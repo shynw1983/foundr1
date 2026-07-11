@@ -42,6 +42,7 @@ const statements = [
   )`,
   `alter table store_dining_sessions add column if not exists order_status text not null default 'selecting'`,
   `alter table store_dining_sessions add column if not exists dine_in_entitled boolean not null default false`,
+  `alter table store_dining_sessions add column if not exists dine_in_entitlement_confirmed boolean not null default false`,
   `alter table store_dining_sessions drop constraint if exists store_dining_sessions_status_check`,
   `update store_dining_sessions set order_status = case when status = 'cooking' then 'cooking' when status = 'selecting' then 'selecting' else 'idle' end, status = case when status in ('selecting', 'cooking') then 'seated' else status end`,
   `alter table store_dining_sessions add constraint store_dining_sessions_status_check check (status in ('seated', 'dining', 'cleaning', 'completed'))`,

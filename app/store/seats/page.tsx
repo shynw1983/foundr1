@@ -74,6 +74,16 @@ export default function StoreSeatsPage() {
   const [error, setError] = useState("");
   const [moving, setMoving] = useState(false);
   const [sharedTables, setSharedTables] = useState<string[]>([]);
+  const [partySizeDraft, setPartySizeDraft] = useState(1);
+
+  function selectTarget(nextSelection: Selection) {
+    setSelection(nextSelection);
+    if (nextSelection.type === "seat") {
+      setPartySizeDraft(1);
+    } else {
+      setPartySizeDraft(nextSelection.id === "A+B" ? 4 : 2);
+    }
+  }
 
   function applyBoard(data: SeatBoardResponse) {
     if (data.store) {
@@ -147,7 +157,7 @@ export default function StoreSeatsPage() {
       const response = await fetch("/api/store/seats", {
         method: isAssign ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ storeId, target, action })
+        body: JSON.stringify({ storeId, target, action, partySize: isAssign ? partySizeDraft : undefined })
       });
       const data = await response.json() as SeatBoardResponse;
       if (!response.ok) throw new Error(data.error || "座席を更新できませんでした。");
@@ -229,7 +239,7 @@ export default function StoreSeatsPage() {
         type="button"
         key={seat.id}
         style={{ left: `${(seat.x / 800) * 100}%`, top: `${(seat.y / 1200) * 100}%` }}
-        onClick={() => interactive && setSelection({ type: "seat", id: seat.id })}
+        onClick={() => interactive && selectTarget({ type: "seat", id: seat.id })}
         tabIndex={interactive ? 0 : -1}
         aria-disabled={!interactive}
         aria-label={`${seat.id}席 ${statusMeta[seat.status].label}`}
@@ -316,14 +326,14 @@ export default function StoreSeatsPage() {
                 type="button"
                 key={table}
                 style={{ left: `${((table === "A" ? 513 : 619) / 800) * 100}%` }}
-                onClick={() => setSelection({ type: "table", id: table })}
+                onClick={() => selectTarget({ type: "table", id: table })}
                 aria-label={`${table}テーブルを選択`}
               >{table}</button>
             ))}
             <button
               className={`seat-plan-table-combine is-${combinedTableState().status}`}
               type="button"
-              onClick={() => setSelection({ type: "table", id: "A+B" })}
+              onClick={() => selectTarget({ type: "table", id: "A+B" })}
               disabled={!combinedTableState().enabled}
               aria-label="AとBテーブルを連結して選択"
             >A+B</button>
@@ -349,7 +359,16 @@ export default function StoreSeatsPage() {
               </div>
             </div>
             {selectedStatus === "available" ? (
-              <div className="seat-action-note"><Users size={18} /><span>{selection.type === "table" ? `${selection.id}テーブル` : "1名でこの席"}を確保します</span></div>
+              <>
+                <div className="seat-action-note"><Users size={18} /><span>{selection.type === "table" ? `${selection.id}テーブル` : "この席"}を{partySizeDraft}名で確保します</span></div>
+                {selection.type === "table" ? (
+                  <div className="seat-party-size" aria-label="ご利用人数">
+                    {Array.from({ length: selection.id === "A+B" ? 4 : 2 }, (_, index) => index + 1).map((size) => (
+                      <button className={partySizeDraft === size ? "is-active" : ""} type="button" key={size} onClick={() => setPartySizeDraft(size)}>{size}名</button>
+                    ))}
+                  </div>
+                ) : null}
+              </>
             ) : selectedStatus === "cleaning" ? (
               <div className="seat-action-note"><Sparkles size={18} /><span>清掃後に空席として開放します</span></div>
             ) : selectedStatus === "selecting" ? (

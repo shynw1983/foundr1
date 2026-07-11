@@ -14,6 +14,7 @@ export async function getActiveDiningSessionsForPos(storeId: string) {
       store_dining_sessions.status as "occupancyStatus",
       store_dining_sessions.order_status as "orderStatus",
       store_dining_sessions.dine_in_entitled as "dineInEntitled",
+      store_dining_sessions.dine_in_entitlement_confirmed as "dineInEntitlementConfirmed",
       store_dining_sessions.party_size::int as "partySize",
       count(distinct store_dining_session_orders.order_id)::int as "orderCount",
       to_char(store_dining_sessions.assigned_at at time zone 'Asia/Tokyo', 'HH24:MI') as "assignedAt"
@@ -68,6 +69,7 @@ export async function linkPaidOrderToDiningSession(input: {
       set
         order_status = 'cooking',
         dine_in_entitled = dine_in_entitled or ${input.grantsDineInEntitlement},
+        dine_in_entitlement_confirmed = dine_in_entitlement_confirmed or ${input.grantsDineInEntitlement},
         paid_at = coalesce(paid_at, now()),
         updated_at = now()
       where id in (select session_id from linked)
@@ -158,6 +160,16 @@ export async function markDiningOrdersPaid(orderIds: string[]) {
     set
       order_status = 'cooking',
       dine_in_entitled = dine_in_entitled or exists (
+        select 1
+        from store_dining_session_orders
+        join store_customer_order_items on store_customer_order_items.order_id = store_dining_session_orders.order_id
+        join menu_catalog_items on menu_catalog_items.id = store_customer_order_items.menu_catalog_item_id
+        join brands on brands.id = menu_catalog_items.brand_id
+        where store_dining_session_orders.session_id = store_dining_sessions.id
+          and store_dining_session_orders.order_id::text = any(${orderIds})
+          and (lower(brands.name) like '%maamaa%' or brands.name like '%まぁ麻%' or brands.name like '%麻辣%')
+      ),
+      dine_in_entitlement_confirmed = dine_in_entitlement_confirmed or exists (
         select 1
         from store_dining_session_orders
         join store_customer_order_items on store_customer_order_items.order_id = store_dining_session_orders.order_id

@@ -52,16 +52,16 @@ async function seatBoard(storeId: string) {
       end as status,
       coalesce(store_dining_sessions.order_status, 'idle') as "activityStatus",
       coalesce(store_dining_sessions.dine_in_entitled, false) as "dineInEntitled",
+      coalesce(store_dining_sessions.dine_in_entitlement_confirmed, false) as "dineInEntitlementConfirmed",
       coalesce(
         store_dining_sessions.status = 'seated'
         and store_dining_sessions.order_status = 'selecting'
         and store_dining_sessions.assigned_at < now() - interval '20 minutes'
-        and not exists (
-          select 1 from store_dining_session_orders where store_dining_session_orders.session_id = store_dining_sessions.id
-        ),
+        and store_dining_sessions.dine_in_entitlement_confirmed = false,
         false
       ) as overdue,
       coalesce(store_dining_sessions.party_size, 0)::int as "partySize",
+      coalesce((select count(*) from store_dining_session_orders where store_dining_session_orders.session_id = store_dining_sessions.id), 0)::int as "orderCount",
       coalesce(to_char(store_dining_sessions.assigned_at at time zone 'Asia/Tokyo', 'HH24:MI'), '') as "startedAt",
       coalesce(store_dining_sessions.table_group_label, '') as "groupLabel"
     from store_tables
@@ -135,9 +135,9 @@ export async function POST(request: Request) {
           )
       ), new_session as (
         insert into store_dining_sessions (
-          store_id, table_group_label, status, order_status, party_size, assigned_by
+          store_id, table_group_label, status, order_status, party_size, dine_in_entitled, dine_in_entitlement_confirmed, assigned_by
         )
-        select ${storeId}, ${target}, 'seated', 'selecting', ${partySize}, ${session.id}
+        select ${storeId}, ${target}, 'seated', 'selecting', ${partySize}, true, false, ${session.id}
         where (select count(*) from selected_tables) = ${labels.length}
         returning id
       ), assignments as (

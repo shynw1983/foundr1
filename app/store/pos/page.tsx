@@ -733,6 +733,7 @@ export default function StorePosPage() {
       groupLabel: string;
       status: PosDiningSession["status"] | "available" | "cleaning";
       partySize: number;
+      orderCount: number;
       startedAt: string;
     }> };
     const unique = new Map<string, PosDiningSession>();
@@ -744,7 +745,7 @@ export default function StorePosPage() {
         label: target.groupLabel || target.label,
         status: target.status as PosDiningSession["status"],
         partySize: Number(target.partySize ?? 1),
-        orderCount: 0,
+        orderCount: Number(target.orderCount ?? 0),
         assignedAt: target.startedAt
       });
     }
@@ -2248,7 +2249,7 @@ export default function StorePosPage() {
                       disabled={saving}
                     >
                       <strong>{diningSession.label}</strong>
-                      <small>{diningSession.status === "selecting" ? "食材選択中" : diningSession.status === "cooking" ? "追加会計" : "追加注文"}</small>
+                      <small>{diningSession.partySize}名 / {diningSession.orderCount}会計</small>
                     </button>
                   ))}
                 </div>
