@@ -36146,7 +36146,8 @@ a:focus-visible {
 }
 
 .seat-floor-background,
-.seat-plan-seat-layer {
+.seat-plan-seat-layer,
+.seat-plan-table-layer {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -36155,11 +36156,12 @@ a:focus-visible {
 
 .seat-floor-background { display: block; object-fit: contain; pointer-events: none; }
 .seat-plan-seat-layer { z-index: 1; }
+.seat-plan-table-layer { z-index: 2; pointer-events: none; }
 
 .seat-plan-seat {
   position: absolute;
-  width: clamp(42px, 11vw, 54px);
-  height: clamp(42px, 11vw, 54px);
+  width: 6.875%;
+  aspect-ratio: 1;
   padding: 0;
   border: 2px solid #c8ceca;
   border-radius: 50%;
@@ -36172,7 +36174,59 @@ a:focus-visible {
   box-shadow: 0 2px 6px rgba(39, 48, 45, .12);
 }
 
-.seat-plan-seat strong { font-size: 16px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
+.seat-plan-seat:not([aria-label^="C"]) {
+  pointer-events: none;
+}
+
+.seat-plan-table,
+.seat-plan-table-combine {
+  position: absolute;
+  pointer-events: auto;
+  border: 1px solid #aeb7b2;
+  background: rgba(255, 255, 255, .94);
+  color: #26322e;
+  box-shadow: 0 2px 5px rgba(39, 48, 45, .1);
+  font-weight: 700;
+}
+
+.seat-plan-table {
+  top: 32.3%;
+  width: 8%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.seat-plan-table-combine {
+  left: 70.75%;
+  top: 32.3%;
+  min-width: 38px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 12px;
+  transform: translate(-50%, -50%);
+  font-size: 10px;
+}
+
+.seat-plan-table.is-selecting,
+.seat-plan-table-combine.is-selecting { border-color: #829eb0; background: #e8f0f4; color: #294b5d; }
+.seat-plan-table.is-cooking,
+.seat-plan-table-combine.is-cooking { border-color: #d0a954; background: #fbf2d9; color: #684f18; }
+.seat-plan-table.is-dining,
+.seat-plan-table-combine.is-dining { border-color: #4f856f; background: #e2eee9; color: #174a38; }
+.seat-plan-table.is-cleaning,
+.seat-plan-table-combine.is-cleaning { border-color: #9da39f; background: #eceeec; color: #5e6562; }
+.seat-plan-table.is-mixed,
+.seat-plan-table-combine.is-mixed { border-style: dashed; background: #f2f2ef; color: #666c69; }
+
+.seat-plan-seat::before {
+  content: "";
+  position: absolute;
+  width: max(44px, 130%);
+  height: max(44px, 130%);
+}
+
+.seat-plan-seat strong { font-size: clamp(10px, 2.8vw, 14px); line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
 .seat-plan-seat span,
 .seat-plan-seat small { display: none; }
 .seat-plan-seat.is-selecting { border-color: #829eb0; background: #e8f0f4; color: #294b5d; }
