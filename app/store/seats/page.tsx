@@ -75,11 +75,15 @@ export default function StoreSeatsPage() {
   const [moving, setMoving] = useState(false);
   const [sharedTables, setSharedTables] = useState<string[]>([]);
   const [partySizeDraft, setPartySizeDraft] = useState(1);
+  const [counterGroupTargets, setCounterGroupTargets] = useState<string[]>([]);
 
   function selectTarget(nextSelection: Selection) {
     setSelection(nextSelection);
     if (nextSelection.type === "seat") {
-      setPartySizeDraft(1);
+      const selected = seats.find((seat) => seat.id === nextSelection.id);
+      const groupTargets = selected?.groupLabel?.split("+").filter((target) => /^C[1-8]$/.test(target)) ?? [];
+      setCounterGroupTargets(groupTargets.length ? groupTargets : [nextSelection.id]);
+      setPartySizeDraft(selected?.partySize ?? Math.max(1, groupTargets.length));
     } else {
       setPartySizeDraft(nextSelection.id === "A+B" ? 4 : 2);
     }
@@ -157,7 +161,13 @@ export default function StoreSeatsPage() {
       const response = await fetch("/api/store/seats", {
         method: isAssign ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ storeId, target, action, partySize: isAssign ? partySizeDraft : undefined })
+        body: JSON.stringify({
+          storeId,
+          target,
+          targets: isAssign && selection.type === "seat" && /^C[1-8]$/.test(selection.id) ? counterGroupTargets : undefined,
+          action,
+          partySize: isAssign ? partySizeDraft : undefined
+        })
       });
       const data = await response.json() as SeatBoardResponse;
       if (!response.ok) throw new Error(data.error || "座席を更新できませんでした。");
@@ -271,18 +281,38 @@ export default function StoreSeatsPage() {
     return { status: "mixed", enabled: false } as const;
   }
 
-  function getMoveTargets(currentGroup = "") {
+  function getMoveTargets(currentGroup = "", partySize = 1) {
     const targets: string[] = [];
-    if (tableStatus("A") === "available") targets.push("A");
-    if (tableStatus("B") === "available") targets.push("B");
-    if (tableStatus("A") === "available" && tableStatus("B") === "available") targets.push("A+B");
-    for (const seat of seats) {
-      if (seat.kind === "counter" && seat.status === "available") targets.push(seat.id);
+    if (partySize <= 2 && tableStatus("A") === "available") targets.push("A");
+    if (partySize <= 2 && tableStatus("B") === "available") targets.push("B");
+    if (partySize <= 4 && tableStatus("A") === "available" && tableStatus("B") === "available") targets.push("A+B");
+    if (partySize === 1) {
+      for (const seat of seats) {
+        if (seat.kind === "counter" && seat.status === "available") targets.push(seat.id);
+      }
     }
     if (currentGroup === "A" && tableStatus("B") === "available") targets.push("A+B");
     if (currentGroup === "B" && tableStatus("A") === "available") targets.push("A+B");
-    if (currentGroup === "A+B") targets.push("A", "B");
+    if (currentGroup === "A+B" && partySize <= 2) targets.push("A", "B");
     return Array.from(new Set(targets)).filter((target) => target !== currentGroup);
+  }
+
+  function setCounterPartySize(size: number, anchor: string) {
+    setPartySizeDraft(size);
+    const available = seats.filter((seat) => seat.kind === "counter" && (seat.status === "available" || seat.id === anchor)).map((seat) => seat.id);
+    setCounterGroupTargets((current) => {
+      const kept = [anchor, ...current.filter((target) => target !== anchor && available.includes(target))];
+      return Array.from(new Set([...kept, ...available])).slice(0, size);
+    });
+  }
+
+  function toggleCounterTarget(target: string, anchor: string) {
+    if (target === anchor) return;
+    setCounterGroupTargets((current) => {
+      if (current.includes(target)) return current.filter((item) => item !== target);
+      if (current.length >= partySizeDraft) return current;
+      return [...current, target];
+    });
   }
 
   return (
@@ -367,6 +397,21 @@ export default function StoreSeatsPage() {
                       <button className={partySizeDraft === size ? "is-active" : ""} type="button" key={size} onClick={() => setPartySizeDraft(size)}>{size}名</button>
                     ))}
                   </div>
+                ) : /^C[1-8]$/.test(selection.id) ? (
+                  <>
+                    <div className="seat-party-size" aria-label="ご利用人数">
+                      {Array.from({ length: seats.filter((seat) => seat.kind === "counter" && (seat.status === "available" || seat.id === selection.id)).length }, (_, index) => index + 1).map((size) => (
+                        <button className={partySizeDraft === size ? "is-active" : ""} type="button" key={size} onClick={() => setCounterPartySize(size, selection.id)}>{size}名</button>
+                      ))}
+                    </div>
+                    {partySizeDraft > 1 ? (
+                      <div className="seat-counter-group" aria-label="カウンター席を選択">
+                        {seats.filter((seat) => seat.kind === "counter" && (seat.status === "available" || seat.id === selection.id)).map((seat) => (
+                          <button className={counterGroupTargets.includes(seat.id) ? "is-active" : ""} type="button" key={seat.id} onClick={() => toggleCounterTarget(seat.id, selection.id)}>{seat.id}</button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
                 ) : null}
               </>
             ) : selectedStatus === "cleaning" ? (
@@ -381,7 +426,7 @@ export default function StoreSeatsPage() {
               <div className="seat-action-note"><Users size={18} /><span>各テーブルの状態が異なるため、AまたはBを個別に選択してください</span></div>
             )}
             {selectedStatus && statusMeta[selectedStatus].source === "staff" ? (
-              <button className="seat-action-primary" type="button" onClick={() => void runStaffAction()} disabled={saving}>
+              <button className="seat-action-primary" type="button" onClick={() => void runStaffAction()} disabled={saving || (selectedStatus === "available" && selection.type === "seat" && /^C[1-8]$/.test(selection.id) && counterGroupTargets.length !== partySizeDraft)}>
                 <Check size={20} /> {saving ? "更新中…" : statusMeta[selectedStatus].action}
               </button>
             ) : selectedStatus ? (
@@ -401,9 +446,9 @@ export default function StoreSeatsPage() {
             ) : null}
             {moving ? (
               <div className="seat-move-grid" aria-label="移動先">
-                {getMoveTargets(selectedSeat.groupLabel)
+                {getMoveTargets(selectedSeat.groupLabel, selectedSeat.partySize)
                   .map((destination) => <button type="button" key={destination} onClick={() => void moveSeat(destination)} disabled={saving}>{destination}</button>)}
-                {!getMoveTargets(selectedSeat.groupLabel).length ? <p>移動できる空席がありません。</p> : null}
+                {!getMoveTargets(selectedSeat.groupLabel, selectedSeat.partySize).length ? <p>人数に合う空席がありません。</p> : null}
               </div>
             ) : null}
             <button className="seat-action-cancel" type="button" onClick={() => setSelection(null)}>閉じる</button>

@@ -111,16 +111,25 @@ export async function POST(request: Request) {
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const storeId = String(body.storeId ?? "").trim();
-  const target = normalizeTarget(body.target);
+  const requestedCounterTargets = Array.isArray(body.targets)
+    ? Array.from(new Set(body.targets.map(normalizeTarget).filter((value) => /^C[1-8]$/.test(value))))
+    : [];
+  const requestedTarget = normalizeTarget(body.target);
+  const target = requestedCounterTargets.length > 1 ? requestedCounterTargets.join("+") : requestedTarget;
   const partySize = Math.max(1, Math.min(20, Math.round(Number(body.partySize) || (target === "A+B" ? 4 : target === "A" || target === "B" ? 2 : 1))));
   const access = await getStoreOrderAccess(session);
   if (!storeId || getScopedStoreFilter(access, storeId) !== storeId) {
     return Response.json({ error: "店舗へのアクセス権限がありません。" }, { status: 403 });
   }
   if (!target) return Response.json({ error: "座席を選択してください。" }, { status: 400 });
-  const chairTarget = /^[AB][12]$/.test(target);
-  const labels = target === "A+B" ? ["A", "B"] : [chairTarget ? target[0] : target];
-  const seatKey = chairTarget ? target : "TABLE";
+  if (requestedCounterTargets.length > 1 && requestedCounterTargets.length !== partySize) {
+    return Response.json({ error: "人数と選択したカウンター席数が一致しません。" }, { status: 400 });
+  }
+  const chairTarget = /^[AB][12]$/.test(requestedTarget);
+  const labels = requestedCounterTargets.length > 1
+    ? requestedCounterTargets
+    : requestedTarget === "A+B" ? ["A", "B"] : [chairTarget ? requestedTarget[0] : requestedTarget];
+  const seatKey = chairTarget ? requestedTarget : "TABLE";
   try {
     const rows = await sql`
       with selected_tables as (
