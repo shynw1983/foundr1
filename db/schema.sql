@@ -3490,6 +3490,18 @@ create table if not exists store_dining_sessions (
     check (status in ('selecting', 'cooking', 'dining', 'cleaning', 'completed')),
   constraint store_dining_sessions_party_size_check check (party_size between 1 and 20)
 );
+alter table store_dining_sessions add column if not exists order_status text not null default 'selecting';
+alter table store_dining_sessions add column if not exists dine_in_entitled boolean not null default false;
+alter table store_dining_sessions drop constraint if exists store_dining_sessions_status_check;
+update store_dining_sessions
+set
+  order_status = case when status = 'cooking' then 'cooking' when status = 'selecting' then 'selecting' else 'idle' end,
+  status = case when status in ('selecting', 'cooking') then 'seated' else status end;
+alter table store_dining_sessions add constraint store_dining_sessions_status_check
+  check (status in ('seated', 'dining', 'cleaning', 'completed'));
+alter table store_dining_sessions drop constraint if exists store_dining_sessions_order_status_check;
+alter table store_dining_sessions add constraint store_dining_sessions_order_status_check
+  check (order_status in ('selecting', 'cooking', 'idle'));
 
 create table if not exists store_dining_session_tables (
   session_id uuid not null references store_dining_sessions(id) on delete cascade,
@@ -3525,7 +3537,7 @@ select
   seat.area_name,
   seat.seat_count,
   'active',
-  false,
+  true,
   seat.sort_order,
   jsonb_build_object('seatManagementKind', seat.kind),
   now()
@@ -3548,6 +3560,7 @@ on conflict (store_id, label) do update set
   area_name = excluded.area_name,
   seat_count = excluded.seat_count,
   status = 'active',
+  table_ordering_enabled = true,
   sort_order = excluded.sort_order,
   metadata = store_tables.metadata || excluded.metadata,
   updated_at = now();

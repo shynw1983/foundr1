@@ -11,6 +11,9 @@ type Seat = {
   x: number;
   y: number;
   status: SeatStatus;
+  activityStatus?: "selecting" | "cooking" | "idle";
+  overdue?: boolean;
+  groupLabel?: string;
   partySize?: number;
   startedAt?: string;
 };
@@ -24,6 +27,9 @@ type SeatBoardTarget = {
   status: SeatStatus;
   partySize: number;
   startedAt: string;
+  activityStatus: "selecting" | "cooking" | "idle";
+  overdue: boolean;
+  groupLabel: string;
 };
 
 type SeatBoardResponse = {
@@ -65,6 +71,7 @@ export default function StoreSeatsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [moving, setMoving] = useState(false);
 
   function applyBoard(data: SeatBoardResponse) {
     if (data.store) {
@@ -75,7 +82,7 @@ export default function StoreSeatsPage() {
     const targets = new Map(data.targets.map((target) => [target.label, target]));
     setSeats(initialSeats.map((seat) => {
       const target = targets.get(seat.kind === "counter" ? seat.id : seat.kind === "table-a" ? "A" : "B");
-      return target ? { ...seat, status: target.status, partySize: target.partySize || undefined, startedAt: target.startedAt || undefined } : seat;
+      return target ? { ...seat, status: target.status, activityStatus: target.activityStatus, overdue: target.overdue, groupLabel: target.groupLabel, partySize: target.partySize || undefined, startedAt: target.startedAt || undefined } : seat;
     }));
   }
 
@@ -124,11 +131,11 @@ export default function StoreSeatsPage() {
     ? selectedSeat.status
     : null;
 
-  async function runStaffAction() {
+  async function runStaffAction(forcedAction = "") {
     if (!selection || !selectedStatus || !storeId || saving) return;
     const target = selection.type === "table" ? selection.id : selection.id;
     const isAssign = selectedStatus === "available";
-    const action = selectedStatus === "dining" ? "vacate" : selectedStatus === "cleaning" ? "clean" : "";
+    const action = forcedAction || (selectedStatus === "dining" ? "vacate" : selectedStatus === "cleaning" ? "clean" : "");
     if (!isAssign && !action) return;
     setSaving(true);
     setError("");
@@ -142,8 +149,32 @@ export default function StoreSeatsPage() {
       if (!response.ok) throw new Error(data.error || "座席を更新できませんでした。");
       applyBoard(data);
       setSelection(null);
+      setMoving(false);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "通信できません。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function moveSeat(destination: string) {
+    if (!selection || !storeId || saving) return;
+    const target = selection.type === "table" ? selection.id : selection.id;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/store/seats", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeId, target, action: "move", destination })
+      });
+      const data = await response.json() as SeatBoardResponse;
+      if (!response.ok) throw new Error(data.error || "座席を変更できませんでした。");
+      applyBoard(data);
+      setSelection(null);
+      setMoving(false);
+    } catch (moveError) {
+      setError(moveError instanceof Error ? moveError.message : "通信できません。");
     } finally {
       setSaving(false);
     }
@@ -179,6 +210,8 @@ export default function StoreSeatsPage() {
         <strong>{seat.id}</strong>
         <span>{statusMeta[seat.status].label}</span>
         {seat.startedAt ? <small>{seat.startedAt}-</small> : null}
+        {seat.status === "dining" && seat.activityStatus === "cooking" ? <i className="seat-plan-activity" aria-label="追加調理中" /> : null}
+        {seat.overdue ? <i className="seat-plan-overdue" aria-label="案内後20分未会計" /> : null}
       </button>
     );
   }
@@ -281,6 +314,19 @@ export default function StoreSeatsPage() {
               </button>
             ) : selectedStatus ? (
               <div className="seat-action-sync-status"><span className="seat-live-dot" /> システム連動中・操作不要</div>
+            ) : null}
+            {selectedStatus === "selecting" ? (
+              <button className="seat-action-cancel" type="button" onClick={() => void runStaffAction("cancel")} disabled={saving}>案内を取り消す</button>
+            ) : null}
+            {selectedStatus && !["available", "cleaning"].includes(selectedStatus) ? (
+              <button className="seat-action-cancel" type="button" onClick={() => setMoving((current) => !current)} disabled={saving}>席を変更・結合/分割</button>
+            ) : null}
+            {moving ? (
+              <div className="seat-move-grid" aria-label="移動先">
+                {["A", "B", "A+B", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]
+                  .filter((destination) => destination !== selectedSeat.groupLabel)
+                  .map((destination) => <button type="button" key={destination} onClick={() => void moveSeat(destination)} disabled={saving}>{destination}</button>)}
+              </div>
             ) : null}
             <button className="seat-action-cancel" type="button" onClick={() => setSelection(null)}>閉じる</button>
           </section>

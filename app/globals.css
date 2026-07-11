@@ -36309,6 +36309,8 @@ a:focus-visible {
 .seat-plan-seat.is-dining { border-color: #15803d; background: var(--seat-dining); color: #fff; }
 .seat-plan-seat.is-cleaning { border-color: #991b1b; background: var(--seat-cleaning); color: #fff; }
 .seat-plan-seat:active { transform: translate(-50%, -50%) scale(.94); }
+.seat-plan-activity { position: absolute; top: -5px; right: -5px; width: 13px; height: 13px; border: 2px solid #fff; border-radius: 50%; background: var(--seat-cooking); box-shadow: 0 0 0 1px #b45309; }
+.seat-plan-overdue { position: absolute; top: -6px; left: -6px; width: 15px; height: 15px; border: 2px solid #fff; border-radius: 50%; background: var(--seat-cleaning); box-shadow: 0 0 0 1px #991b1b; }
 
 .seat-management-legend {
   width: min(100%, 520px);
@@ -36348,6 +36350,8 @@ a:focus-visible {
 .seat-action-cancel { width: 100%; min-height: 48px; border-radius: 13px; font-size: 14px; font-weight: 650; }
 .seat-action-primary { border: 0; display: flex; align-items: center; justify-content: center; gap: 7px; background: var(--seat-green); color: #fff; }
 .seat-action-cancel { margin-top: 8px; border: 1px solid #dfe2df; background: #fff; color: #52605a; }
+.seat-move-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.seat-move-grid button { min-height: 40px; border: 1px solid #173f35; border-radius: 8px; background: #fff; color: #173f35; font-weight: 700; }
 
 @media (min-width: 700px) {
   .seat-management-page { padding-top: 28px; }

@@ -68,6 +68,14 @@ export async function POST(request: Request) {
       and store_tables.status = 'active'
       and stores.status = 'active'
       and (brands.id is null or brands.status = 'active')
+      and exists (
+        select 1
+        from store_dining_session_tables
+        join store_dining_sessions on store_dining_sessions.id = store_dining_session_tables.session_id
+        where store_dining_session_tables.table_id = store_tables.id
+          and store_dining_session_tables.released_at is null
+          and store_dining_sessions.status in ('seated', 'dining')
+      )
     limit 1
   `;
   const table = tableRows[0] as {

@@ -42,7 +42,24 @@ async function seatBoard(storeId: string) {
       store_tables.display_name as "displayName",
       store_tables.seat_count as "seatCount",
       coalesce(store_dining_sessions.id::text, '') as "sessionId",
-      coalesce(store_dining_sessions.status, 'available') as status,
+      case
+        when store_dining_sessions.id is null then 'available'
+        when store_dining_sessions.status = 'cleaning' then 'cleaning'
+        when store_dining_sessions.status = 'dining' then 'dining'
+        when store_dining_sessions.order_status = 'cooking' then 'cooking'
+        else 'selecting'
+      end as status,
+      coalesce(store_dining_sessions.order_status, 'idle') as "activityStatus",
+      coalesce(store_dining_sessions.dine_in_entitled, false) as "dineInEntitled",
+      coalesce(
+        store_dining_sessions.status = 'seated'
+        and store_dining_sessions.order_status = 'selecting'
+        and store_dining_sessions.assigned_at < now() - interval '20 minutes'
+        and not exists (
+          select 1 from store_dining_session_orders where store_dining_session_orders.session_id = store_dining_sessions.id
+        ),
+        false
+      ) as overdue,
       coalesce(store_dining_sessions.party_size, 0)::int as "partySize",
       coalesce(to_char(store_dining_sessions.assigned_at at time zone 'Asia/Tokyo', 'HH24:MI'), '') as "startedAt",
       coalesce(store_dining_sessions.table_group_label, '') as "groupLabel"
@@ -96,9 +113,9 @@ export async function POST(request: Request) {
           and status = 'active'
       ), new_session as (
         insert into store_dining_sessions (
-          store_id, table_group_label, status, party_size, assigned_by
+          store_id, table_group_label, status, order_status, party_size, assigned_by
         )
-        select ${storeId}, ${target}, 'selecting', ${partySize}, ${session.id}
+        select ${storeId}, ${target}, 'seated', 'selecting', ${partySize}, ${session.id}
         where (select count(*) from selected_tables) = ${labels.length}
         returning id
       ), assignments as (
@@ -127,16 +144,69 @@ export async function PATCH(request: Request) {
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const storeId = String(body.storeId ?? "").trim();
   const target = normalizeTarget(body.target);
+  const destination = normalizeTarget(body.destination);
   const action = String(body.action ?? "").trim();
   const access = await getStoreOrderAccess(session);
   if (!storeId || getScopedStoreFilter(access, storeId) !== storeId) {
     return Response.json({ error: "店舗へのアクセス権限がありません。" }, { status: 403 });
   }
-  if (!target || !["vacate", "clean"].includes(action)) {
+  if (!target || !["vacate", "clean", "cancel", "move"].includes(action) || (action === "move" && !destination)) {
     return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
   }
   const labels = target === "A+B" ? ["A", "B"] : [target];
-  if (action === "vacate") {
+  if (action === "move") {
+    const destinationLabels = destination === "A+B" ? ["A", "B"] : [destination];
+    try {
+      const rows = await sql`
+        with source_session as (
+          select distinct store_dining_session_tables.session_id
+          from store_dining_session_tables
+          join store_tables on store_tables.id = store_dining_session_tables.table_id
+          join store_dining_sessions on store_dining_sessions.id = store_dining_session_tables.session_id
+          where store_tables.store_id::text = ${storeId}
+            and store_tables.label = any(${labels})
+            and store_dining_session_tables.released_at is null
+            and store_dining_sessions.status in ('seated', 'dining')
+          limit 1
+        ), destination_tables as (
+          select store_tables.id
+          from store_tables
+          where store_tables.store_id::text = ${storeId}
+            and store_tables.label = any(${destinationLabels})
+            and store_tables.status = 'active'
+            and not exists (
+              select 1 from store_dining_session_tables occupied
+              where occupied.table_id = store_tables.id
+                and occupied.released_at is null
+                and occupied.session_id not in (select session_id from source_session)
+            )
+        ), released as (
+          update store_dining_session_tables
+          set released_at = now()
+          where session_id in (select session_id from source_session)
+            and released_at is null
+            and (select count(*) from destination_tables) = ${destinationLabels.length}
+          returning session_id
+        ), relabeled as (
+          update store_dining_sessions
+          set table_group_label = ${destination}, updated_at = now()
+          where id in (select session_id from source_session)
+            and (select count(*) from destination_tables) = ${destinationLabels.length}
+          returning id
+        )
+        insert into store_dining_session_tables (session_id, table_id)
+        select relabeled.id, destination_tables.id
+        from relabeled cross join destination_tables
+        returning session_id::text
+      `;
+      if (rows.length !== destinationLabels.length) return Response.json({ error: "移動先の座席は利用できません。" }, { status: 409 });
+    } catch (error) {
+      if (String((error as { code?: string })?.code ?? "") === "23505") {
+        return Response.json({ error: "移動先の座席は他のスタッフが使用中です。" }, { status: 409 });
+      }
+      throw error;
+    }
+  } else if (action === "vacate") {
     const rows = await sql`
       update store_dining_sessions
       set status = 'cleaning', vacated_at = now(), updated_at = now()
@@ -148,11 +218,11 @@ export async function PATCH(request: Request) {
           and store_tables.label = any(${labels})
           and store_dining_session_tables.released_at is null
       )
-        and status = 'dining'
+        and status in ('seated', 'dining')
       returning id::text
     `;
     if (!rows.length) return Response.json({ error: "現在の状態では退席処理できません。" }, { status: 409 });
-  } else {
+  } else if (action === "clean") {
     const rows = await sql`
       with completed as (
         update store_dining_sessions
@@ -175,6 +245,32 @@ export async function PATCH(request: Request) {
       returning session_id::text
     `;
     if (!rows.length) return Response.json({ error: "現在の状態では清掃完了にできません。" }, { status: 409 });
+  } else {
+    const rows = await sql`
+      with cancelled as (
+        update store_dining_sessions
+        set status = 'completed', completed_at = now(), updated_at = now()
+        where id in (
+          select distinct store_dining_session_tables.session_id
+          from store_dining_session_tables
+          join store_tables on store_tables.id = store_dining_session_tables.table_id
+          where store_tables.store_id::text = ${storeId}
+            and store_tables.label = any(${labels})
+            and store_dining_session_tables.released_at is null
+        )
+          and status = 'seated'
+          and not exists (
+            select 1 from store_dining_session_orders where store_dining_session_orders.session_id = store_dining_sessions.id
+          )
+        returning id
+      )
+      update store_dining_session_tables
+      set released_at = now()
+      where session_id in (select id from cancelled)
+        and released_at is null
+      returning session_id::text
+    `;
+    if (!rows.length) return Response.json({ error: "注文済みの座席は案内取消できません。" }, { status: 409 });
   }
   return Response.json({ ok: true, ...(await seatBoard(storeId)) });
 }

@@ -28,6 +28,9 @@ export async function GET(request: Request) {
       coalesce(brands.id::text, fallback_brands.id::text, '') as "brandId",
       coalesce(brands.name, fallback_brands.name, '') as "brandName",
       coalesce(pos_store_settings.dine_in_enabled, true) as "dineInEnabled"
+      ,coalesce(active_dining_session.id::text, '') as "diningSessionId"
+      ,coalesce(active_dining_session.table_group_label, '') as "diningSeatLabel"
+      ,coalesce(active_dining_session.dine_in_entitled, false) as "dineInEntitled"
     from store_tables
     join stores on stores.id = store_tables.store_id
     left join brands on brands.id = store_tables.brand_id
@@ -54,6 +57,16 @@ export async function GET(request: Request) {
       limit 1
     ) fallback_brands on true
     left join pos_store_settings on pos_store_settings.store_id = stores.id
+    left join lateral (
+      select store_dining_sessions.id, store_dining_sessions.table_group_label, store_dining_sessions.dine_in_entitled
+      from store_dining_session_tables
+      join store_dining_sessions on store_dining_sessions.id = store_dining_session_tables.session_id
+      where store_dining_session_tables.table_id = store_tables.id
+        and store_dining_session_tables.released_at is null
+        and store_dining_sessions.status in ('seated', 'dining')
+      order by store_dining_sessions.assigned_at desc
+      limit 1
+    ) active_dining_session on true
     where store_tables.qr_token = ${token}
       and store_tables.status = 'active'
       and stores.status = 'active'
@@ -77,7 +90,8 @@ export async function GET(request: Request) {
       customerDisplayName: customerStoreName,
       customerDisplayNames: undefined
     },
-    orderingEnabled: table.tableOrderingEnabled === true && table.dineInEnabled === true
+    orderingEnabled: table.tableOrderingEnabled === true && table.dineInEnabled === true && Boolean(table.diningSessionId),
+    unavailableReason: table.diningSessionId ? "" : "現在この席では注文できません。スタッフにお声がけください。"
   }, {
     headers: publicMenuCacheHeaders(true)
   });

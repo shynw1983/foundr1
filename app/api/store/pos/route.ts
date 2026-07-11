@@ -6,7 +6,7 @@ import { ensureProductionTasksForOrder } from "../../../../lib/order-production"
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { normalizePosPrinterSettings } from "../../../../lib/pos-printer";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
-import { getActiveDiningSessionsForPos, linkPaidOrderToDiningSession, storeRequiresDiningSeat } from "../../../../lib/store-dining-sessions";
+import { getActiveDiningSessionsForPos, linkPaidOrderToDiningSession, markDiningOrdersPaid, storeRequiresDiningSeat } from "../../../../lib/store-dining-sessions";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -133,6 +133,19 @@ function isDineInWeightMalatangOptionGroup(group: { groupKey: string; groupName:
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
+}
+
+async function containsMalatangBrand(brandIds: string[]) {
+  if (!brandIds.length) return false;
+  const rows = await sql`
+    select exists(
+      select 1
+      from brands
+      where id::text = any(${brandIds})
+        and (lower(name) like '%maamaa%' or name like '%まぁ麻%' or name like '%麻辣%')
+    ) as matched
+  `;
+  return rows[0]?.matched === true;
 }
 
 function normalizeMemberLanguage(value: unknown) {
@@ -943,7 +956,7 @@ export async function POST(request: Request) {
   }
 
   const diningSessions = orderType === "eat_in" && !tableSessionKey
-    ? await getActiveDiningSessionsForPos(storeId) as Array<{ id: string; label: string }>
+    ? await getActiveDiningSessionsForPos(storeId) as Array<{ id: string; label: string; dineInEntitled: boolean }>
     : [];
   const diningSeatRequired = orderType === "eat_in" && !tableSessionKey && await storeRequiresDiningSeat(storeId);
   const selectedDiningSession = diningSessions.find((diningSession) => diningSession.id === diningSessionId);
@@ -1016,6 +1029,7 @@ export async function POST(request: Request) {
       where id::text = any(${orderIds})
       returning id::text, pickup_code as "pickupCode"
     `;
+    await markDiningOrdersPaid(orderIds);
     for (const row of updatedRows as Array<{ id: string }>) {
       await ensureProductionTasksForOrder(row.id);
       await syncWebReservationToSalesOrder(row.id);
@@ -1237,6 +1251,12 @@ export async function POST(request: Request) {
   if (normalizedItems.length === 0) {
     return Response.json({ error: "POS で販売できる商品がありません。" }, { status: 400 });
   }
+  const grantsDineInEntitlement = orderType === "eat_in" && await containsMalatangBrand(Array.from(new Set(normalizedItems.map((item) => item.brandId))));
+  if (orderType === "eat_in" && selectedDiningSession && !selectedDiningSession.dineInEntitled && !grantsDineInEntitlement) {
+    return Response.json({
+      error: "ドリンクのみのご注文はお持ち帰りです。店内利用にはマーラータンのご注文が必要です。"
+    }, { status: 400 });
+  }
 
   const subtotalAmount = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
   const discountPreset = discountPresetKey
@@ -1415,7 +1435,7 @@ export async function POST(request: Request) {
   const orderId = orderRows[0]?.id as string | undefined;
   if (!orderId) return Response.json({ error: "会計を保存できませんでした。" }, { status: 500 });
   if (diningSessionId) {
-    const linked = await linkPaidOrderToDiningSession({ storeId, sessionId: diningSessionId, orderId });
+    const linked = await linkPaidOrderToDiningSession({ storeId, sessionId: diningSessionId, orderId, grantsDineInEntitlement });
     if (!linked) {
       await sql`delete from store_customer_orders where id::text = ${orderId}`;
       return Response.json({ error: "座席が更新されました。もう一度座席を選択してください。" }, { status: 409 });
