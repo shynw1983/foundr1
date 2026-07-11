@@ -7,7 +7,9 @@ type SeatStatus = "available" | "selecting" | "cooking" | "dining" | "cleaning";
 
 type Seat = {
   id: number;
-  kind: "table" | "counter";
+  kind: "table-a" | "table-b" | "counter";
+  x: number;
+  y: number;
   status: SeatStatus;
   partySize?: number;
   startedAt?: string;
@@ -15,21 +17,21 @@ type Seat = {
 
 // This demo mirrors the current drawing. In production this array will come from
 // the store layout settings, so seat count, type and placement are not fixed.
-const storageKey = "store:seat-layout-demo:v2";
+const storageKey = "store:seat-layout-demo:v3";
 
 const initialSeats: Seat[] = [
-  { id: 1, kind: "table", status: "available" },
-  { id: 2, kind: "table", status: "available" },
-  { id: 3, kind: "table", status: "available" },
-  { id: 4, kind: "table", status: "available" },
-  { id: 5, kind: "counter", status: "dining", partySize: 1, startedAt: "12:04" },
-  { id: 6, kind: "counter", status: "dining", partySize: 1, startedAt: "12:08" },
-  { id: 7, kind: "counter", status: "cooking", partySize: 1, startedAt: "12:17" },
-  { id: 8, kind: "counter", status: "selecting", partySize: 1, startedAt: "12:21" },
-  { id: 9, kind: "counter", status: "available" },
-  { id: 10, kind: "counter", status: "available" },
-  { id: 11, kind: "counter", status: "cleaning", partySize: 1, startedAt: "12:23" },
-  { id: 12, kind: "counter", status: "available" }
+  { id: 1, kind: "table-a", x: 513, y: 289, status: "available" },
+  { id: 2, kind: "table-a", x: 512, y: 486, status: "available" },
+  { id: 3, kind: "table-b", x: 619, y: 289, status: "available" },
+  { id: 4, kind: "table-b", x: 619, y: 486, status: "available" },
+  { id: 5, kind: "counter", x: 235, y: 288, status: "dining", partySize: 1, startedAt: "12:04" },
+  { id: 6, kind: "counter", x: 235, y: 386, status: "dining", partySize: 1, startedAt: "12:08" },
+  { id: 7, kind: "counter", x: 235, y: 484, status: "cooking", partySize: 1, startedAt: "12:17" },
+  { id: 8, kind: "counter", x: 235, y: 582, status: "selecting", partySize: 1, startedAt: "12:21" },
+  { id: 9, kind: "counter", x: 235, y: 680, status: "available" },
+  { id: 10, kind: "counter", x: 235, y: 778, status: "available" },
+  { id: 11, kind: "counter", x: 235, y: 876, status: "cleaning", partySize: 1, startedAt: "12:23" },
+  { id: 12, kind: "counter", x: 235, y: 974, status: "available" }
 ];
 
 const statusMeta: Record<SeatStatus, { label: string; action?: string; source: "staff" | "system" }> = {
@@ -107,6 +109,7 @@ export default function StoreSeatsPage() {
         className={`seat-plan-seat is-${seat.status}`}
         type="button"
         key={seat.id}
+        style={{ left: `${(seat.x / 800) * 100}%`, top: `${(seat.y / 1200) * 100}%` }}
         onClick={() => setSelectedSeatId(seat.id)}
         aria-label={`${seat.id}番席 ${statusMeta[seat.status].label}`}
       >
@@ -116,9 +119,6 @@ export default function StoreSeatsPage() {
       </button>
     );
   }
-
-  const tableSeats = seats.filter((seat) => seat.kind === "table");
-  const counterSeats = seats.filter((seat) => seat.kind === "counter");
 
   return (
     <main className="seat-management-page">
@@ -148,33 +148,8 @@ export default function StoreSeatsPage() {
         </div>
 
         <div className="seat-floor-plan">
-          <div className="seat-plan-entrance"><span>入口</span><i /></div>
-          <div className="seat-plan-register">
-            <span>会計</span>
-            <small>固定レジ</small>
-          </div>
-
-          <div className="seat-plan-service-zone">
-            <span>選菜冷蔵ケース</span>
-            <small>食材を選ぶ</small>
-          </div>
-
-          <div className="seat-plan-table-zone">
-            <div className="seat-plan-table-label">4名テーブル</div>
-            <div className="seat-plan-table-surface" />
-            <div className="seat-plan-table-seats">{tableSeats.map(renderSeat)}</div>
-          </div>
-
-          <div className="seat-plan-aisle">
-            <span>選菜・会計動線</span>
-            <i />
-          </div>
-
-          <div className="seat-plan-counter-zone">
-            <div className="seat-plan-counter-surface"><span>カウンター</span></div>
-            <div className="seat-plan-counter-seats">{counterSeats.map(renderSeat)}</div>
-          </div>
-
+          <img className="seat-floor-background" src="/store/maamaa-floor-background.svg" alt="" aria-hidden="true" />
+          <div className="seat-plan-seat-layer">{seats.map(renderSeat)}</div>
         </div>
       </section>
 
@@ -191,7 +166,7 @@ export default function StoreSeatsPage() {
             <div className="seat-action-title-row">
               <div className={`seat-action-number is-${selectedSeat.status}`}>{String(selectedSeat.id).padStart(2, "0")}</div>
               <div>
-                <p>{selectedSeat.kind === "counter" ? "カウンター席" : "テーブル席"}</p>
+                <p>{selectedSeat.kind === "counter" ? "カウンター席" : `${selectedSeat.kind === "table-a" ? "A" : "B"}テーブル`}</p>
                 <h2 id="seat-action-title">{statusMeta[selectedSeat.status].label}</h2>
               </div>
             </div>
