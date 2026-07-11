@@ -35,6 +35,7 @@ type SeatBoardTarget = {
 type SeatBoardResponse = {
   store?: { id: string; name: string };
   targets?: SeatBoardTarget[];
+  sharedTables?: string[];
   error?: string;
 };
 
@@ -72,6 +73,7 @@ export default function StoreSeatsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [moving, setMoving] = useState(false);
+  const [sharedTables, setSharedTables] = useState<string[]>([]);
 
   function applyBoard(data: SeatBoardResponse) {
     if (data.store) {
@@ -79,9 +81,11 @@ export default function StoreSeatsPage() {
       setStoreName(data.store.name);
     }
     if (!data.targets) return;
+    setSharedTables(data.sharedTables ?? []);
     const targets = new Map(data.targets.map((target) => [target.label, target]));
     setSeats(initialSeats.map((seat) => {
-      const target = targets.get(seat.kind === "counter" ? seat.id : seat.kind === "table-a" ? "A" : "B");
+      const tableLabel = seat.kind === "table-a" ? "A" : seat.kind === "table-b" ? "B" : "";
+      const target = targets.get(seat.id) ?? targets.get(seat.kind === "counter" ? seat.id : tableLabel);
       return target ? { ...seat, status: target.status, activityStatus: target.activityStatus, overdue: target.overdue, groupLabel: target.groupLabel, partySize: target.partySize || undefined, startedAt: target.startedAt || undefined } : seat;
     }));
   }
@@ -180,6 +184,28 @@ export default function StoreSeatsPage() {
     }
   }
 
+  async function toggleSharedMode(table: "A" | "B", enabled: boolean) {
+    if (saving) return;
+    if (enabled && !window.confirm(`${table}テーブルを相席モードにしますか？\n椅子ごとに別のお客様をご案内できます。`)) return;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/store/seats", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeId, target: table, action: "toggle_shared", enabled })
+      });
+      const data = await response.json() as SeatBoardResponse;
+      if (!response.ok) throw new Error(data.error || "相席モードを変更できませんでした。");
+      applyBoard(data);
+      setSelection(null);
+    } catch (toggleError) {
+      setError(toggleError instanceof Error ? toggleError.message : "通信できません。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function refreshBoard() {
     setLoading(true);
     try {
@@ -196,15 +222,16 @@ export default function StoreSeatsPage() {
   }
 
   function renderSeat(seat: Seat) {
+    const interactive = seat.kind === "counter" || sharedTables.includes(seat.kind === "table-a" ? "A" : "B");
     return (
       <button
-        className={`seat-plan-seat is-${seat.status}`}
+        className={`seat-plan-seat is-${seat.status}${interactive ? " is-interactive" : ""}`}
         type="button"
         key={seat.id}
         style={{ left: `${(seat.x / 800) * 100}%`, top: `${(seat.y / 1200) * 100}%` }}
-        onClick={() => seat.kind === "counter" && setSelection({ type: "seat", id: seat.id })}
-        tabIndex={seat.kind === "counter" ? 0 : -1}
-        aria-disabled={seat.kind !== "counter"}
+        onClick={() => interactive && setSelection({ type: "seat", id: seat.id })}
+        tabIndex={interactive ? 0 : -1}
+        aria-disabled={!interactive}
         aria-label={`${seat.id}席 ${statusMeta[seat.status].label}`}
       >
         <strong>{seat.id}</strong>
@@ -227,6 +254,7 @@ export default function StoreSeatsPage() {
     const aSeats = seats.filter((seat) => seat.kind === "table-a");
     const bSeats = seats.filter((seat) => seat.kind === "table-b");
     const bothAvailable = [...aSeats, ...bSeats].every((seat) => seat.status === "available");
+    if (sharedTables.includes("A") || sharedTables.includes("B")) return { status: "mixed", enabled: false } as const;
     if (bothAvailable) return { status: "available", enabled: true } as const;
     const combinedSession = [...aSeats, ...bSeats].every((seat) => seat.groupLabel === "A+B");
     if (combinedSession) return { status: tableStatus("A+B"), enabled: true } as const;
@@ -284,7 +312,7 @@ export default function StoreSeatsPage() {
           <div className="seat-plan-table-layer">
             {(["A", "B"] as const).map((table) => (
               <button
-                className={`seat-plan-table is-${tableStatus(table)}`}
+                className={`seat-plan-table is-${tableStatus(table)}${sharedTables.includes(table) ? " is-shared" : ""}`}
                 type="button"
                 key={table}
                 style={{ left: `${((table === "A" ? 513 : 619) / 800) * 100}%` }}
@@ -339,6 +367,12 @@ export default function StoreSeatsPage() {
               </button>
             ) : selectedStatus ? (
               <div className="seat-action-sync-status"><span className="seat-live-dot" /> システム連動中・操作不要</div>
+            ) : null}
+            {selection.type === "table" && ["A", "B"].includes(selection.id) && selectedStatus === "available" ? (
+              <button className="seat-action-cancel" type="button" onClick={() => void toggleSharedMode(selection.id as "A" | "B", !sharedTables.includes(selection.id))} disabled={saving}>{sharedTables.includes(selection.id) ? "相席モードを解除する" : "相席モードを有効にする"}</button>
+            ) : null}
+            {selection.type === "seat" && /^[AB][12]$/.test(selection.id) ? (
+              <div className="seat-action-sync-status"><span className="seat-live-dot" /> 相席モード</div>
             ) : null}
             {selectedStatus === "selecting" ? (
               <button className="seat-action-cancel" type="button" onClick={() => void runStaffAction("cancel")} disabled={saving}>案内を取り消す</button>

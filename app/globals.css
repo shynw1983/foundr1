@@ -36246,7 +36246,7 @@ a:focus-visible {
   box-shadow: 0 2px 6px rgba(39, 48, 45, .12);
 }
 
-.seat-plan-seat:not([aria-label^="C"]) {
+.seat-plan-seat:not(.is-interactive) {
   pointer-events: none;
 }
 
@@ -36292,6 +36292,7 @@ a:focus-visible {
 .seat-plan-table-combine.is-cleaning { border-color: #991b1b; background: var(--seat-cleaning); color: #fff; }
 .seat-plan-table.is-mixed,
 .seat-plan-table-combine.is-mixed { border-style: dashed; background: #f2f2ef; color: #666c69; }
+.seat-plan-table.is-shared { border-style: dashed; box-shadow: 0 0 0 3px #2563eb33; }
 .seat-plan-table-combine:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 
 .seat-plan-seat::before {

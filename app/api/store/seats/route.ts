@@ -8,7 +8,7 @@ type SeatStatus = "available" | "selecting" | "cooking" | "dining" | "cleaning";
 
 function normalizeTarget(value: unknown) {
   const target = String(value ?? "").trim().toUpperCase();
-  return ["A", "B", "A+B", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"].includes(target) ? target : "";
+  return ["A", "B", "A+B", "A1", "A2", "B1", "B2", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"].includes(target) ? target : "";
 }
 
 async function resolveStore(request: Request, session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>) {
@@ -38,7 +38,8 @@ async function seatBoard(storeId: string) {
   const targetRows = await sql`
     select
       store_tables.id::text as "tableId",
-      store_tables.label,
+      case when slots.seat_key = 'TABLE' then store_tables.label else slots.seat_key end as label,
+      store_tables.label as "tableLabel",
       store_tables.display_name as "displayName",
       store_tables.seat_count as "seatCount",
       coalesce(store_dining_sessions.id::text, '') as "sessionId",
@@ -64,8 +65,22 @@ async function seatBoard(storeId: string) {
       coalesce(to_char(store_dining_sessions.assigned_at at time zone 'Asia/Tokyo', 'HH24:MI'), '') as "startedAt",
       coalesce(store_dining_sessions.table_group_label, '') as "groupLabel"
     from store_tables
+    cross join lateral (
+      select 'TABLE'::text as seat_key
+      where store_tables.label not in ('A', 'B')
+         or coalesce((store_tables.metadata ->> 'sharedModeEnabled')::boolean, false) = false
+      union all
+      select store_tables.label || '1'
+      where store_tables.label in ('A', 'B')
+        and coalesce((store_tables.metadata ->> 'sharedModeEnabled')::boolean, false) = true
+      union all
+      select store_tables.label || '2'
+      where store_tables.label in ('A', 'B')
+        and coalesce((store_tables.metadata ->> 'sharedModeEnabled')::boolean, false) = true
+    ) slots
     left join store_dining_session_tables
       on store_dining_session_tables.table_id = store_tables.id
+      and store_dining_session_tables.seat_key = slots.seat_key
       and store_dining_session_tables.released_at is null
     left join store_dining_sessions
       on store_dining_sessions.id = store_dining_session_tables.session_id
@@ -77,7 +92,8 @@ async function seatBoard(storeId: string) {
   `;
   return {
     store: storeRows[0] ?? null,
-    targets: targetRows.map((row) => ({ ...row, status: row.status as SeatStatus }))
+    targets: targetRows.map((row) => ({ ...row, status: row.status as SeatStatus })),
+    sharedTables: Array.from(new Set(targetRows.filter((row) => String(row.label).match(/^[AB][12]$/)).map((row) => String(row.tableLabel))))
   };
 }
 
@@ -102,7 +118,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "店舗へのアクセス権限がありません。" }, { status: 403 });
   }
   if (!target) return Response.json({ error: "座席を選択してください。" }, { status: 400 });
-  const labels = target === "A+B" ? ["A", "B"] : [target];
+  const chairTarget = /^[AB][12]$/.test(target);
+  const labels = target === "A+B" ? ["A", "B"] : [chairTarget ? target[0] : target];
+  const seatKey = chairTarget ? target : "TABLE";
   try {
     const rows = await sql`
       with selected_tables as (
@@ -111,6 +129,10 @@ export async function POST(request: Request) {
         where store_id::text = ${storeId}
           and label = any(${labels})
           and status = 'active'
+          and (
+            (${chairTarget} and coalesce((metadata ->> 'sharedModeEnabled')::boolean, false) = true)
+            or (not ${chairTarget} and coalesce((metadata ->> 'sharedModeEnabled')::boolean, false) = false)
+          )
       ), new_session as (
         insert into store_dining_sessions (
           store_id, table_group_label, status, order_status, party_size, assigned_by
@@ -119,8 +141,8 @@ export async function POST(request: Request) {
         where (select count(*) from selected_tables) = ${labels.length}
         returning id
       ), assignments as (
-        insert into store_dining_session_tables (session_id, table_id)
-        select new_session.id, selected_tables.id
+        insert into store_dining_session_tables (session_id, table_id, seat_key)
+        select new_session.id, selected_tables.id, ${seatKey}
         from new_session cross join selected_tables
         returning session_id
       )
@@ -146,16 +168,38 @@ export async function PATCH(request: Request) {
   const target = normalizeTarget(body.target);
   const destination = normalizeTarget(body.destination);
   const action = String(body.action ?? "").trim();
+  const sharedEnabled = body.enabled === true;
   const access = await getStoreOrderAccess(session);
   if (!storeId || getScopedStoreFilter(access, storeId) !== storeId) {
     return Response.json({ error: "店舗へのアクセス権限がありません。" }, { status: 403 });
   }
-  if (!target || !["vacate", "clean", "cancel", "move"].includes(action) || (action === "move" && !destination)) {
+  if (!target || !["vacate", "clean", "cancel", "move", "toggle_shared"].includes(action) || (action === "move" && !destination)) {
     return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
   }
-  const labels = target === "A+B" ? ["A", "B"] : [target];
+  if (action === "toggle_shared") {
+    if (!["A", "B"].includes(target)) return Response.json({ error: "相席にできるのはA・Bテーブルのみです。" }, { status: 400 });
+    const rows = await sql`
+      update store_tables
+      set metadata = jsonb_set(metadata, '{sharedModeEnabled}', to_jsonb(${sharedEnabled}::boolean), true), updated_at = now()
+      where store_id::text = ${storeId}
+        and label = ${target}
+        and not exists (
+          select 1 from store_dining_session_tables
+          where store_dining_session_tables.table_id = store_tables.id
+            and store_dining_session_tables.released_at is null
+        )
+      returning id::text
+    `;
+    if (!rows.length) return Response.json({ error: "利用中のテーブルは相席モードを変更できません。" }, { status: 409 });
+    return Response.json({ ok: true, ...(await seatBoard(storeId)) });
+  }
+  const chairTarget = /^[AB][12]$/.test(target);
+  const labels = target === "A+B" ? ["A", "B"] : [chairTarget ? target[0] : target];
+  const sourceSeatKey = chairTarget ? target : "TABLE";
   if (action === "move") {
-    const destinationLabels = destination === "A+B" ? ["A", "B"] : [destination];
+    const destinationChair = /^[AB][12]$/.test(destination);
+    const destinationLabels = destination === "A+B" ? ["A", "B"] : [destinationChair ? destination[0] : destination];
+    const destinationSeatKey = destinationChair ? destination : "TABLE";
     try {
       const rows = await sql`
         with source_session as (
@@ -165,6 +209,7 @@ export async function PATCH(request: Request) {
           join store_dining_sessions on store_dining_sessions.id = store_dining_session_tables.session_id
           where store_tables.store_id::text = ${storeId}
             and store_tables.label = any(${labels})
+            and store_dining_session_tables.seat_key = ${sourceSeatKey}
             and store_dining_session_tables.released_at is null
             and store_dining_sessions.status in ('seated', 'dining')
           limit 1
@@ -174,9 +219,14 @@ export async function PATCH(request: Request) {
           where store_tables.store_id::text = ${storeId}
             and store_tables.label = any(${destinationLabels})
             and store_tables.status = 'active'
+            and (
+              (${destinationChair} and coalesce((store_tables.metadata ->> 'sharedModeEnabled')::boolean, false) = true)
+              or (not ${destinationChair} and coalesce((store_tables.metadata ->> 'sharedModeEnabled')::boolean, false) = false)
+            )
             and not exists (
               select 1 from store_dining_session_tables occupied
               where occupied.table_id = store_tables.id
+                and occupied.seat_key = ${destinationSeatKey}
                 and occupied.released_at is null
                 and occupied.session_id not in (select session_id from source_session)
             )
@@ -194,8 +244,8 @@ export async function PATCH(request: Request) {
             and (select count(*) from destination_tables) = ${destinationLabels.length}
           returning id
         )
-        insert into store_dining_session_tables (session_id, table_id)
-        select relabeled.id, destination_tables.id
+        insert into store_dining_session_tables (session_id, table_id, seat_key)
+        select relabeled.id, destination_tables.id, ${destinationSeatKey}
         from relabeled cross join destination_tables
         returning session_id::text
       `;
@@ -216,6 +266,7 @@ export async function PATCH(request: Request) {
         join store_tables on store_tables.id = store_dining_session_tables.table_id
         where store_tables.store_id::text = ${storeId}
           and store_tables.label = any(${labels})
+          and store_dining_session_tables.seat_key = ${sourceSeatKey}
           and store_dining_session_tables.released_at is null
       )
         and status in ('seated', 'dining')
@@ -233,6 +284,7 @@ export async function PATCH(request: Request) {
           join store_tables on store_tables.id = store_dining_session_tables.table_id
           where store_tables.store_id::text = ${storeId}
             and store_tables.label = any(${labels})
+            and store_dining_session_tables.seat_key = ${sourceSeatKey}
             and store_dining_session_tables.released_at is null
         )
           and status = 'cleaning'
@@ -256,6 +308,7 @@ export async function PATCH(request: Request) {
           join store_tables on store_tables.id = store_dining_session_tables.table_id
           where store_tables.store_id::text = ${storeId}
             and store_tables.label = any(${labels})
+            and store_dining_session_tables.seat_key = ${sourceSeatKey}
             and store_dining_session_tables.released_at is null
         )
           and status = 'seated'
@@ -272,5 +325,16 @@ export async function PATCH(request: Request) {
     `;
     if (!rows.length) return Response.json({ error: "注文済みの座席は案内取消できません。" }, { status: 409 });
   }
+  await sql`
+    update store_tables
+    set metadata = jsonb_set(metadata, '{sharedModeEnabled}', 'false'::jsonb, true), updated_at = now()
+    where store_id::text = ${storeId}
+      and coalesce((metadata ->> 'sharedModeEnabled')::boolean, false) = true
+      and not exists (
+        select 1 from store_dining_session_tables
+        where store_dining_session_tables.table_id = store_tables.id
+          and store_dining_session_tables.released_at is null
+      )
+  `;
   return Response.json({ ok: true, ...(await seatBoard(storeId)) });
 }

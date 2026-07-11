@@ -3517,9 +3517,11 @@ create table if not exists store_dining_session_orders (
   linked_at timestamptz not null default now(),
   primary key (session_id, order_id)
 );
+alter table store_dining_session_tables add column if not exists seat_key text not null default 'TABLE';
 
-create unique index if not exists store_dining_session_tables_active_table_idx
-  on store_dining_session_tables(table_id)
+drop index if exists store_dining_session_tables_active_table_idx;
+create unique index if not exists store_dining_session_tables_active_seat_idx
+  on store_dining_session_tables(table_id, seat_key)
   where released_at is null;
 create index if not exists store_dining_sessions_store_status_idx
   on store_dining_sessions(store_id, status, updated_at desc);

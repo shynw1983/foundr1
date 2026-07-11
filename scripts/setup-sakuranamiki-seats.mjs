@@ -53,7 +53,9 @@ const statements = [
     linked_at timestamptz not null default now(),
     primary key (session_id, order_id)
   )`,
-  `create unique index if not exists store_dining_session_tables_active_table_idx on store_dining_session_tables(table_id) where released_at is null`,
+  `alter table store_dining_session_tables add column if not exists seat_key text not null default 'TABLE'`,
+  `drop index if exists store_dining_session_tables_active_table_idx`,
+  `create unique index if not exists store_dining_session_tables_active_seat_idx on store_dining_session_tables(table_id, seat_key) where released_at is null`,
   `create index if not exists store_dining_sessions_store_status_idx on store_dining_sessions(store_id, status, updated_at desc)`,
   `create index if not exists store_dining_session_orders_session_idx on store_dining_session_orders(session_id, linked_at)`,
   `insert into store_tables (
