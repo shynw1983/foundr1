@@ -14,6 +14,7 @@ type KitchenTask = {
   printStatus: string;
   itemSummary: string;
   pickupCode: string;
+  tableLabel: string;
   orderSource: string;
   orderType: string;
   note: string;
@@ -270,7 +271,7 @@ export default function StoreKitchenPage() {
                   <strong>{task.pickupCode}</strong>
                   <span>{task.productionAreaLabel} / {statusLabels[task.status]}</span>
                 </div>
-                <p>{(orderTypeLabels[task.orderType] ?? task.orderType) || "受け取り"} / {task.createdTime}</p>
+                <p>{(orderTypeLabels[task.orderType] ?? task.orderType) || "受け取り"}{task.tableLabel ? ` / 座席 ${task.tableLabel}` : ""} / {task.createdTime}</p>
                 <div className="store-kitchen-items">
                   {splitLines(task.itemSummary).map((line, index) => {
                     const lineKey = `${task.id}:${index}`;
@@ -298,7 +299,7 @@ export default function StoreKitchenPage() {
                   {task.status === "new" ? (
                     <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "preparing")}>制作開始</button>
                   ) : null}
-                  <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "ready")}>完成</button>
+                  <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "ready")}>{task.orderType === "eat_in" ? "提供完了" : "完成"}</button>
                 </div>
               </article>
             ))}

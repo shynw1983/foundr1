@@ -40,8 +40,15 @@ const statements = [
     released_at timestamptz,
     primary key (session_id, table_id)
   )`,
+  `create table if not exists store_dining_session_orders (
+    session_id uuid not null references store_dining_sessions(id) on delete cascade,
+    order_id uuid not null unique references store_customer_orders(id) on delete cascade,
+    linked_at timestamptz not null default now(),
+    primary key (session_id, order_id)
+  )`,
   `create unique index if not exists store_dining_session_tables_active_table_idx on store_dining_session_tables(table_id) where released_at is null`,
   `create index if not exists store_dining_sessions_store_status_idx on store_dining_sessions(store_id, status, updated_at desc)`,
+  `create index if not exists store_dining_session_orders_session_idx on store_dining_session_orders(session_id, linked_at)`,
   `insert into store_tables (
     store_id, label, display_name, area_name, seat_count, status,
     table_ordering_enabled, sort_order, metadata, updated_at

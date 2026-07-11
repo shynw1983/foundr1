@@ -22,6 +22,7 @@ async function getKitchenTasks(storeId: string, area = "") {
       order_production_tasks.print_status as "printStatus",
       order_production_tasks.item_summary as "itemSummary",
       store_customer_orders.pickup_code as "pickupCode",
+      coalesce(store_customer_orders.customer_summary ->> 'diningSeatLabel', nullif(store_tables.display_name, ''), store_tables.label, '') as "tableLabel",
       store_customer_orders.order_source as "orderSource",
       store_customer_orders.payment_status as "paymentStatus",
       coalesce(store_customer_orders.customer_summary ->> 'orderType', '') as "orderType",
@@ -30,6 +31,7 @@ async function getKitchenTasks(storeId: string, area = "") {
       to_char(store_customer_orders.created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime"
     from order_production_tasks
     join store_customer_orders on store_customer_orders.id = order_production_tasks.order_id
+    left join store_tables on store_tables.id = store_customer_orders.store_table_id
     where order_production_tasks.store_id::text = ${storeId}
       and store_customer_orders.payment_status = 'paid'
       and store_customer_orders.status not in ('completed', 'cancelled', 'refund_pending')

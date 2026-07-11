@@ -6,6 +6,7 @@ import { ensureProductionTasksForOrder } from "../../../../lib/order-production"
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { normalizePosPrinterSettings } from "../../../../lib/pos-printer";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
+import { getActiveDiningSessionsForPos, linkPaidOrderToDiningSession, storeRequiresDiningSeat } from "../../../../lib/store-dining-sessions";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ type PosCheckoutBody = {
   paymentMethod?: string;
   cashTenderedAmount?: number | string | null;
   tableSessionKey?: string;
+  diningSessionId?: string;
   memberId?: string;
   memberToken?: string;
   memberPhone?: string;
@@ -789,11 +791,13 @@ export async function GET(request: Request) {
   const { access, selectedStoreId, forbidden } = await getSelectedStoreId(request, session);
   if (forbidden) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const [menu, todaySummary, posSettings, tableCheckoutRequests] = await Promise.all([
+  const [menu, todaySummary, posSettings, tableCheckoutRequests, diningSessions, diningSeatRequired] = await Promise.all([
     getPosMenu(selectedStoreId),
     getTodaySummary(selectedStoreId),
     getPosSettings(selectedStoreId),
-    getTableCheckoutRequests(selectedStoreId)
+    getTableCheckoutRequests(selectedStoreId),
+    getActiveDiningSessionsForPos(selectedStoreId),
+    storeRequiresDiningSeat(selectedStoreId)
   ]);
 
   return Response.json({
@@ -802,7 +806,9 @@ export async function GET(request: Request) {
     ...menu,
     posSettings,
     todaySummary,
-    tableCheckoutRequests
+    tableCheckoutRequests,
+    diningSessions,
+    diningSeatRequired
   });
 }
 
@@ -911,6 +917,7 @@ export async function POST(request: Request) {
   const couponId = normalizeText(body.couponId);
   const discountPresetKey = normalizeText(body.discountPresetKey);
   const tableSessionKey = normalizeText(body.tableSessionKey);
+  const diningSessionId = normalizeText(body.diningSessionId);
   const cashTenderedAmount = body.cashTenderedAmount === null || body.cashTenderedAmount === undefined || body.cashTenderedAmount === ""
     ? null
     : Math.round(Number(body.cashTenderedAmount));
@@ -933,6 +940,18 @@ export async function POST(request: Request) {
   }
   if (orderType === "takeout" && !posSettings.takeoutEnabled) {
     return Response.json({ error: "この店舗では持ち帰りの会計は無効です。" }, { status: 400 });
+  }
+
+  const diningSessions = orderType === "eat_in" && !tableSessionKey
+    ? await getActiveDiningSessionsForPos(storeId) as Array<{ id: string; label: string }>
+    : [];
+  const diningSeatRequired = orderType === "eat_in" && !tableSessionKey && await storeRequiresDiningSeat(storeId);
+  const selectedDiningSession = diningSessions.find((diningSession) => diningSession.id === diningSessionId);
+  if (diningSeatRequired && !diningSessionId) {
+    return Response.json({ error: "店内注文の座席を選択してください。" }, { status: 400 });
+  }
+  if (diningSessionId && !selectedDiningSession) {
+    return Response.json({ error: "選択した座席は現在利用できません。座席状況を更新してください。" }, { status: 409 });
   }
 
   if (tableSessionKey) {
@@ -1395,6 +1414,13 @@ export async function POST(request: Request) {
   `;
   const orderId = orderRows[0]?.id as string | undefined;
   if (!orderId) return Response.json({ error: "会計を保存できませんでした。" }, { status: 500 });
+  if (diningSessionId) {
+    const linked = await linkPaidOrderToDiningSession({ storeId, sessionId: diningSessionId, orderId });
+    if (!linked) {
+      await sql`delete from store_customer_orders where id::text = ${orderId}`;
+      return Response.json({ error: "座席が更新されました。もう一度座席を選択してください。" }, { status: 409 });
+    }
+  }
   if (coupon && member?.id) {
     const redeemedCoupon = await redeemMemberCouponForOrder({ memberId: member.id, couponId: coupon.id, orderId, storeId });
     if (!redeemedCoupon) return Response.json({ error: "クーポンを使用処理できませんでした。もう一度会員情報を確認してください。" }, { status: 409 });
@@ -1502,6 +1528,8 @@ export async function POST(request: Request) {
     cashTenderedAmount,
     cashChangeAmount,
     loyaltyMember,
+    diningSessionId,
+    diningSeatLabel: selectedDiningSession?.label ?? "",
     todaySummary
   });
 }

@@ -1,6 +1,7 @@
 import { sql } from "./db";
 import { findMaamaaProductionRule, formatMaamaaProductionRule, maamaaSeasoningRules } from "./maamaa-production-rules";
 import { syncWebReservationToSalesOrder } from "./sales-orders";
+import { syncDiningSessionFromProduction } from "./store-dining-sessions";
 
 type ProductionTaskStatus = "new" | "preparing" | "ready";
 
@@ -327,6 +328,9 @@ export async function setProductionTaskStatus(taskId: string, status: Production
     returning order_id::text as "orderId"
   `;
   const orderId = rows[0]?.orderId as string | undefined;
-  if (orderId) await syncOrderStatusFromProductionTasks(orderId);
+  if (orderId) {
+    await syncOrderStatusFromProductionTasks(orderId);
+    await syncDiningSessionFromProduction(orderId);
+  }
   return orderId;
 }
