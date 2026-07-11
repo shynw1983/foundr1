@@ -21,21 +21,21 @@ type Selection =
 
 // This demo mirrors the current drawing. In production this array will come from
 // the store layout settings, so seat count, type and placement are not fixed.
-const storageKey = "store:seat-layout-demo:v4";
+const storageKey = "store:seat-layout-demo:v5";
 
 const initialSeats: Seat[] = [
   { id: "A1", kind: "table-a", x: 513, y: 289, status: "available" },
   { id: "A2", kind: "table-a", x: 512, y: 486, status: "available" },
   { id: "B1", kind: "table-b", x: 619, y: 289, status: "available" },
   { id: "B2", kind: "table-b", x: 619, y: 486, status: "available" },
-  { id: "C1", kind: "counter", x: 235, y: 288, status: "dining", partySize: 1, startedAt: "12:04" },
-  { id: "C2", kind: "counter", x: 235, y: 386, status: "dining", partySize: 1, startedAt: "12:08" },
-  { id: "C3", kind: "counter", x: 235, y: 484, status: "cooking", partySize: 1, startedAt: "12:17" },
-  { id: "C4", kind: "counter", x: 235, y: 582, status: "selecting", partySize: 1, startedAt: "12:21" },
-  { id: "C5", kind: "counter", x: 235, y: 680, status: "available" },
-  { id: "C6", kind: "counter", x: 235, y: 778, status: "available" },
-  { id: "C7", kind: "counter", x: 235, y: 876, status: "cleaning", partySize: 1, startedAt: "12:23" },
-  { id: "C8", kind: "counter", x: 235, y: 974, status: "available" }
+  { id: "C8", kind: "counter", x: 235, y: 288, status: "dining", partySize: 1, startedAt: "12:04" },
+  { id: "C7", kind: "counter", x: 235, y: 386, status: "dining", partySize: 1, startedAt: "12:08" },
+  { id: "C6", kind: "counter", x: 235, y: 484, status: "cooking", partySize: 1, startedAt: "12:17" },
+  { id: "C5", kind: "counter", x: 235, y: 582, status: "selecting", partySize: 1, startedAt: "12:21" },
+  { id: "C4", kind: "counter", x: 235, y: 680, status: "available" },
+  { id: "C3", kind: "counter", x: 235, y: 778, status: "available" },
+  { id: "C2", kind: "counter", x: 235, y: 876, status: "cleaning", partySize: 1, startedAt: "12:23" },
+  { id: "C1", kind: "counter", x: 235, y: 974, status: "available" }
 ];
 
 const statusMeta: Record<SeatStatus, { label: string; action?: string; source: "staff" | "system" }> = {

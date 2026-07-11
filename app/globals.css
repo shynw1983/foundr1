@@ -36053,6 +36053,11 @@ a:focus-visible {
   --seat-green-soft: #e7f0ed;
   --seat-ink: #19201e;
   --seat-muted: #66716d;
+  --seat-available: #15803d;
+  --seat-selecting: #2563eb;
+  --seat-cooking: #f59e0b;
+  --seat-dining: #16a34a;
+  --seat-cleaning: #dc2626;
   min-height: 100dvh;
   padding: max(18px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom));
   background:
@@ -36208,14 +36213,16 @@ a:focus-visible {
   font-size: 10px;
 }
 
+.seat-plan-table.is-available,
+.seat-plan-table-combine.is-available { border: 2px solid var(--seat-available); color: #166534; }
 .seat-plan-table.is-selecting,
-.seat-plan-table-combine.is-selecting { border-color: #829eb0; background: #e8f0f4; color: #294b5d; }
+.seat-plan-table-combine.is-selecting { border-color: #1d4ed8; background: var(--seat-selecting); color: #fff; }
 .seat-plan-table.is-cooking,
-.seat-plan-table-combine.is-cooking { border-color: #d0a954; background: #fbf2d9; color: #684f18; }
+.seat-plan-table-combine.is-cooking { border-color: #b45309; background: var(--seat-cooking); color: #171717; }
 .seat-plan-table.is-dining,
-.seat-plan-table-combine.is-dining { border-color: #4f856f; background: #e2eee9; color: #174a38; }
+.seat-plan-table-combine.is-dining { border-color: #15803d; background: var(--seat-dining); color: #fff; }
 .seat-plan-table.is-cleaning,
-.seat-plan-table-combine.is-cleaning { border-color: #9da39f; background: #eceeec; color: #5e6562; }
+.seat-plan-table-combine.is-cleaning { border-color: #991b1b; background: var(--seat-cleaning); color: #fff; }
 .seat-plan-table.is-mixed,
 .seat-plan-table-combine.is-mixed { border-style: dashed; background: #f2f2ef; color: #666c69; }
 
@@ -36229,10 +36236,11 @@ a:focus-visible {
 .seat-plan-seat strong { font-size: clamp(10px, 2.8vw, 14px); line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
 .seat-plan-seat span,
 .seat-plan-seat small { display: none; }
-.seat-plan-seat.is-selecting { border-color: #829eb0; background: #e8f0f4; color: #294b5d; }
-.seat-plan-seat.is-cooking { border-color: #d0a954; background: #fbf2d9; color: #684f18; }
-.seat-plan-seat.is-dining { border-color: #4f856f; background: #e2eee9; color: #174a38; }
-.seat-plan-seat.is-cleaning { border-color: #9da39f; background: #eceeec; color: #5e6562; }
+.seat-plan-seat.is-available { border-color: var(--seat-available); color: #166534; }
+.seat-plan-seat.is-selecting { border-color: #1d4ed8; background: var(--seat-selecting); color: #fff; }
+.seat-plan-seat.is-cooking { border-color: #b45309; background: var(--seat-cooking); color: #171717; }
+.seat-plan-seat.is-dining { border-color: #15803d; background: var(--seat-dining); color: #fff; }
+.seat-plan-seat.is-cleaning { border-color: #991b1b; background: var(--seat-cleaning); color: #fff; }
 .seat-plan-seat:active { transform: translate(-50%, -50%) scale(.94); }
 
 .seat-management-legend {
@@ -36246,11 +36254,11 @@ a:focus-visible {
 }
 
 .seat-management-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.seat-management-legend i { width: 8px; height: 8px; border-radius: 50%; background: #fff; border: 1px solid #bac1bd; }
-.seat-management-legend i.is-selecting { background: #8da9b8; border-color: #8da9b8; }
-.seat-management-legend i.is-cooking { background: #d0a954; border-color: #d0a954; }
-.seat-management-legend i.is-dining { background: #4f856f; border-color: #4f856f; }
-.seat-management-legend i.is-cleaning { background: #9da39f; border-color: #9da39f; }
+.seat-management-legend i { width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 2px solid var(--seat-available); }
+.seat-management-legend i.is-selecting { background: var(--seat-selecting); border-color: #1d4ed8; }
+.seat-management-legend i.is-cooking { background: var(--seat-cooking); border-color: #b45309; }
+.seat-management-legend i.is-dining { background: var(--seat-dining); border-color: #15803d; }
+.seat-management-legend i.is-cleaning { background: var(--seat-cleaning); border-color: #991b1b; }
 
 .seat-action-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: flex-end; justify-content: center; padding: 14px; background: rgba(16, 24, 21, .32); backdrop-filter: blur(2px); }
 .seat-action-sheet { width: min(100%, 520px); padding: 9px 18px calc(18px + env(safe-area-inset-bottom)); border-radius: 22px; background: #fff; box-shadow: 0 -20px 60px rgba(18, 27, 23, .22); }
@@ -36261,10 +36269,11 @@ a:focus-visible {
 .seat-action-title-row p { color: var(--seat-muted); font-size: 11px; }
 .seat-action-title-row h2 { font-size: 21px; }
 .seat-action-number { width: 58px; height: 58px; border: 2px solid #c7ceca; border-radius: 17px; display: grid; place-items: center; font-size: 22px; font-weight: 720; }
-.seat-action-number.is-selecting { background: #e8f0f4; border-color: #829eb0; }
-.seat-action-number.is-cooking { background: #fbf2d9; border-color: #d0a954; }
-.seat-action-number.is-dining { background: #e2eee9; border-color: #4f856f; }
-.seat-action-number.is-cleaning { background: #eceeec; border-color: #9da39f; }
+.seat-action-number.is-available { border-color: var(--seat-available); color: #166534; }
+.seat-action-number.is-selecting { background: var(--seat-selecting); border-color: #1d4ed8; color: #fff; }
+.seat-action-number.is-cooking { background: var(--seat-cooking); border-color: #b45309; color: #171717; }
+.seat-action-number.is-dining { background: var(--seat-dining); border-color: #15803d; color: #fff; }
+.seat-action-number.is-cleaning { background: var(--seat-cleaning); border-color: #991b1b; color: #fff; }
 .seat-action-note { margin: 18px 0 12px; min-height: 48px; padding: 12px 14px; border-radius: 12px; display: flex; align-items: center; gap: 9px; background: #f2f4f1; color: #4d5753; font-size: 13px; }
 .seat-action-note.is-system { background: #e9f1ee; color: #285746; }
 .seat-action-sync-status { min-height: 48px; display: flex; align-items: center; justify-content: center; border: 1px solid #d9e5e0; border-radius: 13px; background: #f5f8f6; color: #315f4f; font-size: 13px; font-weight: 600; }
