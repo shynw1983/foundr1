@@ -19,22 +19,33 @@ type Selection =
   | { type: "seat"; id: string }
   | { type: "table"; id: "A" | "B" | "A+B" };
 
+type SeatBoardTarget = {
+  label: string;
+  status: SeatStatus;
+  partySize: number;
+  startedAt: string;
+};
+
+type SeatBoardResponse = {
+  store?: { id: string; name: string };
+  targets?: SeatBoardTarget[];
+  error?: string;
+};
+
 // This demo mirrors the current drawing. In production this array will come from
 // the store layout settings, so seat count, type and placement are not fixed.
-const storageKey = "store:seat-layout-demo:v5";
-
 const initialSeats: Seat[] = [
   { id: "A1", kind: "table-a", x: 513, y: 289, status: "available" },
   { id: "A2", kind: "table-a", x: 512, y: 486, status: "available" },
   { id: "B1", kind: "table-b", x: 619, y: 289, status: "available" },
   { id: "B2", kind: "table-b", x: 619, y: 486, status: "available" },
-  { id: "C8", kind: "counter", x: 235, y: 288, status: "dining", partySize: 1, startedAt: "12:04" },
-  { id: "C7", kind: "counter", x: 235, y: 386, status: "dining", partySize: 1, startedAt: "12:08" },
-  { id: "C6", kind: "counter", x: 235, y: 484, status: "cooking", partySize: 1, startedAt: "12:17" },
-  { id: "C5", kind: "counter", x: 235, y: 582, status: "selecting", partySize: 1, startedAt: "12:21" },
+  { id: "C8", kind: "counter", x: 235, y: 288, status: "available" },
+  { id: "C7", kind: "counter", x: 235, y: 386, status: "available" },
+  { id: "C6", kind: "counter", x: 235, y: 484, status: "available" },
+  { id: "C5", kind: "counter", x: 235, y: 582, status: "available" },
   { id: "C4", kind: "counter", x: 235, y: 680, status: "available" },
   { id: "C3", kind: "counter", x: 235, y: 778, status: "available" },
-  { id: "C2", kind: "counter", x: 235, y: 876, status: "cleaning", partySize: 1, startedAt: "12:23" },
+  { id: "C2", kind: "counter", x: 235, y: 876, status: "available" },
   { id: "C1", kind: "counter", x: 235, y: 974, status: "available" }
 ];
 
@@ -46,33 +57,53 @@ const statusMeta: Record<SeatStatus, { label: string; action?: string; source: "
   cleaning: { label: "清掃待ち", action: "清掃完了・空席へ", source: "staff" }
 };
 
-function currentTime() {
-  return new Intl.DateTimeFormat("ja-JP", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  }).format(new Date());
-}
-
 export default function StoreSeatsPage() {
   const [seats, setSeats] = useState<Seat[]>(initialSeats);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [storeId, setStoreId] = useState("");
+  const [storeName, setStoreName] = useState("桜並木店");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(storageKey);
-      if (saved) setSeats(JSON.parse(saved) as Seat[]);
-    } catch {
-      // Keep the seat board usable if device storage is unavailable.
+  function applyBoard(data: SeatBoardResponse) {
+    if (data.store) {
+      setStoreId(data.store.id);
+      setStoreName(data.store.name);
     }
-    setLoaded(true);
-  }, []);
+    if (!data.targets) return;
+    const targets = new Map(data.targets.map((target) => [target.label, target]));
+    setSeats(initialSeats.map((seat) => {
+      const target = targets.get(seat.kind === "counter" ? seat.id : seat.kind === "table-a" ? "A" : "B");
+      return target ? { ...seat, status: target.status, partySize: target.partySize || undefined, startedAt: target.startedAt || undefined } : seat;
+    }));
+  }
 
   useEffect(() => {
-    if (!loaded) return;
-    window.localStorage.setItem(storageKey, JSON.stringify(seats));
-  }, [loaded, seats]);
+    let active = true;
+    async function load(showLoading = false) {
+      if (showLoading) setLoading(true);
+      try {
+        const response = await fetch("/api/store/seats", { cache: "no-store" });
+        const data = await response.json() as SeatBoardResponse;
+        if (!response.ok) throw new Error(data.error || "座席情報を取得できませんでした。");
+        if (active) {
+          applyBoard(data);
+          setError("");
+        }
+      } catch (loadError) {
+        if (active) setError(loadError instanceof Error ? loadError.message : "通信できません。");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void load(true);
+    const timer = window.setInterval(() => void load(), 3000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const counts = useMemo(() => ({
     available: seats.filter((seat) => seat.status === "available").length,
@@ -93,30 +124,44 @@ export default function StoreSeatsPage() {
     ? selectedSeat.status
     : null;
 
-  function runStaffAction(seatIds: string[]) {
-    setSeats((current) => current.map((seat) => {
-      if (!seatIds.includes(seat.id)) return seat;
-      const status = seat.status === "available"
-        ? "selecting"
-        : seat.status === "dining"
-          ? "cleaning"
-          : seat.status === "cleaning"
-            ? "available"
-            : seat.status;
-      if (status === "available") return { ...seat, status, partySize: undefined, startedAt: undefined };
-      return {
-        ...seat,
-        status,
-        partySize: seat.partySize ?? 1,
-        startedAt: seat.startedAt ?? currentTime()
-      };
-    }));
-    setSelection(null);
+  async function runStaffAction() {
+    if (!selection || !selectedStatus || !storeId || saving) return;
+    const target = selection.type === "table" ? selection.id : selection.id;
+    const isAssign = selectedStatus === "available";
+    const action = selectedStatus === "dining" ? "vacate" : selectedStatus === "cleaning" ? "clean" : "";
+    if (!isAssign && !action) return;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/store/seats", {
+        method: isAssign ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeId, target, action })
+      });
+      const data = await response.json() as SeatBoardResponse;
+      if (!response.ok) throw new Error(data.error || "座席を更新できませんでした。");
+      applyBoard(data);
+      setSelection(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "通信できません。");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function resetDemo() {
-    setSeats(initialSeats);
-    setSelection(null);
+  async function refreshBoard() {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/store/seats", { cache: "no-store" });
+      const data = await response.json() as SeatBoardResponse;
+      if (!response.ok) throw new Error(data.error || "座席情報を取得できませんでした。");
+      applyBoard(data);
+      setError("");
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : "通信できません。");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function renderSeat(seat: Seat) {
@@ -150,13 +195,15 @@ export default function StoreSeatsPage() {
       <header className="seat-management-header">
         <a className="seat-management-back" href="/store" aria-label="店舗ホームへ戻る"><ArrowLeft size={20} /></a>
         <div>
-          <p>FRONT OF HOUSE</p>
+          <p>まぁ麻 {storeName}</p>
           <h1>客席管理</h1>
         </div>
-        <button type="button" className="seat-management-reset" onClick={resetDemo} aria-label="デモ状態をリセット">
+        <button type="button" className="seat-management-reset" onClick={() => void refreshBoard()} aria-label="座席情報を更新" disabled={loading}>
           <RotateCcw size={18} />
         </button>
       </header>
+
+      {error ? <div className="seat-management-error" role="alert">{error}</div> : null}
 
       <section className="seat-management-summary" aria-label="客席状況">
         <div className="is-available"><strong>{counts.available}</strong><span>空席</span></div>
@@ -229,8 +276,8 @@ export default function StoreSeatsPage() {
               <div className="seat-action-note"><Users size={18} /><span>各テーブルの状態が異なるため、AまたはBを個別に選択してください</span></div>
             )}
             {selectedStatus && statusMeta[selectedStatus].source === "staff" ? (
-              <button className="seat-action-primary" type="button" onClick={() => runStaffAction(selectedSeats.map((seat) => seat.id))}>
-                <Check size={20} /> {statusMeta[selectedStatus].action}
+              <button className="seat-action-primary" type="button" onClick={() => void runStaffAction()} disabled={saving}>
+                <Check size={20} /> {saving ? "更新中…" : statusMeta[selectedStatus].action}
               </button>
             ) : selectedStatus ? (
               <div className="seat-action-sync-status"><span className="seat-live-dot" /> システム連動中・操作不要</div>

@@ -36126,6 +36126,18 @@ a:focus-visible {
 .seat-management-summary .is-dining strong { color: var(--seat-dining); }
 .seat-management-summary .is-cleaning strong { color: var(--seat-cleaning); }
 
+.seat-management-error {
+  width: min(100%, 520px);
+  margin: 0 auto 12px;
+  padding: 10px 12px;
+  border: 2px solid #b91c1c;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .seat-floor-card {
   width: min(100%, 520px);
   margin: 0 auto;

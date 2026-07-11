@@ -1,0 +1,180 @@
+import { requireOsSession } from "../../../../lib/api-auth";
+import { sql } from "../../../../lib/db";
+import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
+
+export const dynamic = "force-dynamic";
+
+type SeatStatus = "available" | "selecting" | "cooking" | "dining" | "cleaning";
+
+function normalizeTarget(value: unknown) {
+  const target = String(value ?? "").trim().toUpperCase();
+  return ["A", "B", "A+B", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"].includes(target) ? target : "";
+}
+
+async function resolveStore(request: Request, session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>) {
+  const access = await getStoreOrderAccess(session);
+  const requested = new URL(request.url).searchParams.get("storeId");
+  const filtered = getScopedStoreFilter(access, requested);
+  if (filtered === "__forbidden__") return { access, storeId: "", forbidden: true };
+  if (filtered) return { access, storeId: filtered, forbidden: false };
+  const sakuranamiki = access.stores.find((store) => store.name === "桜並木店");
+  return { access, storeId: sakuranamiki?.id ?? access.stores[0]?.id ?? "", forbidden: false };
+}
+
+async function seatBoard(storeId: string) {
+  const storeRows = await sql`
+    select
+      stores.id::text,
+      stores.name,
+      coalesce(store_floor_layouts.background_path, '/store/maamaa-floor-background.svg') as "backgroundPath",
+      coalesce(store_floor_layouts.canvas_width, 800)::int as "canvasWidth",
+      coalesce(store_floor_layouts.canvas_height, 1200)::int as "canvasHeight",
+      coalesce(store_floor_layouts.layout_data, '{}'::jsonb) as layout
+    from stores
+    left join store_floor_layouts on store_floor_layouts.store_id = stores.id
+    where stores.id::text = ${storeId}
+    limit 1
+  `;
+  const targetRows = await sql`
+    select
+      store_tables.id::text as "tableId",
+      store_tables.label,
+      store_tables.display_name as "displayName",
+      store_tables.seat_count as "seatCount",
+      coalesce(store_dining_sessions.id::text, '') as "sessionId",
+      coalesce(store_dining_sessions.status, 'available') as status,
+      coalesce(store_dining_sessions.party_size, 0)::int as "partySize",
+      coalesce(to_char(store_dining_sessions.assigned_at at time zone 'Asia/Tokyo', 'HH24:MI'), '') as "startedAt",
+      coalesce(store_dining_sessions.table_group_label, '') as "groupLabel"
+    from store_tables
+    left join store_dining_session_tables
+      on store_dining_session_tables.table_id = store_tables.id
+      and store_dining_session_tables.released_at is null
+    left join store_dining_sessions
+      on store_dining_sessions.id = store_dining_session_tables.session_id
+      and store_dining_sessions.status <> 'completed'
+    where store_tables.store_id::text = ${storeId}
+      and store_tables.status = 'active'
+      and store_tables.label = any(${["A", "B", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]})
+    order by store_tables.sort_order, store_tables.label
+  `;
+  return {
+    store: storeRows[0] ?? null,
+    targets: targetRows.map((row) => ({ ...row, status: row.status as SeatStatus }))
+  };
+}
+
+export async function GET(request: Request) {
+  const session = await requireOsSession();
+  if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
+  const { access, storeId, forbidden } = await resolveStore(request, session);
+  if (forbidden) return Response.json({ error: "店舗へのアクセス権限がありません。" }, { status: 403 });
+  if (!storeId) return Response.json({ error: "利用できる店舗がありません。" }, { status: 404 });
+  return Response.json({ ...(await seatBoard(storeId)), stores: access.stores }, { headers: { "Cache-Control": "no-store" } });
+}
+
+export async function POST(request: Request) {
+  const session = await requireOsSession();
+  if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
+  const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+  const storeId = String(body.storeId ?? "").trim();
+  const target = normalizeTarget(body.target);
+  const partySize = Math.max(1, Math.min(20, Math.round(Number(body.partySize) || (target === "A+B" ? 4 : target === "A" || target === "B" ? 2 : 1))));
+  const access = await getStoreOrderAccess(session);
+  if (!storeId || getScopedStoreFilter(access, storeId) !== storeId) {
+    return Response.json({ error: "店舗へのアクセス権限がありません。" }, { status: 403 });
+  }
+  if (!target) return Response.json({ error: "座席を選択してください。" }, { status: 400 });
+  const labels = target === "A+B" ? ["A", "B"] : [target];
+  try {
+    const rows = await sql`
+      with selected_tables as (
+        select id
+        from store_tables
+        where store_id::text = ${storeId}
+          and label = any(${labels})
+          and status = 'active'
+      ), new_session as (
+        insert into store_dining_sessions (
+          store_id, table_group_label, status, party_size, assigned_by
+        )
+        select ${storeId}, ${target}, 'selecting', ${partySize}, ${session.id}
+        where (select count(*) from selected_tables) = ${labels.length}
+        returning id
+      ), assignments as (
+        insert into store_dining_session_tables (session_id, table_id)
+        select new_session.id, selected_tables.id
+        from new_session cross join selected_tables
+        returning session_id
+      )
+      select id::text
+      from new_session
+      where (select count(*) from assignments) = ${labels.length}
+    `;
+    if (!rows[0]?.id) return Response.json({ error: "座席設定が見つかりません。" }, { status: 404 });
+  } catch (error) {
+    if (String((error as { code?: string })?.code ?? "") === "23505") {
+      return Response.json({ error: "この座席は他のスタッフが案内済みです。" }, { status: 409 });
+    }
+    throw error;
+  }
+  return Response.json({ ok: true, ...(await seatBoard(storeId)) }, { status: 201 });
+}
+
+export async function PATCH(request: Request) {
+  const session = await requireOsSession();
+  if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
+  const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+  const storeId = String(body.storeId ?? "").trim();
+  const target = normalizeTarget(body.target);
+  const action = String(body.action ?? "").trim();
+  const access = await getStoreOrderAccess(session);
+  if (!storeId || getScopedStoreFilter(access, storeId) !== storeId) {
+    return Response.json({ error: "店舗へのアクセス権限がありません。" }, { status: 403 });
+  }
+  if (!target || !["vacate", "clean"].includes(action)) {
+    return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
+  }
+  const labels = target === "A+B" ? ["A", "B"] : [target];
+  if (action === "vacate") {
+    const rows = await sql`
+      update store_dining_sessions
+      set status = 'cleaning', vacated_at = now(), updated_at = now()
+      where id in (
+        select distinct store_dining_session_tables.session_id
+        from store_dining_session_tables
+        join store_tables on store_tables.id = store_dining_session_tables.table_id
+        where store_tables.store_id::text = ${storeId}
+          and store_tables.label = any(${labels})
+          and store_dining_session_tables.released_at is null
+      )
+        and status = 'dining'
+      returning id::text
+    `;
+    if (!rows.length) return Response.json({ error: "現在の状態では退席処理できません。" }, { status: 409 });
+  } else {
+    const rows = await sql`
+      with completed as (
+        update store_dining_sessions
+        set status = 'completed', cleaned_at = now(), completed_at = now(), updated_at = now()
+        where id in (
+          select distinct store_dining_session_tables.session_id
+          from store_dining_session_tables
+          join store_tables on store_tables.id = store_dining_session_tables.table_id
+          where store_tables.store_id::text = ${storeId}
+            and store_tables.label = any(${labels})
+            and store_dining_session_tables.released_at is null
+        )
+          and status = 'cleaning'
+        returning id
+      )
+      update store_dining_session_tables
+      set released_at = now()
+      where session_id in (select id from completed)
+        and released_at is null
+      returning session_id::text
+    `;
+    if (!rows.length) return Response.json({ error: "現在の状態では清掃完了にできません。" }, { status: 409 });
+  }
+  return Response.json({ ok: true, ...(await seatBoard(storeId)) });
+}
