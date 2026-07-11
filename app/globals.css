@@ -36352,6 +36352,7 @@ a:focus-visible {
 .seat-action-cancel { margin-top: 8px; border: 1px solid #dfe2df; background: #fff; color: #52605a; }
 .seat-move-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
 .seat-move-grid button { min-height: 40px; border: 1px solid #173f35; border-radius: 8px; background: #fff; color: #173f35; font-weight: 700; }
+.seat-move-grid p { grid-column: 1 / -1; margin: 4px 0; color: #991b1b; font-size: 12px; font-weight: 650; text-align: center; }
 
 @media (min-width: 700px) {
   .seat-management-page { padding-top: 28px; }

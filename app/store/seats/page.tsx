@@ -223,6 +223,20 @@ export default function StoreSeatsPage() {
     return tableSeats.every((seat) => seat.status === tableSeats[0]?.status) ? tableSeats[0]?.status : "mixed";
   }
 
+  function getMoveTargets(currentGroup = "") {
+    const targets: string[] = [];
+    if (tableStatus("A") === "available") targets.push("A");
+    if (tableStatus("B") === "available") targets.push("B");
+    if (tableStatus("A") === "available" && tableStatus("B") === "available") targets.push("A+B");
+    for (const seat of seats) {
+      if (seat.kind === "counter" && seat.status === "available") targets.push(seat.id);
+    }
+    if (currentGroup === "A" && tableStatus("B") === "available") targets.push("A+B");
+    if (currentGroup === "B" && tableStatus("A") === "available") targets.push("A+B");
+    if (currentGroup === "A+B") targets.push("A", "B");
+    return Array.from(new Set(targets)).filter((target) => target !== currentGroup);
+  }
+
   return (
     <main className="seat-management-page">
       <header className="seat-management-header">
@@ -323,9 +337,9 @@ export default function StoreSeatsPage() {
             ) : null}
             {moving ? (
               <div className="seat-move-grid" aria-label="移動先">
-                {["A", "B", "A+B", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]
-                  .filter((destination) => destination !== selectedSeat.groupLabel)
+                {getMoveTargets(selectedSeat.groupLabel)
                   .map((destination) => <button type="button" key={destination} onClick={() => void moveSeat(destination)} disabled={saving}>{destination}</button>)}
+                {!getMoveTargets(selectedSeat.groupLabel).length ? <p>移動できる空席がありません。</p> : null}
               </div>
             ) : null}
             <button className="seat-action-cancel" type="button" onClick={() => setSelection(null)}>閉じる</button>
