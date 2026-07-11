@@ -76,7 +76,9 @@ export default function StoreSeatsPage() {
 
   const counts = useMemo(() => ({
     available: seats.filter((seat) => seat.status === "available").length,
-    occupied: seats.filter((seat) => seat.status !== "available" && seat.status !== "cleaning").length,
+    selecting: seats.filter((seat) => seat.status === "selecting").length,
+    cooking: seats.filter((seat) => seat.status === "cooking").length,
+    dining: seats.filter((seat) => seat.status === "dining").length,
     cleaning: seats.filter((seat) => seat.status === "cleaning").length
   }), [seats]);
   const selectedSeats = selection?.type === "seat"
@@ -157,9 +159,11 @@ export default function StoreSeatsPage() {
       </header>
 
       <section className="seat-management-summary" aria-label="客席状況">
-        <div><strong>{counts.available}</strong><span>空席</span></div>
-        <div><strong>{counts.occupied}</strong><span>利用中</span></div>
-        <div><strong>{counts.cleaning}</strong><span>清掃待ち</span></div>
+        <div className="is-available"><strong>{counts.available}</strong><span>空席</span></div>
+        <div className="is-selecting"><strong>{counts.selecting}</strong><span>食材選択</span></div>
+        <div className="is-cooking"><strong>{counts.cooking}</strong><span>調理待ち</span></div>
+        <div className="is-dining"><strong>{counts.dining}</strong><span>食事中</span></div>
+        <div className="is-cleaning"><strong>{counts.cleaning}</strong><span>清掃待ち</span></div>
       </section>
 
       <section className="seat-floor-card">

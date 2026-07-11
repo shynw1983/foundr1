@@ -36099,7 +36099,7 @@ a:focus-visible {
   width: min(100%, 520px);
   margin: 0 auto 12px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   border: 1px solid #dfe1dc;
   border-radius: 15px;
   background: rgba(255,255,255,.82);
@@ -36107,17 +36107,24 @@ a:focus-visible {
 }
 
 .seat-management-summary div {
-  min-height: 62px;
+  min-width: 0;
+  min-height: 66px;
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 12px 8px;
+  gap: 2px;
+  padding: 8px 3px;
 }
 
 .seat-management-summary div + div { border-left: 1px solid #e5e6e1; }
-.seat-management-summary strong { font-size: 25px; font-weight: 680; font-variant-numeric: tabular-nums; }
-.seat-management-summary span { color: var(--seat-muted); font-size: 12px; }
+.seat-management-summary strong { font-size: 25px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.seat-management-summary span { color: var(--seat-muted); font-size: 10px; line-height: 1.2; white-space: nowrap; }
+.seat-management-summary .is-available strong { color: var(--seat-available); }
+.seat-management-summary .is-selecting strong { color: var(--seat-selecting); }
+.seat-management-summary .is-cooking strong { color: #b45309; }
+.seat-management-summary .is-dining strong { color: var(--seat-dining); }
+.seat-management-summary .is-cleaning strong { color: var(--seat-cleaning); }
 
 .seat-floor-card {
   width: min(100%, 520px);
