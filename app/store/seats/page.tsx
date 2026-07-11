@@ -40,8 +40,8 @@ const initialSeats: Seat[] = [
 
 const statusMeta: Record<SeatStatus, { label: string; action?: string; source: "staff" | "system" }> = {
   available: { label: "空席", action: "この席へ案内", source: "staff" },
-  selecting: { label: "選菜中", source: "system" },
-  cooking: { label: "制作・提供待ち", source: "system" },
+  selecting: { label: "食材選択中", source: "system" },
+  cooking: { label: "調理・提供待ち", source: "system" },
   dining: { label: "食事中", action: "退席・清掃待ち", source: "staff" },
   cleaning: { label: "清掃待ち", action: "清掃完了・空席へ", source: "staff" }
 };
@@ -216,7 +216,7 @@ export default function StoreSeatsPage() {
             ) : selectedStatus === "cleaning" ? (
               <div className="seat-action-note"><Sparkles size={18} /><span>清掃後に空席として開放します</span></div>
             ) : selectedStatus === "selecting" ? (
-              <div className="seat-action-note is-system"><Sparkles size={18} /><span>会計すると自動で「制作・提供待ち」へ進みます</span></div>
+              <div className="seat-action-note is-system"><Sparkles size={18} /><span>会計すると自動で「調理・提供待ち」へ進みます</span></div>
             ) : selectedStatus === "cooking" ? (
               <div className="seat-action-note is-system"><Sparkles size={18} /><span>提供完了すると自動で「食事中」へ進みます</span></div>
             ) : selectedStatus === "dining" ? (
