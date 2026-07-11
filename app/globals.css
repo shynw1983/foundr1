@@ -36292,6 +36292,7 @@ a:focus-visible {
 .seat-plan-table-combine.is-cleaning { border-color: #991b1b; background: var(--seat-cleaning); color: #fff; }
 .seat-plan-table.is-mixed,
 .seat-plan-table-combine.is-mixed { border-style: dashed; background: #f2f2ef; color: #666c69; }
+.seat-plan-table-combine:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 
 .seat-plan-seat::before {
   content: "";

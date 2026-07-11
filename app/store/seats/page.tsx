@@ -223,6 +223,16 @@ export default function StoreSeatsPage() {
     return tableSeats.every((seat) => seat.status === tableSeats[0]?.status) ? tableSeats[0]?.status : "mixed";
   }
 
+  function combinedTableState() {
+    const aSeats = seats.filter((seat) => seat.kind === "table-a");
+    const bSeats = seats.filter((seat) => seat.kind === "table-b");
+    const bothAvailable = [...aSeats, ...bSeats].every((seat) => seat.status === "available");
+    if (bothAvailable) return { status: "available", enabled: true } as const;
+    const combinedSession = [...aSeats, ...bSeats].every((seat) => seat.groupLabel === "A+B");
+    if (combinedSession) return { status: tableStatus("A+B"), enabled: true } as const;
+    return { status: "mixed", enabled: false } as const;
+  }
+
   function getMoveTargets(currentGroup = "") {
     const targets: string[] = [];
     if (tableStatus("A") === "available") targets.push("A");
@@ -283,9 +293,10 @@ export default function StoreSeatsPage() {
               >{table}</button>
             ))}
             <button
-              className={`seat-plan-table-combine is-${tableStatus("A+B")}`}
+              className={`seat-plan-table-combine is-${combinedTableState().status}`}
               type="button"
               onClick={() => setSelection({ type: "table", id: "A+B" })}
+              disabled={!combinedTableState().enabled}
               aria-label="AとBテーブルを連結して選択"
             >A+B</button>
           </div>
