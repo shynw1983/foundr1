@@ -1729,7 +1729,7 @@ export default function StorePosPage() {
         cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" ? body.cashChangeAmount ?? cashTenderedValue - body.amount : null,
         items: selectedTableCheckout ? [{
-          name: `${selectedTableCheckout.tableLabel} テーブル会計`,
+          name: `${selectedTableCheckout.tableLabel} QR追加会計`,
           optionLabel: selectedTableCheckout.itemSummary.slice(0, 3).join(" / "),
           quantity: 1,
           measuredQuantity: null,
@@ -1792,7 +1792,7 @@ export default function StorePosPage() {
         cashTenderedAmount: paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" && cashChangeAmount !== null ? cashChangeAmount : null,
         items: selectedTableCheckout ? [{
-          name: `${selectedTableCheckout.tableLabel} テーブル会計`,
+          name: `${selectedTableCheckout.tableLabel} QR追加会計`,
           optionLabel: selectedTableCheckout.itemSummary.slice(0, 3).join(" / "),
           quantity: 1,
           measuredQuantity: null,
@@ -2196,7 +2196,7 @@ export default function StorePosPage() {
           <div className="store-pos-cart-list">
             {selectedTableCheckout ? (
               <div className="store-pos-table-checkout-selected">
-                <span>テーブル会計</span>
+                <span>QR追加会計</span>
                 <strong>{selectedTableCheckout.tableLabel}</strong>
                 <p>{selectedTableCheckout.itemSummary.slice(0, 5).join(" / ") || "追加注文"}</p>
                 <small>{selectedTableCheckout.orderCount}件 / {selectedTableCheckout.pickupCodes.join(", ")}</small>
@@ -2481,7 +2481,7 @@ export default function StorePosPage() {
           <div className="store-pos-total">
             {selectedTableCheckout ? (
               <>
-                <span>テーブル会計</span>
+                <span>QR追加会計</span>
                 <strong>{formatYen(tableCheckoutAmount)}</strong>
                 <span>対象</span>
                 <strong className="is-tax">{selectedTableCheckout.tableLabel}</strong>

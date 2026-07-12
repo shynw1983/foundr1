@@ -1,8 +1,6 @@
 import { createPickupCode, findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
-import { ensureProductionTasksForOrder } from "../../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
-import { linkTableOrderToDiningSession } from "../../../../../lib/store-dining-sessions";
 
 export const dynamic = "force-dynamic";
 
@@ -68,10 +66,11 @@ function getJstParts(date = new Date()) {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({})) as { token?: string; items?: TableOrderItemInput[]; note?: string };
+  const body = await request.json().catch(() => ({})) as { token?: string; visitKey?: string; items?: TableOrderItemInput[]; note?: string };
   const token = normalizeText(body.token);
+  const visitKey = normalizeText(body.visitKey);
   const cartItems = Array.isArray(body.items) ? body.items : [];
-  if (!token || cartItems.length === 0) {
+  if (!token || !/^[a-zA-Z0-9-]{16,80}$/.test(visitKey) || cartItems.length === 0) {
     return Response.json({ error: "注文する商品を選択してください。" }, { status: 400 });
   }
 
@@ -86,8 +85,6 @@ export async function POST(request: Request) {
       coalesce(brands.id::text, fallback_brands.id::text, '') as "brandId",
       coalesce(brands.name, fallback_brands.name, '') as "brandName",
       coalesce(pos_store_settings.dine_in_enabled, true) as "dineInEnabled"
-      ,coalesce(active_dining_session.id::text, '') as "diningSessionId"
-      ,coalesce(active_dining_session.dine_in_entitled, false) as "dineInEntitled"
     from store_tables
     join stores on stores.id = store_tables.store_id
     left join brands on brands.id = store_tables.brand_id
@@ -104,16 +101,6 @@ export async function POST(request: Request) {
       limit 1
     ) fallback_brands on true
     left join pos_store_settings on pos_store_settings.store_id = stores.id
-    left join lateral (
-      select store_dining_sessions.id, store_dining_sessions.dine_in_entitled
-      from store_dining_session_tables
-      join store_dining_sessions on store_dining_sessions.id = store_dining_session_tables.session_id
-      where store_dining_session_tables.table_id = store_tables.id
-        and store_dining_session_tables.released_at is null
-        and store_dining_sessions.status in ('seated', 'dining')
-      order by store_dining_sessions.assigned_at desc
-      limit 1
-    ) active_dining_session on true
     where store_tables.qr_token = ${token}
       and store_tables.status = 'active'
       and stores.status = 'active'
@@ -130,11 +117,9 @@ export async function POST(request: Request) {
     brandId: string;
     brandName: string;
     dineInEnabled: boolean;
-    diningSessionId: string;
-    dineInEntitled: boolean;
   } | undefined;
   if (!table) return Response.json({ error: "このテーブルでは現在注文できません。" }, { status: 404 });
-  if (!table.tableOrderingEnabled || !table.dineInEnabled || !table.diningSessionId) {
+  if (!table.tableOrderingEnabled || !table.dineInEnabled) {
     return Response.json({ error: "このテーブルでは現在注文できません。" }, { status: 400 });
   }
   const allowedBrandRows = table.brandId
@@ -293,20 +278,9 @@ export async function POST(request: Request) {
   }
 
   const amount = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
-  const brandIds = Array.from(new Set(normalizedItems.map((item) => item.brandId)));
-  const malatangRows = await sql`
-    select exists(
-      select 1 from brands
-      where id::text = any(${brandIds})
-        and (lower(name) like '%maamaa%' or name like '%まぁ麻%' or name like '%麻辣%')
-    ) as matched
-  `;
-  if (!table.dineInEntitled && malatangRows[0]?.matched !== true) {
-    return Response.json({ error: "ドリンクのみのご注文はお持ち帰りです。店内利用にはマーラータンのご注文が必要です。" }, { status: 400 });
-  }
   const { pickupDate, pickupTime } = getJstParts();
-  const pickupCode = createPickupCode("T");
-  const tableSessionKey = `${table.tableId}:${pickupDate.replaceAll("-", "")}`;
+  const pickupCode = createPickupCode("M");
+  const tableSessionKey = `${table.tableId}:${visitKey}`;
   const firstItemName = normalizedItems[0]?.name ?? "";
   const primaryBrandId = table.brandId || normalizedItems[0]?.brandId || "";
   const note = normalizeText(body.note).slice(0, 300);
@@ -350,8 +324,10 @@ export async function POST(request: Request) {
         tableId: table.tableId,
         tableLabel: table.tableDisplayName || table.tableLabel,
         tableSessionKey,
-        checkoutStatus: "open",
-        paymentIntent: "not_requested",
+        checkoutStatus: "requested",
+        checkoutRequestType: "pay_at_counter",
+        checkoutRequestedAt: new Date().toISOString(),
+        paymentIntent: "pay_at_counter",
         note,
         subtotalAmount: amount,
         itemCount: normalizedItems.reduce((sum, item) => sum + item.quantity, 0),
@@ -376,12 +352,6 @@ export async function POST(request: Request) {
   `;
   const orderId = orderRows[0]?.id as string | undefined;
   if (!orderId) return Response.json({ error: "注文を保存できませんでした。" }, { status: 500 });
-  const linked = await linkTableOrderToDiningSession({ storeId: table.storeId, sessionId: table.diningSessionId, orderId });
-  if (!linked) {
-    await sql`delete from store_customer_orders where id::text = ${orderId}`;
-    return Response.json({ error: "座席が更新されました。QRコードを読み直してください。" }, { status: 409 });
-  }
-
   for (let index = 0; index < normalizedItems.length; index += 1) {
     const item = normalizedItems[index];
     const groupLabels = new Map<string, string[]>();
@@ -435,7 +405,6 @@ export async function POST(request: Request) {
     `;
   }
 
-  await ensureProductionTasksForOrder(orderId);
   await publishCustomerOrderEvent("order.created", await findCustomerOrderById(orderId));
 
   return Response.json({

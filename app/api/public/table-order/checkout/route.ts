@@ -4,36 +4,25 @@ import { findCustomerOrderById } from "../../../../../lib/customer-orders";
 
 export const dynamic = "force-dynamic";
 
-const checkoutTypes = new Set(["pay_at_counter", "online_payment", "staff_to_table"]);
+const checkoutTypes = new Set(["pay_at_counter"]);
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
-}
-
-function getJstDate(date = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(date);
 }
 
 function getCheckoutMessage(type: string) {
   if (type === "pay_at_counter") {
     return "レジまでお越しください。スタッフがテーブル番号を確認します。";
   }
-  if (type === "staff_to_table") {
-    return "スタッフをお呼びしました。この画面を開いたままお待ちください。";
-  }
-  return "オンライン決済は準備中です。現在はレジ会計またはスタッフ呼び出しをご利用ください。";
+  return "レジまでお越しください。受付番号を確認してお会計します。";
 }
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({})) as { token?: string; checkoutType?: string };
+  const body = await request.json().catch(() => ({})) as { token?: string; visitKey?: string; checkoutType?: string };
   const token = normalizeText(body.token);
+  const visitKey = normalizeText(body.visitKey);
   const checkoutType = normalizeText(body.checkoutType);
-  if (!token || !checkoutTypes.has(checkoutType)) {
+  if (!token || !/^[a-zA-Z0-9-]{16,80}$/.test(visitKey) || !checkoutTypes.has(checkoutType)) {
     return Response.json({ error: "会計方法を選択してください。" }, { status: 400 });
   }
 
@@ -68,14 +57,6 @@ export async function POST(request: Request) {
       and store_tables.status = 'active'
       and stores.status = 'active'
       and (brands.id is null or brands.status = 'active')
-      and exists (
-        select 1
-        from store_dining_session_tables
-        join store_dining_sessions on store_dining_sessions.id = store_dining_session_tables.session_id
-        where store_dining_session_tables.table_id = store_tables.id
-          and store_dining_session_tables.released_at is null
-          and store_dining_sessions.status in ('seated', 'dining')
-      )
     limit 1
   `;
   const table = tableRows[0] as {
@@ -93,8 +74,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "このテーブルでは現在会計できません。" }, { status: 400 });
   }
 
-  const businessDate = getJstDate();
-  const tableSessionKey = `${table.tableId}:${businessDate.replaceAll("-", "")}`;
+  const tableSessionKey = `${table.tableId}:${visitKey}`;
   const orders = await sql`
     select
       id::text,

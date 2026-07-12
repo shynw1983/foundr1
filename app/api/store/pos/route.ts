@@ -1029,7 +1029,7 @@ export async function POST(request: Request) {
     return Response.json({
       ok: true,
       orderId: orderIds[orderIds.length - 1],
-      pickupCode: tableLabel,
+      pickupCode: (orders as Array<{ pickupCode: string }>).map((order) => order.pickupCode).join("・"),
       amount,
       receiptRequested,
       subtotalAmount: amount,
