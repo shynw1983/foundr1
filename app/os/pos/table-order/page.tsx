@@ -20,6 +20,7 @@ import {
   Store,
   ToggleLeft,
   ToggleRight,
+  Trash2,
   Truck,
   UserCog,
   WalletCards
@@ -197,6 +198,21 @@ export default function OsTableOrderPage() {
     }
   }
 
+  async function deleteTable(table: StoreTable) {
+    const tableName = table.displayName || table.label;
+    if (!window.confirm(`「${tableName}」のQRを削除しますか？\n印刷済みのQRはすぐに利用できなくなります。`)) return;
+    setMessage("");
+    try {
+      const response = await fetch(`/api/os/table-order/tables/${table.id}`, { method: "DELETE" });
+      const body = await response.json().catch(() => ({})) as { ok?: boolean; error?: string };
+      if (!response.ok || body.ok !== true) throw new Error(body.error || "テーブルQRを削除できませんでした。");
+      setTables((current) => current.filter((candidate) => candidate.id !== table.id));
+      setMessage(`「${tableName}」のテーブルQRを削除しました。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "テーブルQRを削除できませんでした。");
+    }
+  }
+
   async function copyUrl(url: string) {
     try {
       await navigator.clipboard.writeText(url);
@@ -338,6 +354,7 @@ export default function OsTableOrderPage() {
                 <button type="button" className="secondary-button" onClick={() => void copyUrl(table.qrUrl)}><Copy size={16} />コピー</button>
                 <a className="secondary-button" href={table.qrUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} />開く</a>
                 <button type="button" className="secondary-button" onClick={() => void patchTable(table, { action: "regenerate_qr" }, "QRを再発行しました。古いQRは無効です。")}><RefreshCcw size={16} />再発行</button>
+                <button type="button" className="danger-button" onClick={() => void deleteTable(table)}><Trash2 size={16} />削除</button>
               </div>
               <label className="table-order-brand-control">
                 <span>表示メニュー</span>

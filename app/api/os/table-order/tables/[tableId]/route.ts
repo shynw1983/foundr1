@@ -130,3 +130,48 @@ export async function PATCH(request: Request, context: { params: Promise<{ table
 
   return Response.json({ table: await serializeTable(tableId, request) });
 }
+
+export async function DELETE(_request: Request, context: { params: Promise<{ tableId: string }> }) {
+  const session = await requireOsSession();
+  if (!session || !(await canManageTableOrders(session.role))) {
+    return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
+
+  const { tableId } = await context.params;
+  const table = await getAccessibleTable(session, tableId);
+  if (!table) return Response.json({ error: "テーブルが見つかりません。" }, { status: 404 });
+
+  const blockers = await sql`
+    select
+      exists (
+        select 1
+        from store_customer_orders
+        where store_table_id::text = ${tableId}
+          and status <> 'cancelled'
+          and (payment_status <> 'paid' or status in ('new', 'preparing', 'ready'))
+      ) as "hasActiveOrders",
+      exists (
+        select 1
+        from store_dining_session_tables
+        join store_dining_sessions on store_dining_sessions.id = store_dining_session_tables.session_id
+        where store_dining_session_tables.table_id::text = ${tableId}
+          and store_dining_session_tables.released_at is null
+          and store_dining_sessions.status <> 'completed'
+      ) as "hasActiveSession"
+  `;
+  if (blockers[0]?.hasActiveOrders === true) {
+    return Response.json({ error: "未会計・制作中・受け取り待ちの注文があるため削除できません。先に注文を完了または取消してください。" }, { status: 409 });
+  }
+  if (blockers[0]?.hasActiveSession === true) {
+    return Response.json({ error: "現在使用中の座席のため削除できません。先に退席処理を完了してください。" }, { status: 409 });
+  }
+
+  const deleted = await sql`
+    delete from store_tables
+    where id::text = ${tableId}
+      and store_id::text = ${String(table.storeId)}
+    returning id::text
+  `;
+  if (!deleted[0]) return Response.json({ error: "テーブルを削除できませんでした。" }, { status: 409 });
+  return Response.json({ ok: true });
+}
