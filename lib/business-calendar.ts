@@ -3,7 +3,7 @@ import { sql } from "./db";
 export type BusinessCalendarEvent = {
   id: string;
   storeId: string | null;
-  sourceType: "holiday" | "sports" | "festival" | "manual";
+  sourceType: "holiday" | "sports" | "festival" | "concert" | "manual";
   title: string;
   startDate: string;
   endDate: string;
@@ -27,6 +27,9 @@ type CalendarEventInput = Omit<BusinessCalendarEvent, "id" | "storeId"> & {
 const holidaySourceUrl = "https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv";
 const hawksSourceBaseUrl = "https://ticket.softbankhawks.co.jp/event/games";
 const yamakasaSourceUrl = "https://www.hakatayamakasa.com/162358.html";
+const payPayDomeEventsBaseUrl = "https://www.softbankhawks.co.jp/stadium/event_schedule";
+const marineMesseEventsUrl = "https://www.marinemesse.or.jp/messe/event";
+const marineMesseCmsUrl = "https://api.cms.studiodesignapp.com/v2/search";
 
 function normalizeDate(value: string) {
   const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(value.trim());
@@ -35,7 +38,35 @@ function normalizeDate(value: string) {
 }
 
 function stripHtml(value: string) {
-  return value.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+  return value
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stableSourceSuffix(value: string) {
+  let hash = 2166136261;
+  for (const character of value) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function toAbsoluteUrl(value: string, baseUrl: string) {
+  try {
+    return new URL(value, baseUrl).toString();
+  } catch {
+    return baseUrl;
+  }
 }
 
 async function upsertEvent(event: CalendarEventInput) {
@@ -150,6 +181,183 @@ export async function syncHawksHomeGames(referenceDate = new Date()) {
   return count;
 }
 
+function isMusicEventTitle(title: string) {
+  return /(LIVE|TOUR|CONCERT|MUSIC|FES(?:TIVAL)?|ROCK|NUMBER SHOT|ライブ|ツアー|コンサート|音楽)/i.test(title);
+}
+
+function isClearlyNonConcertPerformance(title: string) {
+  return /(ディズニー・オン・アイス|アイスショー|K-1|プロレス|格闘技|お笑い|漫才|ミュージカル|サーカス|舞台公演)/i.test(title);
+}
+
+export function parsePayPayDomeConcerts(html: string) {
+  const events: CalendarEventInput[] = [];
+  const entryPattern = /<dt>\s*(\d{4})\/(\d{1,2})\/(\d{1,2})[\s\S]*?<\/dt>\s*<dd>([\s\S]*?)<\/dd>/g;
+  for (const match of html.matchAll(entryPattern)) {
+    const body = match[4];
+    const titleCell = /<th>\s*イベント\s*<\/th>\s*<td>([\s\S]*?)<\/td>/.exec(body)?.[1] ?? "";
+    const title = stripHtml(titleCell);
+    if (!title || !isMusicEventTitle(title)) continue;
+    const date = `${match[1]}-${String(Number(match[2])).padStart(2, "0")}-${String(Number(match[3])).padStart(2, "0")}`;
+    const timeCell = /<th>\s*開演時間\s*<\/th>\s*<td>([\s\S]*?)<\/td>/.exec(body)?.[1] ?? "";
+    const startTime = /(\d{1,2}:\d{2})\s*開演/.exec(stripHtml(timeCell))?.[1]
+      ?? /開演\s*(\d{1,2}:\d{2})/.exec(stripHtml(timeCell))?.[1]
+      ?? /(\d{1,2}:\d{2})/.exec(stripHtml(timeCell))?.[1]
+      ?? null;
+    const link = /<a[^>]+href="([^"]+)"/.exec(titleCell)?.[1] ?? "";
+    events.push({
+      sourceType: "concert",
+      sourceKey: `paypay-concert:${date}:${stableSourceSuffix(title)}`,
+      title,
+      startDate: date,
+      endDate: date,
+      startTime,
+      endTime: null,
+      category: "concert",
+      impactLevel: "major",
+      venue: "みずほPayPayドーム福岡",
+      prefecture: "福岡県",
+      locality: "福岡市",
+      sourceUrl: toAbsoluteUrl(link, `${payPayDomeEventsBaseUrl}/${match[1]}/`),
+      note: "大規模コンサート・音楽イベント",
+      metadata: { official: true, venueSource: "paypay-dome" }
+    });
+  }
+  return events;
+}
+
+export async function syncPayPayDomeConcerts(referenceDate = new Date()) {
+  let count = 0;
+  const sourceKeys: string[] = [];
+  for (const year of [referenceDate.getUTCFullYear(), referenceDate.getUTCFullYear() + 1]) {
+    const url = `${payPayDomeEventsBaseUrl}/${year}/`;
+    const response = await fetch(url, { headers: { "User-Agent": "Foundr1-OS/1.0" } });
+    if (!response.ok) continue;
+    for (const event of parsePayPayDomeConcerts(await response.text())) {
+      await upsertEvent(event);
+      sourceKeys.push(event.sourceKey);
+      count += 1;
+    }
+  }
+  if (sourceKeys.length) {
+    await sql`
+      update business_calendar_events
+      set is_active = false, updated_at = now()
+      where source_type = 'concert'
+        and source_key like 'paypay-concert:%'
+        and start_date >= current_date
+        and not (source_key = any(${sourceKeys}))
+    `;
+  }
+  return count;
+}
+
+type StudioCmsValue = {
+  stringValue?: string;
+  mapValue?: { fields?: Record<string, StudioCmsValue> };
+  document?: { fields?: Record<string, StudioCmsValue> };
+};
+
+function getStudioCmsFields(record: unknown) {
+  const item = record as { document?: { fields?: { default?: StudioCmsValue; _meta?: StudioCmsValue } } };
+  return {
+    fields: item.document?.fields?.default?.mapValue?.fields ?? {},
+    meta: item.document?.fields?._meta?.mapValue?.fields ?? {}
+  };
+}
+
+function getStudioCmsString(fields: Record<string, StudioCmsValue>, key: string) {
+  return fields[key]?.stringValue?.trim() ?? "";
+}
+
+function getStudioCmsTitle(fields: Record<string, StudioCmsValue>, key: string) {
+  return fields[key]?.mapValue?.fields?.title?.stringValue?.trim() ?? "";
+}
+
+function getStudioCmsReferenceTitle(fields: Record<string, StudioCmsValue>, key: string) {
+  return fields[key]?.document?.fields?.default?.mapValue?.fields?.title?.stringValue?.trim() ?? "";
+}
+
+function inferEventYear(month: number, day: number, referenceDate: Date) {
+  const year = referenceDate.getUTCFullYear();
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  const staleThreshold = new Date(referenceDate.getTime() - 31 * 24 * 60 * 60 * 1000);
+  return candidate < staleThreshold ? year + 1 : year;
+}
+
+export function parseMarineMesseConcerts(payload: unknown, referenceDate = new Date()) {
+  if (!Array.isArray(payload)) return [] satisfies CalendarEventInput[];
+  const events: CalendarEventInput[] = [];
+  for (const record of payload) {
+    const { fields, meta } = getStudioCmsFields(record);
+    const title = getStudioCmsString(fields, "title");
+    const eventType = getStudioCmsTitle(fields, "tZdl9ryM");
+    const venue = getStudioCmsReferenceTitle(fields, "zu0OnEpi");
+    if (!title || eventType !== "コンサート・興行" || venue !== "マリンメッセA館" || isClearlyNonConcertPerformance(title)) continue;
+    const schedule = getStudioCmsString(fields, "RIeOyB9L");
+    const sourceUrl = getStudioCmsString(fields, "TyvtSOey") || marineMesseEventsUrl;
+    const uid = getStudioCmsString(meta, "uid") || stableSourceSuffix(title);
+    const datePattern = /(\d{1,2})\.(\d{1,2})\([^)]*\)\s*(\d{1,2}:\d{2})?/g;
+    for (const dateMatch of stripHtml(schedule).matchAll(datePattern)) {
+      const month = Number(dateMatch[1]);
+      const day = Number(dateMatch[2]);
+      const year = inferEventYear(month, day, referenceDate);
+      const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      events.push({
+        sourceType: "concert",
+        sourceKey: `marine-concert:${uid}:${date}`,
+        title,
+        startDate: date,
+        endDate: date,
+        startTime: dateMatch[3] ?? null,
+        endTime: null,
+        category: "concert",
+        impactLevel: "major",
+        venue: "マリンメッセ福岡A館",
+        prefecture: "福岡県",
+        locality: "福岡市",
+        sourceUrl,
+        note: "大規模コンサート・興行",
+        metadata: { official: true, venueSource: "marine-messe-a", cmsUid: uid }
+      });
+    }
+  }
+  return events;
+}
+
+export async function syncMarineMesseConcerts(referenceDate = new Date()) {
+  const pageResponse = await fetch(marineMesseEventsUrl, { headers: { "User-Agent": "Foundr1-OS/1.0" } });
+  if (!pageResponse.ok) throw new Error(`Marine Messe page returned ${pageResponse.status}`);
+  const pageHtml = await pageResponse.text();
+  const publishedUid = /"(\d{14})",\[\],\{\},\["Map"\]/.exec(pageHtml)?.[1];
+  if (!publishedUid) throw new Error("Marine Messe published UID was not found");
+
+  const query = Buffer.from(JSON.stringify({
+    uid: publishedUid,
+    project_id: "gjliOqGf6PL86iEKnjya",
+    schema_key: "rMR9xdMj",
+    filters: "zu0OnEpi:ref[equals]sdl2o80Z",
+    orders: "order",
+    offset: 0,
+    limit: 100
+  })).toString("base64");
+  const response = await fetch(`${marineMesseCmsUrl}?q=${encodeURIComponent(query)}`, { headers: { "User-Agent": "Foundr1-OS/1.0" } });
+  if (!response.ok) throw new Error(`Marine Messe CMS returned ${response.status}`);
+  const events = parseMarineMesseConcerts(await response.json(), referenceDate);
+  for (const event of events) await upsertEvent(event);
+  if (events.length) {
+    const sourceKeys = events.map((event) => event.sourceKey);
+    await sql`
+      update business_calendar_events
+      set is_active = false, updated_at = now()
+      where source_type = 'concert'
+        and source_key like 'marine-concert:%'
+        and start_date >= current_date
+        and not (source_key = any(${sourceKeys}))
+    `;
+  }
+  return events.length;
+}
+
 export async function syncFukuokaMajorEvents(referenceDate = new Date()) {
   const years = [referenceDate.getUTCFullYear(), referenceDate.getUTCFullYear() + 1];
   let count = 0;
@@ -195,16 +403,20 @@ export async function syncFukuokaMajorEvents(referenceDate = new Date()) {
 }
 
 export async function syncBusinessCalendarSources(referenceDate = new Date()) {
-  const [holidayResult, hawksResult, localResult] = await Promise.allSettled([
+  const [holidayResult, hawksResult, localResult, payPayConcertResult, marineConcertResult] = await Promise.allSettled([
     syncJapaneseHolidays(),
     syncHawksHomeGames(referenceDate),
-    syncFukuokaMajorEvents(referenceDate)
+    syncFukuokaMajorEvents(referenceDate),
+    syncPayPayDomeConcerts(referenceDate),
+    syncMarineMesseConcerts(referenceDate)
   ]);
   return {
     holidays: holidayResult.status === "fulfilled" ? holidayResult.value : 0,
     hawksGames: hawksResult.status === "fulfilled" ? hawksResult.value : 0,
     localEvents: localResult.status === "fulfilled" ? localResult.value : 0,
-    errors: [holidayResult, hawksResult, localResult]
+    payPayDomeConcerts: payPayConcertResult.status === "fulfilled" ? payPayConcertResult.value : 0,
+    marineMesseConcerts: marineConcertResult.status === "fulfilled" ? marineConcertResult.value : 0,
+    errors: [holidayResult, hawksResult, localResult, payPayConcertResult, marineConcertResult]
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
       .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason))
   };

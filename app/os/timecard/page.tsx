@@ -25,7 +25,7 @@ type StoreOption = {
 type BusinessCalendarEvent = {
   id: string;
   storeId: string | null;
-  sourceType: "holiday" | "sports" | "festival" | "manual";
+  sourceType: "holiday" | "sports" | "festival" | "concert" | "manual";
   title: string;
   startDate: string;
   endDate: string;
@@ -234,11 +234,13 @@ function getCalendarEventShortLabel(event: BusinessCalendarEvent) {
   if (event.sourceType === "holiday") return "祝";
   if (event.sourceType === "sports") return "鷹";
   if (event.sourceType === "festival") return "祭";
+  if (event.sourceType === "concert") return "演";
   return "予";
 }
 
 function getCalendarEventCategoryLabel(event: BusinessCalendarEvent) {
   if (event.sourceType === "holiday") return "祝日";
+  if (event.sourceType === "concert" || event.category === "concert") return "コンサート";
   if (event.category === "sports") return "試合";
   if (event.category === "festival") return "祭事";
   if (event.category === "traffic") return "交通";
