@@ -64,7 +64,7 @@ type PayrollConfirmationRow = {
 
 const timecardActualEditRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const timecardPayrollViewRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
-const mobilePunchRoles = new Set(["staff"]);
+const mobilePunchRoles = new Set(["owner", "manager", "store_owner", "store_manager", "staff"]);
 const storeTerminalRole = "store_terminal";
 
 const emptyPayrollTotals = {
@@ -2087,7 +2087,7 @@ export async function POST(request: Request) {
 
   const source = String(body.source ?? "").trim();
   const isMobilePunch = source === "mobile";
-  const employeeId = session.role === "staff"
+  const employeeId = isMobilePunch || session.role === "staff"
     ? session.id
     : String(body.employeeId ?? "");
   const punchSource = session.role === storeTerminalRole
