@@ -40,6 +40,89 @@ const marineMesseCmsUrl = "https://api.cms.studiodesignapp.com/v2/search";
 const cruiseScheduleUrl = "https://www.city.fukuoka.lg.jp/kowan/k-kikaku/hakata-port/cruise1.html";
 const fukuokaConventionCalendarUrl = "https://www.welcome-fukuoka.or.jp/wp-content/themes/fcvb_main/images/about/oceans/2026_NewYear.pdf";
 
+type ForeignMajorLongBreak = {
+  market: "中国" | "韓国" | "台湾" | "香港";
+  title: string;
+  startDate: string;
+  endDate: string;
+  sourceUrl: string;
+};
+
+const foreignMajorLongBreaks: ForeignMajorLongBreak[] = [
+  {
+    market: "中国", title: "中国・春節大型連休", startDate: "2026-02-15", endDate: "2026-02-23",
+    sourceUrl: "https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm"
+  },
+  {
+    market: "中国", title: "中国・労働節大型連休", startDate: "2026-05-01", endDate: "2026-05-05",
+    sourceUrl: "https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm"
+  },
+  {
+    market: "中国", title: "中国・国慶節大型連休", startDate: "2026-10-01", endDate: "2026-10-07",
+    sourceUrl: "https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm"
+  },
+  {
+    market: "韓国", title: "韓国・旧正月（ソルラル）連休", startDate: "2026-02-14", endDate: "2026-02-18",
+    sourceUrl: "https://customs.go.kr/engportal/cm/cntnts/cntntsView.do?cntntsId=7401&mi=13284"
+  },
+  {
+    market: "韓国", title: "韓国・秋夕（チュソク）連休", startDate: "2026-09-24", endDate: "2026-09-27",
+    sourceUrl: "https://customs.go.kr/engportal/cm/cntnts/cntntsView.do?cntntsId=7401&mi=13284"
+  },
+  {
+    market: "韓国", title: "韓国・旧正月（ソルラル）連休", startDate: "2027-02-06", endDate: "2027-02-09",
+    sourceUrl: "https://www.kasa.go.kr/prog/plcyBrf/brief/kor/sub01_01_04/view.do?plcyBrfNo=431"
+  },
+  {
+    market: "韓国", title: "韓国・秋夕（チュソク）連休", startDate: "2027-09-14", endDate: "2027-09-16",
+    sourceUrl: "https://www.kasa.go.kr/prog/plcyBrf/brief/kor/sub01_01_04/view.do?plcyBrfNo=431"
+  },
+  {
+    market: "台湾", title: "台湾・春節大型連休", startDate: "2026-02-14", endDate: "2026-02-22",
+    sourceUrl: "https://www.dgpa.gov.tw/information?pid=12685&uid=55"
+  },
+  {
+    market: "台湾", title: "台湾・児童節／清明節連休", startDate: "2026-04-03", endDate: "2026-04-06",
+    sourceUrl: "https://www.dgpa.gov.tw/information?pid=12685&uid=55"
+  },
+  {
+    market: "台湾", title: "台湾・中秋節連休", startDate: "2026-09-25", endDate: "2026-09-28",
+    sourceUrl: "https://www.dgpa.gov.tw/information?pid=12685&uid=55"
+  },
+  {
+    market: "台湾", title: "台湾・春節大型連休", startDate: "2027-02-04", endDate: "2027-02-10",
+    sourceUrl: "https://www.dgpa.gov.tw/information?pid=12983&uid=2"
+  },
+  {
+    market: "台湾", title: "台湾・児童節／清明節連休", startDate: "2027-04-03", endDate: "2027-04-06",
+    sourceUrl: "https://www.dgpa.gov.tw/information?pid=12983&uid=2"
+  },
+  {
+    market: "香港", title: "香港・旧正月連休", startDate: "2026-02-17", endDate: "2026-02-19",
+    sourceUrl: "https://www.gov.hk/en/about/abouthk/holiday/2026.htm"
+  },
+  {
+    market: "香港", title: "香港・清明節／復活祭連休", startDate: "2026-04-03", endDate: "2026-04-07",
+    sourceUrl: "https://www.gov.hk/en/about/abouthk/holiday/2026.htm"
+  },
+  {
+    market: "香港", title: "香港・クリスマス連休", startDate: "2026-12-25", endDate: "2026-12-27",
+    sourceUrl: "https://www.gov.hk/en/about/abouthk/holiday/2026.htm"
+  },
+  {
+    market: "香港", title: "香港・旧正月連休", startDate: "2027-02-06", endDate: "2027-02-09",
+    sourceUrl: "https://www.gov.hk/en/about/abouthk/holiday/2027.htm"
+  },
+  {
+    market: "香港", title: "香港・復活祭連休", startDate: "2027-03-26", endDate: "2027-03-29",
+    sourceUrl: "https://www.gov.hk/en/about/abouthk/holiday/2027.htm"
+  },
+  {
+    market: "香港", title: "香港・クリスマス連休", startDate: "2027-12-25", endDate: "2027-12-27",
+    sourceUrl: "https://www.gov.hk/en/about/abouthk/holiday/2027.htm"
+  }
+];
+
 function timeToMinutes(value: string | null) {
   if (!value) return null;
   const [hours, minutes] = value.split(":").map(Number);
@@ -263,6 +346,52 @@ export async function syncJapaneseLongBreaks(referenceDate = new Date()) {
     );
   }
   for (const event of events) await upsertEvent(event);
+  return events.length;
+}
+
+export async function syncForeignMajorLongBreaks(referenceDate = new Date()) {
+  const targetYears = new Set([referenceDate.getUTCFullYear(), referenceDate.getUTCFullYear() + 1]);
+  const events = foreignMajorLongBreaks.filter((event) => targetYears.has(Number(event.startDate.slice(0, 4))));
+
+  for (const event of events) {
+    const dayCount = Math.round(
+      (new Date(`${event.endDate}T00:00:00Z`).getTime() - new Date(`${event.startDate}T00:00:00Z`).getTime()) / 86_400_000
+    ) + 1;
+    await upsertEvent({
+      sourceType: "holiday",
+      sourceKey: `foreign-long-break:${event.market}:${event.startDate}:${event.endDate}`,
+      title: event.title,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      startTime: null,
+      endTime: null,
+      category: "foreign_long_break",
+      impactLevel: dayCount >= 5 ? "major" : "busy",
+      flowDirection: "inbound",
+      impactStartTime: "00:00",
+      impactEndTime: "23:59",
+      venue: event.market,
+      sourceUrl: event.sourceUrl,
+      note: `${event.market}の大型連休。福岡への訪日旅行需要が高まる可能性がある参考期間`,
+      metadata: { official: true, originMarket: event.market, dayCount, visitorSignal: true }
+    });
+  }
+
+  if (events.length) {
+    const sourceKeys = events.map((event) => `foreign-long-break:${event.market}:${event.startDate}:${event.endDate}`);
+    const firstYear = Math.min(...targetYears);
+    const lastYear = Math.max(...targetYears);
+    await sql`
+      update business_calendar_events
+      set is_active = false, updated_at = now()
+      where source_type = 'holiday'
+        and source_key like 'foreign-long-break:%'
+        and start_date >= ${`${firstYear}-01-01`}::date
+        and start_date <= ${`${lastYear}-12-31`}::date
+        and not (source_key = any(${sourceKeys}))
+    `;
+  }
+
   return events.length;
 }
 
@@ -691,9 +820,10 @@ export async function syncHakataLargeCruiseCalls(referenceDate = new Date()) {
 }
 
 export async function syncBusinessCalendarSources(referenceDate = new Date()) {
-  const [holidayResult, longBreakResult, hawksResult, localResult, mobilityResult, miceResult, cruiseResult, payPayConcertResult, marineConcertResult] = await Promise.allSettled([
+  const [holidayResult, longBreakResult, foreignLongBreakResult, hawksResult, localResult, mobilityResult, miceResult, cruiseResult, payPayConcertResult, marineConcertResult] = await Promise.allSettled([
     syncJapaneseHolidays(),
     syncJapaneseLongBreaks(referenceDate),
+    syncForeignMajorLongBreaks(referenceDate),
     syncHawksHomeGames(referenceDate),
     syncFukuokaMajorEvents(referenceDate),
     syncKyushuMobilityEvents(referenceDate),
@@ -705,6 +835,7 @@ export async function syncBusinessCalendarSources(referenceDate = new Date()) {
   return {
     holidays: holidayResult.status === "fulfilled" ? holidayResult.value : 0,
     longBreaks: longBreakResult.status === "fulfilled" ? longBreakResult.value : 0,
+    foreignLongBreaks: foreignLongBreakResult.status === "fulfilled" ? foreignLongBreakResult.value : 0,
     hawksGames: hawksResult.status === "fulfilled" ? hawksResult.value : 0,
     localEvents: localResult.status === "fulfilled" ? localResult.value : 0,
     mobilityEvents: mobilityResult.status === "fulfilled" ? mobilityResult.value : 0,
@@ -712,7 +843,7 @@ export async function syncBusinessCalendarSources(referenceDate = new Date()) {
     largeCruiseCalls: cruiseResult.status === "fulfilled" ? cruiseResult.value : 0,
     payPayDomeConcerts: payPayConcertResult.status === "fulfilled" ? payPayConcertResult.value : 0,
     marineMesseConcerts: marineConcertResult.status === "fulfilled" ? marineConcertResult.value : 0,
-    errors: [holidayResult, longBreakResult, hawksResult, localResult, mobilityResult, miceResult, cruiseResult, payPayConcertResult, marineConcertResult]
+    errors: [holidayResult, longBreakResult, foreignLongBreakResult, hawksResult, localResult, mobilityResult, miceResult, cruiseResult, payPayConcertResult, marineConcertResult]
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
       .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason))
   };

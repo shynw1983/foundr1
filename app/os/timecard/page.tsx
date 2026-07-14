@@ -242,6 +242,7 @@ type CalendarEventDraft = {
 };
 
 function getCalendarEventShortLabel(event: BusinessCalendarEvent) {
+  if (event.category === "foreign_long_break") return "外";
   if (event.category === "long_break") return "連";
   if (event.sourceType === "holiday") return "祝";
   if (event.sourceType === "sports") return "鷹";
@@ -253,11 +254,12 @@ function getCalendarEventShortLabel(event: BusinessCalendarEvent) {
 }
 
 function getCalendarEventCategoryLabel(event: BusinessCalendarEvent) {
+  if (event.category === "foreign_long_break") return "海外大型連休";
+  if (event.category === "long_break") return "大型連休";
   if (event.sourceType === "holiday") return "祝日";
   if (event.sourceType === "concert" || event.category === "concert") return "コンサート";
   if (event.sourceType === "convention" || event.category === "convention") return "大型MICE";
   if (event.sourceType === "cruise" || event.category === "cruise") return "大型客船";
-  if (event.category === "long_break") return "大型連休";
   if (event.category === "fireworks") return "花火大会";
   if (event.category === "sports") return "試合";
   if (event.category === "festival") return "祭事";
@@ -2534,10 +2536,10 @@ export function TimecardPage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "sync" })
     });
-    const body = await response.json().catch(() => ({})) as { error?: string; result?: { holidays?: number; longBreaks?: number; hawksGames?: number; localEvents?: number; mobilityEvents?: number; largeMiceEvents?: number; largeCruiseCalls?: number; payPayDomeConcerts?: number; marineMesseConcerts?: number; errors?: string[] } };
+    const body = await response.json().catch(() => ({})) as { error?: string; result?: { holidays?: number; longBreaks?: number; foreignLongBreaks?: number; hawksGames?: number; localEvents?: number; mobilityEvents?: number; largeMiceEvents?: number; largeCruiseCalls?: number; payPayDomeConcerts?: number; marineMesseConcerts?: number; errors?: string[] } };
     if (response.ok) {
       const result = body.result;
-      setCalendarMessage(`同期完了：祝日 ${result?.holidays ?? 0} / 連休 ${result?.longBreaks ?? 0} / ホークス ${result?.hawksGames ?? 0} / 地域・移動 ${Number(result?.localEvents ?? 0) + Number(result?.mobilityEvents ?? 0)} / 大型MICE ${result?.largeMiceEvents ?? 0} / 大型客船 ${result?.largeCruiseCalls ?? 0} / コンサート ${Number(result?.payPayDomeConcerts ?? 0) + Number(result?.marineMesseConcerts ?? 0)}件${result?.errors?.length ? `（一部失敗 ${result.errors.length}件）` : ""}`);
+      setCalendarMessage(`同期完了：祝日 ${result?.holidays ?? 0} / 国内連休 ${result?.longBreaks ?? 0} / 海外連休 ${result?.foreignLongBreaks ?? 0} / ホークス ${result?.hawksGames ?? 0} / 地域・移動 ${Number(result?.localEvents ?? 0) + Number(result?.mobilityEvents ?? 0)} / 大型MICE ${result?.largeMiceEvents ?? 0} / 大型客船 ${result?.largeCruiseCalls ?? 0} / コンサート ${Number(result?.payPayDomeConcerts ?? 0) + Number(result?.marineMesseConcerts ?? 0)}件${result?.errors?.length ? `（一部失敗 ${result.errors.length}件）` : ""}`);
       await loadTimecard(month, selectedStoreId, { keepShiftDraft: true, keepActualDraft: true });
     } else {
       setCalendarMessage(body.error ?? "公式情報を同期できませんでした。");
