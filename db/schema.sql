@@ -42,6 +42,36 @@ alter table stores add column if not exists shift_first_half_submission_deadline
 alter table stores add column if not exists shift_second_half_submission_deadline_day integer not null default 10;
 alter table stores add column if not exists shift_submission_deadline_time time not null default '23:59';
 
+create table if not exists business_calendar_events (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid references stores(id) on delete cascade,
+  source_type text not null default 'manual',
+  source_key text not null,
+  title text not null,
+  start_date date not null,
+  end_date date not null,
+  start_time time,
+  end_time time,
+  category text not null default 'local_event',
+  impact_level text not null default 'reference',
+  venue text not null default '',
+  prefecture text not null default '',
+  locality text not null default '',
+  source_url text not null default '',
+  note text not null default '',
+  metadata jsonb not null default '{}'::jsonb,
+  is_active boolean not null default true,
+  created_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (source_type, source_key)
+);
+
+create index if not exists idx_business_calendar_events_dates
+  on business_calendar_events(start_date, end_date) where is_active = true;
+create index if not exists idx_business_calendar_events_store_dates
+  on business_calendar_events(store_id, start_date, end_date) where is_active = true;
+
 create table if not exists companies (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
@@ -228,6 +258,11 @@ alter table employees add column if not exists payroll_subject text not null def
 alter table employees add column if not exists gender text not null default 'unspecified';
 alter table employees add column if not exists name_kana text;
 alter table employees add column if not exists address text;
+
+alter table business_calendar_events drop constraint if exists business_calendar_events_created_by_fkey;
+alter table business_calendar_events
+  add constraint business_calendar_events_created_by_fkey
+  foreign key (created_by) references employees(id) on delete set null;
 alter table employees add column if not exists birth_date date;
 alter table employees add column if not exists my_number text;
 alter table employees add column if not exists employee_number text;

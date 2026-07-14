@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/sales-audit",
       "schedule": "10 1 * * *"
+    },
+    {
+      "path": "/api/cron/business-calendar",
+      "schedule": "40 1 * * 1"
     }
   ]
 }

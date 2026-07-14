@@ -1,5 +1,6 @@
 import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import { writeAuditLog } from "../../../lib/audit-log";
+import { getBusinessCalendarEvents } from "../../../lib/business-calendar";
 import { sql } from "../../../lib/db";
 import type { EmployeeSession } from "../../../lib/auth";
 import { normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from "../../../lib/store-business-hours";
@@ -96,6 +97,8 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
       select
         stores.id::text,
         stores.name,
+        coalesce(stores.address, '') as address,
+        coalesce(stores.weather_location_name, '') as "weatherLocationName",
         coalesce(companies.legal_name, companies.name, '') as "companyLegalName",
         business_hours as "businessHours",
         coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
@@ -120,6 +123,8 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
     select
       stores.id::text,
       stores.name,
+      coalesce(stores.address, '') as address,
+      coalesce(stores.weather_location_name, '') as "weatherLocationName",
       coalesce(companies.legal_name, companies.name, '') as "companyLegalName",
       business_hours as "businessHours",
       coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
@@ -1209,6 +1214,15 @@ export async function GET(request: Request) {
   const payrollConfirmation = canViewPayroll && selectedStoreId
     ? await getPayrollConfirmation(selectedStoreId, month)
     : null;
+  const calendarEvents = selectedStoreId && selectedStore
+    ? await getBusinessCalendarEvents({
+      storeId: selectedStoreId,
+      startDate,
+      endDate,
+      storeLocationText: `${String(selectedStore.address ?? "")} ${String(selectedStore.weatherLocationName ?? "")}`.trim(),
+      storePrefecture: String(selectedStore.socialInsurancePrefecture ?? "")
+    })
+    : [];
   const responseEmployees = canViewPayroll
     ? employees
     : employees.map((employee) => ({
@@ -1279,6 +1293,7 @@ export async function GET(request: Request) {
     employees: responseEmployees,
     punches: isStoreTerminalSession ? [] : typedPunches,
     shifts: isStoreTerminalSession ? [] : responseShifts,
+    calendarEvents: isStoreTerminalSession ? [] : calendarEvents,
     latestPunch: isStoreTerminalSession ? null : latestPunch,
     latestPunches: responseLatestPunches,
     dailySummaries: isStoreTerminalSession ? [] : dailySummaries,

@@ -37,6 +37,7 @@ const tables = [
   "timecard_shifts",
   "timecard_payroll_confirmations",
   "timecard_workload_settings",
+  "business_calendar_events",
   "employee_lifecycle_cases",
   "employee_lifecycle_tasks",
   "employee_lifecycle_documents"
@@ -110,6 +111,22 @@ const requiredColumns = {
     "uploaded_by",
     "uploaded_at",
     "note"
+  ],
+  business_calendar_events: [
+    "store_id",
+    "source_type",
+    "source_key",
+    "title",
+    "start_date",
+    "end_date",
+    "start_time",
+    "category",
+    "impact_level",
+    "venue",
+    "prefecture",
+    "locality",
+    "source_url",
+    "is_active"
   ]
 };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, CalendarPlus, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, RefreshCw, Search, Settings, Store, Trash2, Truck, UserCog, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { CSSProperties, FormEvent, MouseEvent } from "react";
@@ -13,11 +13,29 @@ import { normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from
 type StoreOption = {
   id: string;
   name: string;
+  address?: string;
+  weatherLocationName?: string;
   companyLegalName?: string;
   businessHours?: unknown;
   payrollCycleType?: "month_end" | "specified_day";
   payrollClosingDay?: number;
   socialInsurancePrefecture?: string;
+};
+
+type BusinessCalendarEvent = {
+  id: string;
+  storeId: string | null;
+  sourceType: "holiday" | "sports" | "festival" | "manual";
+  title: string;
+  startDate: string;
+  endDate: string;
+  startTime: string | null;
+  endTime: string | null;
+  category: string;
+  impactLevel: "reference" | "busy" | "major";
+  venue: string;
+  sourceUrl: string;
+  note: string;
 };
 
 type TimecardEmployee = {
@@ -169,6 +187,7 @@ type PayrollPaymentBatch = {
 
 type TimecardPayload = {
   month: string;
+  currentEmployeeRole?: string;
   canViewPayroll: boolean;
   canEditActualTime: boolean;
   stores: StoreOption[];
@@ -179,11 +198,45 @@ type TimecardPayload = {
   };
   employees: TimecardEmployee[];
   shifts: ShiftEntry[];
+  calendarEvents: BusinessCalendarEvent[];
   dailySummaries: DailySummary[];
   payrollConfirmation: PayrollConfirmation | null;
   payrollRows: PayrollRow[];
   payrollTotals: PayrollTotals;
 };
+
+type CalendarEventDraft = {
+  title: string;
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+  category: string;
+  impactLevel: "reference" | "busy" | "major";
+  venue: string;
+  note: string;
+};
+
+function getCalendarEventShortLabel(event: BusinessCalendarEvent) {
+  if (event.sourceType === "holiday") return "祝";
+  if (event.sourceType === "sports") return "鷹";
+  if (event.sourceType === "festival") return "祭";
+  return "予";
+}
+
+function getCalendarEventCategoryLabel(event: BusinessCalendarEvent) {
+  if (event.sourceType === "holiday") return "祝日";
+  if (event.category === "sports") return "試合";
+  if (event.category === "festival") return "祭事";
+  if (event.category === "traffic") return "交通";
+  return "店舗予定";
+}
+
+function getCalendarImpactLabel(impact: BusinessCalendarEvent["impactLevel"]) {
+  if (impact === "major") return "重大影響";
+  if (impact === "busy") return "混雑見込";
+  return "参考";
+}
 
 type ShiftDraft = {
   id?: string | null;
@@ -1344,6 +1397,21 @@ export function TimecardPage({
   const [attendanceImportMessage, setAttendanceImportMessage] = useState("");
   const [isImportingAttendance, setIsImportingAttendance] = useState(false);
   const [isAttendanceImportOpen, setIsAttendanceImportOpen] = useState(false);
+  const [isCalendarManagerOpen, setIsCalendarManagerOpen] = useState(false);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState("");
+  const [calendarMessage, setCalendarMessage] = useState("");
+  const [isSavingCalendar, setIsSavingCalendar] = useState(false);
+  const [calendarDraft, setCalendarDraft] = useState<CalendarEventDraft>({
+    title: "",
+    startDate: "",
+    endDate: "",
+    startTime: "",
+    endTime: "",
+    category: "local_event",
+    impactLevel: "busy",
+    venue: "",
+    note: ""
+  });
   const shiftMessageTimerRef = useRef<number | null>(null);
 
   async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId, options: { keepShiftDraft?: boolean; keepActualDraft?: boolean } = {}) {
@@ -1395,6 +1463,7 @@ export function TimecardPage({
     setSelectedShiftCells([]);
     setIsActualMultiSelectMode(false);
     setSelectedActualCells([]);
+    setSelectedCalendarDate("");
     void loadTimecard(nextMonth, selectedStoreId);
   }
 
@@ -1537,6 +1606,19 @@ export function TimecardPage({
     }
     return map;
   }, [data?.employees, data?.shifts, monthDays, scheduleEmployees, selectedStoreId]);
+  const calendarEventsByDate = useMemo(() => {
+    const map = new Map<string, BusinessCalendarEvent[]>();
+    for (const day of monthDays) {
+      const events = (data?.calendarEvents ?? []).filter((event) => event.startDate <= day.key && event.endDate >= day.key);
+      if (events.length) map.set(day.key, events);
+    }
+    return map;
+  }, [data?.calendarEvents, monthDays]);
+  const selectedCalendarEvents = selectedCalendarDate ? calendarEventsByDate.get(selectedCalendarDate) ?? [] : [];
+  const manualCalendarEvents = useMemo(
+    () => (data?.calendarEvents ?? []).filter((event) => event.sourceType === "manual" && event.storeId === selectedStoreId),
+    [data?.calendarEvents, selectedStoreId]
+  );
   const actualLaborCostByEmployee = useMemo(() => {
     return new Map((data?.payrollRows ?? []).map((row) => [row.employeeId, {
       payrollCost: row.basePay,
@@ -2327,6 +2409,68 @@ export function TimecardPage({
     setIsImportingAttendance(false);
   }
 
+  function openCalendarManager() {
+    const defaultDate = selectedCalendarDate || monthDays[0]?.key || `${month}-01`;
+    setCalendarDraft((current) => ({ ...current, startDate: current.startDate || defaultDate, endDate: current.endDate || defaultDate }));
+    setCalendarMessage("");
+    setIsCalendarManagerOpen((current) => !current);
+  }
+
+  async function saveCalendarEvent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedStoreId) return;
+    setIsSavingCalendar(true);
+    setCalendarMessage("");
+    const response = await fetch("/api/timecard/calendar-events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "create", storeId: selectedStoreId, ...calendarDraft })
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (response.ok) {
+      setCalendarMessage("店舗予定を追加しました。");
+      setCalendarDraft((current) => ({ ...current, title: "", startTime: "", endTime: "", venue: "", note: "" }));
+      await loadTimecard(month, selectedStoreId, { keepShiftDraft: true, keepActualDraft: true });
+    } else {
+      setCalendarMessage(body.error ?? "店舗予定を追加できませんでした。");
+    }
+    setIsSavingCalendar(false);
+  }
+
+  async function deleteCalendarEvent(eventId: string) {
+    if (!selectedStoreId) return;
+    setIsSavingCalendar(true);
+    setCalendarMessage("");
+    const response = await fetch("/api/timecard/calendar-events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", storeId: selectedStoreId, eventId })
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    setCalendarMessage(response.ok ? "店舗予定を削除しました。" : body.error ?? "店舗予定を削除できませんでした。");
+    if (response.ok) await loadTimecard(month, selectedStoreId, { keepShiftDraft: true, keepActualDraft: true });
+    setIsSavingCalendar(false);
+  }
+
+  async function syncCalendarSources() {
+    setIsSavingCalendar(true);
+    setCalendarMessage("公式情報を同期しています。");
+    const response = await fetch("/api/timecard/calendar-events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "sync" })
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string; result?: { holidays?: number; hawksGames?: number; localEvents?: number; errors?: string[] } };
+    if (response.ok) {
+      const result = body.result;
+      setCalendarMessage(`同期完了：祝日 ${result?.holidays ?? 0}件 / ホークス ${result?.hawksGames ?? 0}件 / 地域行事 ${result?.localEvents ?? 0}件${result?.errors?.length ? `（一部失敗 ${result.errors.length}件）` : ""}`);
+      await loadTimecard(month, selectedStoreId, { keepShiftDraft: true, keepActualDraft: true });
+    } else {
+      setCalendarMessage(body.error ?? "公式情報を同期できませんでした。");
+    }
+    setIsSavingCalendar(false);
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -2360,6 +2504,8 @@ export function TimecardPage({
                 <span>対象店舗</span>
                 <select value={selectedStoreId} onChange={(event) => {
                   setSelectedStoreId(event.target.value);
+                  setSelectedCalendarDate("");
+                  setIsCalendarManagerOpen(false);
                   storeTimecardSelection(month, event.target.value);
                   setIsShiftMultiSelectMode(false);
                   setSelectedShiftCells([]);
@@ -2499,19 +2645,118 @@ export function TimecardPage({
                     <h3>計画シフト</h3>
                     <p>{selectedStore?.name ?? "店舗"} の月間シフトを日付 x 従業員で編集します。複数選択モード、または Shift / Command / Ctrl クリックでまとめて編集できます。</p>
                   </div>
-                  <button
-                    className={`secondary-button shift-multi-select-toggle${isShiftMultiSelectMode ? " is-active" : ""}`}
-                    type="button"
-                    onClick={() => {
-                      clearShiftMessage();
-                      setShiftDraft(null);
-                      setShiftEditorPosition(null);
-                      setIsShiftMultiSelectMode((current) => !current);
-                    }}
-                  >
-                    {isShiftMultiSelectMode ? "複数選択中" : "複数選択"}
-                  </button>
+                  <div className="shift-panel-actions">
+                    {data?.canEditActualTime ? (
+                      <button className={`secondary-button calendar-manager-toggle${isCalendarManagerOpen ? " is-active" : ""}`} type="button" onClick={openCalendarManager}>
+                        <CalendarPlus size={15} />
+                        営業カレンダー
+                      </button>
+                    ) : null}
+                    <button
+                      className={`secondary-button shift-multi-select-toggle${isShiftMultiSelectMode ? " is-active" : ""}`}
+                      type="button"
+                      onClick={() => {
+                        clearShiftMessage();
+                        setShiftDraft(null);
+                        setShiftEditorPosition(null);
+                        setIsShiftMultiSelectMode((current) => !current);
+                      }}
+                    >
+                      {isShiftMultiSelectMode ? "複数選択中" : "複数選択"}
+                    </button>
+                  </div>
                 </div>
+                {isCalendarManagerOpen ? (
+                  <section className="business-calendar-manager" aria-label="営業カレンダー管理">
+                    <div className="business-calendar-manager-head">
+                      <div>
+                        <strong>店舗予定を追加</strong>
+                        <span>祝日・公式イベントは自動同期されます。店舗独自の催事や周辺イベントを追加できます。</span>
+                      </div>
+                      {["owner", "manager"].includes(data?.currentEmployeeRole ?? "") ? (
+                        <button className="secondary-button" type="button" disabled={isSavingCalendar} onClick={() => void syncCalendarSources()}>
+                          <RefreshCw size={14} /> 公式情報を同期
+                        </button>
+                      ) : null}
+                    </div>
+                    <form className="business-calendar-form" onSubmit={(event) => void saveCalendarEvent(event)}>
+                      <label className="is-wide">
+                        <span>予定名</span>
+                        <input required maxLength={120} value={calendarDraft.title} placeholder="例：近隣商業施設セール" onChange={(event) => setCalendarDraft({ ...calendarDraft, title: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>開始日</span>
+                        <input required type="date" value={calendarDraft.startDate} onChange={(event) => setCalendarDraft({ ...calendarDraft, startDate: event.target.value, endDate: calendarDraft.endDate < event.target.value ? event.target.value : calendarDraft.endDate })} />
+                      </label>
+                      <label>
+                        <span>終了日</span>
+                        <input required type="date" min={calendarDraft.startDate} value={calendarDraft.endDate} onChange={(event) => setCalendarDraft({ ...calendarDraft, endDate: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>開始時刻</span>
+                        <input type="time" value={calendarDraft.startTime} onChange={(event) => setCalendarDraft({ ...calendarDraft, startTime: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>影響</span>
+                        <select value={calendarDraft.impactLevel} onChange={(event) => setCalendarDraft({ ...calendarDraft, impactLevel: event.target.value as CalendarEventDraft["impactLevel"] })}>
+                          <option value="reference">参考</option>
+                          <option value="busy">混雑見込</option>
+                          <option value="major">重大影響</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>種類</span>
+                        <select value={calendarDraft.category} onChange={(event) => setCalendarDraft({ ...calendarDraft, category: event.target.value })}>
+                          <option value="local_event">地域イベント</option>
+                          <option value="festival">祭事</option>
+                          <option value="sports">スポーツ</option>
+                          <option value="traffic">交通規制</option>
+                          <option value="other">その他</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>会場</span>
+                        <input maxLength={160} value={calendarDraft.venue} placeholder="任意" onChange={(event) => setCalendarDraft({ ...calendarDraft, venue: event.target.value })} />
+                      </label>
+                      <label className="is-wide">
+                        <span>メモ</span>
+                        <input maxLength={500} value={calendarDraft.note} placeholder="客流・交通への影響など" onChange={(event) => setCalendarDraft({ ...calendarDraft, note: event.target.value })} />
+                      </label>
+                      <button className="primary-button" type="submit" disabled={isSavingCalendar}>{isSavingCalendar ? "保存中" : "追加"}</button>
+                    </form>
+                    {calendarMessage ? <p className="business-calendar-message" aria-live="polite">{calendarMessage}</p> : null}
+                    {manualCalendarEvents.length ? (
+                      <div className="business-calendar-manual-list">
+                        {manualCalendarEvents.map((event) => (
+                          <div key={event.id}>
+                            <span className={`calendar-impact-dot is-${event.impactLevel}`} aria-hidden="true" />
+                            <strong>{event.title}</strong>
+                            <span>{event.startDate}{event.endDate !== event.startDate ? `–${event.endDate}` : ""}{event.startTime ? ` ${event.startTime}` : ""}</span>
+                            <button type="button" disabled={isSavingCalendar} aria-label={`${event.title}を削除`} onClick={() => void deleteCalendarEvent(event.id)}><Trash2 size={14} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </section>
+                ) : null}
+                {selectedCalendarDate && selectedCalendarEvents.length ? (
+                  <section className="business-calendar-day-detail" aria-label={`${selectedCalendarDate}の営業情報`}>
+                    <strong>{selectedCalendarDate}</strong>
+                    <div>
+                      {selectedCalendarEvents.map((event) => (
+                        <article className={`is-${event.impactLevel}`} key={event.id}>
+                          <span>{getCalendarEventCategoryLabel(event)}</span>
+                          <div>
+                            <strong>{event.title}</strong>
+                            <small>{[event.startTime, event.venue, getCalendarImpactLabel(event.impactLevel), event.note].filter(Boolean).join(" / ")}</small>
+                          </div>
+                          {event.sourceUrl ? <a href={event.sourceUrl} target="_blank" rel="noreferrer">公式</a> : null}
+                        </article>
+                      ))}
+                    </div>
+                    <button type="button" aria-label="営業情報を閉じる" onClick={() => setSelectedCalendarDate("")}>×</button>
+                  </section>
+                ) : null}
                 {isShiftMultiSelectMode || selectedShiftCells.length ? (
                   <div className="shift-editor shift-bulk-editor" aria-label="シフト一括編集">
                     <div className="shift-editor-title">
@@ -2624,6 +2869,7 @@ export function TimecardPage({
                         <th className="shift-employee-head">従業員</th>
                         {monthDays.map((day) => {
                           const coverage = coverageByDate.get(day.key);
+                          const calendarEvents = calendarEventsByDate.get(day.key) ?? [];
                           const isUncovered = coverage?.status === "uncovered";
                           const isToday = day.key === todayKey;
                           return (
@@ -2634,6 +2880,17 @@ export function TimecardPage({
                             >
                               <span>{day.label}</span>
                               <small>{day.weekdayLabel}</small>
+                              {calendarEvents.length ? (
+                                <button
+                                  className={`shift-calendar-marker is-${calendarEvents.some((event) => event.impactLevel === "major") ? "major" : calendarEvents.some((event) => event.impactLevel === "busy") ? "busy" : "reference"}`}
+                                  type="button"
+                                  title={calendarEvents.map((event) => `${event.title}${event.startTime ? ` ${event.startTime}` : ""}`).join(" / ")}
+                                  aria-label={`${day.key}の営業情報を表示`}
+                                  onClick={() => setSelectedCalendarDate((current) => current === day.key ? "" : day.key)}
+                                >
+                                  {calendarEvents.slice(0, 2).map((event) => getCalendarEventShortLabel(event)).join("·")}{calendarEvents.length > 2 ? `+${calendarEvents.length - 2}` : ""}
+                                </button>
+                              ) : null}
                               {isUncovered || isToday ? (
                                 <span className="shift-day-badges">
                                   {isUncovered ? <span className="shift-day-badge is-uncovered">未</span> : null}
