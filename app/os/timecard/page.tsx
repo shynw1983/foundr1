@@ -50,7 +50,12 @@ type WeatherForecastDay = {
   precipitationProbabilityMax: number | null;
   precipitationSum: number | null;
   windSpeedMax: number | null;
+  windLabel: string;
+  reliability: "A" | "B" | "C" | null;
+  sourceName: string;
   sourceUrl: string;
+  updatedAt: string;
+  isFallback: boolean;
 };
 
 type TimecardEmployee = {
@@ -260,9 +265,9 @@ function getCalendarEventCategoryLabel(event: BusinessCalendarEvent) {
 }
 
 function getCalendarFlowLabel(direction: BusinessCalendarEvent["flowDirection"]) {
-  if (direction === "inbound") return "流入";
-  if (direction === "outbound") return "流出";
-  return "混合";
+  if (direction === "inbound") return "地域流入";
+  if (direction === "outbound") return "地域流出";
+  return "方向不明";
 }
 
 function getCalendarImpactLabel(impact: BusinessCalendarEvent["impactLevel"]) {
@@ -284,6 +289,18 @@ function WeatherCodeIcon({ code, size = 13 }: { code: number | null; size?: numb
 
 function formatForecastNumber(value: number | null) {
   return value === null ? "–" : String(Math.round(value));
+}
+
+function formatForecastUpdatedAt(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
 }
 
 type ShiftDraft = {
@@ -2765,11 +2782,11 @@ export function TimecardPage({
                         </select>
                       </label>
                       <label>
-                        <span>人流方向</span>
+                        <span>地域人流の参考</span>
                         <select value={calendarDraft.flowDirection} onChange={(event) => setCalendarDraft({ ...calendarDraft, flowDirection: event.target.value as CalendarEventDraft["flowDirection"] })}>
-                          <option value="inbound">流入</option>
-                          <option value="outbound">流出</option>
-                          <option value="mixed">混合</option>
+                          <option value="inbound">地域流入</option>
+                          <option value="outbound">地域流出</option>
+                          <option value="mixed">方向不明</option>
                         </select>
                       </label>
                       <label>
@@ -2825,10 +2842,19 @@ export function TimecardPage({
                           <div>
                             <strong>{selectedWeatherForecast.label}</strong>
                             <small>
-                              最高 {formatForecastNumber(selectedWeatherForecast.temperatureMax)}℃ / 最低 {formatForecastNumber(selectedWeatherForecast.temperatureMin)}℃ / 降水 {formatForecastNumber(selectedWeatherForecast.precipitationProbabilityMax)}% / 雨量 {selectedWeatherForecast.precipitationSum ?? "–"}mm / 最大風速 {selectedWeatherForecast.windSpeedMax ?? "–"}km/h
+                              {[
+                                `最高 ${formatForecastNumber(selectedWeatherForecast.temperatureMax)}℃`,
+                                `最低 ${formatForecastNumber(selectedWeatherForecast.temperatureMin)}℃`,
+                                `降水 ${formatForecastNumber(selectedWeatherForecast.precipitationProbabilityMax)}%`,
+                                selectedWeatherForecast.reliability ? `信頼度 ${selectedWeatherForecast.reliability}` : "",
+                                selectedWeatherForecast.windLabel ? `風 ${selectedWeatherForecast.windLabel}` : "",
+                                selectedWeatherForecast.precipitationSum !== null ? `雨量 ${selectedWeatherForecast.precipitationSum}mm` : "",
+                                selectedWeatherForecast.windSpeedMax !== null ? `最大風速 ${selectedWeatherForecast.windSpeedMax}km/h` : "",
+                                formatForecastUpdatedAt(selectedWeatherForecast.updatedAt) ? `更新 ${formatForecastUpdatedAt(selectedWeatherForecast.updatedAt)}` : ""
+                              ].filter(Boolean).join(" / ")}
                             </small>
                           </div>
-                          <a href={selectedWeatherForecast.sourceUrl} target="_blank" rel="noreferrer">予報元</a>
+                          <a href={selectedWeatherForecast.sourceUrl} target="_blank" rel="noreferrer">{selectedWeatherForecast.sourceName}</a>
                         </article>
                       ) : null}
                       {selectedCalendarEvents.map((event) => (
@@ -2993,7 +3019,7 @@ export function TimecardPage({
                                 <button
                                   className={`shift-weather-marker${precipitationProbability >= 40 ? " is-rain-likely" : ""}`}
                                   type="button"
-                                  title={`${weatherForecast.label} / 最高${formatForecastNumber(weatherForecast.temperatureMax)}℃ 最低${formatForecastNumber(weatherForecast.temperatureMin)}℃ / 降水${formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%`}
+                                  title={`${weatherForecast.label} / 最高${formatForecastNumber(weatherForecast.temperatureMax)}℃ 最低${formatForecastNumber(weatherForecast.temperatureMin)}℃ / 降水${formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%${weatherForecast.reliability ? ` / 信頼度${weatherForecast.reliability}` : ""} / ${weatherForecast.sourceName}`}
                                   aria-label={`${day.key}の天気予報を表示`}
                                   onClick={() => setSelectedCalendarDate((current) => current === day.key ? "" : day.key)}
                                 >
@@ -3005,7 +3031,7 @@ export function TimecardPage({
                                     <span className="shift-weather-rain-track">
                                       <span style={{ width: `${precipitationProbability}%` }} />
                                     </span>
-                                    <small>降水{formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%</small>
+                                    <small>{weatherForecast.reliability ? `${formatForecastNumber(weatherForecast.precipitationProbabilityMax)}% ${weatherForecast.reliability}` : `降水${formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%`}</small>
                                   </span>
                                 </button>
                               ) : <span className="shift-context-empty">–</span>}

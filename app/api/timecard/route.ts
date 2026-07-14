@@ -2,7 +2,7 @@ import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../..
 import { writeAuditLog } from "../../../lib/audit-log";
 import { getBusinessCalendarEvents } from "../../../lib/business-calendar";
 import { sql } from "../../../lib/db";
-import { getThreeDayWeatherForecast } from "../../../lib/weather-forecast";
+import { getStoreWeatherForecast } from "../../../lib/weather-forecast";
 import type { EmployeeSession } from "../../../lib/auth";
 import { normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from "../../../lib/store-business-hours";
 import {
@@ -1230,10 +1230,11 @@ export async function GET(request: Request) {
       })
       : Promise.resolve([]),
     selectedStore
-      ? getThreeDayWeatherForecast(
-        toMoneyNumber(selectedStore.weatherLatitude) ?? toMoneyNumber(selectedStore.attendanceLatitude),
-        toMoneyNumber(selectedStore.weatherLongitude) ?? toMoneyNumber(selectedStore.attendanceLongitude)
-      )
+      ? getStoreWeatherForecast({
+        latitude: toMoneyNumber(selectedStore.weatherLatitude) ?? toMoneyNumber(selectedStore.attendanceLatitude),
+        longitude: toMoneyNumber(selectedStore.weatherLongitude) ?? toMoneyNumber(selectedStore.attendanceLongitude),
+        prefecture: String(selectedStore.socialInsurancePrefecture ?? "")
+      })
       : Promise.resolve([])
   ]);
   const responseEmployees = canViewPayroll

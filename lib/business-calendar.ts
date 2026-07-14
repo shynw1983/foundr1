@@ -288,13 +288,13 @@ function parseHawksMonth(html: string, year: number, month: number) {
       endTime: null,
       category: "sports",
       impactLevel: "busy",
-      flowDirection: "inbound",
+      flowDirection: "mixed",
       ...expandImpactWindow(gameMatch[1], 180, 300),
       venue: "みずほPayPayドーム福岡",
       prefecture: "福岡県",
       locality: "福岡市",
       sourceUrl: `${hawksSourceBaseUrl}/${year}/${String(month).padStart(2, "0")}/`,
-      note: specialLabel ? stripHtml(specialLabel[1]) : "福岡ソフトバンクホークス主催試合",
+      note: specialLabel ? stripHtml(specialLabel[1]) : "市外客の来訪と、地域客の会場方面への移動が同時に起こる可能性あり",
       metadata: { opponent: stripHtml(opponentMatch[1]), official: true }
     });
   }

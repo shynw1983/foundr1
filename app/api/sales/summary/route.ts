@@ -753,7 +753,11 @@ export async function GET(request: Request) {
       baselineSales += comparisonMetrics.reduce((sum, item) => sum + item.sales, 0) / comparisonMetrics.length;
       baselineOrderCount += comparisonMetrics.reduce((sum, item) => sum + item.orderCount, 0) / comparisonMetrics.length;
     }
-    const deltaPercent = baselineSales > 0 ? Math.round(((actualSales - baselineSales) / baselineSales) * 1000) / 10 : null;
+    const requiredComparisonDayCount = eventDates.length * 3;
+    const hasEnoughComparison = comparisonDayCount >= requiredComparisonDayCount;
+    const deltaPercent = hasEnoughComparison && baselineSales > 0
+      ? Math.round(((actualSales - baselineSales) / baselineSales) * 1000) / 10
+      : null;
     return {
       ...event,
       impactStartTime,
@@ -765,6 +769,8 @@ export async function GET(request: Request) {
       baselineOrderCount: Math.round(baselineOrderCount * 10) / 10,
       deltaPercent,
       comparisonDayCount,
+      requiredComparisonDayCount,
+      hasEnoughComparison,
       observedDirection: deltaPercent === null || Math.abs(deltaPercent) < 10 ? "neutral" : deltaPercent > 0 ? "positive" : "negative"
     };
   });

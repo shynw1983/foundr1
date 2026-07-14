@@ -45,6 +45,8 @@ type SalesEventImpact = SalesCalendarEvent & {
   baselineOrderCount: number;
   deltaPercent: number | null;
   comparisonDayCount: number;
+  requiredComparisonDayCount: number;
+  hasEnoughComparison: boolean;
   observedDirection: "positive" | "negative" | "neutral";
 };
 type SalesDay = {
@@ -304,15 +306,15 @@ function getDensityLevelClass(loadLevel: string) {
 }
 
 function getFlowDirectionLabel(direction: SalesCalendarEvent["flowDirection"]) {
-  if (direction === "inbound") return "流入";
-  if (direction === "outbound") return "流出";
-  return "混合";
+  if (direction === "inbound") return "地域流入";
+  if (direction === "outbound") return "地域流出";
+  return "方向不明";
 }
 
 function getObservedDirectionLabel(direction: SalesEventImpact["observedDirection"]) {
-  if (direction === "positive") return "実績増";
-  if (direction === "negative") return "実績減";
-  return "差は小さい";
+  if (direction === "positive") return "基準より高い";
+  if (direction === "negative") return "基準より低い";
+  return "基準との差は小さい";
 }
 
 const defaultSalesAnalysisSettings: SalesAnalysisSettings = {
@@ -498,13 +500,15 @@ function buildSalesAnalysisFacts(summary: SalesSummary, storeName: string) {
       title: event.title,
       period: `${event.startDate}${event.endDate === event.startDate ? "" : `–${event.endDate}`}`,
       impactWindow: `${event.impactStartTime ?? "00:00"}–${event.impactEndTime ?? "23:59"}`,
-      flowDirection: event.flowDirection,
+      regionalMovementReference: event.flowDirection,
       actualSales: event.actualSales,
       actualOrderCount: event.actualOrderCount,
       baselineSales: event.baselineSales,
       baselineOrderCount: event.baselineOrderCount,
       deltaPercent: event.deltaPercent,
       comparisonDayCount: event.comparisonDayCount,
+      requiredComparisonDayCount: event.requiredComparisonDayCount,
+      hasEnoughComparison: event.hasEnoughComparison,
       note: event.note
     })),
     imports: summary.imports.map((item) => ({
@@ -1322,8 +1326,8 @@ export default function SalesPage() {
             <div className="panel-title">
               <CalendarDays size={18} />
               <div>
-                <h3>外部要因の時間帯別影響</h3>
-                <p>同じ曜日・同じ時間帯の非重大イベント日を基準に比較します。流入・流出は想定される人流方向、実績増減は売上データの観測結果です。</p>
+                <h3>外部イベント日の売上対照</h3>
+                <p>同じ曜日・同じ時間帯の通常日と並べた参考値です。地域人流はイベント地域全体の情報で、店舗売上との因果関係を示すものではありません。</p>
               </div>
             </div>
             <div className="sales-event-impact-list">
@@ -1337,9 +1341,9 @@ export default function SalesPage() {
                     </div>
                   </div>
                   <div className="sales-event-impact-metrics">
-                    <span><small>影響時間内実績</small><strong>{formatMoney(event.actualSales)}</strong><em>{event.actualOrderCount}件</em></span>
-                    <span><small>同曜日基準</small><strong>{event.comparisonDayCount ? formatMoney(event.baselineSales) : "比較不足"}</strong><em>{event.comparisonDayCount ? `${event.baselineOrderCount}件相当` : "基準日なし"}</em></span>
-                    <span><small>{getObservedDirectionLabel(event.observedDirection)}</small><strong>{event.deltaPercent === null ? "–" : `${event.deltaPercent > 0 ? "+" : ""}${event.deltaPercent}%`}</strong><em>比較日 {event.comparisonDayCount}日</em></span>
+                    <span><small>対象時間内実績</small><strong>{formatMoney(event.actualSales)}</strong><em>{event.actualOrderCount}件</em></span>
+                    <span><small>同曜日基準</small><strong>{event.hasEnoughComparison ? formatMoney(event.baselineSales) : "データ不足"}</strong><em>{event.hasEnoughComparison ? `${event.baselineOrderCount}件相当` : `比較日 ${event.comparisonDayCount}/${event.requiredComparisonDayCount}日`}</em></span>
+                    <span><small>{event.hasEnoughComparison ? getObservedDirectionLabel(event.observedDirection) : "判定なし"}</small><strong>{event.deltaPercent === null ? "–" : `${event.deltaPercent > 0 ? "+" : ""}${event.deltaPercent}%`}</strong><em>比較日 {event.comparisonDayCount}日</em></span>
                   </div>
                 </article>
               ))}
