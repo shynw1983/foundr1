@@ -2915,6 +2915,7 @@ export function TimecardPage({
                           const coverage = coverageByDate.get(day.key);
                           const calendarEvents = calendarEventsByDate.get(day.key) ?? [];
                           const weatherForecast = weatherForecastByDate.get(day.key);
+                          const precipitationProbability = Math.max(0, Math.min(100, weatherForecast?.precipitationProbabilityMax ?? 0));
                           const isUncovered = coverage?.status === "uncovered";
                           const isToday = day.key === todayKey;
                           return (
@@ -2929,15 +2930,22 @@ export function TimecardPage({
                                 <span className="shift-day-context-markers">
                                   {weatherForecast ? (
                                     <button
-                                      className="shift-weather-marker"
+                                      className={`shift-weather-marker${precipitationProbability >= 40 ? " is-rain-likely" : ""}`}
                                       type="button"
                                       title={`${weatherForecast.label} / 最高${formatForecastNumber(weatherForecast.temperatureMax)}℃ 最低${formatForecastNumber(weatherForecast.temperatureMin)}℃ / 降水${formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%`}
                                       aria-label={`${day.key}の天気予報を表示`}
                                       onClick={() => setSelectedCalendarDate((current) => current === day.key ? "" : day.key)}
                                     >
-                                      <WeatherCodeIcon code={weatherForecast.weatherCode} size={10} />
-                                      <span>{formatForecastNumber(weatherForecast.temperatureMax)}/{formatForecastNumber(weatherForecast.temperatureMin)}°</span>
-                                      <small>{formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%</small>
+                                      <span className="shift-weather-summary">
+                                        <WeatherCodeIcon code={weatherForecast.weatherCode} size={11} />
+                                        <span>{formatForecastNumber(weatherForecast.temperatureMax)}/{formatForecastNumber(weatherForecast.temperatureMin)}°</span>
+                                      </span>
+                                      <span className="shift-weather-rain-chart" aria-hidden="true">
+                                        <span className="shift-weather-rain-track">
+                                          <span style={{ width: `${precipitationProbability}%` }} />
+                                        </span>
+                                        <small>雨 {formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%</small>
+                                      </span>
                                     </button>
                                   ) : null}
                                   {calendarEvents.length ? (

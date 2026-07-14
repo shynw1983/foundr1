@@ -19539,26 +19539,65 @@ body :where(
 }
 
 .shift-grid thead th .shift-weather-marker {
-  display: inline-flex;
-  height: 14px;
-  padding: 0 3px;
+  display: flex;
+  width: 58px;
+  height: 29px;
+  padding: 2px 4px 3px;
   border: 1px solid #d8e3e7;
   border-radius: 4px;
+  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  justify-content: center;
+  gap: 1px;
   background: white;
   color: #365d6e;
   font-size: 7px;
   font-weight: 600;
-  line-height: 12px;
+  line-height: 1;
   white-space: nowrap;
 }
 
-.shift-grid thead th .shift-weather-marker > span {
+.shift-grid thead th .shift-weather-marker.is-rain-likely {
+  border-color: rgba(40, 112, 145, 0.32);
+  background: #f2f8fb;
+}
+
+.shift-grid thead th .shift-weather-marker .shift-weather-summary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.shift-grid thead th .shift-weather-marker .shift-weather-summary > span {
   display: inline;
 }
 
-.shift-grid thead th .shift-weather-marker > small {
+.shift-grid thead th .shift-weather-marker .shift-weather-rain-chart {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(15px, 1fr) auto;
+  align-items: center;
+  gap: 3px;
+}
+
+.shift-grid thead th .shift-weather-marker .shift-weather-rain-track {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #dce6ea;
+}
+
+.shift-grid thead th .shift-weather-marker .shift-weather-rain-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2e83ad;
+}
+
+.shift-grid thead th .shift-weather-marker .shift-weather-rain-chart > small {
   display: inline;
   margin: 0;
   color: var(--blue);
