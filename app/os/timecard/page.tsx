@@ -252,13 +252,14 @@ function getCalendarImpactLabel(impact: BusinessCalendarEvent["impactLevel"]) {
 }
 
 function WeatherCodeIcon({ code, size = 13 }: { code: number | null; size?: number }) {
-  if (code === 0) return <Sun size={size} aria-hidden="true" />;
-  if (code === 1 || code === 2) return <CloudSun size={size} aria-hidden="true" />;
-  if (code === 3) return <Cloud size={size} aria-hidden="true" />;
-  if (code === 45 || code === 48) return <CloudFog size={size} aria-hidden="true" />;
-  if ((code !== null && code >= 71 && code <= 77) || code === 85 || code === 86) return <Snowflake size={size} aria-hidden="true" />;
-  if (code !== null && code >= 95) return <CloudLightning size={size} aria-hidden="true" />;
-  return <CloudRain size={size} aria-hidden="true" />;
+  if (code === 0) return <Sun className="weather-code-icon is-clear" size={size} aria-hidden="true" />;
+  if (code === 1 || code === 2) return <CloudSun className="weather-code-icon is-partly-cloudy" size={size} aria-hidden="true" />;
+  if (code === 3) return <Cloud className="weather-code-icon is-cloudy" size={size} aria-hidden="true" />;
+  if (code === 45 || code === 48) return <CloudFog className="weather-code-icon is-cloudy" size={size} aria-hidden="true" />;
+  if ((code !== null && code >= 71 && code <= 77) || code === 85 || code === 86) return <Snowflake className="weather-code-icon is-snowy" size={size} aria-hidden="true" />;
+  if (code !== null && code >= 95) return <CloudLightning className="weather-code-icon is-stormy" size={size} aria-hidden="true" />;
+  if (code !== null && ((code >= 51 && code <= 67) || (code >= 80 && code <= 82))) return <CloudRain className="weather-code-icon is-rainy" size={size} aria-hidden="true" />;
+  return <Cloud className="weather-code-icon is-cloudy" size={size} aria-hidden="true" />;
 }
 
 function formatForecastNumber(value: number | null) {
@@ -2949,14 +2950,14 @@ export function TimecardPage({
                                   onClick={() => setSelectedCalendarDate((current) => current === day.key ? "" : day.key)}
                                 >
                                   <span className="shift-weather-summary">
-                                    <WeatherCodeIcon code={weatherForecast.weatherCode} size={11} />
+                                    <WeatherCodeIcon code={weatherForecast.weatherCode} size={16} />
                                     <span>{formatForecastNumber(weatherForecast.temperatureMax)}/{formatForecastNumber(weatherForecast.temperatureMin)}°</span>
                                   </span>
                                   <span className="shift-weather-rain-chart" aria-hidden="true">
                                     <span className="shift-weather-rain-track">
                                       <span style={{ width: `${precipitationProbability}%` }} />
                                     </span>
-                                    <small>雨 {formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%</small>
+                                    <small>降水{formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%</small>
                                   </span>
                                 </button>
                               ) : <span className="shift-context-empty">–</span>}

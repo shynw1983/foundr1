@@ -19583,7 +19583,27 @@ body :where(
   width: 100%;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
+}
+
+.weather-code-icon {
+  flex: 0 0 auto;
+  stroke-width: 2;
+}
+
+.weather-code-icon.is-clear,
+.weather-code-icon.is-partly-cloudy {
+  color: var(--green);
+}
+
+.weather-code-icon.is-cloudy {
+  color: #687780;
+}
+
+.weather-code-icon.is-rainy,
+.weather-code-icon.is-snowy,
+.weather-code-icon.is-stormy {
+  color: #287091;
 }
 
 .shift-grid thead th .shift-weather-marker .shift-weather-summary > span {
@@ -19591,16 +19611,19 @@ body :where(
 }
 
 .shift-grid thead th .shift-weather-marker .shift-weather-rain-chart {
-  display: grid;
+  display: flex;
   width: 100%;
-  grid-template-columns: minmax(8px, 1fr) auto;
+  height: 9px;
+  flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 1px;
 }
 
 .shift-grid thead th .shift-weather-marker .shift-weather-rain-track {
   display: block;
-  height: 4px;
+  order: 2;
+  width: 100%;
+  height: 3px;
   overflow: hidden;
   border-radius: 2px;
   background: #dce6ea;
@@ -19615,9 +19638,11 @@ body :where(
 
 .shift-grid thead th .shift-weather-marker .shift-weather-rain-chart > small {
   display: inline;
+  order: 1;
   margin: 0;
   color: var(--blue);
-  font-size: 7px;
+  font-size: 6px;
+  line-height: 6px;
 }
 
 .shift-grid thead th .shift-context-empty {
