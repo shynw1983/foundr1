@@ -242,6 +242,7 @@ type CalendarEventDraft = {
 };
 
 function getCalendarEventShortLabel(event: BusinessCalendarEvent) {
+  if (event.category === "long_break") return "連";
   if (event.sourceType === "holiday") return "祝";
   if (event.sourceType === "sports") return "鷹";
   if (event.sourceType === "festival") return "祭";
