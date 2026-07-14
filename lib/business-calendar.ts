@@ -19,6 +19,19 @@ export type BusinessCalendarEvent = {
   note: string;
 };
 
+export type BusinessCalendarMaintenanceStatus = {
+  reviewYear: number;
+  needsReviewCount: number;
+  sources: Array<{
+    key: string;
+    label: string;
+    mode: "automatic" | "annual";
+    coverageYear: number | null;
+    needsReview: boolean;
+    note: string;
+  }>;
+};
+
 type CalendarEventInput = Omit<BusinessCalendarEvent, "id" | "storeId" | "flowDirection" | "impactStartTime" | "impactEndTime"> & {
   sourceKey: string;
   storeId?: string | null;
@@ -846,6 +859,75 @@ export async function syncBusinessCalendarSources(referenceDate = new Date()) {
     errors: [holidayResult, longBreakResult, foreignLongBreakResult, hawksResult, localResult, mobilityResult, miceResult, cruiseResult, payPayConcertResult, marineConcertResult]
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
       .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason))
+  };
+}
+
+export async function getBusinessCalendarMaintenanceStatus(referenceDate = new Date()): Promise<BusinessCalendarMaintenanceStatus> {
+  const currentYear = referenceDate.getUTCFullYear();
+  const reviewYear = referenceDate.getUTCMonth() >= 6 ? currentYear + 1 : currentYear;
+  const rows = await sql`
+    select
+      max(extract(year from start_date)) filter (where source_key like 'foreign-long-break:中国:%')::int as "chinaCoverageYear",
+      max(extract(year from start_date)) filter (where source_key like 'foreign-long-break:韓国:%')::int as "koreaCoverageYear",
+      max(extract(year from start_date)) filter (where source_key like 'foreign-long-break:台湾:%')::int as "taiwanCoverageYear",
+      max(extract(year from start_date)) filter (where source_key like 'foreign-long-break:香港:%')::int as "hongKongCoverageYear",
+      max(extract(year from start_date)) filter (
+        where source_key like 'chikugo-fireworks:%'
+          or source_key like 'kanmon-fireworks:%'
+          or source_key like 'htb-kyushu-fireworks:%'
+          or source_key like 'saga-balloon-fiesta:%'
+      )::int as "mobilityCoverageYear",
+      max(extract(year from start_date)) filter (where source_key like 'fukuoka-mice:%')::int as "miceCoverageYear"
+    from business_calendar_events
+    where is_active = true
+  `;
+  const row = rows[0] ?? {};
+  const foreignCoverageByMarket = [
+    ["中国", row.chinaCoverageYear ? Number(row.chinaCoverageYear) : null],
+    ["韓国", row.koreaCoverageYear ? Number(row.koreaCoverageYear) : null],
+    ["台湾", row.taiwanCoverageYear ? Number(row.taiwanCoverageYear) : null],
+    ["香港", row.hongKongCoverageYear ? Number(row.hongKongCoverageYear) : null]
+  ] as const;
+  const foreignCoverageYear = Math.min(...foreignCoverageByMarket.map(([, year]) => year ?? 0)) || null;
+  const annualSources = [
+    {
+      key: "foreign-long-breaks",
+      label: "海外大型連休",
+      coverageYear: foreignCoverageYear,
+      note: foreignCoverageByMarket.map(([market, year]) => `${market} ${year ?? "未登録"}`).join(" / ")
+    },
+    {
+      key: "mobility-events",
+      label: "大型花火・九州人流",
+      coverageYear: row.mobilityCoverageYear ? Number(row.mobilityCoverageYear) : null,
+      note: "花火大会・佐賀バルーン等"
+    },
+    {
+      key: "large-mice",
+      label: "万人級MICE",
+      coverageYear: row.miceCoverageYear ? Number(row.miceCoverageYear) : null,
+      note: "大型展示会・学会"
+    }
+  ].map((source) => ({
+    ...source,
+    mode: "annual" as const,
+    needsReview: (source.coverageYear ?? 0) < reviewYear
+  }));
+  const sources: BusinessCalendarMaintenanceStatus["sources"] = [
+    {
+      key: "automatic-sources",
+      label: "公式サイト自動同期",
+      mode: "automatic",
+      coverageYear: null,
+      needsReview: false,
+      note: "祝日・ホークス・コンサート・大型客船"
+    },
+    ...annualSources
+  ];
+  return {
+    reviewYear,
+    needsReviewCount: annualSources.filter((source) => source.needsReview).length,
+    sources
   };
 }
 

@@ -41,6 +41,19 @@ type BusinessCalendarEvent = {
   note: string;
 };
 
+type BusinessCalendarMaintenanceStatus = {
+  reviewYear: number;
+  needsReviewCount: number;
+  sources: Array<{
+    key: string;
+    label: string;
+    mode: "automatic" | "annual";
+    coverageYear: number | null;
+    needsReview: boolean;
+    note: string;
+  }>;
+};
+
 type WeatherForecastDay = {
   date: string;
   weatherCode: number | null;
@@ -219,6 +232,7 @@ type TimecardPayload = {
   employees: TimecardEmployee[];
   shifts: ShiftEntry[];
   calendarEvents: BusinessCalendarEvent[];
+  calendarMaintenance: BusinessCalendarMaintenanceStatus | null;
   weatherForecast: WeatherForecastDay[];
   dailySummaries: DailySummary[];
   payrollConfirmation: PayrollConfirmation | null;
@@ -244,6 +258,7 @@ type CalendarEventDraft = {
 function getCalendarEventShortLabel(event: BusinessCalendarEvent) {
   if (event.category === "foreign_long_break") return "外";
   if (event.category === "long_break") return "連";
+  if (event.category === "fireworks") return "花";
   if (event.sourceType === "holiday") return "祝";
   if (event.sourceType === "sports") return "鷹";
   if (event.sourceType === "festival") return "祭";
@@ -251,6 +266,20 @@ function getCalendarEventShortLabel(event: BusinessCalendarEvent) {
   if (event.sourceType === "convention") return "展";
   if (event.sourceType === "cruise") return "船";
   return "予";
+}
+
+function getCalendarEventColorClass(event: BusinessCalendarEvent) {
+  if (event.category === "foreign_long_break") return "is-foreign";
+  if (event.category === "long_break") return "is-long-break";
+  if (event.category === "fireworks") return "is-fireworks";
+  if (event.sourceType === "holiday") return "is-holiday";
+  if (event.sourceType === "sports") return "is-sports";
+  if (event.sourceType === "festival") return "is-festival";
+  if (event.sourceType === "concert") return "is-concert";
+  if (event.sourceType === "convention") return "is-convention";
+  if (event.sourceType === "cruise") return "is-cruise";
+  if (event.category === "traffic") return "is-traffic";
+  return "is-manual";
 }
 
 function getCalendarEventCategoryLabel(event: BusinessCalendarEvent) {
@@ -2726,6 +2755,9 @@ export function TimecardPage({
                       <button className={`secondary-button calendar-manager-toggle${isCalendarManagerOpen ? " is-active" : ""}`} type="button" onClick={openCalendarManager}>
                         <CalendarPlus size={15} />
                         営業カレンダー
+                        {data?.calendarMaintenance?.needsReviewCount ? (
+                          <span className="calendar-maintenance-count">年度確認 {data.calendarMaintenance.needsReviewCount}</span>
+                        ) : null}
                       </button>
                     ) : null}
                     <button
@@ -2755,6 +2787,39 @@ export function TimecardPage({
                         </button>
                       ) : null}
                     </div>
+                    {["owner", "manager"].includes(data?.currentEmployeeRole ?? "") && data?.calendarMaintenance ? (
+                      <section className={`calendar-maintenance-panel${data.calendarMaintenance.needsReviewCount ? " has-warning" : " is-ready"}`} aria-label="年間カレンダーデータ管理">
+                        <div className="calendar-maintenance-heading">
+                          <MessageSquareWarning size={17} />
+                          <div>
+                            <strong>年間データ管理</strong>
+                            <span>
+                              {data.calendarMaintenance.needsReviewCount
+                                ? `${data.calendarMaintenance.reviewYear}年分に ${data.calendarMaintenance.needsReviewCount} 項目の確認が必要です。`
+                                : `${data.calendarMaintenance.reviewYear}年分まで確認済みです。`}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="calendar-maintenance-source-grid">
+                          {data.calendarMaintenance.sources.map((source) => (
+                            <article className={source.mode === "automatic" ? "is-automatic" : source.needsReview ? "needs-review" : "is-covered"} key={source.key}>
+                              <div>
+                                <strong>{source.label}</strong>
+                                <small>{source.note}</small>
+                              </div>
+                              <span>
+                                {source.mode === "automatic"
+                                  ? "毎週自動"
+                                  : source.needsReview
+                                    ? `${data.calendarMaintenance?.reviewYear}年 要確認`
+                                    : `${source.coverageYear}年まで`}
+                              </span>
+                            </article>
+                          ))}
+                        </div>
+                        <p>「要確認」は公式発表後の年度データ更新が必要です。自動同期対象は毎週月曜に更新されます。</p>
+                      </section>
+                    ) : null}
                     <form className="business-calendar-form" onSubmit={(event) => void saveCalendarEvent(event)}>
                       <label className="is-wide">
                         <span>予定名</span>
@@ -2862,7 +2927,7 @@ export function TimecardPage({
                       ) : null}
                       {selectedCalendarEvents.map((event) => (
                         <article className={`is-${event.impactLevel}`} key={event.id}>
-                          <span>{getCalendarEventCategoryLabel(event)}</span>
+                          <span className={`calendar-event-kind ${getCalendarEventColorClass(event)}`}>{getCalendarEventCategoryLabel(event)}</span>
                           <div>
                             <strong>{event.title}</strong>
                             <small>{[
@@ -3055,7 +3120,12 @@ export function TimecardPage({
                                   aria-label={`${day.key}の営業情報を表示`}
                                   onClick={() => setSelectedCalendarDate((current) => current === day.key ? "" : day.key)}
                                 >
-                                  {calendarEvents.slice(0, 2).map((event) => getCalendarEventShortLabel(event)).join("·")}{calendarEvents.length > 2 ? `+${calendarEvents.length - 2}` : ""}
+                                  {calendarEvents.slice(0, 2).map((event) => (
+                                    <span className={`shift-calendar-label ${getCalendarEventColorClass(event)}`} key={event.id}>
+                                      {getCalendarEventShortLabel(event)}
+                                    </span>
+                                  ))}
+                                  {calendarEvents.length > 2 ? <span className="shift-calendar-more">+{calendarEvents.length - 2}</span> : null}
                                 </button>
                               ) : <span className="shift-context-empty">–</span>}
                             </th>

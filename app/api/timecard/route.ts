@@ -1,6 +1,6 @@
 import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import { writeAuditLog } from "../../../lib/audit-log";
-import { getBusinessCalendarEvents } from "../../../lib/business-calendar";
+import { getBusinessCalendarEvents, getBusinessCalendarMaintenanceStatus } from "../../../lib/business-calendar";
 import { sql } from "../../../lib/db";
 import { getStoreWeatherForecast } from "../../../lib/weather-forecast";
 import type { EmployeeSession } from "../../../lib/auth";
@@ -1219,7 +1219,7 @@ export async function GET(request: Request) {
   const payrollConfirmation = canViewPayroll && selectedStoreId
     ? await getPayrollConfirmation(selectedStoreId, month)
     : null;
-  const [calendarEvents, weatherForecast] = await Promise.all([
+  const [calendarEvents, weatherForecast, calendarMaintenance] = await Promise.all([
     selectedStoreId && selectedStore
       ? getBusinessCalendarEvents({
         storeId: selectedStoreId,
@@ -1235,7 +1235,10 @@ export async function GET(request: Request) {
         longitude: toMoneyNumber(selectedStore.weatherLongitude) ?? toMoneyNumber(selectedStore.attendanceLongitude),
         prefecture: String(selectedStore.socialInsurancePrefecture ?? "")
       })
-      : Promise.resolve([])
+      : Promise.resolve([]),
+    session.role === storeTerminalRole
+      ? Promise.resolve(null)
+      : getBusinessCalendarMaintenanceStatus()
   ]);
   const responseEmployees = canViewPayroll
     ? employees
@@ -1308,6 +1311,7 @@ export async function GET(request: Request) {
     punches: isStoreTerminalSession ? [] : typedPunches,
     shifts: isStoreTerminalSession ? [] : responseShifts,
     calendarEvents: isStoreTerminalSession ? [] : calendarEvents,
+    calendarMaintenance,
     weatherForecast: isStoreTerminalSession ? [] : weatherForecast,
     latestPunch: isStoreTerminalSession ? null : latestPunch,
     latestPunches: responseLatestPunches,
