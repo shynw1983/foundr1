@@ -88,8 +88,12 @@ function formatDeadlineForToday(deadlineAt: string | Date | null, deadlineLabel:
   return `${String(deadlineParts.month).padStart(2, "0")}/${String(deadlineParts.day).padStart(2, "0")} ${time}`;
 }
 
-export async function getProcurementDashboardData(session?: EmployeeSession) {
+export async function getProcurementDashboardData(
+  session?: EmployeeSession,
+  options: { includeMasterData?: boolean } = {}
+) {
   const scope = session ? await getSessionStoreScope(session) : { allStores: true, storeIds: [] };
+  const includeMasterData = options.includeMasterData !== false;
   const [
     stores,
     brands,
@@ -109,7 +113,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
     priceSignals
   ] =
     await Promise.all([
-      sql`
+      includeMasterData ? sql`
         select
           stores.id::text,
           stores.name,
@@ -184,9 +188,9 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         where (${scope.allStores} or stores.id::text = any(${scope.storeIds}))
         group by stores.id, companies.name, companies.legal_name, companies.representative_name, companies.invoice_registration_number, companies.receipt_purpose_text, companies.receipt_tax_rate, companies.address, companies.phone, companies.privacy_contact_name, companies.privacy_contact_email, companies.privacy_contact_phone
         order by stores.name
-      `,
-      sql`select name, brand_type as type from brands order by name`,
-      sql`
+      ` : Promise.resolve(undefined),
+      includeMasterData ? sql`select name, brand_type as type from brands order by name` : Promise.resolve(undefined),
+      includeMasterData ? sql`
         select
           id::text,
           name,
@@ -291,8 +295,8 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           )
         )
         order by name
-      `,
-      sql`
+      ` : Promise.resolve(undefined),
+      includeMasterData ? sql`
         select
           name,
           category,
@@ -306,13 +310,13 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           coalesce(order_url, '') as "orderUrl"
         from suppliers
         order by name
-      `,
-      sql`
+      ` : Promise.resolve(undefined),
+      includeMasterData ? sql`
         select name, sort_order as "sortOrder"
         from product_categories
         order by sort_order, name
-      `,
-      sql`
+      ` : Promise.resolve(undefined),
+      includeMasterData ? sql`
         select
           product_categories.name as category,
           product_subcategories.name,
@@ -320,8 +324,8 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         from product_subcategories
         join product_categories on product_categories.id = product_subcategories.category_id
         order by product_categories.sort_order, product_categories.name, product_subcategories.sort_order, product_subcategories.name
-      `,
-      sql`
+      ` : Promise.resolve(undefined),
+      includeMasterData ? sql`
         select
           suppliers.name as supplier,
           supplier_locations.name as "locationName",
@@ -336,8 +340,8 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         from supplier_locations
         join suppliers on suppliers.id = supplier_locations.supplier_id
         order by suppliers.name, supplier_locations.name
-      `,
-      sql`
+      ` : Promise.resolve(undefined),
+      includeMasterData ? sql`
         select
           products.name as product,
           brands.name as brand,
@@ -358,8 +362,8 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           )
         )
         order by products.name, brands.name
-      `,
-      sql`
+      ` : Promise.resolve(undefined),
+      includeMasterData ? sql`
         select
           products.name as product,
           json_agg(
@@ -399,8 +403,8 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           )
         group by products.name
         order by products.name
-      `,
-      sql`
+      ` : Promise.resolve(undefined),
+      includeMasterData ? sql`
         select
           employees.id::text as id,
           employees.name,
@@ -420,7 +424,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           )
         group by employees.id
         order by employees.name
-      `,
+      ` : Promise.resolve(undefined),
       sql`
         select
           purchase_orders.order_no as id,

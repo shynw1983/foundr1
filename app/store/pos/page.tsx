@@ -658,6 +658,7 @@ export default function StorePosPage() {
   const [memberScannerOpen, setMemberScannerOpen] = useState(false);
   const [memberScannerMessage, setMemberScannerMessage] = useState("");
   const [customerDisplayScannerLoading, setCustomerDisplayScannerLoading] = useState(false);
+  const [customerDisplayScanPending, setCustomerDisplayScanPending] = useState(false);
   const [note, setNote] = useState("");
   const [receiptRequested, setReceiptRequested] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1070,6 +1071,7 @@ export default function StorePosPage() {
       });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(body.error || "客席表示に会員 QR 読取を開始できませんでした。");
+      setCustomerDisplayScanPending(true);
       setMessage("客席表示で会員 QR 読取を開始しました。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "客席表示に会員 QR 読取を開始できませんでした。");
@@ -1081,6 +1083,18 @@ export default function StorePosPage() {
   useEffect(() => {
     if (!selectedStoreId) return;
     let active = true;
+    let pusher: any;
+    let channels: any[] = [];
+    let pollingTimer = 0;
+
+    const handleScanRequest = (scanRequest?: { id?: string; code?: string } | null) => {
+      const requestId = String(scanRequest?.id ?? "").trim();
+      const code = String(scanRequest?.code ?? "").trim();
+      if (!requestId || !code || requestId === customerDisplayMemberScanIdRef.current) return;
+      customerDisplayMemberScanIdRef.current = requestId;
+      setCustomerDisplayScanPending(false);
+      void lookupMember(code);
+    };
 
     async function checkCustomerDisplayMemberScan() {
       if (!selectedStoreIdRef.current || memberLookupLoadingRef.current) return;
@@ -1089,22 +1103,72 @@ export default function StorePosPage() {
       const response = await fetch(`/api/store/pos/customer-display/member-scan?${params.toString()}`, { cache: "no-store" }).catch(() => null);
       if (!active || !response?.ok) return;
       const body = await response.json().catch(() => ({})) as { scanRequest?: { id?: string; code?: string } | null };
-      const scanRequest = body.scanRequest;
-      const requestId = String(scanRequest?.id ?? "").trim();
-      const code = String(scanRequest?.code ?? "").trim();
-      if (!requestId || !code || requestId === customerDisplayMemberScanIdRef.current) return;
-      customerDisplayMemberScanIdRef.current = requestId;
-      void lookupMember(code);
+      handleScanRequest(body.scanRequest);
     }
 
-    void checkCustomerDisplayMemberScan();
-    const interval = window.setInterval(checkCustomerDisplayMemberScan, 1500);
+    const stopPolling = () => {
+      if (!pollingTimer) return;
+      window.clearInterval(pollingTimer);
+      pollingTimer = 0;
+    };
+    const startPolling = () => {
+      if (pollingTimer) return;
+      void checkCustomerDisplayMemberScan();
+      pollingTimer = window.setInterval(
+        checkCustomerDisplayMemberScan,
+        customerDisplayScanPending ? 3000 : 60000
+      );
+    };
+
+    startPolling();
+    fetch(`/api/store/realtime-config?storeId=${encodeURIComponent(selectedStoreId)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(async (config) => {
+        if (!active || !config?.key || !config?.cluster || !config?.channels?.length) {
+          startPolling();
+          return;
+        }
+        const { default: Pusher } = await import("pusher-js");
+        if (!active) return;
+        pusher = new Pusher(config.key, {
+          cluster: config.cluster,
+          channelAuthorization: {
+            endpoint: "/api/store/realtime-auth",
+            transport: "ajax"
+          }
+        });
+        pusher.connection.bind("unavailable", startPolling);
+        pusher.connection.bind("failed", startPolling);
+        pusher.connection.bind("disconnected", startPolling);
+        channels = config.channels.map((channelName: string) => {
+          const channel = pusher.subscribe(channelName);
+          channel.bind("pusher:subscription_succeeded", stopPolling);
+          channel.bind("pusher:subscription_error", startPolling);
+          channel.bind("pos.customer-display.updated", (payload: { state?: { memberScanRequest?: { id?: string; code?: string } | null } }) => {
+            handleScanRequest(payload?.state?.memberScanRequest);
+          });
+          return channel;
+        });
+      })
+      .catch(startPolling);
+
     return () => {
       active = false;
-      window.clearInterval(interval);
+      stopPolling();
+      channels.forEach((channel) => {
+        channel.unbind("pos.customer-display.updated");
+        pusher?.unsubscribe(channel.name);
+      });
+      pusher?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStoreId]);
+  }, [customerDisplayScanPending, selectedStoreId]);
+
+  useEffect(() => {
+    if (!customerDisplayScanPending) return;
+    const timer = window.setTimeout(() => setCustomerDisplayScanPending(false), 2 * 60 * 1000);
+    return () => window.clearTimeout(timer);
+  }, [customerDisplayScanPending]);
 
   function clearSelectedMember() {
     setSelectedMember(null);

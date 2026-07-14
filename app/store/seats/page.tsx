@@ -106,6 +106,9 @@ export default function StoreSeatsPage() {
 
   useEffect(() => {
     let active = true;
+    let pusher: any;
+    let channels: any[] = [];
+    let timer = 0;
     async function load(showLoading = false) {
       if (showLoading) setLoading(true);
       try {
@@ -122,11 +125,58 @@ export default function StoreSeatsPage() {
         if (active) setLoading(false);
       }
     }
+    const stopPolling = () => {
+      if (!timer) return;
+      window.clearInterval(timer);
+      timer = 0;
+    };
+    const startPolling = (intervalMs = 10000) => {
+      stopPolling();
+      timer = window.setInterval(() => {
+        if (document.visibilityState === "visible") void load();
+      }, intervalMs);
+    };
+
     void load(true);
-    const timer = window.setInterval(() => void load(), 3000);
+    startPolling();
+    fetch("/api/store/realtime-config", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(async (config) => {
+        if (!active || !config?.key || !config?.cluster || !config?.channels?.length) return;
+        const { default: Pusher } = await import("pusher-js");
+        if (!active) return;
+        pusher = new Pusher(config.key, {
+          cluster: config.cluster,
+          channelAuthorization: {
+            endpoint: "/api/store/realtime-auth",
+            transport: "ajax"
+          }
+        });
+        const refreshBoard = () => void load();
+        pusher.connection.bind("unavailable", () => startPolling());
+        pusher.connection.bind("failed", () => startPolling());
+        pusher.connection.bind("disconnected", () => startPolling());
+        channels = config.channels.map((channelName: string) => {
+          const channel = pusher.subscribe(channelName);
+          channel.bind("pusher:subscription_succeeded", () => startPolling(60000));
+          channel.bind("pusher:subscription_error", () => startPolling());
+          channel.bind("store.seats.updated", refreshBoard);
+          channel.bind("order.created", refreshBoard);
+          channel.bind("order.updated", refreshBoard);
+          return channel;
+        });
+      })
+      .catch(() => startPolling());
     return () => {
       active = false;
-      window.clearInterval(timer);
+      stopPolling();
+      channels.forEach((channel) => {
+        channel.unbind("store.seats.updated");
+        channel.unbind("order.created");
+        channel.unbind("order.updated");
+        pusher?.unsubscribe(channel.name);
+      });
+      pusher?.disconnect();
     };
   }, []);
 

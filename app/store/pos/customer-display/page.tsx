@@ -643,6 +643,7 @@ export default function CustomerDisplayPage() {
   }, [state.memberScanCommand]);
 
   useEffect(() => {
+    if (realtimeStatus === "connected") return;
     let active = true;
 
     async function checkMemberScanCommand() {
@@ -662,12 +663,12 @@ export default function CustomerDisplayPage() {
     }
 
     void checkMemberScanCommand();
-    const interval = window.setInterval(checkMemberScanCommand, 1200);
+    const interval = window.setInterval(checkMemberScanCommand, 5000);
     return () => {
       active = false;
       window.clearInterval(interval);
     };
-  }, [memberScannerOpen]);
+  }, [memberScannerOpen, realtimeStatus]);
 
   async function load(storeId = selectedStoreIdRef.current || getStoredStoreSelection()) {
     const params = new URLSearchParams();
@@ -698,7 +699,7 @@ export default function CustomerDisplayPage() {
     const interval = window.setInterval(() => {
       const currentStoreId = new URLSearchParams(window.location.search).get("storeId") || selectedStoreIdRef.current || getStoredStoreSelection();
       void load(currentStoreId);
-    }, realtimeStatus === "connected" ? 60000 : 1200);
+    }, realtimeStatus === "connected" ? 60000 : 15000);
     return () => window.clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realtimeStatus]);

@@ -1,7 +1,6 @@
 import { cookies } from "next/headers";
 import { authCookieName, readSessionToken, type EmployeeSession } from "./auth";
 import { sql } from "./db";
-import { touchEmployeeSession } from "./employee-sessions";
 
 const writableRoles = new Set(["owner", "manager", "store_owner", "store_manager", "staff"]);
 const allStoreAccessRoles = new Set(["owner", "manager"]);
@@ -18,24 +17,57 @@ export async function requireOsSession(): Promise<EmployeeSession | null> {
   if (!session.sessionId) return null;
 
   const rows = await sql`
+    with active_session as (
+      select
+        employee_sessions.id as session_id,
+        employees.id,
+        employees.name,
+        coalesce(employees.login_id, employees.email, '') as "loginId",
+        employees.role,
+        employees.session_version as "sessionVersion"
+      from employee_sessions
+      join employees on employees.id = employee_sessions.employee_id
+      where employee_sessions.id = ${session.sessionId}::uuid
+        and employees.id = ${session.id}::uuid
+        and employees.status = 'active'
+        and employee_sessions.session_version = ${session.sessionVersion}
+        and employees.session_version = ${session.sessionVersion}
+        and employee_sessions.revoked_at is null
+        and employee_sessions.expires_at > now()
+      limit 1
+    ), touched_session as (
+      update employee_sessions
+      set
+        last_seen_at = now(),
+        expires_at = now() + interval '14 days'
+      from active_session
+      where employee_sessions.id = active_session.session_id
+        and (
+          employee_sessions.last_seen_at is null
+          or employee_sessions.last_seen_at < now() - interval '1 minute'
+        )
+      returning employee_sessions.id
+    ), touched_employee as (
+      update employees
+      set last_seen_at = now()
+      from active_session
+      where employees.id = active_session.id
+        and (
+          employees.last_seen_at is null
+          or employees.last_seen_at < now() - interval '1 minute'
+        )
+      returning employees.id
+    )
     select
       id::text,
       name,
-      coalesce(login_id, email, '') as "loginId",
+      "loginId",
       role,
-      session_version as "sessionVersion"
-    from employees
-    where id = ${session.id}
-      and status = 'active'
-    limit 1
+      "sessionVersion"
+    from active_session
   `;
   const employee = rows[0] as EmployeeSession | undefined;
   if (!employee) return null;
-  if (employee.sessionVersion !== session.sessionVersion) return null;
-  const sessionIsActive = await touchEmployeeSession(session.sessionId, employee.id, employee.sessionVersion);
-  if (!sessionIsActive) return null;
-
-  await touchEmployeeLastSeen(employee.id);
   return { ...employee, sessionId: session.sessionId };
 }
 

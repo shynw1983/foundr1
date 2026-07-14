@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { publishStoreOperationalEvent } from "../../../../lib/order-realtime";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -166,6 +167,7 @@ export async function POST(request: Request) {
     }
     throw error;
   }
+  await publishStoreOperationalEvent(storeId, "store.seats.updated").catch(() => undefined);
   return Response.json({ ok: true, ...(await seatBoard(storeId)) }, { status: 201 });
 }
 
@@ -200,6 +202,7 @@ export async function PATCH(request: Request) {
       returning id::text
     `;
     if (!rows.length) return Response.json({ error: "利用中のテーブルは相席モードを変更できません。" }, { status: 409 });
+    await publishStoreOperationalEvent(storeId, "store.seats.updated").catch(() => undefined);
     return Response.json({ ok: true, ...(await seatBoard(storeId)) });
   }
   const chairTarget = /^[AB][12]$/.test(target);
@@ -345,5 +348,6 @@ export async function PATCH(request: Request) {
           and store_dining_session_tables.released_at is null
       )
   `;
+  await publishStoreOperationalEvent(storeId, "store.seats.updated").catch(() => undefined);
   return Response.json({ ok: true, ...(await seatBoard(storeId)) });
 }

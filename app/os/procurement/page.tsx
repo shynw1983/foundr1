@@ -151,7 +151,9 @@ type ProcurementStaffUnavailableSlot = {
 
 const additionalPurchaseDraftStorageKey = "foundr1-os:procurement-additional-purchase-drafts:v1";
 const pendingProcurementTaskItemStorageKey = "foundr1-os:procurement-pending-task-items:v1";
-const recentProcurementTaskItemRetentionMs = 10000;
+const recentProcurementTaskItemRetentionMs = 120000;
+const procurementLiveRefreshIntervalMs = 60000;
+const procurementMasterRefreshIntervalMs = 30 * 60 * 1000;
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
@@ -838,7 +840,9 @@ export default function ProcurementPage() {
   const recentDeliveryBatchesRef = useRef<Record<string, { batch: DeliveryBatch; updatedAt: number }>>({});
   const recentDeliveryStatesRef = useRef<Record<string, { state: DeliveryState; updatedAt: number }>>({});
   const dashboardLoadRequestRef = useRef(0);
+  const dashboardRefreshTimerRef = useRef(0);
   const lastDashboardLoadedAtRef = useRef(0);
+  const lastFullDashboardLoadedAtRef = useRef(0);
   const [products, setProducts] = useState<Product[]>([]);
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -916,13 +920,18 @@ export default function ProcurementPage() {
     return fulfillmentMap;
   }, [supplierFulfillments]);
 
-  const loadDashboardData = useCallback(async (options?: { background?: boolean }) => {
+  const loadDashboardData = useCallback(async (options?: { background?: boolean; full?: boolean }) => {
     const requestId = dashboardLoadRequestRef.current + 1;
     dashboardLoadRequestRef.current = requestId;
     setDashboardSyncState(options?.background ? "refreshing" : "loading");
+    const includeMasterData = options?.full === true
+      || options?.background !== true
+      || Date.now() - lastFullDashboardLoadedAtRef.current >= procurementMasterRefreshIntervalMs;
 
     try {
-      const response = await fetch(`/api/dashboard?ts=${Date.now()}`, {
+      const params = new URLSearchParams({ ts: String(Date.now()) });
+      if (!includeMasterData) params.set("mode", "live");
+      const response = await fetch(`/api/dashboard?${params.toString()}`, {
         cache: "no-store",
         headers: {
           "Cache-Control": "no-cache",
@@ -957,7 +966,14 @@ export default function ProcurementPage() {
         setPurchaseOrders(data.orders);
       }
       if (data.purchaseOrderItems) {
-        setPurchaseOrderItems(applyPendingProcurementTaskItemsToDashboardItems(data.purchaseOrderItems, getOptimisticProcurementTaskItems()));
+        const reconciliation = reconcileConfirmedPendingProcurementTaskItems(data.purchaseOrderItems);
+        reconciliation.confirmedItemIds.forEach((itemId) => {
+          delete recentProcurementTaskItemsRef.current[itemId];
+        });
+        setPurchaseOrderItems(applyPendingProcurementTaskItemsToDashboardItems(data.purchaseOrderItems, {
+          ...getRecentProcurementTaskItems(),
+          ...reconciliation.pendingItems
+        }));
       }
       if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
       if (data.deliveryBatches) setDeliveryBatches(mergeOptimisticDeliveryBatches(data.deliveryBatches));
@@ -968,6 +984,7 @@ export default function ProcurementPage() {
       if (data.procurementStaffAvailability) setProcurementStaffAvailability(data.procurementStaffAvailability);
       setDashboardSyncState("synced");
       lastDashboardLoadedAtRef.current = Date.now();
+      if (includeMasterData) lastFullDashboardLoadedAtRef.current = Date.now();
       return true;
     } catch {
       if (dashboardLoadRequestRef.current === requestId) {
@@ -977,9 +994,54 @@ export default function ProcurementPage() {
     }
   }, []);
 
+  function scheduleDashboardRefresh() {
+    if (dashboardRefreshTimerRef.current) window.clearTimeout(dashboardRefreshTimerRef.current);
+    dashboardRefreshTimerRef.current = window.setTimeout(() => {
+      dashboardRefreshTimerRef.current = 0;
+      void loadDashboardData({ background: true });
+    }, 1500);
+  }
+
   useEffect(() => {
     void loadDashboardData();
   }, [loadDashboardData]);
+
+  useEffect(() => {
+    let active = true;
+    let pusher: any;
+    let channels: any[] = [];
+
+    fetch("/api/store/realtime-config", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(async (config) => {
+        if (!active || !config?.key || !config?.cluster || !config?.channels?.length) return;
+        const { default: Pusher } = await import("pusher-js");
+        if (!active) return;
+        pusher = new Pusher(config.key, {
+          cluster: config.cluster,
+          channelAuthorization: {
+            endpoint: "/api/store/realtime-auth",
+            transport: "ajax"
+          }
+        });
+        channels = config.channels.map((channelName: string) => {
+          const channel = pusher.subscribe(channelName);
+          channel.bind("procurement.updated", scheduleDashboardRefresh);
+          return channel;
+        });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+      channels.forEach((channel) => {
+        channel.unbind("procurement.updated", scheduleDashboardRefresh);
+        pusher?.unsubscribe(channel.name);
+      });
+      pusher?.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectedCalendarStaffId = getSelectedStaffId(calendarStaffId, staffOptions);
   const calendarDayEntries = getUnavailableSlotsForStaffDate(procurementStaffAvailability, selectedCalendarStaffId, calendarDate);
@@ -1070,7 +1132,7 @@ export default function ProcurementPage() {
     const refreshDashboardWhenVisible = () => {
       if (document.visibilityState !== "visible") return;
       const now = Date.now();
-      if (now - lastDashboardLoadedAtRef.current < 3000) return;
+      if (now - lastDashboardLoadedAtRef.current < procurementLiveRefreshIntervalMs) return;
       void loadDashboardData({ background: true });
     };
 
@@ -1081,11 +1143,10 @@ export default function ProcurementPage() {
     };
 
     syncPendingItems();
-    const visibleRefreshTimer = window.setInterval(refreshDashboardWhenVisible, 15000);
+    const visibleRefreshTimer = window.setInterval(refreshDashboardWhenVisible, procurementLiveRefreshIntervalMs);
     window.addEventListener("online", syncWhenVisible);
     window.addEventListener("focus", refreshDashboardWhenVisible);
     window.addEventListener("pageshow", refreshDashboardWhenVisible);
-    window.addEventListener("pointerdown", refreshDashboardWhenVisible);
     document.addEventListener("visibilitychange", syncWhenVisible);
 
     return () => {
@@ -1093,8 +1154,8 @@ export default function ProcurementPage() {
       window.removeEventListener("online", syncWhenVisible);
       window.removeEventListener("focus", refreshDashboardWhenVisible);
       window.removeEventListener("pageshow", refreshDashboardWhenVisible);
-      window.removeEventListener("pointerdown", refreshDashboardWhenVisible);
       document.removeEventListener("visibilitychange", syncWhenVisible);
+      if (dashboardRefreshTimerRef.current) window.clearTimeout(dashboardRefreshTimerRef.current);
     };
   }, [loadDashboardData]);
 
@@ -1168,7 +1229,7 @@ export default function ProcurementPage() {
     const nextSave = saveRequest
       .then(() => {
         rememberRecentProcurementTaskItem(item);
-        removePendingProcurementTaskItem(item.id, updatedAt);
+        scheduleDashboardRefresh();
       })
       .catch((error: unknown) => {
         if (!options.silentFailure) {
@@ -1302,7 +1363,7 @@ export default function ProcurementPage() {
     }
 
     setActiveExceptionItemId(null);
-    await loadDashboardData();
+    await loadDashboardData({ background: true });
     showNotice("残数をフォロー待ちとして分割しました。");
   }
 
@@ -1637,7 +1698,7 @@ export default function ProcurementPage() {
         ...drafts,
         [orderId]: createDefaultAdditionalPurchaseDraft(products)
       }));
-      await loadDashboardData();
+      await loadDashboardData({ background: true });
       showNotice("追加購入を登録しました。");
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "追加購入を登録できませんでした。");
@@ -3318,11 +3379,8 @@ function writePendingProcurementTaskItem(item: ProcurementTaskItem, updatedAt: n
   }
 }
 
-function removePendingProcurementTaskItem(itemId: string, updatedAt: number) {
+function replacePendingProcurementTaskItems(pendingItems: Record<string, PendingProcurementTaskItemEntry>) {
   try {
-    const pendingItems = readPendingProcurementTaskItems();
-    if (!pendingItems[itemId] || pendingItems[itemId].updatedAt !== updatedAt) return;
-    delete pendingItems[itemId];
     if (Object.keys(pendingItems).length === 0) {
       window.localStorage.removeItem(pendingProcurementTaskItemStorageKey);
       return;
@@ -3331,6 +3389,55 @@ function removePendingProcurementTaskItem(itemId: string, updatedAt: number) {
   } catch {
     // Ignore cleanup failures; a later successful sync can clear the record.
   }
+}
+
+function normalizeComparablePrice(value: unknown) {
+  const normalized = String(value ?? "").replace(/[¥￥,\s]/g, "").trim();
+  if (!normalized) return "";
+  const number = Number(normalized);
+  return Number.isFinite(number) ? String(number) : normalized;
+}
+
+function serverDashboardItemConfirmsPendingItem(
+  serverItem: DashboardOrderItem,
+  pendingItem: ProcurementTaskItem
+) {
+  const serverDeliveryStatus = serverItem.deliveryStatus ?? "pending";
+  const pendingDeliveryStatus = pendingItem.deliveryStatus ?? "pending";
+  const deliveryConfirmed = getDeliveryStatusRank(serverDeliveryStatus) >= getDeliveryStatusRank(pendingDeliveryStatus);
+  const batchConfirmed = !pendingItem.deliveryBatchId
+    || String(serverItem.deliveryBatchId ?? "") === String(pendingItem.deliveryBatchId);
+
+  return Number(serverItem.actualQuantity ?? serverItem.requestedQuantity ?? 0) === Number(pendingItem.actualQuantity)
+    && normalizeComparablePrice(serverItem.actualPrice) === normalizeComparablePrice(pendingItem.actualPrice)
+    && String(serverItem.supplierLocationName ?? "") === pendingItem.supplierLocationName
+    && Boolean(serverItem.purchased) === pendingItem.purchased
+    && Boolean(serverItem.unavailable) === pendingItem.unavailable
+    && String(serverItem.supplier ?? "") === pendingItem.supplier
+    && String(serverItem.note ?? "") === pendingItem.note
+    && String(serverItem.priceExceptionNote ?? "") === pendingItem.priceExceptionNote
+    && deliveryConfirmed
+    && batchConfirmed;
+}
+
+function reconcileConfirmedPendingProcurementTaskItems(items: DashboardOrderItem[]) {
+  const pendingItems = readPendingProcurementTaskItems();
+  if (Object.keys(pendingItems).length === 0) {
+    return { pendingItems, confirmedItemIds: [] as string[] };
+  }
+
+  const serverItemsById = new Map(items.flatMap((item) => item.id ? [[item.id, item] as const] : []));
+  const confirmedItemIds: string[] = [];
+
+  Object.entries(pendingItems).forEach(([itemId, entry]) => {
+    const serverItem = serverItemsById.get(itemId);
+    if (!serverItem || !serverDashboardItemConfirmsPendingItem(serverItem, entry.item)) return;
+    delete pendingItems[itemId];
+    confirmedItemIds.push(itemId);
+  });
+
+  if (confirmedItemIds.length > 0) replacePendingProcurementTaskItems(pendingItems);
+  return { pendingItems, confirmedItemIds };
 }
 
 function applyPendingProcurementTaskItemsToDashboardItems(

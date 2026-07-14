@@ -2,6 +2,7 @@ import { writeAuditLog } from "../../../../lib/audit-log";
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import {
+  clearRolePermissionCache,
   configurableRoles,
   getAllRolePermissions,
   normalizeConfigurableRole,
@@ -52,6 +53,8 @@ export async function POST(request: Request) {
       `;
     }
   }
+
+  clearRolePermissionCache();
 
   await writeAuditLog({
     actorEmployeeId: session.id,

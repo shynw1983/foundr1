@@ -4,11 +4,12 @@ import { getProcurementDashboardData } from "../../../lib/procurement-data";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return NextResponse.json({ error: "権限がありません。" }, { status: 403 });
 
-  const data = await getProcurementDashboardData(session);
+  const includeMasterData = new URL(request.url).searchParams.get("mode") !== "live";
+  const data = await getProcurementDashboardData(session, { includeMasterData });
 
   return NextResponse.json({
     ...data,

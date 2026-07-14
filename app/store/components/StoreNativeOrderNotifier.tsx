@@ -115,6 +115,11 @@ export function StoreNativeOrderNotifier() {
       void checkOrdersByPolling();
       pollingTimer = window.setInterval(checkOrdersByPolling, 15000);
     };
+    const stopPolling = () => {
+      if (!pollingTimer) return;
+      window.clearInterval(pollingTimer);
+      pollingTimer = 0;
+    };
 
     const handleOrderEvent = ({ order }: StoreOrderRealtimePayload) => {
       if (!shouldNotifyOrder(order) || !order?.id || !order.status || !order.paymentStatus) return;
@@ -142,6 +147,7 @@ export function StoreNativeOrderNotifier() {
         pusher.connection.bind("disconnected", startPolling);
         channels = config.channels.map((channelName: string) => {
           const channel = pusher.subscribe(channelName);
+          channel.bind("pusher:subscription_succeeded", stopPolling);
           channel.bind("pusher:subscription_error", startPolling);
           channel.bind("order.created", handleOrderEvent);
           channel.bind("order.updated", handleOrderEvent);
@@ -152,7 +158,7 @@ export function StoreNativeOrderNotifier() {
 
     return () => {
       active = false;
-      if (pollingTimer) window.clearInterval(pollingTimer);
+      stopPolling();
       channels.forEach((channel) => {
         channel.unbind("order.created", handleOrderEvent);
         channel.unbind("order.updated", handleOrderEvent);

@@ -1,5 +1,6 @@
 import { canAccessStore, requireOwnerOsSession, requireWritableOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { publishStoreOperationalEvent } from "../../../../lib/order-realtime";
 import { roleHasPermission } from "../../../../lib/role-permissions";
 
 const additionalPurchaseNotePrefix = "追加購入";
@@ -119,6 +120,7 @@ export async function POST(request: Request) {
     where id = ${order.id}
   `;
 
+  await publishStoreOperationalEvent(order.storeId, "procurement.updated").catch(() => undefined);
   return Response.json({ ok: true, itemId: insertedRows[0]?.id ?? "" });
 }
 
@@ -769,6 +771,7 @@ export async function PATCH(request: Request) {
     }
   }
 
+  await publishStoreOperationalEvent(itemDetail.storeId, "procurement.updated").catch(() => undefined);
   return Response.json({ ok: true });
 }
 
@@ -784,9 +787,12 @@ export async function DELETE(request: Request) {
   }
 
   const itemRows = await sql`
-    select purchase_order_id as "purchaseOrderId"
+    select
+      purchase_order_items.purchase_order_id as "purchaseOrderId",
+      purchase_orders.store_id::text as "storeId"
     from purchase_order_items
-    where id = ${itemId}
+    join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
+    where purchase_order_items.id = ${itemId}
     limit 1
   `;
   const purchaseOrderId = itemRows[0]?.purchaseOrderId;
@@ -812,6 +818,7 @@ export async function DELETE(request: Request) {
     where id = ${purchaseOrderId}
   `;
 
+  await publishStoreOperationalEvent(itemRows[0].storeId, "procurement.updated").catch(() => undefined);
   return Response.json({ ok: true });
 }
 

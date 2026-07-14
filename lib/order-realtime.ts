@@ -59,6 +59,24 @@ export async function publishPosCustomerDisplayEvent(storeId: string, state: Rec
   });
 }
 
+export async function publishStoreOperationalEvent(
+  storeId: string,
+  eventName: "store.seats.updated" | "procurement.updated"
+) {
+  const pusher = getPusher();
+  if (!pusher || !storeId) return;
+
+  await pusher.trigger(`private-store-orders-${storeId}`, eventName, { storeId });
+  await recordExternalServiceUsage({
+    serviceKey: "pusher",
+    metricKey: "messages",
+    quantity: 1,
+    unit: "count",
+    source: "store_operational_event",
+    metadata: { storeId, eventName }
+  });
+}
+
 export async function publishStoreVersionUpdatedEvent(version = getAppVersion()) {
   const pusher = getPusher();
   if (!pusher || !version || version === "local") return;

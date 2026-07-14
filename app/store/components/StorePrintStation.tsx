@@ -81,6 +81,8 @@ export function StorePrintStation() {
   useEffect(() => {
     let active = true;
     let timer = 0;
+    let pusher: any;
+    let channels: any[] = [];
 
     async function updatePrintStatus(storeId: string, taskId: string, printStatus: "printing" | "printed" | "failed") {
       const response = await fetch("/api/store/print-station", {
@@ -132,8 +134,40 @@ export function StorePrintStation() {
       }
     }
 
+    const startPolling = (intervalMs = 8000) => {
+      if (timer) window.clearInterval(timer);
+      timer = window.setInterval(poll, intervalMs);
+    };
+
     void poll();
-    timer = window.setInterval(poll, 8000);
+    startPolling();
+    const selectedStoreId = getStoredStoreSelection();
+    fetch(`/api/store/realtime-config${selectedStoreId ? `?storeId=${encodeURIComponent(selectedStoreId)}` : ""}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(async (config) => {
+        if (!active || !config?.key || !config?.cluster || !config?.channels?.length) return;
+        const { default: Pusher } = await import("pusher-js");
+        if (!active) return;
+        pusher = new Pusher(config.key, {
+          cluster: config.cluster,
+          channelAuthorization: {
+            endpoint: "/api/store/realtime-auth",
+            transport: "ajax"
+          }
+        });
+        pusher.connection.bind("unavailable", () => startPolling());
+        pusher.connection.bind("failed", () => startPolling());
+        pusher.connection.bind("disconnected", () => startPolling());
+        channels = config.channels.map((channelName: string) => {
+          const channel = pusher.subscribe(channelName);
+          channel.bind("pusher:subscription_succeeded", () => startPolling(60000));
+          channel.bind("pusher:subscription_error", () => startPolling());
+          channel.bind("order.created", poll);
+          channel.bind("order.updated", poll);
+          return channel;
+        });
+      })
+      .catch(() => startPolling());
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") void poll();
     };
@@ -142,6 +176,12 @@ export function StorePrintStation() {
     return () => {
       active = false;
       window.clearInterval(timer);
+      channels.forEach((channel) => {
+        channel.unbind("order.created", poll);
+        channel.unbind("order.updated", poll);
+        pusher?.unsubscribe(channel.name);
+      });
+      pusher?.disconnect();
       window.removeEventListener("focus", poll);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };

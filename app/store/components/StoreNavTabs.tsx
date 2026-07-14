@@ -260,6 +260,11 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
       void checkOrdersByPolling();
       pollingTimer = window.setInterval(checkOrdersByPolling, 15000);
     };
+    const stopPolling = () => {
+      if (!pollingTimer) return;
+      window.clearInterval(pollingTimer);
+      pollingTimer = 0;
+    };
 
     const handleOrderCreated = ({ order }: StoreOrderRealtimePayload) => {
       if (!shouldAlertOrder(order) || !order?.id || !order.status || !order.paymentStatus) return;
@@ -290,6 +295,7 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
         pusher.connection.bind("disconnected", startPolling);
         channels = config.channels.map((channelName: string) => {
           const channel = pusher.subscribe(channelName);
+          channel.bind("pusher:subscription_succeeded", stopPolling);
           channel.bind("pusher:subscription_error", startPolling);
           channel.bind("order.created", handleOrderCreated);
           channel.bind("order.updated", handleOrderCreated);
@@ -300,7 +306,7 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
 
     return () => {
       activeListener = false;
-      if (pollingTimer) window.clearInterval(pollingTimer);
+      stopPolling();
       channels.forEach((channel) => {
         channel.unbind("order.created", handleOrderCreated);
         channel.unbind("order.updated", handleOrderCreated);

@@ -251,9 +251,24 @@ export function normalizePermissionKeys(role: string, permissionKeys: unknown) {
   return Array.from(normalizedKeys);
 }
 
+const permissionCacheTtlMs = 60_000;
+const permissionCache = new Map<string, { permissions: Set<string>; expiresAt: number }>();
+
+export function clearRolePermissionCache(role?: string) {
+  const normalizedRole = role ? normalizeConfigurableRole(role) : null;
+  if (normalizedRole) {
+    permissionCache.delete(normalizedRole);
+    return;
+  }
+  permissionCache.clear();
+}
+
 export async function getPermissionsForRole(role: string) {
   const normalizedRole = normalizeConfigurableRole(role);
   if (!normalizedRole) return new Set<string>();
+
+  const cached = permissionCache.get(normalizedRole);
+  if (cached && cached.expiresAt > Date.now()) return new Set(cached.permissions);
 
   const rows = await sql`
     select permission_key as "permissionKey", is_enabled as "isEnabled"
@@ -269,6 +284,10 @@ export async function getPermissionsForRole(role: string) {
     if (enabled || definition.lockedRoles?.includes(normalizedRole)) permissions.add(definition.key);
   }
 
+  permissionCache.set(normalizedRole, {
+    permissions: new Set(permissions),
+    expiresAt: Date.now() + permissionCacheTtlMs
+  });
   return permissions;
 }
 
