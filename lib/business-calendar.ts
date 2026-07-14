@@ -351,13 +351,13 @@ export function parsePayPayDomeConcerts(html: string) {
       endTime: null,
       category: "concert",
       impactLevel: "major",
-      flowDirection: "inbound",
+      flowDirection: "mixed",
       ...expandImpactWindow(startTime, 180, 300),
       venue: "みずほPayPayドーム福岡",
       prefecture: "福岡県",
       locality: "福岡市",
       sourceUrl: toAbsoluteUrl(link, `${payPayDomeEventsBaseUrl}/${match[1]}/`),
-      note: "大規模コンサート・音楽イベント",
+      note: "市外客の流入と、地域客の会場方面への流出が同時に起こる可能性あり",
       metadata: { official: true, venueSource: "paypay-dome" }
     });
   }
@@ -451,13 +451,13 @@ export function parseMarineMesseConcerts(payload: unknown, referenceDate = new D
         endTime: null,
         category: "concert",
         impactLevel: "major",
-        flowDirection: "inbound",
+        flowDirection: "mixed",
         ...expandImpactWindow(dateMatch[3] ?? null, 180, 300),
         venue: "マリンメッセ福岡A館",
         prefecture: "福岡県",
         locality: "福岡市",
         sourceUrl,
-        note: "大規模コンサート・興行",
+        note: "市外客の流入と、地域客の会場方面への流出が同時に起こる可能性あり",
         metadata: { official: true, venueSource: "marine-messe-a", cmsUid: uid }
       });
     }
