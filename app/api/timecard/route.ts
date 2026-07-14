@@ -477,6 +477,34 @@ async function canPunchForEmployee(storeId: string, employeeId: string) {
   return Boolean(rows[0]);
 }
 
+async function getFinalWorkdayFarewell(storeId: string, employeeId: string) {
+  const rows = await sql`
+    select
+      employees.name as "employeeName",
+      stores.name as "storeName"
+    from employee_work_stores
+    join employees on employees.id = employee_work_stores.employee_id
+    join stores on stores.id = employee_work_stores.store_id
+    left join timecard_store_settings on timecard_store_settings.store_id = stores.id
+    where employee_work_stores.employee_id = ${employeeId}
+      and employee_work_stores.store_id = ${storeId}
+      and employee_work_stores.resignation_date = (
+        case
+          when (now() at time zone 'Asia/Tokyo')::time < coalesce(timecard_store_settings.workday_change_time, '05:00'::time)
+            then ((now() at time zone 'Asia/Tokyo') - interval '1 day')::date
+          else (now() at time zone 'Asia/Tokyo')::date
+        end
+      )
+    limit 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    employeeName: String(row.employeeName),
+    storeName: String(row.storeName)
+  };
+}
+
 function formatDateKey(date: Date) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
@@ -2157,5 +2185,9 @@ export async function POST(request: Request) {
     request
   });
 
-  return Response.json({ ok: true, id: inserted[0]?.id ?? null });
+  const farewell = punchType === "clock_out"
+    ? await getFinalWorkdayFarewell(storeId, employeeId)
+    : null;
+
+  return Response.json({ ok: true, id: inserted[0]?.id ?? null, farewell });
 }

@@ -18081,6 +18081,90 @@ body :where(
   font-weight: 800;
 }
 
+.timecard-farewell-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(13, 35, 29, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+.timecard-farewell-dialog {
+  width: min(460px, 100%);
+  padding: 32px 28px 26px;
+  border: 1px solid rgba(31, 111, 91, 0.2);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(8, 28, 22, 0.3);
+  text-align: center;
+  animation: timecard-farewell-enter 240ms ease-out both;
+}
+
+.timecard-farewell-icon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.timecard-farewell-icon svg {
+  width: 28px;
+  height: 28px;
+  stroke-width: 1.8;
+}
+
+.timecard-farewell-eyebrow {
+  margin: 0 0 7px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+}
+
+.timecard-farewell-dialog h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(24px, 6vw, 31px);
+  font-weight: 700;
+}
+
+.timecard-farewell-message {
+  margin: 22px 0 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 550;
+  line-height: 1.9;
+}
+
+.timecard-farewell-note {
+  margin: 10px 0 24px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.timecard-farewell-close {
+  width: 100%;
+  min-height: 46px;
+  justify-content: center;
+}
+
+@keyframes timecard-farewell-enter {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timecard-farewell-dialog { animation: none; }
+}
+
 .mobile-timecard-location {
   display: none;
   grid-template-columns: minmax(0, 1fr) auto;

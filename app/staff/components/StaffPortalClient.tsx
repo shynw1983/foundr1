@@ -21,6 +21,7 @@ import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { formatDuration, formatJstDateTime, formatJstTime, getJstMonthLabel } from "../../../lib/timecard";
 import { UserBadge } from "../../os/components/UserBadge";
+import { FarewellDialog, type TimecardFarewell } from "../../../components/timecard/FarewellDialog";
 
 type StaffView = "home" | "timecard" | "shifts" | "requests" | "payroll" | "documents";
 
@@ -314,6 +315,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
   const [message, setMessage] = useState("");
   const [shiftMessage, setShiftMessage] = useState("");
   const [isPunching, setIsPunching] = useState("");
+  const [farewell, setFarewell] = useState<TimecardFarewell | null>(null);
   const [swapTargetShiftId, setSwapTargetShiftId] = useState("");
   const [swapNote, setSwapNote] = useState("");
 
@@ -455,9 +457,12 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
         mobileAccuracyMeters: nextLocation?.accuracyMeters ?? null
       })
     });
-    const body = await response.json().catch(() => ({})) as { error?: string };
+    const body = await response.json().catch(() => ({})) as { error?: string; farewell?: TimecardFarewell | null };
     setMessage(response.ok ? "打刻しました。" : body.error ?? "打刻できませんでした。");
-    if (response.ok) await loadTimecard(selectedStoreId);
+    if (response.ok) {
+      if (body.farewell) setFarewell(body.farewell);
+      await loadTimecard(selectedStoreId);
+    }
     setIsPunching("");
   }
 
@@ -640,6 +645,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
 
       {view === "payroll" ? <PayrollView payrolls={payrolls} /> : null}
       {view === "documents" ? <DocumentsView documents={documents} /> : null}
+      {farewell ? <FarewellDialog farewell={farewell} onClose={() => setFarewell(null)} /> : null}
     </main>
   );
 }

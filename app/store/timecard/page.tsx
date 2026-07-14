@@ -6,6 +6,7 @@ import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 import { useVisibleRefresh } from "../components/useVisibleRefresh";
 import { formatJstDateTime, getJstMonthLabel } from "../../../lib/timecard";
+import { FarewellDialog, type TimecardFarewell } from "../../../components/timecard/FarewellDialog";
 
 type StoreOption = {
   id: string;
@@ -66,6 +67,7 @@ export default function StoreTimecardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPunching, setIsPunching] = useState("");
   const [message, setMessage] = useState("");
+  const [farewell, setFarewell] = useState<TimecardFarewell | null>(null);
 
   async function loadTimecard(nextStoreId = selectedStoreId) {
     setIsLoading(true);
@@ -135,11 +137,12 @@ export default function StoreTimecardPage() {
         source: "store_tablet"
       })
     });
-    const body = await response.json().catch(() => ({})) as { error?: string };
+    const body = await response.json().catch(() => ({})) as { error?: string; farewell?: TimecardFarewell | null };
     if (!response.ok) {
       setMessage(body.error ?? "打刻できませんでした。");
     } else {
       setMessage("打刻しました。");
+      if (body.farewell) setFarewell(body.farewell);
       await loadTimecard(selectedStoreId);
     }
     setIsPunching("");
@@ -231,6 +234,7 @@ export default function StoreTimecardPage() {
           </div>
         </section>
       </section>
+      {farewell ? <FarewellDialog farewell={farewell} onClose={() => setFarewell(null)} /> : null}
     </main>
   );
 }
