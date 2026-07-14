@@ -1336,15 +1336,19 @@ export default function StorePosPage() {
     for (const [brandId, group] of Object.entries(brandGroups)) {
       const printer = getKitchenPrinterForBrand(printerSettings, brandId === "default" ? null : brandId);
       if (!isPrintablePrinter(printer)) continue;
-      const result = await printWithAndroidBridge(createKitchenPrintPayload(body, group.items, printer, group.brandName));
-      if (result.ok) {
-        sentCount += 1;
-      } else {
-        errors.push(`${group.brandName}: ${result.error || "送信失敗"}`);
+      const payload = createKitchenPrintPayload(body, group.items, printer, group.brandName);
+      for (let copy = 1; copy <= printerSettings.kitchenCopies; copy += 1) {
+        const result = await printWithAndroidBridge(payload);
+        if (result.ok) {
+          sentCount += 1;
+        } else {
+          errors.push(`${group.brandName} ${copy}/${printerSettings.kitchenCopies}枚目: ${result.error || "送信失敗"}`);
+          break;
+        }
       }
     }
     if (errors.length) return ` / 厨房印刷未送信: ${errors.join(", ")}`;
-    return sentCount ? ` / 厨房印刷 ${sentCount}件送信済み` : "";
+    return sentCount ? ` / 厨房印刷 ${sentCount}枚送信済み` : "";
   }
 
   async function publishCustomerDisplayState(state: Record<string, unknown>) {

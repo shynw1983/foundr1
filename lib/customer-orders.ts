@@ -27,6 +27,9 @@ export type CustomerOrderRow = {
   squareReceiptUrl: string;
   pickupDate: string;
   pickupTime: string;
+  pickupTiming: string;
+  initialAlertAcknowledgedAt: string;
+  reminderAlertAcknowledgedAt: string;
   amount: number;
   currency: string;
   drink: string;
@@ -352,6 +355,9 @@ export async function findCustomerOrderById(orderId: string) {
       coalesce(store_customer_orders.square_receipt_url, '') as "squareReceiptUrl",
       store_customer_orders.pickup_date::text as "pickupDate",
       store_customer_orders.pickup_time as "pickupTime",
+      coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') as "pickupTiming",
+      coalesce(store_customer_orders.customer_summary ->> 'initialAlertAcknowledgedAt', '') as "initialAlertAcknowledgedAt",
+      coalesce(store_customer_orders.customer_summary ->> 'reminderAlertAcknowledgedAt', '') as "reminderAlertAcknowledgedAt",
       store_customer_orders.amount,
       store_customer_orders.currency,
       store_customer_orders.drink,

@@ -29,6 +29,7 @@ async function readSettings() {
 async function enrichSettingsWithSkuCategories(settings: MaamaaProductionReferenceSettings) {
   const productIds = Array.from(new Set([
     ...settings.productionRules.map((rule) => rule.productId).filter(Boolean),
+    ...settings.productionRules.flatMap((rule) => (rule.additionalProducts ?? []).map((item) => item.productId).filter(Boolean)),
     ...settings.setRules.flatMap((rule) => (rule.items ?? []).map((item) => item.productId).filter(Boolean))
   ] as string[]));
   if (!productIds.length) return settings;
@@ -47,7 +48,14 @@ async function enrichSettingsWithSkuCategories(settings: MaamaaProductionReferen
     ...settings,
     productionRules: settings.productionRules.map((rule) => {
       const product = rule.productId ? productsById.get(rule.productId) : null;
-      return product ? { ...rule, productCategory: product.category, productSubcategory: product.subcategory } : rule;
+      return {
+        ...rule,
+        ...(product ? { productCategory: product.category, productSubcategory: product.subcategory } : {}),
+        additionalProducts: rule.additionalProducts?.map((item) => {
+          const additionalProduct = item.productId ? productsById.get(item.productId) : null;
+          return additionalProduct ? { ...item, productCategory: additionalProduct.category, productSubcategory: additionalProduct.subcategory } : item;
+        })
+      };
     }),
     setRules: settings.setRules.map((rule) => ({
       ...rule,

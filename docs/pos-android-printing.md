@@ -60,3 +60,4 @@ The payload version is `1`. Keep Android parsing tolerant of unknown fields so P
 
 - `/os/pos`: save receipt, default kitchen, and brand kitchen printer settings; send test prints to the selected destination.
 - `/store/pos`: after checkout, send receipt print jobs and brand-grouped kitchen print jobs when enabled.
+- Kitchen ticket copies are configured per store (1-5). The web app sends one bridge print call per copy for both POS and Web reservation kitchen tickets.

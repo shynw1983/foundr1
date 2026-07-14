@@ -56,6 +56,7 @@ export type PosPrinterSettings = PosPrinterConnection & {
   enabled: boolean;
   receiptEnabled: boolean;
   kitchenEnabled: boolean;
+  kitchenCopies: number;
   receiptPrinter: PosPrinterConnection;
   kitchenPrinter: PosPrinterConnection;
   brandKitchenPrinters: PosBrandKitchenPrinterSetting[];
@@ -179,6 +180,7 @@ export const defaultPosPrinterSettings: PosPrinterSettings = {
   enabled: false,
   receiptEnabled: true,
   kitchenEnabled: false,
+  kitchenCopies: 1,
   ...defaultPosPrinterConnection,
   receiptPrinter: defaultPosPrinterConnection,
   kitchenPrinter: defaultPosPrinterConnection,
@@ -270,10 +272,12 @@ export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings 
   const receiptPrinter = normalizePosPrinterConnection(source.receiptPrinter, legacyPrinter);
   const kitchenPrinter = normalizePosPrinterConnection(source.kitchenPrinter, legacyPrinter);
   const brandKitchenPrinters = Array.isArray(source.brandKitchenPrinters) ? source.brandKitchenPrinters : [];
+  const kitchenCopies = Math.round(Number(source.kitchenCopies ?? defaultPosPrinterSettings.kitchenCopies));
   return {
     enabled: source.enabled === true,
     receiptEnabled: source.receiptEnabled !== false,
     kitchenEnabled: source.kitchenEnabled === true,
+    kitchenCopies: Number.isFinite(kitchenCopies) ? Math.max(1, Math.min(5, kitchenCopies)) : defaultPosPrinterSettings.kitchenCopies,
     ...receiptPrinter,
     receiptPrinter,
     kitchenPrinter,

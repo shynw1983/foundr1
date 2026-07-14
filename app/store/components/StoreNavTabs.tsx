@@ -1,11 +1,12 @@
 "use client";
 
-import { BookOpen, ChefHat, ChevronDown, Clock3, ClipboardList, Home, Menu, MessageSquareWarning, Monitor, PackageCheck, Settings, ShoppingCart, Store, Tags } from "lucide-react";
+import { BookOpen, ChefHat, ChevronDown, Clock3, ClipboardList, Home, Menu, MessageSquareWarning, Monitor, PackageCheck, Settings, ShoppingCart, Store, Tags, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
 import { useCloseOnOutside } from "../../os/components/useCloseOnOutside";
 import { defaultStoreModuleSettings, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
 import { getStoredStoreSelection, setStoredStoreSelection } from "./store-selection";
+import { getStoreOrderAlertPhase, isStoreOrderAlertAcknowledged } from "../../../lib/store-order-alert-timing";
 
 type StoreOrderRealtimePayload = {
   order?: {
@@ -13,6 +14,13 @@ type StoreOrderRealtimePayload = {
     status?: string;
     paymentStatus?: string;
     orderSource?: string;
+    pickupTiming?: string;
+    pickupDate?: string;
+    pickupTime?: string;
+    paidAt?: string;
+    alertPhase?: string;
+    initialAlertAcknowledgedAt?: string;
+    reminderAlertAcknowledgedAt?: string;
   };
 };
 
@@ -22,6 +30,13 @@ type StoreOrdersResponse = {
     status: string;
     paymentStatus: string;
     orderSource?: string;
+    pickupTiming?: string;
+    pickupDate?: string;
+    pickupTime?: string;
+    paidAt?: string;
+    alertPhase?: string;
+    initialAlertAcknowledgedAt?: string;
+    reminderAlertAcknowledgedAt?: string;
   }>;
 };
 
@@ -36,6 +51,7 @@ type StoreContextResponse = {
 
 const tabs = [
   { label: "ホーム", href: "/store", icon: Home },
+  { label: "客席", href: "/store/seats", icon: Users },
   { label: "注文", href: "/store/orders", icon: ClipboardList },
   { label: "販売状態", href: "/store/menu", icon: Tags },
   { label: "POS", href: "/store/pos", icon: ShoppingCart },
@@ -77,14 +93,16 @@ function isNewPaidOrder(order: StoreOrderRealtimePayload["order"]) {
 }
 
 function shouldAlertOrder(order: StoreOrderRealtimePayload["order"]) {
-  return isNewPaidOrder(order);
+  return isNewPaidOrder(order) &&
+    getStoreOrderAlertPhase(order ?? {}) !== "scheduled_waiting" &&
+    !isStoreOrderAlertAcknowledged(order ?? {});
 }
 
-function getAlertOrderKey(order: { id: string; status: string; paymentStatus: string }) {
-  return `${order.id}:${order.status}:${order.paymentStatus}`;
+function getAlertOrderKey(order: NonNullable<StoreOrderRealtimePayload["order"]>) {
+  return `${order.id}:${order.status}:${order.paymentStatus}:${getStoreOrderAlertPhase(order)}`;
 }
 
-export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "receiving" | "feedback" }) {
+export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "receiving" | "feedback" }) {
   const activeHref = active === "home"
     ? "/store"
     : active === "kitchen"
@@ -245,7 +263,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
 
     const handleOrderCreated = ({ order }: StoreOrderRealtimePayload) => {
       if (!shouldAlertOrder(order) || !order?.id || !order.status || !order.paymentStatus) return;
-      knownActiveOrderKeysRef.current.add(getAlertOrderKey({ id: order.id, status: order.status, paymentStatus: order.paymentStatus }));
+      knownActiveOrderKeysRef.current.add(getAlertOrderKey(order));
       hasInitializedOrderWatchRef.current = true;
       markOrderAlert();
     };

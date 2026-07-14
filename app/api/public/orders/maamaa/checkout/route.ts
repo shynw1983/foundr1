@@ -3,7 +3,7 @@ import { calculateCouponDiscount, getUsableMemberCoupon, resolveMemberForOrder }
 import { getMaamaaCompatibleMenu, type MaamaaMenuSection, type MaamaaPricedOption } from "../../../../../../lib/maamaa-compatible-menu";
 import { getActiveStorePaymentAccount } from "../../../../../../lib/store-payment-accounts";
 import { isPickupWithinBusinessHours } from "../../../../../../lib/store-business-hours";
-import { isPickupWithinReservationWindows } from "../../../../../../lib/store-reservation-windows";
+import { getStoreReservationWindowsForDate } from "../../../../../../lib/store-reservation-windows";
 import { getTemporaryClosureForPickup } from "../../../../../../lib/store-temporary-closures";
 
 export const dynamic = "force-dynamic";
@@ -248,7 +248,8 @@ export async function POST(request: Request) {
   if (!isPickupWithinBusinessHours(operation.businessHours, pickupDate, pickup)) {
     return Response.json({ error: "Pickup time is outside store business hours" }, { status: 409 });
   }
-  if (!await isPickupWithinReservationWindows({ storeId: publicStore.osStoreId, pickupDate, pickupTime: pickup })) {
+  const reservationWindows = await getStoreReservationWindowsForDate({ storeId: publicStore.osStoreId, pickupDate });
+  if (!reservationWindows.some((window) => pickup >= window.start && pickup <= window.end)) {
     return Response.json({ error: "Pickup time is outside confirmed staff schedule" }, { status: 409 });
   }
   const temporaryClosure = await getTemporaryClosureForPickup(publicStore.osStoreId, pickupDate, pickup);
@@ -289,6 +290,12 @@ export async function POST(request: Request) {
   const couponDiscountAmount = coupon ? Math.min(calculateCouponDiscount(coupon, subtotalAmount), Math.max(0, subtotalAmount - 1)) : 0;
   if (coupon && couponDiscountAmount <= 0) return Response.json({ error: "Selected coupon cannot be applied to this order" }, { status: 400 });
   const amount = Math.max(0, subtotalAmount - couponDiscountAmount);
+  const minimumAllowedTime = [minimumPickup.time, earliestPickupTime].sort().at(-1) ?? minimumPickup.time;
+  const earliestAvailablePickupTime = reservationWindows
+    .filter((window) => window.end >= minimumAllowedTime)
+    .map((window) => window.start > minimumAllowedTime ? window.start : minimumAllowedTime)
+    .at(0) ?? minimumAllowedTime;
+  const pickupTiming = pickup === earliestAvailablePickupTime ? "earliest" : "scheduled";
   const itemSummaries = buildableItems.map((item, index) => ({
     name: `${menu.baseSoup.name}${buildableItems.length > 1 ? ` #${index + 1}` : ""}`,
     detailLabel: item.detailLabel || "カスタマイズなし",
@@ -312,6 +319,8 @@ export async function POST(request: Request) {
       brand: "maamaa",
       store: publicStore.label,
       paymentAccountName: paymentAccount.accountName,
+      pickupTiming,
+      minimumPickupMinutesAtOrder: minimumPickupMinutes,
       memberId: member?.id ?? "",
       memberNumber: member?.memberNumber ?? "",
       subtotalAmount,

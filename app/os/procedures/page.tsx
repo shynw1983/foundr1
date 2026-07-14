@@ -28,6 +28,7 @@ import {
   formatMaamaaSetItem,
   type MaamaaProductionReferenceSettings,
   type MaamaaProductionRule,
+  type MaamaaProductionSkuItem,
   type MaamaaSeasoningRule,
   type MaamaaSetItem,
   type MaamaaSetRule
@@ -634,7 +635,13 @@ export default function ProcedureAdminPage() {
         kind: "production",
         index,
         title: rule.customerName || "メニュー名未設定",
-        summary: [rule.productId ? (maamaaReferenceProductsById.get(rule.productId) ? getProductFamilyLabel(maamaaReferenceProductsById.get(rule.productId)!) : rule.productName ?? rule.kitchenName) : rule.kitchenName, rule.quantity, rule.prep, rule.action].filter(Boolean).join(" / ") || "詳細未設定"
+        summary: [
+          rule.productId ? (maamaaReferenceProductsById.get(rule.productId) ? getProductFamilyLabel(maamaaReferenceProductsById.get(rule.productId)!) : rule.productName ?? rule.kitchenName) : rule.kitchenName,
+          rule.additionalProducts?.length ? `追加SKU ${rule.additionalProducts.length}` : "",
+          rule.quantity,
+          rule.prep,
+          rule.action
+        ].filter(Boolean).join(" / ") || "詳細未設定"
       }));
   }, [maamaaReferenceCategory, maamaaReferenceProductsById, maamaaReferenceSettings]);
   const selectedMaamaaReferenceItem = maamaaReferenceItems[Math.min(selectedMaamaaReferenceIndex, Math.max(maamaaReferenceItems.length - 1, 0))];
@@ -860,6 +867,41 @@ export default function ProcedureAdminPage() {
       ...current,
       productionRules: current.productionRules.map((rule, ruleIndex) => ruleIndex === index ? { ...rule, ...patch } : rule)
     }));
+  }
+
+  function updateMaamaaProductionSkuItems(index: number, items: MaamaaProductionSkuItem[]) {
+    const cleanedItems = items
+      .map((item) => ({
+        ...item,
+        productId: item.productId?.trim() || undefined,
+        productName: item.productName.trim(),
+        productCategory: item.productCategory?.trim() || undefined,
+        productSubcategory: item.productSubcategory?.trim() || undefined,
+        quantity: item.quantity?.trim() || undefined,
+        unit: item.unit?.trim() || undefined,
+        note: item.note?.trim() || undefined
+      }))
+      .filter((item) => item.productId || item.productName);
+    updateMaamaaProductionRule(index, { additionalProducts: cleanedItems.length ? cleanedItems : undefined });
+  }
+
+  function updateMaamaaProductionSkuItem(ruleIndex: number, itemIndex: number, patch: Partial<MaamaaProductionSkuItem>) {
+    const rule = maamaaReferenceSettings.productionRules[ruleIndex];
+    if (!rule) return;
+    const items = [...(rule.additionalProducts ?? [])].map((item, currentIndex) => currentIndex === itemIndex ? { ...item, ...patch } : item);
+    updateMaamaaProductionSkuItems(ruleIndex, items);
+  }
+
+  function addMaamaaProductionSkuItem(ruleIndex: number) {
+    const rule = maamaaReferenceSettings.productionRules[ruleIndex];
+    if (!rule) return;
+    updateMaamaaProductionRule(ruleIndex, { additionalProducts: [...(rule.additionalProducts ?? []), { productName: "" }] });
+  }
+
+  function removeMaamaaProductionSkuItem(ruleIndex: number, itemIndex: number) {
+    const rule = maamaaReferenceSettings.productionRules[ruleIndex];
+    if (!rule) return;
+    updateMaamaaProductionSkuItems(ruleIndex, (rule.additionalProducts ?? []).filter((_, currentIndex) => currentIndex !== itemIndex));
   }
 
   function addMaamaaProductionRule() {
@@ -1342,6 +1384,54 @@ export default function ProcedureAdminPage() {
                             disabled={!canEdit}
                           />
                         </label>
+                        <div className="procedure-reference-editor-wide procedure-reference-set-items">
+                          <div className="procedure-reference-editor-heading">
+                            <span>追加SKU</span>
+                            <button className="secondary-button" type="button" onClick={() => addMaamaaProductionSkuItem(selectedMaamaaReferenceItem.index)} disabled={!canEdit}>
+                              <Plus size={14} />
+                              SKU追加
+                            </button>
+                          </div>
+                          <div className="procedure-reference-set-item-list">
+                            {(rule.additionalProducts ?? []).map((item, itemIndex) => (
+                              <div className="procedure-reference-set-item-row" key={`${item.productId ?? (item.productName || "sku")}-${itemIndex}`}>
+                                <label>
+                                  <span>SKU</span>
+                                  <select
+                                    value={item.productId ?? ""}
+                                    onChange={(event) => {
+                                      const product = maamaaReferenceProductsById.get(event.target.value);
+                                      updateMaamaaProductionSkuItem(selectedMaamaaReferenceItem.index, itemIndex, {
+                                        productId: product?.id,
+                                        productName: product ? getProductFamilyLabel(product) : item.productName,
+                                        productCategory: product?.category,
+                                        productSubcategory: product?.subcategory
+                                      });
+                                    }}
+                                    disabled={!canEdit}
+                                  >
+                                    <option value="">{item.productName ? `未連携: ${item.productName}` : "SKUを選択"}</option>
+                                    {maamaaReferenceSkuOptions.map((product) => (
+                                      <option value={product.id} key={product.id}>{getMaamaaSkuOptionLabel(product)}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label>
+                                  <span>数量</span>
+                                  <input value={item.quantity ?? ""} onChange={(event) => updateMaamaaProductionSkuItem(selectedMaamaaReferenceItem.index, itemIndex, { quantity: event.target.value })} placeholder="例: 2" disabled={!canEdit} />
+                                </label>
+                                <label>
+                                  <span>単位</span>
+                                  <input value={item.unit ?? ""} onChange={(event) => updateMaamaaProductionSkuItem(selectedMaamaaReferenceItem.index, itemIndex, { unit: event.target.value })} placeholder="個" disabled={!canEdit} />
+                                </label>
+                                <button className="danger-button" type="button" onClick={() => removeMaamaaProductionSkuItem(selectedMaamaaReferenceItem.index, itemIndex)} disabled={!canEdit}>
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))}
+                            {!(rule.additionalProducts ?? []).length ? <p className="empty-state">通常は主SKUのみです。海鮮3種盛りなど複数SKUの食材だけ追加してください。</p> : null}
+                          </div>
+                        </div>
                         <label>
                           <span>分量</span>
                           <input value={rule.quantity ?? ""} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { quantity: event.target.value })} disabled={!canEdit} />

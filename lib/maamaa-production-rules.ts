@@ -1,3 +1,13 @@
+export type MaamaaProductionSkuItem = {
+  productId?: string;
+  productName: string;
+  productCategory?: string;
+  productSubcategory?: string;
+  quantity?: string;
+  unit?: string;
+  note?: string;
+};
+
 export type MaamaaProductionRule = {
   id?: string;
   customerName: string;
@@ -8,6 +18,7 @@ export type MaamaaProductionRule = {
   productName?: string;
   productCategory?: string;
   productSubcategory?: string;
+  additionalProducts?: MaamaaProductionSkuItem[];
   section: "noodles" | "base" | "standard" | "premium" | "vip" | "request" | "seasoning" | "set" | "operation";
   kitchenName: string;
   cookType?: "boil" | "no_boil";
@@ -556,7 +567,7 @@ export function translateMaamaaReferenceText(value: string | undefined, language
 
 function cloneMaamaaSettings(settings: MaamaaProductionReferenceSettings): MaamaaProductionReferenceSettings {
   return {
-    productionRules: settings.productionRules.map((rule) => ({ ...rule, aliases: [...(rule.aliases ?? [])] })),
+    productionRules: settings.productionRules.map((rule) => ({ ...rule, aliases: [...(rule.aliases ?? [])], additionalProducts: rule.additionalProducts?.map((item) => ({ ...item })) })),
     seasoningRules: settings.seasoningRules.map((rule) => ({ ...rule, lines: [...rule.lines] })),
     setRules: settings.setRules.map((rule) => ({ ...rule, defaultItems: [...rule.defaultItems], items: rule.items?.map((item) => ({ ...item })) }))
   };
@@ -594,6 +605,9 @@ function normalizeProductionRule(value: unknown): MaamaaProductionRule | null {
   if (!customerName || !kitchenName) return null;
   const heatMinutes = Number(source.minimumHeatMinutes ?? 0);
   const placement = normalizePlacement(source.placement);
+  const additionalProducts = Array.isArray(source.additionalProducts)
+    ? source.additionalProducts.map(normalizeProductionSkuItem).filter((item): item is MaamaaProductionSkuItem => Boolean(item))
+    : [];
   return {
     id: String(source.id ?? "").trim() || undefined,
     customerName,
@@ -604,6 +618,7 @@ function normalizeProductionRule(value: unknown): MaamaaProductionRule | null {
     productName: String(source.productName ?? "").trim() || undefined,
     productCategory: String(source.productCategory ?? "").trim() || undefined,
     productSubcategory: String(source.productSubcategory ?? "").trim() || undefined,
+    additionalProducts: additionalProducts.length ? additionalProducts : undefined,
     section: normalizeProductionSection(source.section),
     kitchenName,
     cookType: normalizeCookType(source.cookType, placement),
@@ -613,6 +628,23 @@ function normalizeProductionRule(value: unknown): MaamaaProductionRule | null {
     minimumHeatMinutes: Number.isFinite(heatMinutes) && heatMinutes > 0 ? Math.round(heatMinutes) : undefined,
     placement,
     notes: String(source.notes ?? "").trim() || undefined
+  };
+}
+
+function normalizeProductionSkuItem(value: unknown): MaamaaProductionSkuItem | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const productName = String(source.productName ?? "").trim();
+  const productId = String(source.productId ?? "").trim();
+  if (!productName && !productId) return null;
+  return {
+    productId: productId || undefined,
+    productName: productName || "SKU未設定",
+    productCategory: String(source.productCategory ?? "").trim() || undefined,
+    productSubcategory: String(source.productSubcategory ?? "").trim() || undefined,
+    quantity: String(source.quantity ?? "").trim() || undefined,
+    unit: String(source.unit ?? "").trim() || undefined,
+    note: String(source.note ?? "").trim() || undefined
   };
 }
 

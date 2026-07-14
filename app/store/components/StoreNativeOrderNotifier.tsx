@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { showNativeNotification } from "../../../lib/native-notifications";
+import { getStoreOrderAlertPhase, isStoreOrderAlertAcknowledged } from "../../../lib/store-order-alert-timing";
 
 type StoreOrderRealtimePayload = {
   order?: {
@@ -10,6 +11,13 @@ type StoreOrderRealtimePayload = {
     status?: string;
     paymentStatus?: string;
     orderSource?: string;
+    pickupTiming?: string;
+    pickupDate?: string;
+    pickupTime?: string;
+    paidAt?: string;
+    alertPhase?: string;
+    initialAlertAcknowledgedAt?: string;
+    reminderAlertAcknowledgedAt?: string;
     drink?: string;
   };
 };
@@ -20,6 +28,13 @@ type StoreOrdersResponse = {
     status: string;
     paymentStatus: string;
     orderSource?: string;
+    pickupTiming?: string;
+    pickupDate?: string;
+    pickupTime?: string;
+    paidAt?: string;
+    alertPhase?: string;
+    initialAlertAcknowledgedAt?: string;
+    reminderAlertAcknowledgedAt?: string;
   }>;
 };
 
@@ -27,11 +42,13 @@ function shouldNotifyOrder(order: StoreOrderRealtimePayload["order"]) {
   return order?.paymentStatus === "paid" &&
     order.status === "new" &&
     order.orderSource !== "store_pos" &&
-    Boolean(order.id);
+    Boolean(order.id) &&
+    getStoreOrderAlertPhase(order) !== "scheduled_waiting" &&
+    !isStoreOrderAlertAcknowledged(order);
 }
 
-function getOrderKey(order: { id: string; status: string; paymentStatus: string }) {
-  return `${order.id}:${order.status}:${order.paymentStatus}`;
+function getOrderKey(order: NonNullable<StoreOrderRealtimePayload["order"]>) {
+  return `${order.id}:${order.status}:${order.paymentStatus}:${getStoreOrderAlertPhase(order)}`;
 }
 
 function isOrdersPage() {
@@ -50,7 +67,7 @@ function buildNotificationBody(order?: StoreOrderRealtimePayload["order"]) {
 export function StoreNativeOrderNotifier() {
   const knownOrderKeysRef = useRef<Set<string>>(new Set());
   const initializedRef = useRef(false);
-  const lastNotifiedOrderIdsRef = useRef<Set<string>>(new Set());
+  const lastNotifiedOrderKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let active = true;
@@ -61,13 +78,15 @@ export function StoreNativeOrderNotifier() {
     const notifyOrder = (order?: StoreOrderRealtimePayload["order"]) => {
       if (!active || isOrdersPage()) return;
       const id = String(order?.id ?? "").trim();
-      if (id && lastNotifiedOrderIdsRef.current.has(id)) return;
-      if (id) lastNotifiedOrderIdsRef.current.add(id);
+      const phase = getStoreOrderAlertPhase(order ?? {});
+      const notificationKey = id ? `${id}:${phase}` : "";
+      if (notificationKey && lastNotifiedOrderKeysRef.current.has(notificationKey)) return;
+      if (notificationKey) lastNotifiedOrderKeysRef.current.add(notificationKey);
       void showNativeNotification({
-        title: "新しいWeb予約",
+        title: phase === "scheduled_reminder" ? "予約時間が近づいています" : "新しいWeb予約",
         body: buildNotificationBody(order),
         href: "/store/orders",
-        tag: id ? `store-order:${id}` : `store-order:${Date.now()}`
+        tag: id ? `store-order:${id}:${phase}` : `store-order:${Date.now()}`
       });
     };
 
@@ -76,18 +95,15 @@ export function StoreNativeOrderNotifier() {
         const response = await fetch("/api/store/orders?watch=1", { cache: "no-store" });
         if (!response.ok || !active) return;
         const body = await response.json() as StoreOrdersResponse;
-        const activeOrderKeys = new Set(
-          (body.orders ?? [])
-            .filter((order) => shouldNotifyOrder(order))
-            .map(getOrderKey)
-        );
+        const alertableOrders = (body.orders ?? []).filter((order) => shouldNotifyOrder(order));
+        const activeOrderKeys = new Set(alertableOrders.map(getOrderKey));
         if (!initializedRef.current) {
           knownOrderKeysRef.current = activeOrderKeys;
           initializedRef.current = true;
           return;
         }
-        const hasIncomingOrder = Array.from(activeOrderKeys).some((orderKey) => !knownOrderKeysRef.current.has(orderKey));
-        if (hasIncomingOrder) notifyOrder();
+        const incomingOrder = alertableOrders.find((order) => !knownOrderKeysRef.current.has(getOrderKey(order)));
+        if (incomingOrder) notifyOrder(incomingOrder);
         knownOrderKeysRef.current = activeOrderKeys;
       } catch {
         // The Store app should stay usable even if notification polling fails.
@@ -102,7 +118,7 @@ export function StoreNativeOrderNotifier() {
 
     const handleOrderEvent = ({ order }: StoreOrderRealtimePayload) => {
       if (!shouldNotifyOrder(order) || !order?.id || !order.status || !order.paymentStatus) return;
-      knownOrderKeysRef.current.add(getOrderKey({ id: order.id, status: order.status, paymentStatus: order.paymentStatus }));
+      knownOrderKeysRef.current.add(getOrderKey(order));
       initializedRef.current = true;
       notifyOrder(order);
     };

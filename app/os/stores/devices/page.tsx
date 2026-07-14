@@ -656,6 +656,16 @@ export default function StoreDeviceSettingsPage() {
               <div className="pos-admin-receipt-template-editor">
                 <div className="pos-admin-printer-grid">
                   <label>
+                    <span>印刷枚数</span>
+                    <select
+                      value={settings.printerSettings.kitchenCopies}
+                      onChange={(event) => updatePrinterSettings({ kitchenCopies: Number(event.target.value) })}
+                      disabled={!canManage}
+                    >
+                      {[1, 2, 3, 4, 5].map((copies) => <option key={copies} value={copies}>{copies}枚</option>)}
+                    </select>
+                  </label>
+                  <label>
                     <span>タイトル</span>
                     <input value={settings.printerSettings.kitchenTicketTemplate.title} onChange={(event) => updateKitchenTicketTemplate({ title: event.target.value })} disabled={!canManage} />
                   </label>

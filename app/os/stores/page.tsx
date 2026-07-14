@@ -1332,7 +1332,7 @@ export default function StoresPage() {
                 <div className="store-payroll-settings">
                   <div className="store-payroll-summary">
                     <strong>会社情報と個人情報文書</strong>
-                    <p>領収書 PDF と従業員向けの個人情報・マイナンバー取扱文書に表示する会社情報です。この店舗に紐づく会社情報として保存されます。</p>
+                    <p>Web予約の電子領収書 PDF と従業員向けの個人情報・マイナンバー取扱文書に表示する会社情報です。この店舗に紐づく会社情報として保存されます。来店注文の領収書は POS のレシート印刷設定で設定します。</p>
                   </div>
                   <label>
                     <span>正式会社名</span>
@@ -1347,7 +1347,7 @@ export default function StoresPage() {
                     <input name="invoiceRegistrationNumber" value={editingInvoiceRegistrationNumber} onChange={(event) => setEditingInvoiceRegistrationNumber(event.target.value)} placeholder="例: T1234567890123" />
                   </label>
                   <label>
-                    <span>但し書き</span>
+                    <span>Web予約領収書の但し書き</span>
                     <input name="receiptPurposeText" value={editingReceiptPurposeText} onChange={(event) => setEditingReceiptPurposeText(event.target.value)} placeholder="例: テイクアウト飲食代" />
                   </label>
                   <label>

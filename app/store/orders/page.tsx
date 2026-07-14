@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { defaultStoreModuleSettings, storeOrderAlertSoundOptions, type StoreModuleSettings, type StoreOrderAlertSound } from "../../../lib/module-setting-defaults";
 import { playStoreOrderAlertSound } from "../../../lib/store-order-alert-sounds";
+import { getStoreOrderAlertPhase, isStoreOrderAlertAcknowledged, shouldRepeatStoreOrderAlert, type StoreOrderAlertPhase } from "../../../lib/store-order-alert-timing";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { clearStoredStoreSelection, getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
@@ -16,6 +17,11 @@ type StoreOrder = {
   paymentStatus: string;
   pickupDate: string;
   pickupTime: string;
+  pickupTiming: string;
+  paidAt: string;
+  alertPhase: string;
+  initialAlertAcknowledgedAt: string;
+  reminderAlertAcknowledgedAt: string;
   amount: number;
   currency: string;
   drink: string;
@@ -141,10 +147,15 @@ const nextActions: Record<string, Array<{ status: string; label: string }>> = {
 const pendingPaymentVisibleMinutes = 30;
 
 function shouldNotifyNewOrder(previousOrder: StoreOrder | undefined, nextOrder: StoreOrder) {
-  return nextOrder.paymentStatus === "paid" &&
+  if (!(nextOrder.paymentStatus === "paid" &&
     nextOrder.status === "new" &&
-    nextOrder.orderSource !== "store_pos" &&
-    (!previousOrder || previousOrder.paymentStatus !== "paid" || previousOrder.status !== "new");
+    nextOrder.orderSource !== "store_pos")) return false;
+  const nextPhase = getStoreOrderAlertPhase(nextOrder);
+  if (nextPhase === "scheduled_waiting" || isStoreOrderAlertAcknowledged(nextOrder, nextPhase)) return false;
+  return !previousOrder ||
+    previousOrder.paymentStatus !== "paid" ||
+    previousOrder.status !== "new" ||
+    getStoreOrderAlertPhase(previousOrder) !== nextPhase;
 }
 
 function shouldNotifyCheckoutRequest(previousOrder: StoreOrder | undefined, nextOrder: StoreOrder) {
@@ -269,6 +280,7 @@ export default function StoreOrdersPage() {
   const [error, setError] = useState("");
   const [cancelNotice, setCancelNotice] = useState("");
   const [checkoutHandlingId, setCheckoutHandlingId] = useState("");
+  const [alertAcknowledgingId, setAlertAcknowledgingId] = useState("");
   const audioContextRef = useRef<AudioContext | null>(null);
   const ordersRef = useRef<StoreOrder[]>([]);
   const repeatAlertTimersRef = useRef<number[]>([]);
@@ -400,12 +412,14 @@ export default function StoreOrdersPage() {
     playStoreOrderAlertSound(audioContextRef.current, sound);
   };
 
-  const isUnhandledNewOrder = (order: StoreOrder, orderIds: string[]) => (
-    orderIds.includes(order.id) &&
-    order.paymentStatus === "paid" &&
-    order.status === "new" &&
-    order.orderSource !== "store_pos"
-  );
+  const isUnhandledNewOrder = (order: StoreOrder, orderIds: string[]) => {
+    const phase = getStoreOrderAlertPhase(order);
+    return orderIds.includes(order.id) &&
+      order.paymentStatus === "paid" &&
+      order.status === "new" &&
+      order.orderSource !== "store_pos" &&
+      !isStoreOrderAlertAcknowledged(order, phase);
+  };
 
   const playArrivalAlert = (orderIds: string[]) => {
     playNewOrderSound();
@@ -416,8 +430,8 @@ export default function StoreOrdersPage() {
     repeatAlertTimersRef.current.push(timer);
   };
 
-  const scheduleRepeatAlert = (orderIds: string[]) => {
-    if (!storeSettings.orderAlerts.repeatUntilHandled || !orderIds.length) return;
+  const scheduleRepeatAlert = (orderIds: string[], phase: StoreOrderAlertPhase) => {
+    if (!storeSettings.orderAlerts.repeatUntilHandled || !orderIds.length || !shouldRepeatStoreOrderAlert(phase)) return;
     const startedAt = Date.now();
 
     const queueNextAlert = () => {
@@ -494,7 +508,8 @@ export default function StoreOrdersPage() {
         setNewOrderIds(incomingIds);
         setSelectedId((currentSelected) => currentSelected || incomingIds[0]);
         playArrivalAlert(incomingIds);
-        scheduleRepeatAlert(incomingIds);
+        const incomingPhase = getStoreOrderAlertPhase(nextOrders.find((order: StoreOrder) => incomingIds.includes(order.id)) ?? {});
+        scheduleRepeatAlert(incomingIds, incomingPhase);
         window.setTimeout(() => setNewOrderIds([]), 10000);
       }
 
@@ -573,7 +588,7 @@ export default function StoreOrdersPage() {
           setNewOrderIds([order.id]);
           setSelectedId(order.id);
           playArrivalAlert([order.id]);
-          scheduleRepeatAlert([order.id]);
+          scheduleRepeatAlert([order.id], getStoreOrderAlertPhase(order));
           window.setTimeout(() => setNewOrderIds([]), 10000);
         }
 
@@ -742,6 +757,35 @@ export default function StoreOrdersPage() {
       if (response.ok) await refresh();
     } finally {
       setCheckoutHandlingId("");
+    }
+  };
+
+  const acknowledgeOrderAlert = async (order: StoreOrder) => {
+    const alertPhase = getStoreOrderAlertPhase(order);
+    if (alertPhase === "scheduled_waiting" || isStoreOrderAlertAcknowledged(order, alertPhase)) return;
+    const acknowledgedAt = new Date().toISOString();
+    const acknowledgementPatch = alertPhase === "scheduled_reminder"
+      ? { reminderAlertAcknowledgedAt: acknowledgedAt }
+      : { initialAlertAcknowledgedAt: acknowledgedAt };
+    setAlertAcknowledgingId(order.id);
+    setOrders((current) => {
+      const next = current.map((item) => item.id === order.id ? { ...item, ...acknowledgementPatch } : item);
+      ordersRef.current = next;
+      return next;
+    });
+    try {
+      const response = await fetch("/api/store/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id, checkoutAction: "acknowledge_alert", alertPhase })
+      });
+      if (!response.ok) {
+        await refresh();
+        return;
+      }
+      await refresh();
+    } finally {
+      setAlertAcknowledgingId("");
     }
   };
 
@@ -1140,6 +1184,20 @@ export default function StoreOrdersPage() {
 
               {isPaidOrder(selectedOrder) ? (
                 <div className="store-order-actions">
+                  {selectedOrder.status === "new" &&
+                  selectedOrder.orderSource !== "store_pos" &&
+                  getStoreOrderAlertPhase(selectedOrder) !== "scheduled_waiting" ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={alertAcknowledgingId === selectedOrder.id || isStoreOrderAlertAcknowledged(selectedOrder)}
+                      onClick={() => void acknowledgeOrderAlert(selectedOrder)}
+                    >
+                      {isStoreOrderAlertAcknowledged(selectedOrder)
+                        ? "確認済み"
+                        : alertAcknowledgingId === selectedOrder.id ? "確認中..." : "確認して消音"}
+                    </button>
+                  ) : null}
                   {(nextActions[selectedOrder.status] ?? []).map((action) => (
                     <button type="button" className="primary-button" key={action.status} onClick={() => updateStatus(selectedOrder.id, action.status)}>
                       {action.label}

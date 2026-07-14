@@ -3,6 +3,7 @@ import { sql } from "../../../../lib/db";
 import { refreshActiveProductionTasksForStore } from "../../../../lib/order-production";
 import { normalizePosPrinterSettings } from "../../../../lib/pos-printer";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
+import { scheduledOrderReminderLeadMinutes } from "../../../../lib/store-order-alert-timing";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,12 @@ export async function GET(request: Request) {
       and store_customer_orders.payment_status = 'paid'
       and store_customer_orders.status in ('new', 'preparing', 'ready')
       and order_production_tasks.status in ('new', 'preparing')
+      and (
+        store_customer_orders.order_source <> 'maamaa_web'
+        or coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') <> 'scheduled'
+        or ((store_customer_orders.pickup_date::text || ' ' || store_customer_orders.pickup_time)::timestamp at time zone 'Asia/Tokyo')
+          <= now() + (${scheduledOrderReminderLeadMinutes} * interval '1 minute')
+      )
       and (
         order_production_tasks.print_status = 'pending'
         or (order_production_tasks.print_status = 'failed' and order_production_tasks.updated_at < now() - interval '2 minutes')

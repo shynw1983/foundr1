@@ -115,10 +115,15 @@ export function StorePrintStation() {
           }
           const claimed = await updatePrintStatus(body.selectedStoreId, job.taskId, "printing");
           if (!claimed) continue;
-          setStatus(`厨房印刷中 ${job.pickupCode}`);
-          const result = await printWithAndroidBridge(payload);
+          const copies = body.printerSettings.kitchenCopies;
+          let result: Awaited<ReturnType<typeof printWithAndroidBridge>> = { ok: true };
+          for (let copy = 1; copy <= copies; copy += 1) {
+            setStatus(`厨房印刷中 ${job.pickupCode}（${copy}/${copies}枚）`);
+            result = await printWithAndroidBridge(payload);
+            if (!result.ok) break;
+          }
           await updatePrintStatus(body.selectedStoreId, job.taskId, result.ok ? "printed" : "failed");
-          setStatus(result.ok ? `厨房印刷済み ${job.pickupCode}` : `厨房印刷失敗 ${job.pickupCode}`);
+          setStatus(result.ok ? `厨房印刷済み ${job.pickupCode}（${copies}枚）` : `厨房印刷失敗 ${job.pickupCode}`);
         }
       } catch {
         setStatus("厨房印刷の確認に失敗しました。");

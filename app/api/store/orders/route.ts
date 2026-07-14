@@ -32,6 +32,17 @@ export async function GET(request: Request) {
       store_customer_orders.payment_status as "paymentStatus",
       store_customer_orders.pickup_date::text as "pickupDate",
       store_customer_orders.pickup_time as "pickupTime",
+      coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') as "pickupTiming",
+      coalesce(store_customer_orders.paid_at::text, '') as "paidAt",
+      case
+        when store_customer_orders.order_source <> 'maamaa_web'
+          or coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') <> 'scheduled' then 'immediate'
+        when store_customer_orders.paid_at > now() - interval '2 minutes' then 'scheduled_initial'
+        when ((store_customer_orders.pickup_date::text || ' ' || store_customer_orders.pickup_time)::timestamp at time zone 'Asia/Tokyo') <= now() + interval '20 minutes' then 'scheduled_reminder'
+        else 'scheduled_waiting'
+      end as "alertPhase",
+      coalesce(store_customer_orders.customer_summary ->> 'initialAlertAcknowledgedAt', '') as "initialAlertAcknowledgedAt",
+      coalesce(store_customer_orders.customer_summary ->> 'reminderAlertAcknowledgedAt', '') as "reminderAlertAcknowledgedAt",
       store_customer_orders.amount,
       store_customer_orders.currency,
       store_customer_orders.drink,
@@ -107,6 +118,17 @@ export async function GET(request: Request) {
       store_customer_orders.payment_status as "paymentStatus",
       store_customer_orders.pickup_date::text as "pickupDate",
       store_customer_orders.pickup_time as "pickupTime",
+      coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') as "pickupTiming",
+      coalesce(store_customer_orders.paid_at::text, '') as "paidAt",
+      case
+        when store_customer_orders.order_source <> 'maamaa_web'
+          or coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') <> 'scheduled' then 'immediate'
+        when store_customer_orders.paid_at > now() - interval '2 minutes' then 'scheduled_initial'
+        when ((store_customer_orders.pickup_date::text || ' ' || store_customer_orders.pickup_time)::timestamp at time zone 'Asia/Tokyo') <= now() + interval '20 minutes' then 'scheduled_reminder'
+        else 'scheduled_waiting'
+      end as "alertPhase",
+      coalesce(store_customer_orders.customer_summary ->> 'initialAlertAcknowledgedAt', '') as "initialAlertAcknowledgedAt",
+      coalesce(store_customer_orders.customer_summary ->> 'reminderAlertAcknowledgedAt', '') as "reminderAlertAcknowledgedAt",
       store_customer_orders.amount,
       store_customer_orders.currency,
       store_customer_orders.drink,
@@ -161,13 +183,13 @@ export async function PATCH(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
 
-  const body = await request.json().catch(() => ({})) as { orderId?: string; status?: string; checkoutAction?: string };
+  const body = await request.json().catch(() => ({})) as { orderId?: string; status?: string; checkoutAction?: string; alertPhase?: string };
   const orderId = String(body.orderId ?? "").trim();
   const status = String(body.status ?? "").trim();
   const checkoutAction = String(body.checkoutAction ?? "").trim();
   const access = await getStoreOrderAccess(session);
   if (!orderId || (!checkoutAction && !canChangeOrderStatus(access, status))) return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
-  if (checkoutAction && checkoutAction !== "mark_checkout_handled") return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
+  if (checkoutAction && !["mark_checkout_handled", "acknowledge_alert"].includes(checkoutAction)) return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
 
   const targetRows = await sql`
     select
@@ -210,6 +232,32 @@ export async function PATCH(request: Request) {
       await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(rows[0].id as string));
     }
     return Response.json({ ok: Boolean(rows[0]?.id), handledCount: rows.length });
+  }
+
+  if (checkoutAction === "acknowledge_alert") {
+    const alertPhase = String(body.alertPhase ?? "").trim();
+    if (!["immediate", "scheduled_initial", "scheduled_reminder"].includes(alertPhase)) {
+      return Response.json({ error: "確認対象の通知がありません。" }, { status: 400 });
+    }
+    const acknowledgedAt = new Date().toISOString();
+    const acknowledgementPayload = alertPhase === "scheduled_reminder"
+      ? { reminderAlertAcknowledgedAt: acknowledgedAt, reminderAlertAcknowledgedBy: session.id }
+      : { initialAlertAcknowledgedAt: acknowledgedAt, initialAlertAcknowledgedBy: session.id };
+    const rows = await sql`
+      update store_customer_orders
+      set
+        customer_summary = customer_summary || ${JSON.stringify(acknowledgementPayload)}::jsonb,
+        updated_at = now()
+      where id = ${orderId}
+        and payment_status = 'paid'
+        and status = 'new'
+        and order_source <> 'store_pos'
+      returning id::text
+    `;
+    if (rows[0]?.id) {
+      await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(rows[0].id as string));
+    }
+    return Response.json({ ok: Boolean(rows[0]?.id), acknowledgedAt });
   }
 
   const rows = await sql`

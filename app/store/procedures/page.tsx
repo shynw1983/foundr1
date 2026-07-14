@@ -336,19 +336,57 @@ function skuCategoryKey(category: string | undefined, subcategory: string | unde
   return `${category?.trim() || "__unlinked__"}::${subcategory?.trim() || ""}`;
 }
 
-function buildSetPlanLine(item: string, index: number, rules: MaamaaProductionRule[]): MaamaaPlanLine {
+function skuItemDetail(item: { quantity?: string; unit?: string; note?: string }, fallback: string) {
+  const amount = [item.quantity, item.unit].filter(Boolean).join("");
+  return [amount, item.note].filter(Boolean).join(" / ") || fallback;
+}
+
+function buildRuleSkuPlanLines(
+  rule: MaamaaProductionRule,
+  key: string,
+  source: MaamaaPlanLine["source"],
+  quantity: number,
+  primaryDetail: string
+): MaamaaPlanLine[] {
+  const lines: MaamaaPlanLine[] = [{
+    id: `${source}-${key}`,
+    title: rule.kitchenName,
+    detail: primaryDetail,
+    quantity,
+    source,
+    categoryKey: skuCategoryKey(rule.productCategory, rule.productSubcategory),
+    categoryLabel: skuCategoryLabel(rule.productCategory, rule.productSubcategory, false),
+    notes: rule.notes
+  }];
+
+  for (const [index, product] of (rule.additionalProducts ?? []).entries()) {
+    lines.push({
+      id: `${source}-${key}-sku-${index}-${product.productId ?? product.productName}`,
+      title: product.productName,
+      detail: skuItemDetail(product, primaryDetail),
+      quantity,
+      source,
+      categoryKey: skuCategoryKey(product.productCategory, product.productSubcategory),
+      categoryLabel: skuCategoryLabel(product.productCategory, product.productSubcategory, false),
+      notes: product.note
+    });
+  }
+
+  return lines;
+}
+
+function buildSetPlanLines(item: string, index: number, rules: MaamaaProductionRule[]): MaamaaPlanLine[] {
   const rule = findMaamaaProductionRule(item, rules);
-  const category = rule ? skuCategoryLabel(rule.productCategory, rule.productSubcategory, false) : skuCategoryLabel(undefined, undefined, false);
-  return {
+  if (rule) return buildRuleSkuPlanLines(rule, `${index}-${item}`, "set", 1, item);
+  return [{
     id: `set-${index}-${item}`,
-    title: rule?.kitchenName || item,
+    title: item,
     detail: item,
     quantity: 1,
     source: "set",
-    categoryKey: rule ? skuCategoryKey(rule.productCategory, rule.productSubcategory) : skuCategoryKey(undefined, undefined),
-    categoryLabel: category,
-    notes: rule?.notes
-  };
+    categoryKey: skuCategoryKey(undefined, undefined),
+    categoryLabel: skuCategoryLabel(undefined, undefined, false)
+  }];
 }
 
 function buildStructuredSetPlanLine(item: MaamaaSetItem, index: number): MaamaaPlanLine {
@@ -364,13 +402,9 @@ function buildStructuredSetPlanLine(item: MaamaaSetItem, index: number): MaamaaP
   };
 }
 
-function buildAddPlanLine(rule: MaamaaProductionRule, key: string, quantity: number): MaamaaPlanLine {
+function buildAddPlanLines(rule: MaamaaProductionRule, key: string, quantity: number): MaamaaPlanLine[] {
   const cookType = rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil");
-  const category = skuCategoryLabel(rule.productCategory, rule.productSubcategory, false);
-  return {
-    id: `add-${key}`,
-    title: rule.kitchenName,
-    detail: [
+  const detail = [
       rule.quantity || "",
       rule.prep || "",
       rule.action || "",
@@ -378,13 +412,8 @@ function buildAddPlanLine(rule: MaamaaProductionRule, key: string, quantity: num
       cookType !== "no_boil" && rule.minimumHeatMinutes ? `最低${rule.minimumHeatMinutes}分加熱` : "",
       rule.placement === "container" ? "容器へ" : "",
       rule.placement === "finish" ? "仕上げ" : ""
-    ].filter(Boolean).join(" / ") || "分量要確認",
-    quantity,
-    source: "add",
-    categoryKey: skuCategoryKey(rule.productCategory, rule.productSubcategory),
-    categoryLabel: category,
-    notes: rule.notes
-  };
+    ].filter(Boolean).join(" / ") || "分量要確認";
+  return buildRuleSkuPlanLines(rule, key, "add", quantity, detail);
 }
 
 function groupPlanLines(lines: MaamaaPlanLine[]) {
@@ -456,9 +485,9 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
   const setLines = mode === "set" && selectedSet
     ? selectedSet.items?.length
       ? selectedSet.items.map((item, index) => buildStructuredSetPlanLine(item, index))
-      : getSetItems(selectedSet).map((item, index) => buildSetPlanLine(item, index, settings.productionRules))
+      : getSetItems(selectedSet).flatMap((item, index) => buildSetPlanLines(item, index, settings.productionRules))
     : [];
-  const addLines = selectedAddOnRules.map(({ rule, key }) => buildAddPlanLine(rule, key, selectedAddOns[key] ?? 1));
+  const addLines = selectedAddOnRules.flatMap(({ rule, key }) => buildAddPlanLines(rule, key, selectedAddOns[key] ?? 1));
   const planLines = groupPlanLines([...setLines, ...addLines]);
   const selectedSoupRule = settings.seasoningRules.find((rule) => rule.name === selectedSoupName) ?? soupRules[0];
   const selectedMedicinalRule = settings.seasoningRules.find((rule) => rule.name === selectedMedicinalName);
