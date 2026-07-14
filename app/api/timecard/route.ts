@@ -2,6 +2,7 @@ import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../..
 import { writeAuditLog } from "../../../lib/audit-log";
 import { getBusinessCalendarEvents } from "../../../lib/business-calendar";
 import { sql } from "../../../lib/db";
+import { getThreeDayWeatherForecast } from "../../../lib/weather-forecast";
 import type { EmployeeSession } from "../../../lib/auth";
 import { normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from "../../../lib/store-business-hours";
 import {
@@ -108,6 +109,8 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
         coalesce(attendance_location_enabled, false) as "attendanceLocationEnabled",
         attendance_latitude::float as "attendanceLatitude",
         attendance_longitude::float as "attendanceLongitude",
+        weather_latitude::float as "weatherLatitude",
+        weather_longitude::float as "weatherLongitude",
         coalesce(attendance_radius_meters, 100)::int as "attendanceRadiusMeters",
         coalesce(attendance_accuracy_threshold_meters, 100)::int as "attendanceAccuracyThresholdMeters"
       from stores
@@ -134,6 +137,8 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
       coalesce(attendance_location_enabled, false) as "attendanceLocationEnabled",
       attendance_latitude::float as "attendanceLatitude",
       attendance_longitude::float as "attendanceLongitude",
+      weather_latitude::float as "weatherLatitude",
+      weather_longitude::float as "weatherLongitude",
       coalesce(attendance_radius_meters, 100)::int as "attendanceRadiusMeters",
       coalesce(attendance_accuracy_threshold_meters, 100)::int as "attendanceAccuracyThresholdMeters"
     from stores
@@ -1214,15 +1219,23 @@ export async function GET(request: Request) {
   const payrollConfirmation = canViewPayroll && selectedStoreId
     ? await getPayrollConfirmation(selectedStoreId, month)
     : null;
-  const calendarEvents = selectedStoreId && selectedStore
-    ? await getBusinessCalendarEvents({
-      storeId: selectedStoreId,
-      startDate,
-      endDate,
-      storeLocationText: `${String(selectedStore.address ?? "")} ${String(selectedStore.weatherLocationName ?? "")}`.trim(),
-      storePrefecture: String(selectedStore.socialInsurancePrefecture ?? "")
-    })
-    : [];
+  const [calendarEvents, weatherForecast] = await Promise.all([
+    selectedStoreId && selectedStore
+      ? getBusinessCalendarEvents({
+        storeId: selectedStoreId,
+        startDate,
+        endDate,
+        storeLocationText: `${String(selectedStore.address ?? "")} ${String(selectedStore.weatherLocationName ?? "")}`.trim(),
+        storePrefecture: String(selectedStore.socialInsurancePrefecture ?? "")
+      })
+      : Promise.resolve([]),
+    selectedStore
+      ? getThreeDayWeatherForecast(
+        toMoneyNumber(selectedStore.weatherLatitude) ?? toMoneyNumber(selectedStore.attendanceLatitude),
+        toMoneyNumber(selectedStore.weatherLongitude) ?? toMoneyNumber(selectedStore.attendanceLongitude)
+      )
+      : Promise.resolve([])
+  ]);
   const responseEmployees = canViewPayroll
     ? employees
     : employees.map((employee) => ({
@@ -1294,6 +1307,7 @@ export async function GET(request: Request) {
     punches: isStoreTerminalSession ? [] : typedPunches,
     shifts: isStoreTerminalSession ? [] : responseShifts,
     calendarEvents: isStoreTerminalSession ? [] : calendarEvents,
+    weatherForecast: isStoreTerminalSession ? [] : weatherForecast,
     latestPunch: isStoreTerminalSession ? null : latestPunch,
     latestPunches: responseLatestPunches,
     dailySummaries: isStoreTerminalSession ? [] : dailySummaries,

@@ -19417,6 +19417,15 @@ body :where(
   color: var(--danger);
 }
 
+.business-calendar-day-detail article.weather-day-detail-card > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: #eef5f8;
+  color: #356276;
+}
+
 .business-calendar-day-detail article > div {
   display: grid;
   min-width: 0;
@@ -19512,6 +19521,48 @@ body :where(
   font-weight: 600;
   line-height: 12px;
   white-space: nowrap;
+}
+
+.shift-grid thead th .shift-day-context-markers {
+  display: flex;
+  min-height: 14px;
+  margin-top: 2px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+
+.shift-grid thead th .shift-day-context-markers .shift-calendar-marker {
+  display: inline-block;
+  margin: 0;
+}
+
+.shift-grid thead th .shift-weather-marker {
+  display: inline-flex;
+  height: 14px;
+  padding: 0 3px;
+  border: 1px solid #d8e3e7;
+  border-radius: 4px;
+  align-items: center;
+  gap: 2px;
+  background: white;
+  color: #365d6e;
+  font-size: 7px;
+  font-weight: 600;
+  line-height: 12px;
+  white-space: nowrap;
+}
+
+.shift-grid thead th .shift-weather-marker > span {
+  display: inline;
+}
+
+.shift-grid thead th .shift-weather-marker > small {
+  display: inline;
+  margin: 0;
+  color: var(--blue);
+  font-size: 7px;
 }
 
 .shift-grid thead th .shift-calendar-marker.is-busy {

@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, CalendarDays, CalendarPlus, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, RefreshCw, Search, Settings, Store, Trash2, Truck, UserCog, WalletCards } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, CalendarPlus, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, Cloud, CloudFog, CloudLightning, CloudRain, CloudSun, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, RefreshCw, Search, Settings, Snowflake, Store, Sun, Trash2, Truck, UserCog, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { CSSProperties, FormEvent, MouseEvent } from "react";
@@ -36,6 +36,18 @@ type BusinessCalendarEvent = {
   venue: string;
   sourceUrl: string;
   note: string;
+};
+
+type WeatherForecastDay = {
+  date: string;
+  weatherCode: number | null;
+  label: string;
+  temperatureMax: number | null;
+  temperatureMin: number | null;
+  precipitationProbabilityMax: number | null;
+  precipitationSum: number | null;
+  windSpeedMax: number | null;
+  sourceUrl: string;
 };
 
 type TimecardEmployee = {
@@ -199,6 +211,7 @@ type TimecardPayload = {
   employees: TimecardEmployee[];
   shifts: ShiftEntry[];
   calendarEvents: BusinessCalendarEvent[];
+  weatherForecast: WeatherForecastDay[];
   dailySummaries: DailySummary[];
   payrollConfirmation: PayrollConfirmation | null;
   payrollRows: PayrollRow[];
@@ -236,6 +249,20 @@ function getCalendarImpactLabel(impact: BusinessCalendarEvent["impactLevel"]) {
   if (impact === "major") return "重大影響";
   if (impact === "busy") return "混雑見込";
   return "参考";
+}
+
+function WeatherCodeIcon({ code, size = 13 }: { code: number | null; size?: number }) {
+  if (code === 0) return <Sun size={size} aria-hidden="true" />;
+  if (code === 1 || code === 2) return <CloudSun size={size} aria-hidden="true" />;
+  if (code === 3) return <Cloud size={size} aria-hidden="true" />;
+  if (code === 45 || code === 48) return <CloudFog size={size} aria-hidden="true" />;
+  if ((code !== null && code >= 71 && code <= 77) || code === 85 || code === 86) return <Snowflake size={size} aria-hidden="true" />;
+  if (code !== null && code >= 95) return <CloudLightning size={size} aria-hidden="true" />;
+  return <CloudRain size={size} aria-hidden="true" />;
+}
+
+function formatForecastNumber(value: number | null) {
+  return value === null ? "–" : String(Math.round(value));
 }
 
 type ShiftDraft = {
@@ -1614,7 +1641,12 @@ export function TimecardPage({
     }
     return map;
   }, [data?.calendarEvents, monthDays]);
+  const weatherForecastByDate = useMemo(
+    () => new Map((data?.weatherForecast ?? []).map((forecast) => [forecast.date, forecast])),
+    [data?.weatherForecast]
+  );
   const selectedCalendarEvents = selectedCalendarDate ? calendarEventsByDate.get(selectedCalendarDate) ?? [] : [];
+  const selectedWeatherForecast = selectedCalendarDate ? weatherForecastByDate.get(selectedCalendarDate) ?? null : null;
   const manualCalendarEvents = useMemo(
     () => (data?.calendarEvents ?? []).filter((event) => event.sourceType === "manual" && event.storeId === selectedStoreId),
     [data?.calendarEvents, selectedStoreId]
@@ -2739,10 +2771,22 @@ export function TimecardPage({
                     ) : null}
                   </section>
                 ) : null}
-                {selectedCalendarDate && selectedCalendarEvents.length ? (
+                {selectedCalendarDate && (selectedCalendarEvents.length || selectedWeatherForecast) ? (
                   <section className="business-calendar-day-detail" aria-label={`${selectedCalendarDate}の営業情報`}>
                     <strong>{selectedCalendarDate}</strong>
                     <div>
+                      {selectedWeatherForecast ? (
+                        <article className="weather-day-detail-card">
+                          <span><WeatherCodeIcon code={selectedWeatherForecast.weatherCode} size={14} /> 天気</span>
+                          <div>
+                            <strong>{selectedWeatherForecast.label}</strong>
+                            <small>
+                              最高 {formatForecastNumber(selectedWeatherForecast.temperatureMax)}℃ / 最低 {formatForecastNumber(selectedWeatherForecast.temperatureMin)}℃ / 降水 {formatForecastNumber(selectedWeatherForecast.precipitationProbabilityMax)}% / 雨量 {selectedWeatherForecast.precipitationSum ?? "–"}mm / 最大風速 {selectedWeatherForecast.windSpeedMax ?? "–"}km/h
+                            </small>
+                          </div>
+                          <a href={selectedWeatherForecast.sourceUrl} target="_blank" rel="noreferrer">予報元</a>
+                        </article>
+                      ) : null}
                       {selectedCalendarEvents.map((event) => (
                         <article className={`is-${event.impactLevel}`} key={event.id}>
                           <span>{getCalendarEventCategoryLabel(event)}</span>
@@ -2870,6 +2914,7 @@ export function TimecardPage({
                         {monthDays.map((day) => {
                           const coverage = coverageByDate.get(day.key);
                           const calendarEvents = calendarEventsByDate.get(day.key) ?? [];
+                          const weatherForecast = weatherForecastByDate.get(day.key);
                           const isUncovered = coverage?.status === "uncovered";
                           const isToday = day.key === todayKey;
                           return (
@@ -2880,16 +2925,33 @@ export function TimecardPage({
                             >
                               <span>{day.label}</span>
                               <small>{day.weekdayLabel}</small>
-                              {calendarEvents.length ? (
-                                <button
-                                  className={`shift-calendar-marker is-${calendarEvents.some((event) => event.impactLevel === "major") ? "major" : calendarEvents.some((event) => event.impactLevel === "busy") ? "busy" : "reference"}`}
-                                  type="button"
-                                  title={calendarEvents.map((event) => `${event.title}${event.startTime ? ` ${event.startTime}` : ""}`).join(" / ")}
-                                  aria-label={`${day.key}の営業情報を表示`}
-                                  onClick={() => setSelectedCalendarDate((current) => current === day.key ? "" : day.key)}
-                                >
-                                  {calendarEvents.slice(0, 2).map((event) => getCalendarEventShortLabel(event)).join("·")}{calendarEvents.length > 2 ? `+${calendarEvents.length - 2}` : ""}
-                                </button>
+                              {calendarEvents.length || weatherForecast ? (
+                                <span className="shift-day-context-markers">
+                                  {weatherForecast ? (
+                                    <button
+                                      className="shift-weather-marker"
+                                      type="button"
+                                      title={`${weatherForecast.label} / 最高${formatForecastNumber(weatherForecast.temperatureMax)}℃ 最低${formatForecastNumber(weatherForecast.temperatureMin)}℃ / 降水${formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%`}
+                                      aria-label={`${day.key}の天気予報を表示`}
+                                      onClick={() => setSelectedCalendarDate((current) => current === day.key ? "" : day.key)}
+                                    >
+                                      <WeatherCodeIcon code={weatherForecast.weatherCode} size={10} />
+                                      <span>{formatForecastNumber(weatherForecast.temperatureMax)}/{formatForecastNumber(weatherForecast.temperatureMin)}°</span>
+                                      <small>{formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%</small>
+                                    </button>
+                                  ) : null}
+                                  {calendarEvents.length ? (
+                                    <button
+                                      className={`shift-calendar-marker is-${calendarEvents.some((event) => event.impactLevel === "major") ? "major" : calendarEvents.some((event) => event.impactLevel === "busy") ? "busy" : "reference"}`}
+                                      type="button"
+                                      title={calendarEvents.map((event) => `${event.title}${event.startTime ? ` ${event.startTime}` : ""}`).join(" / ")}
+                                      aria-label={`${day.key}の営業情報を表示`}
+                                      onClick={() => setSelectedCalendarDate((current) => current === day.key ? "" : day.key)}
+                                    >
+                                      {calendarEvents.slice(0, 2).map((event) => getCalendarEventShortLabel(event)).join("·")}{calendarEvents.length > 2 ? `+${calendarEvents.length - 2}` : ""}
+                                    </button>
+                                  ) : null}
+                                </span>
                               ) : null}
                               {isUncovered || isToday ? (
                                 <span className="shift-day-badges">
