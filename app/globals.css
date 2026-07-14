@@ -19581,9 +19581,10 @@ body :where(
 .shift-grid thead th .shift-weather-marker .shift-weather-summary {
   display: flex;
   width: 100%;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 0;
 }
 
 .weather-code-icon {
@@ -19606,24 +19607,27 @@ body :where(
   color: #287091;
 }
 
-.shift-grid thead th .shift-weather-marker .shift-weather-summary > span {
-  display: inline;
+.shift-grid thead th .shift-weather-marker .shift-weather-temperature {
+  display: block;
+  font-size: 7px;
+  line-height: 7px;
 }
 
 .shift-grid thead th .shift-weather-marker .shift-weather-rain-chart {
   display: flex;
   width: 100%;
-  height: 9px;
-  flex-direction: column;
+  height: 7px;
+  flex-direction: row;
   align-items: center;
-  gap: 1px;
+  justify-content: center;
+  gap: 2px;
 }
 
 .shift-grid thead th .shift-weather-marker .shift-weather-rain-track {
   display: block;
-  order: 2;
-  width: 100%;
+  width: 14px;
   height: 3px;
+  flex: 0 0 14px;
   overflow: hidden;
   border-radius: 2px;
   background: #dce6ea;
@@ -19638,7 +19642,6 @@ body :where(
 
 .shift-grid thead th .shift-weather-marker .shift-weather-rain-chart > small {
   display: inline;
-  order: 1;
   margin: 0;
   color: var(--blue);
   font-size: 6px;
@@ -32620,6 +32623,148 @@ body :where(
   font-size: 11px;
   font-weight: 800;
   line-height: 1.35;
+}
+
+.sales-calendar-events {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sales-calendar-events > span {
+  display: block;
+  overflow: hidden;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: #edf5f1;
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sales-calendar-events > span.is-outbound {
+  background: #fff6e8;
+  color: #865714;
+}
+
+.sales-calendar-events > span.is-mixed {
+  background: #f1f3f4;
+  color: #53616a;
+}
+
+.sales-event-impact-panel {
+  grid-column: 1 / -1;
+}
+
+.sales-event-impact-list {
+  display: grid;
+  gap: 10px;
+}
+
+.sales-event-impact-list > article {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) minmax(360px, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.sales-event-impact-list > article.is-positive {
+  border-color: rgba(33, 116, 91, 0.28);
+}
+
+.sales-event-impact-list > article.is-negative {
+  border-color: rgba(178, 62, 53, 0.24);
+}
+
+.sales-event-impact-title {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.sales-event-impact-title > span {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #edf5f1;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.sales-event-impact-title > span.is-outbound {
+  background: #fff6e8;
+  color: #865714;
+}
+
+.sales-event-impact-title > span.is-mixed {
+  background: #eef1f2;
+  color: #53616a;
+}
+
+.sales-event-impact-title div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sales-event-impact-title strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sales-event-impact-title small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.sales-event-impact-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sales-event-impact-metrics > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sales-event-impact-metrics small,
+.sales-event-impact-metrics em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.sales-event-impact-metrics strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .sales-event-impact-list > article {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .sales-event-impact-metrics {
+    grid-template-columns: 1fr;
+  }
 }
 
 .sales-calendar-amounts {

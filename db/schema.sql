@@ -54,9 +54,13 @@ create table if not exists business_calendar_events (
   end_time time,
   category text not null default 'local_event',
   impact_level text not null default 'reference',
+  flow_direction text not null default 'mixed',
+  impact_start_time time,
+  impact_end_time time,
   venue text not null default '',
   prefecture text not null default '',
   locality text not null default '',
+  audience_prefecture text not null default '',
   source_url text not null default '',
   note text not null default '',
   metadata jsonb not null default '{}'::jsonb,
@@ -66,6 +70,11 @@ create table if not exists business_calendar_events (
   updated_at timestamptz not null default now(),
   unique (source_type, source_key)
 );
+
+alter table business_calendar_events add column if not exists flow_direction text not null default 'mixed';
+alter table business_calendar_events add column if not exists impact_start_time time;
+alter table business_calendar_events add column if not exists impact_end_time time;
+alter table business_calendar_events add column if not exists audience_prefecture text not null default '';
 
 create index if not exists idx_business_calendar_events_dates
   on business_calendar_events(start_date, end_date) where is_active = true;

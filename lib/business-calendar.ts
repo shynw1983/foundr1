@@ -3,7 +3,7 @@ import { sql } from "./db";
 export type BusinessCalendarEvent = {
   id: string;
   storeId: string | null;
-  sourceType: "holiday" | "sports" | "festival" | "concert" | "manual";
+  sourceType: "holiday" | "sports" | "festival" | "concert" | "convention" | "cruise" | "manual";
   title: string;
   startDate: string;
   endDate: string;
@@ -11,16 +11,23 @@ export type BusinessCalendarEvent = {
   endTime: string | null;
   category: string;
   impactLevel: "reference" | "busy" | "major";
+  flowDirection: "inbound" | "outbound" | "mixed";
+  impactStartTime: string | null;
+  impactEndTime: string | null;
   venue: string;
   sourceUrl: string;
   note: string;
 };
 
-type CalendarEventInput = Omit<BusinessCalendarEvent, "id" | "storeId"> & {
+type CalendarEventInput = Omit<BusinessCalendarEvent, "id" | "storeId" | "flowDirection" | "impactStartTime" | "impactEndTime"> & {
   sourceKey: string;
   storeId?: string | null;
+  flowDirection?: BusinessCalendarEvent["flowDirection"];
+  impactStartTime?: string | null;
+  impactEndTime?: string | null;
   prefecture?: string;
   locality?: string;
+  audiencePrefecture?: string;
   metadata?: Record<string, unknown>;
 };
 
@@ -30,11 +37,43 @@ const yamakasaSourceUrl = "https://www.hakatayamakasa.com/162358.html";
 const payPayDomeEventsBaseUrl = "https://www.softbankhawks.co.jp/stadium/event_schedule";
 const marineMesseEventsUrl = "https://www.marinemesse.or.jp/messe/event";
 const marineMesseCmsUrl = "https://api.cms.studiodesignapp.com/v2/search";
+const cruiseScheduleUrl = "https://www.city.fukuoka.lg.jp/kowan/k-kikaku/hakata-port/cruise1.html";
+const fukuokaConventionCalendarUrl = "https://www.welcome-fukuoka.or.jp/wp-content/themes/fcvb_main/images/about/oceans/2026_NewYear.pdf";
+
+function timeToMinutes(value: string | null) {
+  if (!value) return null;
+  const [hours, minutes] = value.split(":").map(Number);
+  return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
+}
+
+function minutesToTime(value: number) {
+  const normalized = Math.max(0, Math.min(23 * 60 + 59, value));
+  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
+}
+
+function expandImpactWindow(startTime: string | null, beforeMinutes: number, afterMinutes: number) {
+  const start = timeToMinutes(startTime);
+  if (start === null) return { impactStartTime: "10:00", impactEndTime: "23:00" };
+  return {
+    impactStartTime: minutesToTime(start - beforeMinutes),
+    impactEndTime: minutesToTime(start + afterMinutes)
+  };
+}
 
 function normalizeDate(value: string) {
   const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(value.trim());
   if (!match) return null;
   return `${match[1]}-${String(Number(match[2])).padStart(2, "0")}-${String(Number(match[3])).padStart(2, "0")}`;
+}
+
+function addDays(dateString: string, amount: number) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + amount)).toISOString().slice(0, 10);
+}
+
+function isWeekend(dateString: string) {
+  const day = new Date(`${dateString}T12:00:00Z`).getUTCDay();
+  return day === 0 || day === 6;
 }
 
 function stripHtml(value: string) {
@@ -73,11 +112,13 @@ async function upsertEvent(event: CalendarEventInput) {
   await sql`
     insert into business_calendar_events (
       store_id, source_type, source_key, title, start_date, end_date, start_time, end_time,
-      category, impact_level, venue, prefecture, locality, source_url, note, metadata, is_active, updated_at
+      category, impact_level, flow_direction, impact_start_time, impact_end_time,
+      venue, prefecture, locality, audience_prefecture, source_url, note, metadata, is_active, updated_at
     ) values (
       ${event.storeId ?? null}, ${event.sourceType}, ${event.sourceKey}, ${event.title},
       ${event.startDate}::date, ${event.endDate}::date, ${event.startTime}::time, ${event.endTime}::time,
-      ${event.category}, ${event.impactLevel}, ${event.venue}, ${event.prefecture ?? ""}, ${event.locality ?? ""},
+      ${event.category}, ${event.impactLevel}, ${event.flowDirection ?? "mixed"}, ${event.impactStartTime ?? null}::time, ${event.impactEndTime ?? null}::time,
+      ${event.venue}, ${event.prefecture ?? ""}, ${event.locality ?? ""}, ${event.audiencePrefecture ?? ""},
       ${event.sourceUrl}, ${event.note}, ${JSON.stringify(event.metadata ?? {})}, true, now()
     )
     on conflict (source_type, source_key) do update set
@@ -89,9 +130,13 @@ async function upsertEvent(event: CalendarEventInput) {
       end_time = excluded.end_time,
       category = excluded.category,
       impact_level = excluded.impact_level,
+      flow_direction = excluded.flow_direction,
+      impact_start_time = excluded.impact_start_time,
+      impact_end_time = excluded.impact_end_time,
       venue = excluded.venue,
       prefecture = excluded.prefecture,
       locality = excluded.locality,
+      audience_prefecture = excluded.audience_prefecture,
       source_url = excluded.source_url,
       note = excluded.note,
       metadata = excluded.metadata,
@@ -121,6 +166,9 @@ export async function syncJapaneseHolidays() {
       endTime: null,
       category: "holiday",
       impactLevel: "busy",
+      flowDirection: "mixed",
+      impactStartTime: "00:00",
+      impactEndTime: "23:59",
       venue: "",
       sourceUrl: holidaySourceUrl,
       note: "国民の祝日・休日",
@@ -129,6 +177,93 @@ export async function syncJapaneseHolidays() {
     count += 1;
   }
   return count;
+}
+
+export async function syncJapaneseLongBreaks(referenceDate = new Date()) {
+  const response = await fetch(holidaySourceUrl, { headers: { "User-Agent": "Foundr1-OS/1.0" } });
+  if (!response.ok) throw new Error(`Holiday source returned ${response.status}`);
+  const csv = new TextDecoder("shift_jis").decode(await response.arrayBuffer());
+  const holidayByDate = new Map<string, string>();
+  for (const line of csv.split(/\r?\n/).slice(1)) {
+    const [rawDate, rawTitle] = line.split(",");
+    const date = rawDate ? normalizeDate(rawDate) : null;
+    if (date && rawTitle?.trim()) holidayByDate.set(date, rawTitle.trim());
+  }
+
+  const targetYears = [referenceDate.getUTCFullYear(), referenceDate.getUTCFullYear() + 1];
+  const events: CalendarEventInput[] = [];
+  for (const year of targetYears) {
+    let sequenceStart = "";
+    let sequenceDates: string[] = [];
+    const flushSequence = () => {
+      if (sequenceDates.length < 3 || !sequenceDates.some((date) => holidayByDate.has(date))) {
+        sequenceStart = "";
+        sequenceDates = [];
+        return;
+      }
+      const sequenceEnd = sequenceDates.at(-1) ?? sequenceStart;
+      if (sequenceDates.some((date) => date.endsWith("-01-01"))) {
+        sequenceStart = "";
+        sequenceDates = [];
+        return;
+      }
+      const holidayTitle = sequenceDates.map((date) => holidayByDate.get(date)).find(Boolean) ?? "祝日";
+      const title = sequenceDates.some((date) => date.slice(5, 7) === "05")
+        ? "ゴールデンウィーク"
+        : sequenceDates.length >= 4 && sequenceDates.some((date) => date.slice(5, 7) === "09")
+          ? "シルバーウィーク"
+          : `${holidayTitle}を含む${sequenceDates.length}連休`;
+      events.push({
+        sourceType: "holiday",
+        sourceKey: `jp-long-break:${sequenceStart}:${sequenceEnd}`,
+        title,
+        startDate: sequenceStart,
+        endDate: sequenceEnd,
+        startTime: null,
+        endTime: null,
+        category: "long_break",
+        impactLevel: sequenceDates.length >= 5 ? "major" : "busy",
+        flowDirection: "mixed",
+        impactStartTime: "00:00",
+        impactEndTime: "23:59",
+        venue: "全国",
+        sourceUrl: holidaySourceUrl,
+        note: "祝日と週末が連続する人流変動期間",
+        metadata: { officialHolidays: true, dayCount: sequenceDates.length }
+      });
+      sequenceStart = "";
+      sequenceDates = [];
+    };
+
+    for (let date = `${year}-01-01`; date <= `${year}-12-31`; date = addDays(date, 1)) {
+      if (isWeekend(date) || holidayByDate.has(date)) {
+        if (!sequenceStart) sequenceStart = date;
+        sequenceDates.push(date);
+      } else {
+        flushSequence();
+      }
+    }
+    flushSequence();
+
+    events.push(
+      {
+        sourceType: "holiday", sourceKey: `obon-travel:${year}`, title: "お盆・帰省ピーク",
+        startDate: `${year}-08-13`, endDate: `${year}-08-16`, startTime: null, endTime: null,
+        category: "long_break", impactLevel: "major", flowDirection: "mixed", impactStartTime: "00:00", impactEndTime: "23:59",
+        venue: "全国", sourceUrl: "https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html",
+        note: "法定祝日ではない社会休暇・帰省の集中期間", metadata: { socialHoliday: true }
+      },
+      {
+        sourceType: "holiday", sourceKey: `year-end-travel:${year}`, title: "年末年始・帰省ピーク",
+        startDate: `${year}-12-29`, endDate: `${year + 1}-01-03`, startTime: null, endTime: null,
+        category: "long_break", impactLevel: "major", flowDirection: "mixed", impactStartTime: "00:00", impactEndTime: "23:59",
+        venue: "全国", sourceUrl: "https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html",
+        note: "法定祝日の範囲を超える一般的な年末年始休暇", metadata: { socialHoliday: true }
+      }
+    );
+  }
+  for (const event of events) await upsertEvent(event);
+  return events.length;
 }
 
 function parseHawksMonth(html: string, year: number, month: number) {
@@ -153,6 +288,8 @@ function parseHawksMonth(html: string, year: number, month: number) {
       endTime: null,
       category: "sports",
       impactLevel: "busy",
+      flowDirection: "inbound",
+      ...expandImpactWindow(gameMatch[1], 180, 300),
       venue: "みずほPayPayドーム福岡",
       prefecture: "福岡県",
       locality: "福岡市",
@@ -214,6 +351,8 @@ export function parsePayPayDomeConcerts(html: string) {
       endTime: null,
       category: "concert",
       impactLevel: "major",
+      flowDirection: "inbound",
+      ...expandImpactWindow(startTime, 180, 300),
       venue: "みずほPayPayドーム福岡",
       prefecture: "福岡県",
       locality: "福岡市",
@@ -312,6 +451,8 @@ export function parseMarineMesseConcerts(payload: unknown, referenceDate = new D
         endTime: null,
         category: "concert",
         impactLevel: "major",
+        flowDirection: "inbound",
+        ...expandImpactWindow(dateMatch[3] ?? null, 180, 300),
         venue: "マリンメッセ福岡A館",
         prefecture: "福岡県",
         locality: "福岡市",
@@ -367,30 +508,35 @@ export async function syncFukuokaMajorEvents(referenceDate = new Date()) {
         sourceType: "festival", sourceKey: `hakata-dontaku:${year}`, title: "博多どんたく港まつり",
         startDate: `${year}-05-03`, endDate: `${year}-05-04`, startTime: null, endTime: null,
         category: "festival", impactLevel: "major", venue: "福岡市中心部", prefecture: "福岡県", locality: "福岡市",
+        flowDirection: "inbound", impactStartTime: "09:00", impactEndTime: "21:00", audiencePrefecture: "福岡県",
         sourceUrl: "https://www.dontaku.fukunet.or.jp/", note: "市内中心部の混雑・交通規制に注意"
       },
       {
         sourceType: "festival", sourceKey: `hakata-yamakasa:${year}`, title: "博多祇園山笠",
         startDate: `${year}-07-01`, endDate: `${year}-07-15`, startTime: null, endTime: null,
         category: "festival", impactLevel: "busy", venue: "博多部・天神周辺", prefecture: "福岡県", locality: "福岡市",
+        flowDirection: "mixed", impactStartTime: "08:00", impactEndTime: "21:00", audiencePrefecture: "福岡県",
         sourceUrl: yamakasaSourceUrl, note: "期間中は行事・交通規制による人流変化に注意"
       },
       {
         sourceType: "festival", sourceKey: `hakata-yamakasa-oi:${year}`, title: "追い山笠ならし",
         startDate: `${year}-07-12`, endDate: `${year}-07-12`, startTime: "15:59", endTime: null,
         category: "festival", impactLevel: "major", venue: "櫛田神社～博多部", prefecture: "福岡県", locality: "福岡市",
+        flowDirection: "mixed", impactStartTime: "13:00", impactEndTime: "19:00", audiencePrefecture: "福岡県",
         sourceUrl: yamakasaSourceUrl, note: "大規模な観覧客・交通規制を想定"
       },
       {
         sourceType: "festival", sourceKey: `hakata-yamakasa-group:${year}`, title: "集団山笠見せ",
         startDate: `${year}-07-13`, endDate: `${year}-07-13`, startTime: "15:30", endTime: null,
         category: "festival", impactLevel: "major", venue: "呉服町～天神", prefecture: "福岡県", locality: "福岡市",
+        flowDirection: "mixed", impactStartTime: "13:00", impactEndTime: "19:00", audiencePrefecture: "福岡県",
         sourceUrl: yamakasaSourceUrl, note: "天神方面まで運行・交通規制あり"
       },
       {
         sourceType: "festival", sourceKey: `hakata-yamakasa-final:${year}`, title: "追い山笠",
         startDate: `${year}-07-15`, endDate: `${year}-07-15`, startTime: "04:59", endTime: null,
         category: "festival", impactLevel: "major", venue: "櫛田神社～博多部", prefecture: "福岡県", locality: "福岡市",
+        flowDirection: "mixed", impactStartTime: "03:30", impactEndTime: "09:00", audiencePrefecture: "福岡県",
         sourceUrl: yamakasaSourceUrl, note: "早朝から大規模な観覧客・交通規制を想定"
       }
     ];
@@ -402,21 +548,171 @@ export async function syncFukuokaMajorEvents(referenceDate = new Date()) {
   return count;
 }
 
+export async function syncKyushuMobilityEvents(referenceDate = new Date()) {
+  if (![referenceDate.getUTCFullYear(), referenceDate.getUTCFullYear() + 1].includes(2026)) return 0;
+  const events: CalendarEventInput[] = [
+    {
+      sourceType: "festival", sourceKey: "chikugo-fireworks:2026", title: "筑後川花火大会",
+      startDate: "2026-08-05", endDate: "2026-08-05", startTime: "19:40", endTime: "20:40",
+      category: "fireworks", impactLevel: "major", flowDirection: "outbound", impactStartTime: "15:30", impactEndTime: "23:00",
+      venue: "久留米市 筑後川河川敷", prefecture: "福岡県", locality: "久留米市", audiencePrefecture: "福岡県",
+      sourceUrl: "https://www.crossroadfukuoka.jp/event/13612", note: "福岡市から久留米方面への移動。荒天時は8月7日に順延",
+      metadata: { official: true, fireworks: 15000, fallbackDate: "2026-08-07" }
+    },
+    {
+      sourceType: "festival", sourceKey: "kanmon-fireworks:2026", title: "関門海峡花火大会",
+      startDate: "2026-08-13", endDate: "2026-08-13", startTime: "19:35", endTime: "20:30",
+      category: "fireworks", impactLevel: "major", flowDirection: "outbound", impactStartTime: "14:00", impactEndTime: "23:59",
+      venue: "北九州市門司区・下関市", prefecture: "福岡県", locality: "北九州市", audiencePrefecture: "福岡県",
+      sourceUrl: "https://www.city.kitakyushu.lg.jp/moji/w1100625.html", note: "福岡市から北九州・下関方面への移動と大規模交通規制",
+      metadata: { official: true }
+    },
+    {
+      sourceType: "festival", sourceKey: "htb-kyushu-fireworks:2026", title: "ハウステンボス 九州一 大花火まつり",
+      startDate: "2026-11-14", endDate: "2026-11-14", startTime: "18:45", endTime: "20:30",
+      category: "fireworks", impactLevel: "major", flowDirection: "outbound", impactStartTime: "10:00", impactEndTime: "23:59",
+      venue: "ハウステンボス", prefecture: "長崎県", locality: "佐世保市", audiencePrefecture: "福岡県",
+      sourceUrl: "https://www.huistenbosch.co.jp/event/fireworks/kyushu_autumn/", note: "福岡県から佐世保方面への日帰り・宿泊移動",
+      metadata: { official: true, fireworks: 22000 }
+    },
+    {
+      sourceType: "festival", sourceKey: "saga-balloon-fiesta:2026", title: "佐賀インターナショナルバルーンフェスタ",
+      startDate: "2026-10-30", endDate: "2026-11-03", startTime: null, endTime: null,
+      category: "festival", impactLevel: "major", flowDirection: "outbound", impactStartTime: "04:00", impactEndTime: "20:00",
+      venue: "佐賀市嘉瀬川河川敷", prefecture: "佐賀県", locality: "佐賀市", audiencePrefecture: "福岡県",
+      sourceUrl: "https://www.city.saga.lg.jp/kanko/event/4346.html", note: "福岡県から佐賀方面への早朝出発・日帰り移動",
+      metadata: { official: true }
+    }
+  ];
+  for (const event of events) await upsertEvent(event);
+  return events.length;
+}
+
+export async function syncFukuokaLargeMiceEvents() {
+  const definitions = [
+    ["2026-02-16", "2026-02-18", "ビューティーワールド ジャパン 福岡", 11000, "マリンメッセ福岡A館"],
+    ["2026-03-20", "2026-03-22", "第90回日本循環器学会学術集会", 15000, "福岡国際会議場・マリンメッセ福岡A館/B館・福岡サンパレス"],
+    ["2026-03-22", "2026-03-26", "Fukuoka Flower Show 2026", 38000, "福岡市植物園"],
+    ["2026-05-20", "2026-05-22", "第36回西日本食品産業創造展'26", 23000, "マリンメッセ福岡A館・B館"],
+    ["2026-06-05", "2026-06-06", "2026九州印刷情報産業展", 10000, "福岡国際センター"],
+    ["2026-06-11", "2026-06-12", "福岡ギフト・ショー2026 / 福岡プレミアム・インセンティブショー2026", 10000, "マリンメッセ福岡B館"],
+    ["2026-06-24", "2026-06-25", "九州・東アジア 国際物流総合展 INNOVATION EXPO 2026", 10000, "マリンメッセ福岡A館・B館"]
+  ] as const;
+  for (const [startDate, endDate, title, attendees, venue] of definitions) {
+    await upsertEvent({
+      sourceType: "convention",
+      sourceKey: `fukuoka-mice:${startDate}:${stableSourceSuffix(title)}`,
+      title,
+      startDate,
+      endDate,
+      startTime: null,
+      endTime: null,
+      category: "convention",
+      impactLevel: "major",
+      flowDirection: "inbound",
+      impactStartTime: "08:00",
+      impactEndTime: "21:00",
+      venue,
+      prefecture: "福岡県",
+      locality: "福岡市",
+      audiencePrefecture: "福岡県",
+      sourceUrl: fukuokaConventionCalendarUrl,
+      note: `公表参加予定 ${attendees.toLocaleString("ja-JP")}人`,
+      metadata: { official: true, expectedAttendees: attendees, threshold: 10000 }
+    });
+  }
+  return definitions.length;
+}
+
+const largeCruisePassengerCapacity: Record<string, number> = {
+  MSCBELLISSIMA: 5655,
+  SPECTRUMOFTHESEAS: 4905,
+  COSTASERENA: 3780
+};
+
+export function parseHakataLargeCruiseCalls(html: string, referenceDate = new Date()) {
+  const events: CalendarEventInput[] = [];
+  const pageYear = Number(/(20\d{2})年（令和\d+年）クルーズ客船寄港予定/.exec(stripHtml(html))?.[1]) || referenceDate.getUTCFullYear();
+  for (const row of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const cells = Array.from(row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)).map((match) => stripHtml(match[1]));
+    if (cells.length < 3) continue;
+    const arrival = /(\d{1,2})月(\d{1,2})日[^\d]*(\d{1,2})時(\d{2})分/.exec(cells[0]);
+    if (!arrival) continue;
+    const canonicalShipName = cells[2].replace(/\s+/g, "").toUpperCase();
+    const passengerCapacity = largeCruisePassengerCapacity[canonicalShipName];
+    if (!passengerCapacity) continue;
+    const shipName = canonicalShipName === "SPECTRUMOFTHESEAS" ? "SPECTRUM OF THE SEAS" : cells[2].replace(/\s+/g, " ");
+    const departure = /(\d{1,2})時(\d{2})分/.exec(cells[1]);
+    const date = `${pageYear}-${String(Number(arrival[1])).padStart(2, "0")}-${String(Number(arrival[2])).padStart(2, "0")}`;
+    const startTime = `${String(Number(arrival[3])).padStart(2, "0")}:${arrival[4]}`;
+    const endTime = departure ? `${String(Number(departure[1])).padStart(2, "0")}:${departure[2]}` : null;
+    events.push({
+      sourceType: "cruise",
+      sourceKey: `hakata-cruise:${date}:${canonicalShipName}`,
+      title: `${shipName} 博多港寄港`,
+      startDate: date,
+      endDate: date,
+      startTime,
+      endTime,
+      category: "cruise",
+      impactLevel: "major",
+      flowDirection: "inbound",
+      impactStartTime: startTime,
+      impactEndTime: endTime ?? "22:00",
+      venue: "博多港",
+      prefecture: "福岡県",
+      locality: "福岡市",
+      audiencePrefecture: "福岡県",
+      sourceUrl: cruiseScheduleUrl,
+      note: `大型客船・最大乗客数目安 ${passengerCapacity.toLocaleString("ja-JP")}人`,
+      metadata: { official: true, passengerCapacity, berth: cells[3] ?? "", origin: cells[6] ?? "" }
+    });
+  }
+  return events;
+}
+
+export async function syncHakataLargeCruiseCalls(referenceDate = new Date()) {
+  const response = await fetch(cruiseScheduleUrl, { headers: { "User-Agent": "Foundr1-OS/1.0" } });
+  if (!response.ok) throw new Error(`Hakata cruise schedule returned ${response.status}`);
+  const events = parseHakataLargeCruiseCalls(await response.text(), referenceDate);
+  for (const event of events) await upsertEvent(event);
+  if (events.length) {
+    const sourceKeys = events.map((event) => event.sourceKey);
+    await sql`
+      update business_calendar_events
+      set is_active = false, updated_at = now()
+      where source_type = 'cruise'
+        and source_key like 'hakata-cruise:%'
+        and start_date >= current_date
+        and not (source_key = any(${sourceKeys}))
+    `;
+  }
+  return events.length;
+}
+
 export async function syncBusinessCalendarSources(referenceDate = new Date()) {
-  const [holidayResult, hawksResult, localResult, payPayConcertResult, marineConcertResult] = await Promise.allSettled([
+  const [holidayResult, longBreakResult, hawksResult, localResult, mobilityResult, miceResult, cruiseResult, payPayConcertResult, marineConcertResult] = await Promise.allSettled([
     syncJapaneseHolidays(),
+    syncJapaneseLongBreaks(referenceDate),
     syncHawksHomeGames(referenceDate),
     syncFukuokaMajorEvents(referenceDate),
+    syncKyushuMobilityEvents(referenceDate),
+    syncFukuokaLargeMiceEvents(),
+    syncHakataLargeCruiseCalls(referenceDate),
     syncPayPayDomeConcerts(referenceDate),
     syncMarineMesseConcerts(referenceDate)
   ]);
   return {
     holidays: holidayResult.status === "fulfilled" ? holidayResult.value : 0,
+    longBreaks: longBreakResult.status === "fulfilled" ? longBreakResult.value : 0,
     hawksGames: hawksResult.status === "fulfilled" ? hawksResult.value : 0,
     localEvents: localResult.status === "fulfilled" ? localResult.value : 0,
+    mobilityEvents: mobilityResult.status === "fulfilled" ? mobilityResult.value : 0,
+    largeMiceEvents: miceResult.status === "fulfilled" ? miceResult.value : 0,
+    largeCruiseCalls: cruiseResult.status === "fulfilled" ? cruiseResult.value : 0,
     payPayDomeConcerts: payPayConcertResult.status === "fulfilled" ? payPayConcertResult.value : 0,
     marineMesseConcerts: marineConcertResult.status === "fulfilled" ? marineConcertResult.value : 0,
-    errors: [holidayResult, hawksResult, localResult, payPayConcertResult, marineConcertResult]
+    errors: [holidayResult, longBreakResult, hawksResult, localResult, mobilityResult, miceResult, cruiseResult, payPayConcertResult, marineConcertResult]
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
       .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason))
   };
@@ -443,6 +739,9 @@ export async function getBusinessCalendarEvents(input: {
       to_char(end_time, 'HH24:MI') as "endTime",
       category,
       impact_level as "impactLevel",
+      flow_direction as "flowDirection",
+      to_char(impact_start_time, 'HH24:MI') as "impactStartTime",
+      to_char(impact_end_time, 'HH24:MI') as "impactEndTime",
       venue,
       source_url as "sourceUrl",
       note
@@ -453,9 +752,15 @@ export async function getBusinessCalendarEvents(input: {
       and (
         store_id::text = ${input.storeId}
         or (
-          store_id is null
-          and (prefecture = '' or ${prefecture} = prefecture)
-          and (locality = '' or position(locality in ${locationText}) > 0 or (${locationText} = '' and ${prefecture} = prefecture))
+        store_id is null
+          and (
+            audience_prefecture = ${prefecture}
+            or (
+              audience_prefecture = ''
+              and (prefecture = '' or ${prefecture} = prefecture)
+              and (locality = '' or position(locality in ${locationText}) > 0 or (${locationText} = '' and ${prefecture} = prefecture))
+            )
+          )
         )
       )
     order by start_date, case impact_level when 'major' then 1 when 'busy' then 2 else 3 end, start_time nulls first, title

@@ -25,7 +25,7 @@ type StoreOption = {
 type BusinessCalendarEvent = {
   id: string;
   storeId: string | null;
-  sourceType: "holiday" | "sports" | "festival" | "concert" | "manual";
+  sourceType: "holiday" | "sports" | "festival" | "concert" | "convention" | "cruise" | "manual";
   title: string;
   startDate: string;
   endDate: string;
@@ -33,6 +33,9 @@ type BusinessCalendarEvent = {
   endTime: string | null;
   category: string;
   impactLevel: "reference" | "busy" | "major";
+  flowDirection: "inbound" | "outbound" | "mixed";
+  impactStartTime: string | null;
+  impactEndTime: string | null;
   venue: string;
   sourceUrl: string;
   note: string;
@@ -226,6 +229,9 @@ type CalendarEventDraft = {
   endTime: string;
   category: string;
   impactLevel: "reference" | "busy" | "major";
+  flowDirection: "inbound" | "outbound" | "mixed";
+  impactStartTime: string;
+  impactEndTime: string;
   venue: string;
   note: string;
 };
@@ -235,16 +241,28 @@ function getCalendarEventShortLabel(event: BusinessCalendarEvent) {
   if (event.sourceType === "sports") return "鷹";
   if (event.sourceType === "festival") return "祭";
   if (event.sourceType === "concert") return "演";
+  if (event.sourceType === "convention") return "展";
+  if (event.sourceType === "cruise") return "船";
   return "予";
 }
 
 function getCalendarEventCategoryLabel(event: BusinessCalendarEvent) {
   if (event.sourceType === "holiday") return "祝日";
   if (event.sourceType === "concert" || event.category === "concert") return "コンサート";
+  if (event.sourceType === "convention" || event.category === "convention") return "大型MICE";
+  if (event.sourceType === "cruise" || event.category === "cruise") return "大型客船";
+  if (event.category === "long_break") return "大型連休";
+  if (event.category === "fireworks") return "花火大会";
   if (event.category === "sports") return "試合";
   if (event.category === "festival") return "祭事";
   if (event.category === "traffic") return "交通";
   return "店舗予定";
+}
+
+function getCalendarFlowLabel(direction: BusinessCalendarEvent["flowDirection"]) {
+  if (direction === "inbound") return "流入";
+  if (direction === "outbound") return "流出";
+  return "混合";
 }
 
 function getCalendarImpactLabel(impact: BusinessCalendarEvent["impactLevel"]) {
@@ -1439,6 +1457,9 @@ export function TimecardPage({
     endTime: "",
     category: "local_event",
     impactLevel: "busy",
+    flowDirection: "mixed",
+    impactStartTime: "",
+    impactEndTime: "",
     venue: "",
     note: ""
   });
@@ -2464,7 +2485,7 @@ export function TimecardPage({
     const body = await response.json().catch(() => ({})) as { error?: string };
     if (response.ok) {
       setCalendarMessage("店舗予定を追加しました。");
-      setCalendarDraft((current) => ({ ...current, title: "", startTime: "", endTime: "", venue: "", note: "" }));
+      setCalendarDraft((current) => ({ ...current, title: "", startTime: "", endTime: "", impactStartTime: "", impactEndTime: "", venue: "", note: "" }));
       await loadTimecard(month, selectedStoreId, { keepShiftDraft: true, keepActualDraft: true });
     } else {
       setCalendarMessage(body.error ?? "店舗予定を追加できませんでした。");
@@ -2495,10 +2516,10 @@ export function TimecardPage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "sync" })
     });
-    const body = await response.json().catch(() => ({})) as { error?: string; result?: { holidays?: number; hawksGames?: number; localEvents?: number; errors?: string[] } };
+    const body = await response.json().catch(() => ({})) as { error?: string; result?: { holidays?: number; longBreaks?: number; hawksGames?: number; localEvents?: number; mobilityEvents?: number; largeMiceEvents?: number; largeCruiseCalls?: number; payPayDomeConcerts?: number; marineMesseConcerts?: number; errors?: string[] } };
     if (response.ok) {
       const result = body.result;
-      setCalendarMessage(`同期完了：祝日 ${result?.holidays ?? 0}件 / ホークス ${result?.hawksGames ?? 0}件 / 地域行事 ${result?.localEvents ?? 0}件${result?.errors?.length ? `（一部失敗 ${result.errors.length}件）` : ""}`);
+      setCalendarMessage(`同期完了：祝日 ${result?.holidays ?? 0} / 連休 ${result?.longBreaks ?? 0} / ホークス ${result?.hawksGames ?? 0} / 地域・移動 ${Number(result?.localEvents ?? 0) + Number(result?.mobilityEvents ?? 0)} / 大型MICE ${result?.largeMiceEvents ?? 0} / 大型客船 ${result?.largeCruiseCalls ?? 0} / コンサート ${Number(result?.payPayDomeConcerts ?? 0) + Number(result?.marineMesseConcerts ?? 0)}件${result?.errors?.length ? `（一部失敗 ${result.errors.length}件）` : ""}`);
       await loadTimecard(month, selectedStoreId, { keepShiftDraft: true, keepActualDraft: true });
     } else {
       setCalendarMessage(body.error ?? "公式情報を同期できませんでした。");
@@ -2732,12 +2753,32 @@ export function TimecardPage({
                         <input type="time" value={calendarDraft.startTime} onChange={(event) => setCalendarDraft({ ...calendarDraft, startTime: event.target.value })} />
                       </label>
                       <label>
+                        <span>終了時刻</span>
+                        <input type="time" value={calendarDraft.endTime} onChange={(event) => setCalendarDraft({ ...calendarDraft, endTime: event.target.value })} />
+                      </label>
+                      <label>
                         <span>影響</span>
                         <select value={calendarDraft.impactLevel} onChange={(event) => setCalendarDraft({ ...calendarDraft, impactLevel: event.target.value as CalendarEventDraft["impactLevel"] })}>
                           <option value="reference">参考</option>
                           <option value="busy">混雑見込</option>
                           <option value="major">重大影響</option>
                         </select>
+                      </label>
+                      <label>
+                        <span>人流方向</span>
+                        <select value={calendarDraft.flowDirection} onChange={(event) => setCalendarDraft({ ...calendarDraft, flowDirection: event.target.value as CalendarEventDraft["flowDirection"] })}>
+                          <option value="inbound">流入</option>
+                          <option value="outbound">流出</option>
+                          <option value="mixed">混合</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>影響開始</span>
+                        <input type="time" value={calendarDraft.impactStartTime} onChange={(event) => setCalendarDraft({ ...calendarDraft, impactStartTime: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>影響終了</span>
+                        <input type="time" value={calendarDraft.impactEndTime} onChange={(event) => setCalendarDraft({ ...calendarDraft, impactEndTime: event.target.value })} />
                       </label>
                       <label>
                         <span>種類</span>
@@ -2766,7 +2807,7 @@ export function TimecardPage({
                           <div key={event.id}>
                             <span className={`calendar-impact-dot is-${event.impactLevel}`} aria-hidden="true" />
                             <strong>{event.title}</strong>
-                            <span>{event.startDate}{event.endDate !== event.startDate ? `–${event.endDate}` : ""}{event.startTime ? ` ${event.startTime}` : ""}</span>
+                            <span>{event.startDate}{event.endDate !== event.startDate ? `–${event.endDate}` : ""} / {getCalendarFlowLabel(event.flowDirection)} / {event.impactStartTime ?? "00:00"}–{event.impactEndTime ?? "23:59"}</span>
                             <button type="button" disabled={isSavingCalendar} aria-label={`${event.title}を削除`} onClick={() => void deleteCalendarEvent(event.id)}><Trash2 size={14} /></button>
                           </div>
                         ))}
@@ -2795,7 +2836,12 @@ export function TimecardPage({
                           <span>{getCalendarEventCategoryLabel(event)}</span>
                           <div>
                             <strong>{event.title}</strong>
-                            <small>{[event.startTime, event.venue, getCalendarImpactLabel(event.impactLevel), event.note].filter(Boolean).join(" / ")}</small>
+                            <small>{[
+                              `${getCalendarFlowLabel(event.flowDirection)} ${event.impactStartTime ?? "00:00"}–${event.impactEndTime ?? "23:59"}`,
+                              event.venue,
+                              getCalendarImpactLabel(event.impactLevel),
+                              event.note
+                            ].filter(Boolean).join(" / ")}</small>
                           </div>
                           {event.sourceUrl ? <a href={event.sourceUrl} target="_blank" rel="noreferrer">公式</a> : null}
                         </article>
@@ -2953,7 +2999,7 @@ export function TimecardPage({
                                 >
                                   <span className="shift-weather-summary">
                                     <WeatherCodeIcon code={weatherForecast.weatherCode} size={16} />
-                                    <span>{formatForecastNumber(weatherForecast.temperatureMax)}/{formatForecastNumber(weatherForecast.temperatureMin)}°</span>
+                                    <span className="shift-weather-temperature">{formatForecastNumber(weatherForecast.temperatureMax)}/{formatForecastNumber(weatherForecast.temperatureMin)}°</span>
                                   </span>
                                   <span className="shift-weather-rain-chart" aria-hidden="true">
                                     <span className="shift-weather-rain-track">

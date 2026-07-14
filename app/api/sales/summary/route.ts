@@ -1,4 +1,5 @@
 import { getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
+import { getBusinessCalendarEvents, type BusinessCalendarEvent } from "../../../../lib/business-calendar";
 import { sql } from "../../../../lib/db";
 import {
   getJstMonthLabel,
@@ -112,6 +113,24 @@ type WeatherDay = {
   temperatureMean: number | null;
   precipitation: number | null;
 };
+
+type SalesOrderFact = {
+  date: string;
+  minuteOfDay: number;
+  sales: number;
+};
+
+function timeTextToMinutes(value: string | null, fallback: number) {
+  if (!value) return fallback;
+  const [hours, minutes] = value.split(":").map(Number);
+  return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : fallback;
+}
+
+function isWithinMinuteWindow(minuteOfDay: number, startMinute: number, endMinute: number) {
+  return startMinute <= endMinute
+    ? minuteOfDay >= startMinute && minuteOfDay <= endMinute
+    : minuteOfDay >= startMinute || minuteOfDay <= endMinute;
+}
 
 type WorkloadOrder = {
   orderedAtMs: number;
@@ -322,7 +341,9 @@ export async function GET(request: Request) {
     select
       coalesce(weather_location_name, name, '') as "weatherLocationName",
       coalesce(attendance_latitude, weather_latitude)::float as "weatherLatitude",
-      coalesce(attendance_longitude, weather_longitude)::float as "weatherLongitude"
+      coalesce(attendance_longitude, weather_longitude)::float as "weatherLongitude",
+      coalesce(address, '') as "address",
+      coalesce(social_insurance_prefecture, '') as "socialInsurancePrefecture"
     from stores
     where id::text = ${selectedStoreId}
     limit 1
@@ -335,6 +356,8 @@ export async function GET(request: Request) {
   const weatherLongitude = Number.isFinite(Number(storeWeather.weatherLongitude))
     ? Number(storeWeather.weatherLongitude)
     : defaultWeatherLocation.longitude;
+  const storeLocationText = `${String(storeWeather.address ?? "")} ${weatherLocationName}`.trim();
+  const storePrefecture = String(storeWeather.socialInsurancePrefecture ?? "");
 
   const orders = selectedStoreId ? await sql`
     select
@@ -502,6 +525,19 @@ export async function GET(request: Request) {
   const weatherByDate = selectedStoreId
     ? await getHistoricalWeather(weatherLatitude, weatherLongitude, startDate, endDate)
     : new Map<string, WeatherDay>();
+  const calendarEvents = selectedStoreId
+    ? await getBusinessCalendarEvents({
+      storeId: selectedStoreId,
+      startDate,
+      endDate: addDays(endDate, 1),
+      storeLocationText,
+      storePrefecture
+    })
+    : [];
+  const calendarEventsByDate = new Map<string, BusinessCalendarEvent[]>();
+  for (const date of getDatesBetween(startDate, endDate)) {
+    calendarEventsByDate.set(date, calendarEvents.filter((event) => event.startDate <= date && event.endDate >= date));
+  }
 
   for (const date of getDatesBetween(startDate, endDate)) {
     dayMap.set(date, {
@@ -636,7 +672,8 @@ export async function GET(request: Request) {
       weatherCode: weather.weatherCode,
       weatherLabel: weather.weatherLabel,
       temperatureMean: weather.temperatureMean,
-      precipitation: weather.precipitation
+      precipitation: weather.precipitation,
+      calendarEvents: calendarEventsByDate.get(day.date) ?? []
     };
   });
   const activeRawDaily = rawDaily.filter((day) => day.workMinutes > 0 && day.orderCount > 0);
@@ -661,6 +698,74 @@ export async function GET(request: Request) {
       peakLoadLevel: day.orderCount > 0 ? salesAnalysisLevel.loadLevel : "veryIdle",
       peakLoadLevelLabel: day.orderCount > 0 ? salesAnalysisLevel.loadLevelLabel : "かなり空き",
       peakLoadLevelScore: day.orderCount > 0 ? salesAnalysisLevel.loadLevelScore : salesAnalysisSettings.scoreVeryIdle
+    };
+  });
+  const minuteFormatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+  const orderFacts = orders.map((order) => {
+    const orderedAt = new Date(String(order.orderedAt));
+    const [hourText, minuteText] = minuteFormatter.format(orderedAt).split(":");
+    return {
+      date: formatter.format(orderedAt),
+      minuteOfDay: Number(hourText) * 60 + Number(minuteText),
+      sales: Number(order.total ?? 0)
+    } satisfies SalesOrderFact;
+  });
+  const activeDayByDate = new Map(daily.map((day) => [day.date, day]));
+  const majorEventDates = new Set(Array.from(calendarEventsByDate.entries())
+    .filter(([, events]) => events.some((event) => event.impactLevel === "major"))
+    .map(([date]) => date));
+  const eventImpacts = calendarEvents.map((event) => {
+    const impactStartTime = event.impactStartTime ?? event.startTime ?? "00:00";
+    const impactEndTime = event.impactEndTime ?? event.endTime ?? "23:59";
+    const startMinute = timeTextToMinutes(impactStartTime, 0);
+    const endMinute = timeTextToMinutes(impactEndTime, 23 * 60 + 59);
+    const eventDates = getDatesBetween(
+      event.startDate < startDate ? startDate : event.startDate,
+      event.endDate > endDate ? endDate : event.endDate
+    );
+    let actualSales = 0;
+    let actualOrderCount = 0;
+    let baselineSales = 0;
+    let baselineOrderCount = 0;
+    let comparisonDayCount = 0;
+    for (const eventDate of eventDates) {
+      const eventOrders = orderFacts.filter((order) => order.date === eventDate && isWithinMinuteWindow(order.minuteOfDay, startMinute, endMinute));
+      actualSales += eventOrders.reduce((sum, order) => sum + order.sales, 0);
+      actualOrderCount += eventOrders.length;
+      const weekday = new Date(`${eventDate}T12:00:00+09:00`).getDay();
+      const comparisonDates = getDatesBetween(startDate, endDate).filter((date) => (
+        !eventDates.includes(date)
+        && !majorEventDates.has(date)
+        && new Date(`${date}T12:00:00+09:00`).getDay() === weekday
+        && Boolean(activeDayByDate.get(date)?.workloadAvailable)
+      ));
+      if (!comparisonDates.length) continue;
+      comparisonDayCount += comparisonDates.length;
+      const comparisonMetrics = comparisonDates.map((date) => {
+        const matchedOrders = orderFacts.filter((order) => order.date === date && isWithinMinuteWindow(order.minuteOfDay, startMinute, endMinute));
+        return { sales: matchedOrders.reduce((sum, order) => sum + order.sales, 0), orderCount: matchedOrders.length };
+      });
+      baselineSales += comparisonMetrics.reduce((sum, item) => sum + item.sales, 0) / comparisonMetrics.length;
+      baselineOrderCount += comparisonMetrics.reduce((sum, item) => sum + item.orderCount, 0) / comparisonMetrics.length;
+    }
+    const deltaPercent = baselineSales > 0 ? Math.round(((actualSales - baselineSales) / baselineSales) * 1000) / 10 : null;
+    return {
+      ...event,
+      impactStartTime,
+      impactEndTime,
+      impactedDayCount: eventDates.length,
+      actualSales,
+      actualOrderCount,
+      baselineSales: Math.round(baselineSales),
+      baselineOrderCount: Math.round(baselineOrderCount * 10) / 10,
+      deltaPercent,
+      comparisonDayCount,
+      observedDirection: deltaPercent === null || Math.abs(deltaPercent) < 10 ? "neutral" : deltaPercent > 0 ? "positive" : "negative"
     };
   });
   for (const day of daily) {
@@ -779,6 +884,7 @@ export async function GET(request: Request) {
     weekdays,
     hourly,
     timeBands,
+    eventImpacts,
     busiestDays,
     quietestDays,
     busiestWeekdays,

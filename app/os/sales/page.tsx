@@ -20,6 +20,33 @@ import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 
 type StoreOption = { id: string; name: string };
+type SalesCalendarEvent = {
+  id: string;
+  sourceType: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  startTime: string | null;
+  endTime: string | null;
+  category: string;
+  impactLevel: "reference" | "busy" | "major";
+  flowDirection: "inbound" | "outbound" | "mixed";
+  impactStartTime: string | null;
+  impactEndTime: string | null;
+  venue: string;
+  sourceUrl: string;
+  note: string;
+};
+type SalesEventImpact = SalesCalendarEvent & {
+  impactedDayCount: number;
+  actualSales: number;
+  actualOrderCount: number;
+  baselineSales: number;
+  baselineOrderCount: number;
+  deltaPercent: number | null;
+  comparisonDayCount: number;
+  observedDirection: "positive" | "negative" | "neutral";
+};
 type SalesDay = {
   date: string;
   orderCount: number;
@@ -47,6 +74,7 @@ type SalesDay = {
   weatherLabel: string;
   temperatureMean: number | null;
   precipitation: number | null;
+  calendarEvents: SalesCalendarEvent[];
 };
 type SalesHour = { hour: number; orderCount: number; sales: number };
 type SalesTimeBand = {
@@ -143,6 +171,7 @@ type SalesSummary = {
   weekdays: SalesWeekday[];
   hourly: SalesHour[];
   timeBands: SalesTimeBand[];
+  eventImpacts: SalesEventImpact[];
   busiestDays: SalesDay[];
   quietestDays: SalesDay[];
   busiestWeekdays: SalesWeekday[];
@@ -274,6 +303,18 @@ function getDensityLevelClass(loadLevel: string) {
   return "is-quiet";
 }
 
+function getFlowDirectionLabel(direction: SalesCalendarEvent["flowDirection"]) {
+  if (direction === "inbound") return "流入";
+  if (direction === "outbound") return "流出";
+  return "混合";
+}
+
+function getObservedDirectionLabel(direction: SalesEventImpact["observedDirection"]) {
+  if (direction === "positive") return "実績増";
+  if (direction === "negative") return "実績減";
+  return "差は小さい";
+}
+
 const defaultSalesAnalysisSettings: SalesAnalysisSettings = {
   veryIdleRateMax: 0.6,
   normalRateMax: 1.1,
@@ -334,7 +375,8 @@ function getCalendarDays(startDate: string, endDate: string, days: SalesDay[]) {
       weatherCode: null,
       weatherLabel: "",
       temperatureMean: null,
-      precipitation: null
+      precipitation: null,
+      calendarEvents: []
     });
     if (cells.length > 410) break;
   }
@@ -452,6 +494,19 @@ function buildSalesAnalysisFacts(summary: SalesSummary, storeName: string) {
         salesPerHour: averageSalesPerHour(dryTrackedDays)
       } : null
     },
+    externalFactors: summary.eventImpacts.map((event) => ({
+      title: event.title,
+      period: `${event.startDate}${event.endDate === event.startDate ? "" : `–${event.endDate}`}`,
+      impactWindow: `${event.impactStartTime ?? "00:00"}–${event.impactEndTime ?? "23:59"}`,
+      flowDirection: event.flowDirection,
+      actualSales: event.actualSales,
+      actualOrderCount: event.actualOrderCount,
+      baselineSales: event.baselineSales,
+      baselineOrderCount: event.baselineOrderCount,
+      deltaPercent: event.deltaPercent,
+      comparisonDayCount: event.comparisonDayCount,
+      note: event.note
+    })),
     imports: summary.imports.map((item) => ({
       sourcePlatform: item.sourcePlatform,
       brandName: item.brandName,
@@ -1242,6 +1297,14 @@ export default function SalesPage() {
                       <span><em>店内・予約</em><b>{formatMoney(day.inStoreSales)}</b></span>
                       <span><em>デリバリー入金目安</em><b>{formatMoney(day.deliveryEstimatedDeposit)}</b></span>
                     </div>
+                    {day.calendarEvents.length ? (
+                      <div className="sales-calendar-events" title={day.calendarEvents.map((event) => event.title).join(" / ")}>
+                        {day.calendarEvents.slice(0, 2).map((event) => (
+                          <span className={`is-${event.flowDirection}`} key={event.id}>{getFlowDirectionLabel(event.flowDirection)}・{event.title}</span>
+                        ))}
+                        {day.calendarEvents.length > 2 ? <small>ほか{day.calendarEvents.length - 2}件</small> : null}
+                      </div>
+                    ) : null}
                     {day.workloadAvailable ? (
                       <small>{day.loadLevelLabel} / 注文 平均比 {formatRate(day.orderRate)}倍</small>
                     ) : day.orderCount > 0 ? (
@@ -1254,6 +1317,34 @@ export default function SalesPage() {
               })}
             </div>
             <p className="sales-calendar-note">天気: {summary?.weatherLocation.name ?? "店舗所在地"} の参考値</p>
+          </article>
+          <article className="panel sales-event-impact-panel">
+            <div className="panel-title">
+              <CalendarDays size={18} />
+              <div>
+                <h3>外部要因の時間帯別影響</h3>
+                <p>同じ曜日・同じ時間帯の非重大イベント日を基準に比較します。流入・流出は想定される人流方向、実績増減は売上データの観測結果です。</p>
+              </div>
+            </div>
+            <div className="sales-event-impact-list">
+              {(summary?.eventImpacts ?? []).map((event) => (
+                <article className={`is-${event.observedDirection}`} key={event.id}>
+                  <div className="sales-event-impact-title">
+                    <span className={`is-${event.flowDirection}`}>{getFlowDirectionLabel(event.flowDirection)}</span>
+                    <div>
+                      <strong>{event.title}</strong>
+                      <small>{event.startDate}{event.endDate === event.startDate ? "" : `–${event.endDate}`} / {event.impactStartTime ?? "00:00"}–{event.impactEndTime ?? "23:59"} / {event.venue}</small>
+                    </div>
+                  </div>
+                  <div className="sales-event-impact-metrics">
+                    <span><small>影響時間内実績</small><strong>{formatMoney(event.actualSales)}</strong><em>{event.actualOrderCount}件</em></span>
+                    <span><small>同曜日基準</small><strong>{event.comparisonDayCount ? formatMoney(event.baselineSales) : "比較不足"}</strong><em>{event.comparisonDayCount ? `${event.baselineOrderCount}件相当` : "基準日なし"}</em></span>
+                    <span><small>{getObservedDirectionLabel(event.observedDirection)}</small><strong>{event.deltaPercent === null ? "–" : `${event.deltaPercent > 0 ? "+" : ""}${event.deltaPercent}%`}</strong><em>比較日 {event.comparisonDayCount}日</em></span>
+                  </div>
+                </article>
+              ))}
+              {summary && summary.eventImpacts.length === 0 ? <div className="empty-state">選択期間に対象イベントはありません</div> : null}
+            </div>
           </article>
         </section>
 
