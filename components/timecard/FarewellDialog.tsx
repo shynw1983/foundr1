@@ -45,7 +45,9 @@ export function FarewellDialog({ farewell, onClose }: { farewell: TimecardFarewe
         <p className="timecard-farewell-message">
           これまで{farewell.storeName}を支えていただき、<br />本当にありがとうございました。
         </p>
-        <p className="timecard-farewell-note">これからの新しい一歩を、心より応援しています。</p>
+        <p className="timecard-farewell-note">
+          これからの新しい一歩を、<br />心より応援しています。
+        </p>
         <div className="timecard-farewell-signature" aria-label="会社・店舗署名">
           {farewell.companyName ? <span>{farewell.companyName}</span> : null}
           <strong>{farewell.storeName}一同</strong>
