@@ -19502,6 +19502,32 @@ body :where(
   line-height: 1.15;
 }
 
+.shift-grid thead th.shift-date-head {
+  top: 0;
+  height: 38px;
+  padding: 3px 2px;
+}
+
+.shift-grid thead th.shift-weather-head {
+  top: 38px;
+  height: 36px;
+  padding: 2px 1px;
+  background: #f8fafb;
+}
+
+.shift-grid thead th.shift-event-head {
+  top: 74px;
+  height: 22px;
+  padding: 3px 1px;
+  background: #f7faf8;
+}
+
+.shift-grid thead .shift-employee-head,
+.shift-grid thead .shift-cost-head {
+  top: 0;
+  height: 96px;
+}
+
 .shift-grid thead th span,
 .shift-grid thead th small {
   display: block;
@@ -19523,28 +19549,19 @@ body :where(
   white-space: nowrap;
 }
 
-.shift-grid thead th .shift-day-context-markers {
-  display: flex;
-  min-height: 14px;
-  margin-top: 2px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-}
-
-.shift-grid thead th .shift-day-context-markers .shift-calendar-marker {
-  display: inline-block;
-  margin: 0;
+.shift-grid thead th.shift-event-head .shift-calendar-marker {
+  margin: 0 auto;
 }
 
 .shift-grid thead th .shift-weather-marker {
   display: flex;
-  width: 58px;
-  height: 29px;
-  padding: 2px 4px 3px;
-  border: 1px solid #d8e3e7;
-  border-radius: 4px;
+  width: 100%;
+  max-width: 58px;
+  height: 31px;
+  margin: 0 auto;
+  padding: 2px 2px 3px;
+  border: 0;
+  border-radius: 3px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -19558,7 +19575,6 @@ body :where(
 }
 
 .shift-grid thead th .shift-weather-marker.is-rain-likely {
-  border-color: rgba(40, 112, 145, 0.32);
   background: #f2f8fb;
 }
 
@@ -19577,7 +19593,7 @@ body :where(
 .shift-grid thead th .shift-weather-marker .shift-weather-rain-chart {
   display: grid;
   width: 100%;
-  grid-template-columns: minmax(15px, 1fr) auto;
+  grid-template-columns: minmax(8px, 1fr) auto;
   align-items: center;
   gap: 3px;
 }
@@ -19602,6 +19618,12 @@ body :where(
   margin: 0;
   color: var(--blue);
   font-size: 7px;
+}
+
+.shift-grid thead th .shift-context-empty {
+  color: #c7cfd5;
+  font-size: 9px;
+  font-weight: 400;
 }
 
 .shift-grid thead th .shift-calendar-marker.is-busy {
@@ -19664,6 +19686,11 @@ body :where(
   background: #fff7f2;
 }
 
+.shift-grid thead th.shift-weather-head.is-weekend,
+.shift-grid thead th.shift-event-head.is-weekend {
+  background: #fff7f2;
+}
+
 .shift-grid .has-uncovered-shift,
 .shift-grid thead th.has-uncovered-shift {
   background: #fff7f6;
@@ -19676,6 +19703,10 @@ body :where(
 
 .shift-grid thead th.is-today {
   color: var(--green);
+  box-shadow: none;
+}
+
+.shift-grid thead th.shift-event-head.is-today {
   box-shadow: inset 0 -2px 0 rgba(33, 116, 91, 0.72);
 }
 

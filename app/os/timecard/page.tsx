@@ -2909,58 +2909,20 @@ export function TimecardPage({
                 <div className="shift-grid-wrap">
                   <table className="shift-grid">
                     <thead>
-                      <tr>
-                        <th className="shift-employee-head">従業員</th>
+                      <tr className="shift-date-head-row">
+                        <th className="shift-employee-head" rowSpan={3}>従業員</th>
                         {monthDays.map((day) => {
                           const coverage = coverageByDate.get(day.key);
-                          const calendarEvents = calendarEventsByDate.get(day.key) ?? [];
-                          const weatherForecast = weatherForecastByDate.get(day.key);
-                          const precipitationProbability = Math.max(0, Math.min(100, weatherForecast?.precipitationProbabilityMax ?? 0));
                           const isUncovered = coverage?.status === "uncovered";
                           const isToday = day.key === todayKey;
                           return (
                             <th
-                              className={`${day.isWeekend ? "is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}${isToday ? " is-today" : ""}`.trim()}
+                              className={`shift-date-head${day.isWeekend ? " is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}${isToday ? " is-today" : ""}`}
                               title={isUncovered ? `未シフト: ${coverage?.missingLabel}` : undefined}
                               key={day.key}
                             >
                               <span>{day.label}</span>
                               <small>{day.weekdayLabel}</small>
-                              {calendarEvents.length || weatherForecast ? (
-                                <span className="shift-day-context-markers">
-                                  {weatherForecast ? (
-                                    <button
-                                      className={`shift-weather-marker${precipitationProbability >= 40 ? " is-rain-likely" : ""}`}
-                                      type="button"
-                                      title={`${weatherForecast.label} / 最高${formatForecastNumber(weatherForecast.temperatureMax)}℃ 最低${formatForecastNumber(weatherForecast.temperatureMin)}℃ / 降水${formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%`}
-                                      aria-label={`${day.key}の天気予報を表示`}
-                                      onClick={() => setSelectedCalendarDate((current) => current === day.key ? "" : day.key)}
-                                    >
-                                      <span className="shift-weather-summary">
-                                        <WeatherCodeIcon code={weatherForecast.weatherCode} size={11} />
-                                        <span>{formatForecastNumber(weatherForecast.temperatureMax)}/{formatForecastNumber(weatherForecast.temperatureMin)}°</span>
-                                      </span>
-                                      <span className="shift-weather-rain-chart" aria-hidden="true">
-                                        <span className="shift-weather-rain-track">
-                                          <span style={{ width: `${precipitationProbability}%` }} />
-                                        </span>
-                                        <small>雨 {formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%</small>
-                                      </span>
-                                    </button>
-                                  ) : null}
-                                  {calendarEvents.length ? (
-                                    <button
-                                      className={`shift-calendar-marker is-${calendarEvents.some((event) => event.impactLevel === "major") ? "major" : calendarEvents.some((event) => event.impactLevel === "busy") ? "busy" : "reference"}`}
-                                      type="button"
-                                      title={calendarEvents.map((event) => `${event.title}${event.startTime ? ` ${event.startTime}` : ""}`).join(" / ")}
-                                      aria-label={`${day.key}の営業情報を表示`}
-                                      onClick={() => setSelectedCalendarDate((current) => current === day.key ? "" : day.key)}
-                                    >
-                                      {calendarEvents.slice(0, 2).map((event) => getCalendarEventShortLabel(event)).join("·")}{calendarEvents.length > 2 ? `+${calendarEvents.length - 2}` : ""}
-                                    </button>
-                                  ) : null}
-                                </span>
-                              ) : null}
                               {isUncovered || isToday ? (
                                 <span className="shift-day-badges">
                                   {isUncovered ? <span className="shift-day-badge is-uncovered">未</span> : null}
@@ -2970,7 +2932,57 @@ export function TimecardPage({
                             </th>
                           );
                         })}
-                        <th className="shift-cost-head">月計</th>
+                        <th className="shift-cost-head" rowSpan={3}>月計</th>
+                      </tr>
+                      <tr className="shift-weather-head-row">
+                        {monthDays.map((day) => {
+                          const weatherForecast = weatherForecastByDate.get(day.key);
+                          const precipitationProbability = Math.max(0, Math.min(100, weatherForecast?.precipitationProbabilityMax ?? 0));
+                          return (
+                            <th className={`shift-weather-head${day.isWeekend ? " is-weekend" : ""}${day.key === todayKey ? " is-today" : ""}`} key={day.key}>
+                              {weatherForecast ? (
+                                <button
+                                  className={`shift-weather-marker${precipitationProbability >= 40 ? " is-rain-likely" : ""}`}
+                                  type="button"
+                                  title={`${weatherForecast.label} / 最高${formatForecastNumber(weatherForecast.temperatureMax)}℃ 最低${formatForecastNumber(weatherForecast.temperatureMin)}℃ / 降水${formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%`}
+                                  aria-label={`${day.key}の天気予報を表示`}
+                                  onClick={() => setSelectedCalendarDate((current) => current === day.key ? "" : day.key)}
+                                >
+                                  <span className="shift-weather-summary">
+                                    <WeatherCodeIcon code={weatherForecast.weatherCode} size={11} />
+                                    <span>{formatForecastNumber(weatherForecast.temperatureMax)}/{formatForecastNumber(weatherForecast.temperatureMin)}°</span>
+                                  </span>
+                                  <span className="shift-weather-rain-chart" aria-hidden="true">
+                                    <span className="shift-weather-rain-track">
+                                      <span style={{ width: `${precipitationProbability}%` }} />
+                                    </span>
+                                    <small>雨 {formatForecastNumber(weatherForecast.precipitationProbabilityMax)}%</small>
+                                  </span>
+                                </button>
+                              ) : <span className="shift-context-empty">–</span>}
+                            </th>
+                          );
+                        })}
+                      </tr>
+                      <tr className="shift-event-head-row">
+                        {monthDays.map((day) => {
+                          const calendarEvents = calendarEventsByDate.get(day.key) ?? [];
+                          return (
+                            <th className={`shift-event-head${day.isWeekend ? " is-weekend" : ""}${day.key === todayKey ? " is-today" : ""}`} key={day.key}>
+                              {calendarEvents.length ? (
+                                <button
+                                  className={`shift-calendar-marker is-${calendarEvents.some((event) => event.impactLevel === "major") ? "major" : calendarEvents.some((event) => event.impactLevel === "busy") ? "busy" : "reference"}`}
+                                  type="button"
+                                  title={calendarEvents.map((event) => `${event.title}${event.startTime ? ` ${event.startTime}` : ""}`).join(" / ")}
+                                  aria-label={`${day.key}の営業情報を表示`}
+                                  onClick={() => setSelectedCalendarDate((current) => current === day.key ? "" : day.key)}
+                                >
+                                  {calendarEvents.slice(0, 2).map((event) => getCalendarEventShortLabel(event)).join("·")}{calendarEvents.length > 2 ? `+${calendarEvents.length - 2}` : ""}
+                                </button>
+                              ) : <span className="shift-context-empty">–</span>}
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody>
