@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 export type TimecardFarewell = {
   employeeName: string;
   storeName: string;
+  companyName: string;
 };
 
 export function FarewellDialog({ farewell, onClose }: { farewell: TimecardFarewell; onClose: () => void }) {
@@ -45,6 +46,10 @@ export function FarewellDialog({ farewell, onClose }: { farewell: TimecardFarewe
           これまで{farewell.storeName}を支えていただき、<br />本当にありがとうございました。
         </p>
         <p className="timecard-farewell-note">これからの新しい一歩を、心より応援しています。</p>
+        <div className="timecard-farewell-signature" aria-label="会社・店舗署名">
+          {farewell.companyName ? <span>{farewell.companyName}</span> : null}
+          <strong>{farewell.storeName}一同</strong>
+        </div>
         <button ref={closeButtonRef} className="primary-button timecard-farewell-close" type="button" onClick={onClose}>
           閉じる
         </button>

@@ -18144,10 +18144,28 @@ body :where(
 }
 
 .timecard-farewell-note {
-  margin: 10px 0 24px;
+  margin: 10px 0 0;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.7;
+}
+
+.timecard-farewell-signature {
+  display: grid;
+  gap: 2px;
+  margin: 18px 0 24px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.timecard-farewell-signature span,
+.timecard-farewell-signature strong {
+  font-weight: 500;
+}
+
+.timecard-farewell-signature strong {
+  color: var(--ink);
 }
 
 .timecard-farewell-close {

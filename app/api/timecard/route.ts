@@ -481,10 +481,12 @@ async function getFinalWorkdayFarewell(storeId: string, employeeId: string) {
   const rows = await sql`
     select
       employees.name as "employeeName",
-      stores.name as "storeName"
+      stores.name as "storeName",
+      coalesce(companies.legal_name, companies.name, '') as "companyName"
     from employee_work_stores
     join employees on employees.id = employee_work_stores.employee_id
     join stores on stores.id = employee_work_stores.store_id
+    left join companies on companies.id = stores.company_id
     left join timecard_store_settings on timecard_store_settings.store_id = stores.id
     where employee_work_stores.employee_id = ${employeeId}
       and employee_work_stores.store_id = ${storeId}
@@ -501,7 +503,8 @@ async function getFinalWorkdayFarewell(storeId: string, employeeId: string) {
   if (!row) return null;
   return {
     employeeName: String(row.employeeName),
-    storeName: String(row.storeName)
+    storeName: String(row.storeName),
+    companyName: String(row.companyName ?? "")
   };
 }
 
