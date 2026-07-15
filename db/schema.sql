@@ -692,8 +692,9 @@ alter table employee_work_store_payroll_history
   drop constraint if exists employee_work_store_payroll_history_employee_id_store_id_valid_from_key;
 alter table employee_work_store_payroll_history
   drop constraint if exists employee_work_store_payroll_h_employee_id_store_id_valid_fr_key;
-create unique index if not exists employee_work_store_payroll_history_effective_idx
-  on employee_work_store_payroll_history(employee_id, store_id, wage_valid_from, commute_valid_from);
+drop index if exists employee_work_store_payroll_history_effective_idx;
+create index if not exists employee_work_store_payroll_history_effective_revision_idx
+  on employee_work_store_payroll_history(employee_id, store_id, wage_valid_from, commute_valid_from, updated_at desc);
 
 create table if not exists employee_lifecycle_cases (
   id uuid primary key default gen_random_uuid(),

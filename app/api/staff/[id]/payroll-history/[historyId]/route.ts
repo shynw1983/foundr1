@@ -119,6 +119,8 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const targetRows = await sql`
     select
       employee_work_store_payroll_history.store_id::text as "storeId",
+      employee_work_store_payroll_history.wage_valid_from as "wageValidFrom",
+      employee_work_store_payroll_history.commute_valid_from as "commuteValidFrom",
       employees.role
     from employee_work_store_payroll_history
     join employees on employees.id = employee_work_store_payroll_history.employee_id
@@ -134,19 +136,30 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   if (!target || !canManageTargetRole(access, String(target.role ?? ""))) {
     return Response.json({ error: "給与変更履歴が見つかりません。" }, { status: 404 });
   }
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+  if (String(target.wageValidFrom ?? "").slice(0, 10) <= today && String(target.commuteValidFrom ?? "").slice(0, 10) <= today) {
+    return Response.json({ error: "適用済みの給与履歴は削除できません。訂正内容を新しい履歴として保存してください。" }, { status: 409 });
+  }
 
   await sql`
     delete from employee_work_store_payroll_history
-    where id = ${historyId}
-      and employee_id = ${id}
+    where employee_id = ${id}
+      and store_id = ${target.storeId}
+      and wage_valid_from = ${String(target.wageValidFrom ?? "").slice(0, 10)}
+      and commute_valid_from = ${String(target.commuteValidFrom ?? "").slice(0, 10)}
   `;
   await refreshCurrentWorkStore(id, String(target.storeId));
   await writeAuditLog({
     actorEmployeeId: session.id,
-    action: "staff.payroll_history.deleted",
+    action: "staff.payroll_history.future_change.cancelled",
     targetType: "employee",
     targetId: id,
-    metadata: { historyId, storeId: target.storeId },
+    metadata: { historyId, storeId: target.storeId, wageValidFrom: target.wageValidFrom, commuteValidFrom: target.commuteValidFrom },
     request
   });
 

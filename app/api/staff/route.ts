@@ -374,11 +374,14 @@ export async function GET() {
             'residentTaxJuneAmount', employee_work_store_payroll_history.resident_tax_june_amount,
             'residentTaxMonthlyAmount', employee_work_store_payroll_history.resident_tax_monthly_amount,
             'wageValidFrom', employee_work_store_payroll_history.wage_valid_from,
-            'commuteValidFrom', employee_work_store_payroll_history.commute_valid_from
+            'commuteValidFrom', employee_work_store_payroll_history.commute_valid_from,
+            'updatedAt', employee_work_store_payroll_history.updated_at,
+            'updatedByName', payroll_updater.name
           )
-          order by employee_work_store_payroll_history.valid_from desc, employee_work_store_payroll_history.created_at desc
+          order by employee_work_store_payroll_history.valid_from desc, employee_work_store_payroll_history.updated_at desc, employee_work_store_payroll_history.created_at desc
         ) as records
         from employee_work_store_payroll_history
+        left join employees payroll_updater on payroll_updater.id = employee_work_store_payroll_history.updated_by
         where employee_work_store_payroll_history.employee_id = employee_work_stores.employee_id
           and employee_work_store_payroll_history.store_id = employee_work_stores.store_id
       ) payroll_history on true
@@ -795,30 +798,6 @@ export async function POST(request: Request) {
         ${session.id},
         now()
       )
-      on conflict (employee_id, store_id, wage_valid_from, commute_valid_from) do update set
-        payroll_enabled = excluded.payroll_enabled,
-        employment_type = excluded.employment_type,
-        hourly_wage = excluded.hourly_wage,
-        monthly_salary = excluded.monthly_salary,
-        prescribed_monthly_work_minutes = excluded.prescribed_monthly_work_minutes,
-        commute_allowance_per_workday = excluded.commute_allowance_per_workday,
-        commute_allowance_monthly_cap = excluded.commute_allowance_monthly_cap,
-        apply_social_insurance = excluded.apply_social_insurance,
-        social_insurance_standard_monthly_amount = excluded.social_insurance_standard_monthly_amount,
-        social_insurance_deduction_from = excluded.social_insurance_deduction_from,
-        apply_employment_insurance = excluded.apply_employment_insurance,
-        employment_insurance_deduction_from = excluded.employment_insurance_deduction_from,
-        apply_labor_insurance = excluded.apply_labor_insurance,
-        apply_income_tax = excluded.apply_income_tax,
-        income_tax_category = excluded.income_tax_category,
-        dependent_count = excluded.dependent_count,
-        apply_resident_tax = excluded.apply_resident_tax,
-        resident_tax_year = excluded.resident_tax_year,
-        resident_tax_june_amount = excluded.resident_tax_june_amount,
-        resident_tax_monthly_amount = excluded.resident_tax_monthly_amount,
-        valid_from = excluded.valid_from,
-        updated_by = excluded.updated_by,
-        updated_at = now()
     `;
   }
 

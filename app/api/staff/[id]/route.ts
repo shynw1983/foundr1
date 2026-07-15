@@ -221,6 +221,34 @@ function getPayrollMonthStartDate(month: string, store?: StorePayrollConfig) {
   return `${match[1]}-${match[2]}-01`;
 }
 
+function payrollSnapshotSignature(snapshot: Record<string, unknown> | undefined) {
+  if (!snapshot) return "";
+  const number = (value: unknown) => value === null || value === undefined || value === "" ? null : Number(value);
+  const date = (value: unknown) => String(value ?? "").slice(0, 10) || null;
+  return JSON.stringify({
+    payrollEnabled: snapshot.payrollEnabled !== false,
+    employmentType: normalizeEmploymentType(String(snapshot.employmentType ?? "")),
+    hourlyWage: number(snapshot.hourlyWage),
+    monthlySalary: number(snapshot.monthlySalary),
+    prescribedMonthlyWorkMinutes: number(snapshot.prescribedMonthlyWorkMinutes),
+    commuteAllowancePerWorkday: number(snapshot.commuteAllowancePerWorkday) ?? 0,
+    commuteAllowanceMonthlyCap: number(snapshot.commuteAllowanceMonthlyCap),
+    applySocialInsurance: Boolean(snapshot.applySocialInsurance),
+    socialInsuranceStandardMonthlyAmount: number(snapshot.socialInsuranceStandardMonthlyAmount),
+    socialInsuranceDeductionFrom: date(snapshot.socialInsuranceDeductionFrom),
+    applyEmploymentInsurance: Boolean(snapshot.applyEmploymentInsurance),
+    employmentInsuranceDeductionFrom: date(snapshot.employmentInsuranceDeductionFrom),
+    applyLaborInsurance: Boolean(snapshot.applyLaborInsurance),
+    applyIncomeTax: Boolean(snapshot.applyIncomeTax),
+    incomeTaxCategory: normalizeIncomeTaxCategory(String(snapshot.incomeTaxCategory ?? "")),
+    dependentCount: normalizeDependentCount(snapshot.dependentCount as number | string | null | undefined),
+    applyResidentTax: Boolean(snapshot.applyResidentTax),
+    residentTaxYear: number(snapshot.residentTaxYear),
+    residentTaxJuneAmount: number(snapshot.residentTaxJuneAmount),
+    residentTaxMonthlyAmount: number(snapshot.residentTaxMonthlyAmount)
+  });
+}
+
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const access = await requireStaffAdminSession();
   if (!access) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -589,7 +617,60 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       )
       on conflict do nothing
     `;
-    await sql`
+    const latestEffectiveHistoryRows = await sql`
+      select
+        payroll_enabled as "payrollEnabled",
+        employment_type as "employmentType",
+        hourly_wage as "hourlyWage",
+        monthly_salary as "monthlySalary",
+        prescribed_monthly_work_minutes as "prescribedMonthlyWorkMinutes",
+        commute_allowance_per_workday as "commuteAllowancePerWorkday",
+        commute_allowance_monthly_cap as "commuteAllowanceMonthlyCap",
+        apply_social_insurance as "applySocialInsurance",
+        social_insurance_standard_monthly_amount as "socialInsuranceStandardMonthlyAmount",
+        social_insurance_deduction_from as "socialInsuranceDeductionFrom",
+        apply_employment_insurance as "applyEmploymentInsurance",
+        employment_insurance_deduction_from as "employmentInsuranceDeductionFrom",
+        apply_labor_insurance as "applyLaborInsurance",
+        apply_income_tax as "applyIncomeTax",
+        income_tax_category as "incomeTaxCategory",
+        dependent_count as "dependentCount",
+        apply_resident_tax as "applyResidentTax",
+        resident_tax_year as "residentTaxYear",
+        resident_tax_june_amount as "residentTaxJuneAmount",
+        resident_tax_monthly_amount as "residentTaxMonthlyAmount"
+      from employee_work_store_payroll_history
+      where employee_id = ${id}
+        and store_id = ${storeId}
+        and wage_valid_from = ${storeWageValidFrom}
+        and commute_valid_from = ${storeCommuteValidFrom}
+      order by updated_at desc, created_at desc
+      limit 1
+    `;
+    const nextPayrollSnapshot = {
+      payrollEnabled: storePayrollEnabled,
+      employmentType: storeEmploymentType,
+      hourlyWage: storeHourlyWage,
+      monthlySalary: storeMonthlySalary,
+      prescribedMonthlyWorkMinutes: storePrescribedMonthlyWorkMinutes,
+      commuteAllowancePerWorkday: storeCommuteAllowancePerWorkday,
+      commuteAllowanceMonthlyCap: storeCommuteAllowanceMonthlyCap,
+      applySocialInsurance: storeApplySocialInsurance,
+      socialInsuranceStandardMonthlyAmount: storeSocialInsuranceStandardMonthlyAmount,
+      socialInsuranceDeductionFrom: storeApplySocialInsurance ? storeSocialInsuranceDeductionFrom : null,
+      applyEmploymentInsurance: storeApplyEmploymentInsurance,
+      employmentInsuranceDeductionFrom: storeApplyEmploymentInsurance ? storeEmploymentInsuranceDeductionFrom : null,
+      applyLaborInsurance: Boolean(storeSetting?.applyLaborInsurance),
+      applyIncomeTax: storeApplyIncomeTax,
+      incomeTaxCategory: storeIncomeTaxCategory,
+      dependentCount: storeDependentCount,
+      applyResidentTax: storeApplyResidentTax,
+      residentTaxYear: storeApplyResidentTax ? storeResidentTaxYear : null,
+      residentTaxJuneAmount: storeApplyResidentTax ? storeResidentTaxJuneAmount : null,
+      residentTaxMonthlyAmount: storeApplyResidentTax ? storeResidentTaxMonthlyAmount : null
+    };
+    const payrollChanged = payrollSnapshotSignature(latestEffectiveHistoryRows[0]) !== payrollSnapshotSignature(nextPayrollSnapshot);
+    if (payrollChanged) await sql`
       insert into employee_work_store_payroll_history (
         employee_id,
         store_id,
@@ -648,30 +729,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ${session.id},
         now()
       )
-      on conflict (employee_id, store_id, wage_valid_from, commute_valid_from) do update set
-        payroll_enabled = excluded.payroll_enabled,
-        employment_type = excluded.employment_type,
-        hourly_wage = excluded.hourly_wage,
-        monthly_salary = excluded.monthly_salary,
-        prescribed_monthly_work_minutes = excluded.prescribed_monthly_work_minutes,
-        commute_allowance_per_workday = excluded.commute_allowance_per_workday,
-        commute_allowance_monthly_cap = excluded.commute_allowance_monthly_cap,
-        apply_social_insurance = excluded.apply_social_insurance,
-        social_insurance_standard_monthly_amount = excluded.social_insurance_standard_monthly_amount,
-        social_insurance_deduction_from = excluded.social_insurance_deduction_from,
-        apply_employment_insurance = excluded.apply_employment_insurance,
-        employment_insurance_deduction_from = excluded.employment_insurance_deduction_from,
-        apply_labor_insurance = excluded.apply_labor_insurance,
-        apply_income_tax = excluded.apply_income_tax,
-        income_tax_category = excluded.income_tax_category,
-        dependent_count = excluded.dependent_count,
-        apply_resident_tax = excluded.apply_resident_tax,
-        resident_tax_year = excluded.resident_tax_year,
-        resident_tax_june_amount = excluded.resident_tax_june_amount,
-        resident_tax_monthly_amount = excluded.resident_tax_monthly_amount,
-        valid_from = excluded.valid_from,
-        updated_by = excluded.updated_by,
-        updated_at = now()
     `;
   }
 

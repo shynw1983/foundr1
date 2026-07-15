@@ -61,7 +61,10 @@ type PayrollHistoryEntry = {
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   applySocialInsurance?: boolean | null;
+  socialInsuranceStandardMonthlyAmount?: number | string | null;
+  socialInsuranceDeductionFrom?: string | null;
   applyEmploymentInsurance?: boolean | null;
+  employmentInsuranceDeductionFrom?: string | null;
   applyLaborInsurance?: boolean | null;
   applyIncomeTax?: boolean | null;
   incomeTaxCategory?: string | null;
@@ -72,6 +75,8 @@ type PayrollHistoryEntry = {
   residentTaxMonthlyAmount?: number | string | null;
   wageValidFrom?: string | null;
   commuteValidFrom?: string | null;
+  updatedAt?: string | null;
+  updatedByName?: string | null;
 };
 
 type StaffMember = {
@@ -345,6 +350,56 @@ function formatPayrollMonthLabel(value?: string | null, store?: StoreOption) {
   return month ? `${month.replace("-", "/")} 月度〜` : "未設定";
 }
 
+function getJstTodayLabel() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+}
+
+function isFuturePayrollRecord(record: PayrollHistoryEntry) {
+  const today = getJstTodayLabel();
+  return String(record.wageValidFrom ?? record.validFrom ?? "").slice(0, 10) > today
+    || String(record.commuteValidFrom ?? record.validFrom ?? "").slice(0, 10) > today;
+}
+
+function formatPayrollUpdatedAt(value?: string | null) {
+  if (!value) return "保存日時不明";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "保存日時不明";
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function getPayrollHistoryChanges(record: PayrollHistoryEntry, previous?: PayrollHistoryEntry) {
+  if (!previous) return ["初回設定"];
+  const changes: string[] = [];
+  const money = (value: number | string | null | undefined) => formatPayrollAmount(value);
+  const add = (label: string, before: unknown, after: unknown, format = (value: unknown) => String(value ?? "未設定")) => {
+    if (String(before ?? "") !== String(after ?? "")) changes.push(`${label}: ${format(before)} → ${format(after)}`);
+  };
+  add("給与形態", previous.employmentType, record.employmentType, (value) => value === "monthly" ? "月給" : "時給");
+  if (record.employmentType === "monthly") add("月給", previous.monthlySalary, record.monthlySalary, (value) => money(value as number | string | null));
+  else add("時給", previous.hourlyWage, record.hourlyWage, (value) => money(value as number | string | null));
+  add("月所定労働時間", previous.prescribedMonthlyWorkMinutes, record.prescribedMonthlyWorkMinutes, (value) => `${formatMonthlyWorkHours(value as number | string | null) || "店舗既定"}h`);
+  add("交通費/日", previous.commuteAllowancePerWorkday, record.commuteAllowancePerWorkday, (value) => money(value as number | string | null));
+  add("交通費上限", previous.commuteAllowanceMonthlyCap, record.commuteAllowanceMonthlyCap, (value) => money(value as number | string | null));
+  add("社会保険", previous.applySocialInsurance, record.applySocialInsurance, (value) => value ? "適用" : "対象外");
+  add("雇用保険", previous.applyEmploymentInsurance, record.applyEmploymentInsurance, (value) => value ? "適用" : "対象外");
+  add("労働保険", previous.applyLaborInsurance, record.applyLaborInsurance, (value) => value ? "適用" : "対象外");
+  add("源泉所得税", previous.applyIncomeTax, record.applyIncomeTax, (value) => value ? "適用" : "対象外");
+  add("住民税", previous.applyResidentTax, record.applyResidentTax, (value) => value ? "適用" : "対象外");
+  return changes.length ? changes : ["同じ適用月度の設定を訂正"];
+}
+
 export default function StaffPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -353,6 +408,10 @@ export default function StaffPage() {
   const [currentUserRole, setCurrentUserRole] = useState("");
   const [canManageStaff, setCanManageStaff] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+  const [editingInitialTab, setEditingInitialTab] = useState<"basic" | "payroll">("basic");
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [staffSavedAt, setStaffSavedAt] = useState<string | null>(null);
+  const [hasUnsavedStaffChanges, setHasUnsavedStaffChanges] = useState(false);
   const [dataSource, setDataSource] = useState<"loading" | "neon" | "forbidden">("loading");
   const [error, setError] = useState("");
   const [companyFilter, setCompanyFilter] = useState(ALL_FILTER);
@@ -520,21 +579,43 @@ export default function StaffPage() {
     event.preventDefault();
     if (!editingStaff || !canManageStaff || editingStaff.canManage === false) return;
     setError("");
-    const response = await fetch(`/api/staff/${editingStaff.id}`, {
+    setIsSavingStaff(true);
+    const editingStaffId = editingStaff.id;
+    const response = await fetch(`/api/staff/${editingStaffId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(readForm(event.currentTarget))
-    });
+    }).catch(() => null);
 
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
+    if (!response?.ok) {
+      const body = await response?.json().catch(() => ({})) ?? {};
       setError(body.error ?? "スタッフを更新できませんでした。");
+      setIsSavingStaff(false);
       return;
     }
 
+    const employees = await loadStaff();
+    setEditingStaff(employees.find((member) => member.id === editingStaffId) ?? editingStaff);
+    setHasUnsavedStaffChanges(false);
+    setStaffSavedAt(new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" }).format(new Date()));
+    setIsSavingStaff(false);
+    showNotice("スタッフ情報を保存しました。");
+  }
+
+  function openStaffEditor(member: StaffMember, initialTab: "basic" | "payroll") {
+    setEditingInitialTab(initialTab);
+    setStaffSavedAt(null);
+    setHasUnsavedStaffChanges(false);
+    setError("");
+    setEditingStaff(member);
+  }
+
+  function closeStaffEditor() {
+    if (hasUnsavedStaffChanges && !window.confirm("保存していない変更があります。破棄して閉じますか？")) return;
     setEditingStaff(null);
-    await loadStaff();
-    showNotice("スタッフを更新しました。");
+    setHasUnsavedStaffChanges(false);
+    setStaffSavedAt(null);
+    setError("");
   }
 
   async function deleteEditingStaff() {
@@ -688,7 +769,12 @@ export default function StaffPage() {
                       {profileStatus.detail ? <small className="staff-profile-status-detail">{profileStatus.detail}</small> : null}
                     </div>
                     <div className="row-actions">
-                      <button className="secondary-button" type="button" onClick={() => setEditingStaff(member)}>
+                      {member.role !== "store_terminal" ? (
+                        <button className="secondary-button" type="button" onClick={() => openStaffEditor(member, "payroll")}>
+                          給与設定
+                        </button>
+                      ) : null}
+                      <button className="secondary-button" type="button" onClick={() => openStaffEditor(member, "basic")}>
                         {member.canManage !== false ? "編集" : "詳細"}
                       </button>
                     </div>
@@ -719,7 +805,7 @@ export default function StaffPage() {
       </section>
 
       {editingStaff ? (
-        <ModalHistoryScope historyKey="staff-edit" onClose={() => setEditingStaff(null)}>
+        <ModalHistoryScope historyKey="staff-edit" onClose={closeStaffEditor}>
           <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="staff-edit-title">
             <section className="edit-modal staff-edit-modal">
             <div className="modal-heading">
@@ -727,10 +813,13 @@ export default function StaffPage() {
                 <p className="eyebrow">Staff</p>
                 <h3 id="staff-edit-title">{editingStaff.canManage !== false ? "スタッフを編集" : "スタッフ詳細"}</h3>
               </div>
-              <button className="secondary-button" type="button" onClick={() => setEditingStaff(null)}>閉じる</button>
+              <button className="secondary-button" type="button" onClick={closeStaffEditor}>閉じる</button>
             </div>
             {error ? <div className="login-error">{error}</div> : null}
-            <form className="management-form staff-form" onSubmit={updateStaff}>
+            <form className="management-form staff-form" onSubmit={updateStaff} onChangeCapture={() => {
+              setHasUnsavedStaffChanges(true);
+              setStaffSavedAt(null);
+            }}>
               <div className={editingStaff.canManage !== false ? "" : "staff-readonly-fields"}>
                 <StaffFormFields
                   member={editingStaff}
@@ -738,12 +827,26 @@ export default function StaffPage() {
                   currentUserId={currentUserId}
                   currentUserRole={currentUserRole}
                   readOnly={editingStaff.canManage === false}
+                  initialTab={editingInitialTab}
                   onHistoryChanged={reloadStaffKeepingEdit}
                   onNotice={showNotice}
                   onError={setError}
+                  onDirty={() => {
+                    setHasUnsavedStaffChanges(true);
+                    setStaffSavedAt(null);
+                  }}
                 />
               </div>
-              {editingStaff.canManage !== false ? <button className="primary-button" type="submit">保存</button> : null}
+              {editingStaff.canManage !== false ? (
+                <div className="staff-save-bar">
+                  <span className={error ? "staff-save-status is-error" : "staff-save-status"} role="status" aria-live="polite">
+                    {error || (staffSavedAt ? `${staffSavedAt} に保存しました` : hasUnsavedStaffChanges ? "未保存の変更があります" : "")}
+                  </span>
+                  <button className="primary-button" type="submit" disabled={isSavingStaff}>
+                    {isSavingStaff ? "保存中…" : "保存"}
+                  </button>
+                </div>
+              ) : null}
             </form>
             {editingStaff.canManage !== false ? (
               <details className="store-danger-zone">
@@ -916,24 +1019,29 @@ function StaffFormFields({
   currentUserId,
   currentUserRole,
   readOnly = false,
+  initialTab = "basic",
   onHistoryChanged,
   onNotice,
-  onError
+  onError,
+  onDirty
 }: {
   member?: StaffMember;
   stores: StoreOption[];
   currentUserId?: string;
   currentUserRole?: string;
   readOnly?: boolean;
+  initialTab?: "basic" | "payroll";
   onHistoryChanged?: (employeeId: string) => Promise<void> | void;
   onNotice?: (message: string) => void;
   onError?: (message: string) => void;
+  onDirty?: () => void;
 }) {
   const selectedVisibleStoreIds = new Set(member ? getVisibleStores(member).map((store) => store.id) : []);
   const workStoreById = new Map((member ? getWorkStores(member) : []).map((store) => [store.id, store]));
   const isSelf = Boolean(member && member.id === currentUserId);
   const [larkStatus, setLarkStatus] = useState("");
-  const [activeTab, setActiveTab] = useState<"basic" | "payroll" | "lifecycle" | "other">("basic");
+  const [activeTab, setActiveTab] = useState<"basic" | "payroll" | "lifecycle" | "other">(initialTab);
+  const [payrollEditStoreIds, setPayrollEditStoreIds] = useState<string[]>([]);
   const [lifecycleCases, setLifecycleCases] = useState<LifecycleCase[]>([]);
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
   const assignableRoleOptions = getAssignableRoleOptions(currentUserRole ?? "");
@@ -977,7 +1085,9 @@ function StaffFormFields({
     setIsBranchPickerOpen(false);
     setLifecycleCases([]);
     setLifecycleLoading(false);
-  }, [member]);
+    setActiveTab(initialTab);
+    setPayrollEditStoreIds([]);
+  }, [initialTab, member]);
 
   useEffect(() => {
     if (isStoreTerminal) return;
@@ -1316,23 +1426,26 @@ function StaffFormFields({
     setNamedInputValue(form, `residentTaxYear:${store.id}`, record.residentTaxYear ?? "");
     setNamedInputValue(form, `residentTaxJuneAmount:${store.id}`, record.residentTaxJuneAmount ?? "");
     setNamedInputValue(form, `residentTaxMonthlyAmount:${store.id}`, record.residentTaxMonthlyAmount ?? "");
+    setPayrollEditStoreIds((current) => current.includes(store.id) ? current : [...current, store.id]);
+    onDirty?.();
     onNotice?.("給与変更履歴を入力欄に読み込みました。保存すると反映されます。");
   }
 
   async function deletePayrollHistory(record: PayrollHistoryEntry) {
     if (!member || !record.id) return;
-    if (!window.confirm("この給与変更履歴を削除しますか？")) return;
+    if (!isFuturePayrollRecord(record)) return;
+    if (!window.confirm("この将来の給与変更予定をキャンセルしますか？")) return;
 
     onError?.("");
     const response = await fetch(`/api/staff/${member.id}/payroll-history/${record.id}`, { method: "DELETE" });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      onError?.(body.error ?? "給与変更履歴を削除できませんでした。");
+      onError?.(body.error ?? "給与変更予定をキャンセルできませんでした。");
       return;
     }
 
     await onHistoryChanged?.(member.id);
-    onNotice?.("給与変更履歴を削除しました。");
+    onNotice?.("将来の給与変更予定をキャンセルしました。");
   }
 
   return (
@@ -1622,9 +1735,15 @@ function StaffFormFields({
           {selectedPayrollStores.length ? selectedPayrollStores.map((store) => {
             const setting = workStoreById.get(store.id);
             const defaultEmploymentType = setting?.employmentType ?? member?.employmentType ?? "hourly";
-            const history = (setting?.payrollHistory ?? []).slice(0, 4);
+            const history = setting?.payrollHistory ?? [];
+            const futureRecords = history.filter(isFuturePayrollRecord).filter((record, index, records) => {
+              const key = `${String(record.wageValidFrom ?? record.validFrom).slice(0, 10)}:${String(record.commuteValidFrom ?? record.validFrom).slice(0, 10)}`;
+              return records.findIndex((candidate) => `${String(candidate.wageValidFrom ?? candidate.validFrom).slice(0, 10)}:${String(candidate.commuteValidFrom ?? candidate.validFrom).slice(0, 10)}` === key) === index;
+            });
+            const currentRecord = history.find((record) => !isFuturePayrollRecord(record));
             const isWorkStore = selectedWorkStoreIds.has(store.id);
             const isActivePayrollStore = store.id === activePayrollStoreId;
+            const isEditingPayroll = payrollEditStoreIds.includes(store.id) || !member;
             return (
               <article className={isActivePayrollStore ? "staff-payroll-store-row is-selected" : "staff-payroll-store-row is-hidden"} key={store.id}>
                 <label className="staff-payroll-store-toggle">
@@ -1646,6 +1765,56 @@ function StaffFormFields({
                   </div>
                 ) : (
                   <>
+                <section className="staff-payroll-current" aria-label={`${store.name}の現在の給与設定`}>
+                  <div className="staff-payroll-current-heading">
+                    <div>
+                      <span className="status-pill is-complete">現在適用中</span>
+                      <strong>{defaultEmploymentType === "monthly" ? `月給 ${formatPayrollAmount(setting?.monthlySalary)}` : `時給 ${formatPayrollAmount(setting?.hourlyWage)}`}</strong>
+                      <small>
+                        賃金 {formatPayrollMonthLabel(currentRecord?.wageValidFrom ?? currentRecord?.validFrom, store)}
+                        {` / 交通費 ${formatPayrollMonthLabel(currentRecord?.commuteValidFrom ?? currentRecord?.validFrom, store)}`}
+                      </small>
+                    </div>
+                    {!readOnly ? (
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => setPayrollEditStoreIds((current) => current.includes(store.id) ? current.filter((id) => id !== store.id) : [...current, store.id])}
+                      >
+                        {isEditingPayroll ? "編集を閉じる" : "給与設定を変更"}
+                      </button>
+                    ) : null}
+                  </div>
+                  <dl className="staff-payroll-current-grid">
+                    <div><dt>給与計算</dt><dd>{setting?.payrollEnabled === false ? "対象外" : "計算する"}</dd></div>
+                    <div><dt>月所定労働時間</dt><dd>{formatMonthlyWorkHours(setting?.prescribedMonthlyWorkMinutes) || "店舗既定"}h</dd></div>
+                    <div><dt>交通費</dt><dd>{formatPayrollAmount(setting?.commuteAllowancePerWorkday)} / 日</dd></div>
+                    <div><dt>交通費月上限</dt><dd>{setting?.commuteAllowanceMonthlyCap ? formatPayrollAmount(setting.commuteAllowanceMonthlyCap) : "設定なし"}</dd></div>
+                    <div><dt>保険</dt><dd>{[setting?.applySocialInsurance && "社会保険", setting?.applyEmploymentInsurance && "雇用保険", setting?.applyLaborInsurance && "労働保険"].filter(Boolean).join("・") || "対象外"}</dd></div>
+                    <div><dt>税</dt><dd>{[setting?.applyIncomeTax && `所得税${setting.incomeTaxCategory === "otsu" ? "（乙）" : setting.incomeTaxCategory === "kou" ? "（甲）" : ""}`, setting?.applyResidentTax && "住民税"].filter(Boolean).join("・") || "対象外"}</dd></div>
+                  </dl>
+                </section>
+                {futureRecords.length ? (
+                  <section className="staff-payroll-scheduled">
+                    <div className="staff-payroll-section-heading">
+                      <strong>予定されている変更</strong>
+                      <span>{futureRecords.length}件</span>
+                    </div>
+                    {futureRecords.map((record) => (
+                      <div className="staff-payroll-scheduled-row" key={`future-${record.id}`}>
+                        <div>
+                          <strong>{record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`}</strong>
+                          <small>賃金 {formatPayrollMonthLabel(record.wageValidFrom ?? record.validFrom, store)} / 交通費 {formatPayrollMonthLabel(record.commuteValidFrom ?? record.validFrom, store)}</small>
+                        </div>
+                        {!readOnly ? <span className="staff-payroll-history-actions">
+                          <button className="secondary-button" type="button" onClick={(event) => applyPayrollHistory(event, store, record)}>編集</button>
+                          <button className="danger-button" type="button" onClick={() => void deletePayrollHistory(record)}>予定を取消</button>
+                        </span> : null}
+                      </div>
+                    ))}
+                  </section>
+                ) : null}
+                <div className={isEditingPayroll ? "staff-payroll-editor is-open" : "staff-payroll-editor"} aria-hidden={!isEditingPayroll}>
                 <fieldset className="staff-employment-store-fields">
                   <span>雇用基本情報</span>
                   <label>
@@ -1730,11 +1899,11 @@ function StaffFormFields({
                   </label>
                   <label>
                     <span>賃金・月所定適用月度</span>
-                    <input name={`wageValidFromMonth:${store.id}`} type="month" defaultValue={formatPayrollMonth(history[0]?.wageValidFrom ?? history[0]?.validFrom, store) || toDateInputValue(new Date().toISOString()).slice(0, 7)} />
+                    <input name={`wageValidFromMonth:${store.id}`} type="month" defaultValue={formatPayrollMonth(currentRecord?.wageValidFrom ?? currentRecord?.validFrom, store) || toDateInputValue(new Date().toISOString()).slice(0, 7)} />
                   </label>
                   <label>
                     <span>交通費適用月度</span>
-                    <input name={`commuteValidFromMonth:${store.id}`} type="month" defaultValue={formatPayrollMonth(history[0]?.commuteValidFrom ?? history[0]?.validFrom, store) || toDateInputValue(new Date().toISOString()).slice(0, 7)} />
+                    <input name={`commuteValidFromMonth:${store.id}`} type="month" defaultValue={formatPayrollMonth(currentRecord?.commuteValidFrom ?? currentRecord?.validFrom, store) || toDateInputValue(new Date().toISOString()).slice(0, 7)} />
                   </label>
                 </fieldset>
                 <fieldset className="staff-payroll-deductions">
@@ -1840,21 +2009,35 @@ function StaffFormFields({
                     </div>
                   </section>
                 </fieldset>
+                </div>
                 <div className="staff-payroll-history">
-                  <span>給与変更履歴</span>
+                  <div className="staff-payroll-section-heading">
+                    <strong>給与変更履歴</strong>
+                    <span>{history.length}件</span>
+                  </div>
                   {history.length ? history.map((record, index) => (
                     <div className="staff-payroll-history-row" key={`${store.id}-${record.id ?? record.validFrom ?? index}`}>
-                      <small>
-                        賃金 {formatPayrollMonthLabel(record.wageValidFrom ?? record.validFrom, store)} {record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`} / 月所定 {formatMonthlyWorkHours(record.prescribedMonthlyWorkMinutes) || "店舗既定"}h / 交通費 {formatPayrollMonthLabel(record.commuteValidFrom ?? record.validFrom, store)} {formatPayrollAmount(record.commuteAllowancePerWorkday)} / 源泉 {record.applyIncomeTax ? `${record.incomeTaxCategory === "otsu" ? "乙" : record.incomeTaxCategory === "kou" ? "甲" : "未設定"} ${record.dependentCount ?? 0}人` : "なし"} / 住民税 {record.applyResidentTax ? `${record.residentTaxYear ?? "-"}年度 6月${formatPayrollAmount(record.residentTaxJuneAmount)} 7月以降${formatPayrollAmount(record.residentTaxMonthlyAmount)}` : "なし"}
-                      </small>
-                      <span className="staff-payroll-history-actions">
+                      <div className="staff-payroll-history-main">
+                        <div className="staff-payroll-history-meta">
+                          <span className={isFuturePayrollRecord(record) ? "status-pill is-pending" : "status-pill is-complete"}>{isFuturePayrollRecord(record) ? "適用予定" : "適用済み"}</span>
+                          <strong>{record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`}</strong>
+                          <small>{record.updatedByName || "更新者不明"}・{formatPayrollUpdatedAt(record.updatedAt)}</small>
+                        </div>
+                        <small>賃金 {formatPayrollMonthLabel(record.wageValidFrom ?? record.validFrom, store)} / 交通費 {formatPayrollMonthLabel(record.commuteValidFrom ?? record.validFrom, store)}</small>
+                        <ul>
+                          {getPayrollHistoryChanges(record, history[index + 1]).map((change) => <li key={change}>{change}</li>)}
+                        </ul>
+                      </div>
+                      {!readOnly ? <span className="staff-payroll-history-actions">
                         <button className="secondary-button" type="button" onClick={(event) => applyPayrollHistory(event, store, record)}>
-                          編集
+                          {isFuturePayrollRecord(record) ? "編集" : "訂正"}
                         </button>
-                        <button className="danger-button" type="button" disabled={!record.id} onClick={() => void deletePayrollHistory(record)}>
-                          削除
-                        </button>
-                      </span>
+                        {isFuturePayrollRecord(record) ? (
+                          <button className="danger-button" type="button" disabled={!record.id} onClick={() => void deletePayrollHistory(record)}>
+                            予定を取消
+                          </button>
+                        ) : null}
+                      </span> : null}
                     </div>
                   )) : (
                     <small>まだ履歴がありません。保存するとこの設定が履歴に残ります。</small>

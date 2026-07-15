@@ -6832,29 +6832,234 @@ body :where(
 
 .staff-payroll-history {
   display: grid;
-  gap: 5px;
-  padding: 10px 12px;
-  border: 1px dashed var(--line);
-  border-radius: 8px;
-  background: #f8fbff;
+  gap: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
 }
 
 .staff-payroll-history small {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 500;
 }
 
 .staff-payroll-history-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+  gap: 12px;
+  align-items: flex-start;
   justify-content: space-between;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+
+.staff-payroll-history-row:first-of-type {
+  margin-top: 10px;
 }
 
 .staff-payroll-history-row small {
   flex: 1 1 260px;
+}
+
+.staff-payroll-current,
+.staff-payroll-scheduled {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.staff-payroll-current {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--line));
+  background: color-mix(in srgb, var(--primary) 4%, var(--surface));
+}
+
+.staff-payroll-current-heading,
+.staff-payroll-section-heading,
+.staff-payroll-scheduled-row,
+.staff-payroll-history-meta,
+.staff-save-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.staff-payroll-current-heading > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.staff-payroll-current-heading > div > strong {
+  font-size: 22px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.staff-payroll-current-heading small,
+.staff-payroll-scheduled-row small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.staff-payroll-current-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--line);
+}
+
+.staff-payroll-current-grid > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px 12px;
+  background: var(--surface);
+}
+
+.staff-payroll-current-grid dt,
+.staff-payroll-current-grid dd {
+  margin: 0;
+}
+
+.staff-payroll-current-grid dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.staff-payroll-current-grid dd {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.staff-payroll-current .status-pill.is-complete,
+.staff-payroll-history .status-pill.is-complete {
+  width: fit-content;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+}
+
+.staff-payroll-history .status-pill.is-pending {
+  width: fit-content;
+  color: var(--warning-text, #76510a);
+  background: var(--warning-bg, #fff8e6);
+}
+
+.staff-payroll-scheduled {
+  background: var(--surface-subtle, #fafafa);
+}
+
+.staff-payroll-section-heading > strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.staff-payroll-section-heading > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.staff-payroll-scheduled-row + .staff-payroll-scheduled-row {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.staff-payroll-scheduled-row > div {
+  display: grid;
+  gap: 4px;
+}
+
+.staff-payroll-editor {
+  display: none;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-subtle, #fafafa);
+}
+
+.staff-payroll-editor.is-open {
+  display: grid;
+}
+
+.staff-payroll-history-main {
+  display: grid;
+  flex: 1 1 420px;
+  gap: 7px;
+  min-width: 0;
+}
+
+.staff-payroll-history-meta {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.staff-payroll-history-meta > strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.staff-payroll-history-main ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.staff-save-bar {
+  position: sticky;
+  z-index: 4;
+  bottom: 0;
+  margin: 8px -2px -2px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.staff-save-status {
+  min-height: 20px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.staff-save-status.is-error {
+  color: var(--danger);
+}
+
+@media (max-width: 760px) {
+  .staff-payroll-current-heading,
+  .staff-payroll-scheduled-row,
+  .staff-save-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .staff-payroll-current-heading .secondary-button,
+  .staff-payroll-scheduled-row .staff-payroll-history-actions,
+  .staff-save-bar .primary-button {
+    width: 100%;
+  }
+
+  .staff-payroll-current-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .staff-payroll-history-actions {
