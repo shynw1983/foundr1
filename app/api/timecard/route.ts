@@ -1242,6 +1242,7 @@ export async function GET(request: Request) {
   });
   const payroll = canViewPayroll ? summarizePayroll(employees, dailySummaries, {
     month,
+    periodEndExclusive: endDate,
     withholdingTaxRows,
     socialInsuranceRows,
     employmentInsuranceRateRows,
@@ -1603,6 +1604,7 @@ export async function POST(request: Request) {
     });
     const payroll = summarizePayroll(employees, dailySummaries, {
       month,
+      periodEndExclusive: endDate,
       withholdingTaxRows,
       socialInsuranceRows,
       employmentInsuranceRateRows,

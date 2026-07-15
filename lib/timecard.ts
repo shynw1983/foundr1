@@ -268,8 +268,22 @@ function uniqueStrings(values: string[]) {
 function getEffectivePayrollSetting(employee: TimecardEmployee | undefined, storeId: string, workDate: string) {
   const settings = (employee?.storePayrollSettings ?? [])
     .filter((setting) => setting.storeId === storeId && setting.wageValidFrom <= workDate)
-    .sort((a, b) => b.wageValidFrom.localeCompare(a.wageValidFrom));
+    .sort((a, b) => b.wageValidFrom.localeCompare(a.wageValidFrom)
+      || b.validFrom.localeCompare(a.validFrom)
+      || b.commuteValidFrom.localeCompare(a.commuteValidFrom));
   return settings[0] ?? employee?.storePayrollSettings.find((setting) => setting.storeId === storeId);
+}
+
+function getPayrollPeriodReferenceDate(month: string, periodEndExclusive?: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(periodEndExclusive ?? "")) {
+    const end = new Date(`${periodEndExclusive}T00:00:00Z`);
+    end.setUTCDate(end.getUTCDate() - 1);
+    return `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, "0")}-${String(end.getUTCDate()).padStart(2, "0")}`;
+  }
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) return `${month}-31`;
+  const end = new Date(Date.UTC(Number(match[1]), Number(match[2]), 0));
+  return `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, "0")}-${String(end.getUTCDate()).padStart(2, "0")}`;
 }
 
 function getEffectiveCommuteSetting(employee: TimecardEmployee | undefined, storeId: string, workDate: string) {
@@ -553,6 +567,7 @@ export function summarizePayroll(
   dailySummaries: TimecardDailySummary[],
   options: {
     month?: string;
+    periodEndExclusive?: string;
     withholdingTaxRows?: WithholdingTaxRow[];
     socialInsuranceRows?: SocialInsuranceRow[];
     employmentInsuranceRateRows?: EmploymentInsuranceRateRow[];
@@ -560,6 +575,7 @@ export function summarizePayroll(
   } = {}
 ) {
   const payrollMonth = options.month ?? getJstMonthLabel();
+  const payrollPeriodReferenceDate = getPayrollPeriodReferenceDate(payrollMonth, options.periodEndExclusive);
   const withholdingTaxRows = options.withholdingTaxRows ?? [];
   const socialInsuranceRows = options.socialInsuranceRows ?? [];
   const employmentInsuranceRateRows = options.employmentInsuranceRateRows ?? [];
@@ -676,6 +692,11 @@ export function summarizePayroll(
     let incomeTax = 0;
     let residentTax = 0;
     let commuteAllowance = 0;
+    const monthlyDeductionSettingByStore = new Map<string, TimecardStorePayrollSetting>();
+    for (const storeId of new Set((employee?.storePayrollSettings ?? []).map((setting) => setting.storeId))) {
+      const setting = getEffectivePayrollSetting(employee, storeId, payrollPeriodReferenceDate);
+      if (setting) monthlyDeductionSettingByStore.set(storeId, setting);
+    }
     for (const setting of employee?.storePayrollSettings ?? []) {
       if (!setting.payrollEnabled) continue;
       const storeDays = (daysByEmployeeAndStore.get(`${row.employeeId}:${setting.storeId}`) ?? [])
@@ -800,13 +821,16 @@ export function summarizePayroll(
           : Math.min(uncappedCommuteAllowance, Math.ceil(setting.commuteAllowanceMonthlyCap));
         commuteAllowance += storeCommuteAllowance;
       }
-      const socialResult = getSocialInsuranceDeduction(employee, setting, payrollMonth, socialInsuranceRows);
+      const isMonthlyDeductionSetting = monthlyDeductionSettingByStore.get(setting.storeId) === setting;
+      const socialResult = isMonthlyDeductionSetting
+        ? getSocialInsuranceDeduction(employee, setting, payrollMonth, socialInsuranceRows)
+        : { amount: 0, alerts: [] as string[] };
       socialInsurance += socialResult.amount;
       row.alerts = uniqueStrings([...row.alerts, ...socialResult.alerts]);
       const employmentDeduction = getEmploymentInsuranceDeduction(setting, payrollMonth, storeTaxablePay + storeCommuteAllowance, employmentInsuranceRateRows);
       employmentInsurance += employmentDeduction;
       incomeTax += getWithholdingTax(Math.max(0, storeTaxablePay - socialResult.amount - employmentDeduction), setting, withholdingTaxRows);
-      residentTax += getResidentTaxDeduction(setting, payrollMonth);
+      if (isMonthlyDeductionSetting) residentTax += getResidentTaxDeduction(setting, payrollMonth);
     }
     const basePay = Math.ceil(regularPay + overtimePay + nightPremiumPay);
     const roundedAllowancePay = Math.ceil(allowancePay);
