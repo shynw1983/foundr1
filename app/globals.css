@@ -18872,6 +18872,8 @@ body :where(
 }
 
 .shift-period-switcher button {
+  -webkit-appearance: none;
+  appearance: none;
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -18881,6 +18883,7 @@ body :where(
   padding: 7px 12px;
   background: transparent;
   color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
   text-align: left;
 }
 
@@ -18889,10 +18892,13 @@ body :where(
   background: var(--panel, white);
 }
 
-.shift-period-switcher button.is-active {
+.shift-period-switcher button.is-active,
+.shift-period-switcher button[aria-current="page"] {
   border-color: var(--green);
-  background: var(--green);
-  color: white;
+  background: var(--green) !important;
+  background-image: none !important;
+  color: white !important;
+  -webkit-text-fill-color: white;
 }
 
 .shift-period-switcher[aria-busy="true"] button {
@@ -18922,8 +18928,16 @@ body :where(
   font-weight: 500;
 }
 
-.shift-period-switcher button.is-active span {
+.shift-period-switcher button.is-active strong,
+.shift-period-switcher button[aria-current="page"] strong {
+  color: white;
+  -webkit-text-fill-color: white;
+}
+
+.shift-period-switcher button.is-active span,
+.shift-period-switcher button[aria-current="page"] span {
   color: rgba(255, 255, 255, 0.82);
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.82);
 }
 
 .shift-request-publish-actions {
