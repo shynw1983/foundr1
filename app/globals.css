@@ -18860,11 +18860,90 @@ body :where(
   padding: 18px;
 }
 
+.shift-period-switcher {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--color-surface-subtle, #f7f9f8);
+}
+
+.shift-period-switcher button {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  min-height: 52px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 7px 12px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.shift-period-switcher button:hover:not(:disabled) {
+  border-color: var(--color-brand-border, rgba(33, 116, 91, 0.28));
+  background: var(--panel, white);
+}
+
+.shift-period-switcher button.is-active {
+  border-color: var(--green);
+  background: var(--green);
+  color: white;
+}
+
+.shift-period-switcher button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.shift-period-switcher strong,
+.shift-period-switcher span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shift-period-switcher strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.shift-period-switcher span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.shift-period-switcher button.is-active span {
+  color: rgba(255, 255, 255, 0.82);
+}
+
 .shift-request-publish-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
+}
+
+@media (max-width: 560px) {
+  .shift-period-switcher {
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .shift-period-switcher button {
+    min-height: 50px;
+    padding-inline: 7px;
+  }
+
+  .shift-period-switcher strong {
+    font-size: 12px;
+  }
 }
 
 .shift-coverage-list {

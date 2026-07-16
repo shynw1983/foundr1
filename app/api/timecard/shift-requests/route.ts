@@ -149,8 +149,9 @@ function getCurrentSchedulingPeriod() {
     const monthLabel = `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}`;
     const nextMonthStart = new Date(Date.UTC(targetYear, targetMonth + 1, 1));
     return {
+      key: `${monthLabel}-second_half`,
       periodType: "second_half",
-      startDate: `${monthLabel}-15`,
+      startDate: `${monthLabel}-16`,
       endDate: formatDateKey(new Date(nextMonthStart.getTime() - 24 * 60 * 60 * 1000)),
       label: `${monthLabel} 後半`
     };
@@ -159,10 +160,41 @@ function getCurrentSchedulingPeriod() {
   const nextMonthStart = new Date(Date.UTC(targetYear, targetMonth + 1, 1));
   const nextMonthLabel = `${nextMonthStart.getUTCFullYear()}-${String(nextMonthStart.getUTCMonth() + 1).padStart(2, "0")}`;
   return {
+    key: `${nextMonthLabel}-first_half`,
     periodType: "first_half",
     startDate: `${nextMonthLabel}-01`,
-    endDate: `${nextMonthLabel}-14`,
+    endDate: `${nextMonthLabel}-15`,
     label: `${nextMonthLabel} 前半`
+  };
+}
+
+function getSchedulingPeriod(value: string | null) {
+  const match = /^(\d{4})-(\d{2})-(first_half|second_half)$/.exec(value ?? "");
+  if (!match) return getCurrentSchedulingPeriod();
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return getCurrentSchedulingPeriod();
+
+  const monthLabel = `${match[1]}-${match[2]}`;
+  const periodType = match[3] as "first_half" | "second_half";
+  if (periodType === "first_half") {
+    return {
+      key: `${monthLabel}-first_half`,
+      periodType,
+      startDate: `${monthLabel}-01`,
+      endDate: `${monthLabel}-15`,
+      label: `${monthLabel} 前半`
+    };
+  }
+
+  const nextMonthStart = new Date(Date.UTC(year, month, 1));
+  return {
+    key: `${monthLabel}-second_half`,
+    periodType,
+    startDate: `${monthLabel}-16`,
+    endDate: formatDateKey(new Date(nextMonthStart.getTime() - 24 * 60 * 60 * 1000)),
+    label: `${monthLabel} 後半`
   };
 }
 
@@ -290,7 +322,6 @@ export async function GET(request: Request) {
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
 
   const url = new URL(request.url);
-  const { month, startDate, endDate } = getMonthRange(url.searchParams.get("month") || getJstMonthLabel());
   const selfOnly = url.searchParams.get("selfOnly") === "1";
   const canManageRequestScope = managerRoles.has(session.role) && !selfOnly;
   const stores = selfOnly ? await getEmployeeVisibleStores(session.id) : await getVisibleStores(session);
@@ -321,12 +352,13 @@ export async function GET(request: Request) {
   ` : [];
   const submissionPeriod = getShiftSubmissionPeriod(shiftSettingsRows[0] ?? null);
   const submissionDates = enumerateDates(submissionPeriod.startDate, submissionPeriod.endDate);
-  const schedulingPeriod = getCurrentSchedulingPeriod();
+  const schedulingPeriod = getSchedulingPeriod(url.searchParams.get("period"));
+  const month = schedulingPeriod.startDate.slice(0, 7);
   const schedulingDates = enumerateDates(schedulingPeriod.startDate, schedulingPeriod.endDate);
-  const queryStartDate = startDate < schedulingPeriod.startDate ? startDate : schedulingPeriod.startDate;
+  const queryStartDate = schedulingPeriod.startDate;
   const schedulingEndExclusive = new Date(`${schedulingPeriod.endDate}T00:00:00+09:00`);
   schedulingEndExclusive.setUTCDate(schedulingEndExclusive.getUTCDate() + 1);
-  const queryEndDate = endDate > schedulingPeriod.endDate ? endDate : formatDateKey(schedulingEndExclusive);
+  const queryEndDate = formatDateKey(schedulingEndExclusive);
 
   const requests = selectedStoreId ? await sql`
     select

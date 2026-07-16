@@ -35,7 +35,7 @@ type ShiftRequestPayload = {
   selectedStoreId: string;
   stores: StoreOption[];
   employees: EmployeeOption[];
-  schedulingPeriod?: { periodType: string; startDate: string; endDate: string; label: string };
+  schedulingPeriod?: { key: string; periodType: "first_half" | "second_half"; startDate: string; endDate: string; label: string };
   schedulingDates?: string[];
   requests: ShiftRequestItem[];
   myShifts?: Array<{ id: string; workDate: string; scheduledStart: string | null; scheduledEnd: string | null; employeeName: string }>;
@@ -114,6 +114,50 @@ function formatWorkDate(value: string) {
   }).format(new Date(`${value}T00:00:00+09:00`));
 }
 
+type SchedulingPeriodOption = NonNullable<ShiftRequestPayload["schedulingPeriod"]>;
+
+function getSchedulingPeriodOption(month: string, periodType: "first_half" | "second_half"): SchedulingPeriodOption {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const nextMonthStart = new Date(Date.UTC(year, monthNumber, 1));
+  const endOfMonth = new Date(nextMonthStart.getTime() - 24 * 60 * 60 * 1000).getUTCDate();
+  return {
+    key: `${month}-${periodType}`,
+    periodType,
+    startDate: `${month}-${periodType === "first_half" ? "01" : "16"}`,
+    endDate: `${month}-${periodType === "first_half" ? "15" : String(endOfMonth).padStart(2, "0")}`,
+    label: `${month} ${periodType === "first_half" ? "前半" : "後半"}`
+  };
+}
+
+function addSchedulingPeriods(period: SchedulingPeriodOption, offset: number) {
+  const month = period.startDate.slice(0, 7);
+  const [year, monthNumber] = month.split("-").map(Number);
+  const halfIndex = year * 24 + (monthNumber - 1) * 2 + (period.periodType === "second_half" ? 1 : 0) + offset;
+  const nextYear = Math.floor(halfIndex / 24);
+  const nextMonthIndex = Math.floor((halfIndex % 24) / 2);
+  const nextMonth = `${nextYear}-${String(nextMonthIndex + 1).padStart(2, "0")}`;
+  return getSchedulingPeriodOption(nextMonth, halfIndex % 2 === 0 ? "first_half" : "second_half");
+}
+
+function getSchedulingPeriodKeyForDate(value: string) {
+  const match = /^(\d{4}-\d{2})-(\d{2})$/.exec(value);
+  if (!match) return "";
+  return `${match[1]}-${Number(match[2]) <= 15 ? "first_half" : "second_half"}`;
+}
+
+function formatSchedulingPeriodLabel(period: SchedulingPeriodOption) {
+  const [year, month] = period.startDate.slice(0, 7).split("-");
+  return `${year}年 ${Number(month)}月${period.periodType === "first_half" ? "前半" : "後半"}`;
+}
+
+function formatSchedulingPeriodRange(period: SchedulingPeriodOption) {
+  const format = (value: string) => {
+    const [, month, day] = value.split("-");
+    return `${Number(month)}/${Number(day)}`;
+  };
+  return `${format(period.startDate)}–${format(period.endDate)}`;
+}
+
 function getShiftWindow(request: ShiftRequestItem) {
   return request.windows.find((window) => window.workDate === request.workDate) ?? request.windows[0] ?? null;
 }
@@ -183,6 +227,7 @@ export default function TimecardShiftRequestsPage() {
   const initialQueryRef = useRef<{ storeId: string; requestId: string; date: string; handled: boolean } | null>(null);
   const [data, setData] = useState<ShiftRequestPayload | null>(null);
   const [month, setMonth] = useState(getJstMonthLabel());
+  const [selectedPeriodKey, setSelectedPeriodKey] = useState("");
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ShiftRequestItem["status"]>("open");
   const [message, setMessage] = useState("");
@@ -200,11 +245,13 @@ export default function TimecardShiftRequestsPage() {
     };
   }
 
-  async function loadRequests(nextStoreId = selectedStoreId, nextMonth = month) {
+  async function loadRequests(nextStoreId = selectedStoreId, nextPeriodKey = selectedPeriodKey) {
     setIsLoading(true);
     setMessage("");
     try {
-      const params = new URLSearchParams({ month: nextMonth });
+      const periodMonth = nextPeriodKey.match(/^\d{4}-\d{2}/)?.[0] ?? month;
+      const params = new URLSearchParams({ month: periodMonth });
+      if (nextPeriodKey) params.set("period", nextPeriodKey);
       if (nextStoreId) params.set("storeId", nextStoreId);
       const response = await fetch(`/api/timecard/shift-requests?${params.toString()}`, { cache: "no-store" });
       if (response.ok) {
@@ -212,6 +259,7 @@ export default function TimecardShiftRequestsPage() {
         setData(body);
         setSelectedStoreId(body.selectedStoreId);
         setMonth(body.month);
+        setSelectedPeriodKey(body.schedulingPeriod?.key ?? "");
         setApprovalDrafts((current) => {
           const next = { ...current };
           for (const request of body.requests ?? []) {
@@ -238,7 +286,7 @@ export default function TimecardShiftRequestsPage() {
   useEffect(() => {
     const initialQuery = initialQueryRef.current;
     if (initialQuery?.requestId) setStatusFilter("all");
-    void loadRequests(initialQuery?.storeId || selectedStoreId, month);
+    void loadRequests(initialQuery?.storeId || selectedStoreId, getSchedulingPeriodKeyForDate(initialQuery?.date ?? ""));
   }, []);
 
   useEffect(() => {
@@ -295,7 +343,7 @@ export default function TimecardShiftRequestsPage() {
       return;
     }
     setMessage(approved ? "申請を承認しました。" : "申請を却下しました。");
-    await loadRequests(selectedStoreId, month);
+    await loadRequests(selectedStoreId, selectedPeriodKey);
   }
 
   async function publishSchedule() {
@@ -311,11 +359,14 @@ export default function TimecardShiftRequestsPage() {
     }
     setPublishNote("");
     setMessage("シフトを公開しました。");
-    await loadRequests(selectedStoreId, month);
+    await loadRequests(selectedStoreId, selectedPeriodKey);
   }
 
   const latestPublication = data?.publications[0] ?? null;
   const openCount = (data?.requests ?? []).filter((request) => request.status === "open").length;
+  const periodOptions = data?.schedulingPeriod
+    ? [-1, 0, 1].map((offset) => addSchedulingPeriods(data.schedulingPeriod as SchedulingPeriodOption, offset))
+    : [];
 
   return (
     <main className="shell">
@@ -342,17 +393,13 @@ export default function TimecardShiftRequestsPage() {
             <span className="source-indicator">{isLoading ? "読み込み中" : `未確認 ${openCount} 件`}</span>
           </div>
           <div className="timecard-toolbar">
-            <input type="month" value={month} onChange={(event) => {
-              setMonth(event.target.value);
-              void loadRequests(selectedStoreId, event.target.value);
-            }} />
             <select value={selectedStoreId} onChange={(event) => {
               setSelectedStoreId(event.target.value);
-              void loadRequests(event.target.value, month);
+              void loadRequests(event.target.value, selectedPeriodKey);
             }}>
               {data?.stores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
             </select>
-            <button className="secondary-button" type="button" onClick={() => loadRequests(selectedStoreId, month)}>
+            <button className="secondary-button" type="button" onClick={() => loadRequests(selectedStoreId, selectedPeriodKey)}>
               <RefreshCw size={16} />
               更新
             </button>
@@ -360,6 +407,22 @@ export default function TimecardShiftRequestsPage() {
         </header>
 
         {message ? <div className="timecard-message">{message}</div> : null}
+
+        <nav className="shift-period-switcher" aria-label="シフト対象期間">
+          {periodOptions.map((period) => (
+            <button
+              className={period.key === selectedPeriodKey ? "is-active" : ""}
+              type="button"
+              disabled={isLoading}
+              aria-current={period.key === selectedPeriodKey ? "page" : undefined}
+              onClick={() => void loadRequests(selectedStoreId, period.key)}
+              key={period.key}
+            >
+              <strong>{formatSchedulingPeriodLabel(period)}</strong>
+              <span>{formatSchedulingPeriodRange(period)}</span>
+            </button>
+          ))}
+        </nav>
 
         <section className="panel shift-request-publish-panel">
           <div className="panel-title">
@@ -387,7 +450,7 @@ export default function TimecardShiftRequestsPage() {
 
         <section className="shift-coverage-list">
           {isLoading ? <div className="empty-state">読み込み中</div> : null}
-          {!isLoading && calendarDates.length === 0 ? <div className="empty-state">排班対象期間がありません。</div> : null}
+          {!isLoading && calendarDates.length === 0 ? <div className="empty-state">シフト対象期間がありません。</div> : null}
           {data?.schedulingPeriod ? (
             <div className="shift-schedule-period-label">
               <CalendarDays size={16} />
