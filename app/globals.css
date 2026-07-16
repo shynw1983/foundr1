@@ -18895,9 +18895,12 @@ body :where(
   color: white;
 }
 
-.shift-period-switcher button:disabled {
+.shift-period-switcher[aria-busy="true"] button {
   cursor: wait;
-  opacity: 0.7;
+}
+
+.shift-period-switcher[aria-busy="true"] button:not(.is-active) {
+  opacity: 0.62;
 }
 
 .shift-period-switcher strong,
@@ -35395,7 +35398,8 @@ body:has(.store-workbench-shell) {
 .store-pos-payment-grid button.is-active,
 .timecard-view-tabs button.is-active,
 .timecard-view-tabs a.is-active,
-.timecard-subtabs button.is-active {
+.timecard-subtabs button.is-active,
+.shift-period-switcher button.is-active {
   background: var(--green);
   color: white;
 }

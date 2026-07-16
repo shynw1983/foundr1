@@ -228,6 +228,7 @@ export default function TimecardShiftRequestsPage() {
   const [data, setData] = useState<ShiftRequestPayload | null>(null);
   const [month, setMonth] = useState(getJstMonthLabel());
   const [selectedPeriodKey, setSelectedPeriodKey] = useState("");
+  const [pendingPeriodKey, setPendingPeriodKey] = useState("");
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ShiftRequestItem["status"]>("open");
   const [message, setMessage] = useState("");
@@ -247,6 +248,7 @@ export default function TimecardShiftRequestsPage() {
 
   async function loadRequests(nextStoreId = selectedStoreId, nextPeriodKey = selectedPeriodKey) {
     setIsLoading(true);
+    setPendingPeriodKey(nextPeriodKey);
     setMessage("");
     try {
       const periodMonth = nextPeriodKey.match(/^\d{4}-\d{2}/)?.[0] ?? month;
@@ -280,6 +282,7 @@ export default function TimecardShiftRequestsPage() {
       setMessage("シフト連絡を読み込めませんでした。通信状態を確認してください。");
     } finally {
       setIsLoading(false);
+      setPendingPeriodKey("");
     }
   }
 
@@ -408,14 +411,16 @@ export default function TimecardShiftRequestsPage() {
 
         {message ? <div className="timecard-message">{message}</div> : null}
 
-        <nav className="shift-period-switcher" aria-label="シフト対象期間">
+        <nav className="shift-period-switcher" aria-label="シフト対象期間" aria-busy={isLoading}>
           {periodOptions.map((period) => (
             <button
-              className={period.key === selectedPeriodKey ? "is-active" : ""}
+              className={period.key === (pendingPeriodKey || selectedPeriodKey) ? "is-active" : ""}
               type="button"
-              disabled={isLoading}
-              aria-current={period.key === selectedPeriodKey ? "page" : undefined}
-              onClick={() => void loadRequests(selectedStoreId, period.key)}
+              aria-disabled={isLoading}
+              aria-current={period.key === (pendingPeriodKey || selectedPeriodKey) ? "page" : undefined}
+              onClick={() => {
+                if (!isLoading) void loadRequests(selectedStoreId, period.key);
+              }}
               key={period.key}
             >
               <strong>{formatSchedulingPeriodLabel(period)}</strong>
