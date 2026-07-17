@@ -12140,6 +12140,10 @@ body :where(
   min-height: 52px;
 }
 
+.store-pos-floating-checkout {
+  display: none;
+}
+
 .store-pos-receipt-request.is-active {
   border-color: var(--green);
   background: rgba(47, 111, 88, 0.1);
@@ -34075,6 +34079,10 @@ body :where(
 }
 
 @media (max-width: 1180px) {
+  .store-pos-page:has(.store-pos-floating-checkout) {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+  }
+
   .store-pos-layout {
     grid-template-columns: 1fr;
   }
@@ -34085,6 +34093,53 @@ body :where(
 
   .store-pos-cart-panel {
     position: static;
+  }
+
+  .store-pos-floating-checkout {
+    position: fixed;
+    right: 16px;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    left: 16px;
+    z-index: 65;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    width: min(680px, calc(100vw - 32px));
+    margin-inline: auto;
+    border: 1px solid rgba(31, 111, 85, 0.22);
+    border-radius: 12px;
+    padding: 10px 10px 10px 16px;
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 18px 44px rgba(15, 43, 34, 0.2);
+    backdrop-filter: blur(14px);
+  }
+
+  .store-pos-floating-checkout > div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .store-pos-floating-checkout span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .store-pos-floating-checkout strong {
+    color: var(--ink);
+    font-size: 24px;
+    font-weight: 650;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  .store-pos-floating-checkout .primary-button {
+    min-width: 132px;
+    min-height: 52px;
+    border-radius: 9px;
+    font-size: 15px;
   }
 
   .pos-admin-metrics {

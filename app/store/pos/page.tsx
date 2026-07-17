@@ -626,6 +626,7 @@ export default function StorePosPage() {
   const memberLookupLoadingRef = useRef(false);
   const customerDisplayMemberScanIdRef = useRef("");
   const selectedStoreIdRef = useRef("");
+  const checkoutSectionRef = useRef<HTMLDivElement | null>(null);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [categories, setCategories] = useState<PosMenuCategory[]>([]);
@@ -715,12 +716,19 @@ export default function StorePosPage() {
 
   async function load(nextStoreId = selectedStoreId) {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (nextStoreId) params.set("storeId", nextStoreId);
-    params.set("ts", String(Date.now()));
-    const response = await fetch(`/api/store/pos${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
+    const fetchPosData = (storeId: string) => {
+      const params = new URLSearchParams();
+      if (storeId) params.set("storeId", storeId);
+      params.set("ts", String(Date.now()));
+      return fetch(`/api/store/pos?${params.toString()}`, { cache: "no-store" });
+    };
+    let response = await fetchPosData(nextStoreId);
+    if (response.status === 403 && nextStoreId) {
+      response = await fetchPosData("");
+    }
     if (!response.ok) {
-      setMessage("POS データを読み込めませんでした。");
+      const errorBody = await response.json().catch(() => ({})) as { error?: string };
+      setMessage(errorBody.error || "POS データを読み込めませんでした。");
       setLoading(false);
       return;
     }
@@ -1949,6 +1957,13 @@ export default function StorePosPage() {
     }
   }
 
+  function revealCheckoutSection() {
+    checkoutSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => {
+      checkoutSectionRef.current?.querySelector<HTMLButtonElement>("button.is-active")?.focus({ preventScroll: true });
+    }, 450);
+  }
+
   async function loadTransactions(orderId = selectedTransaction?.id ?? "") {
     if (!selectedStoreId) return;
     setTransactionLoading(true);
@@ -2503,7 +2518,7 @@ export default function StorePosPage() {
             ) : null}
           </div>
 
-          <div className="store-pos-payment-grid">
+          <div className="store-pos-payment-grid" id="store-pos-payment-section" ref={checkoutSectionRef}>
             {paymentOptions.map((option) => {
               const Icon = option.icon;
               return (
@@ -2605,6 +2620,25 @@ export default function StorePosPage() {
           </div>
         </aside>
       </section>
+
+      {hasCurrentTransaction ? (
+        <aside className="store-pos-floating-checkout" aria-label="会計ショートカット">
+          <div>
+            <span>{selectedTableCheckout ? `${selectedTableCheckout.orderCount}件のテーブル会計` : `${cartCount}点を選択中`}</span>
+            <strong>{formatYen(activeCheckoutAmount)}</strong>
+          </div>
+          <button
+            className="primary-button"
+            type="button"
+            aria-controls="store-pos-payment-section"
+            onClick={revealCheckoutSection}
+            disabled={saving}
+          >
+            <ShoppingCart size={18} />
+            会計へ
+          </button>
+        </aside>
+      ) : null}
 
       {memberScannerOpen ? (
         <ModalHistoryScope historyKey="store-pos-member-scanner" onClose={() => setMemberScannerOpen(false)}>
