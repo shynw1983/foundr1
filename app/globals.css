@@ -19168,6 +19168,16 @@ body :where(
   align-items: center;
 }
 
+.shift-coverage-controls.is-compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.shift-coverage-status {
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .shift-coverage-controls input {
   width: 100%;
   min-height: 38px;

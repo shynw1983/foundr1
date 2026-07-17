@@ -8,6 +8,7 @@ import type { EmployeeSession } from "../../../../lib/auth";
 type ShiftRequestBody = {
   action?: string;
   storeId?: string;
+  shiftId?: string;
   month?: string;
   requestId?: string;
   requestType?: string;
@@ -583,6 +584,63 @@ export async function POST(request: Request) {
   const storeId = String(body.storeId ?? "");
   if (!storeId || !await canUseStore(session, storeId)) {
     return Response.json({ error: "この店舗を操作する権限がありません。" }, { status: 403 });
+  }
+
+  if (action === "update_confirmed_shift") {
+    if (!managerRoles.has(session.role)) {
+      return Response.json({ error: "確定シフトを変更する権限がありません。" }, { status: 403 });
+    }
+    const shiftId = String(body.shiftId ?? "");
+    const scheduledStart = normalizeTimeValue(body.approvedStart);
+    const scheduledEnd = normalizeTimeValue(body.approvedEnd);
+    if (!shiftId || !scheduledStart || !scheduledEnd) {
+      return Response.json({ error: "変更する開始・終了時刻を入力してください。" }, { status: 400 });
+    }
+    const shiftRows = await sql`
+      select
+        timecard_shifts.id::text,
+        timecard_shifts.employee_id::text as "employeeId",
+        to_char(timecard_shifts.work_date, 'YYYY-MM-DD') as "workDate",
+        to_char(timecard_shifts.scheduled_start, 'HH24:MI') as "scheduledStart",
+        to_char(timecard_shifts.scheduled_end, 'HH24:MI') as "scheduledEnd"
+      from timecard_shifts
+      where timecard_shifts.id::text = ${shiftId}
+        and timecard_shifts.store_id::text = ${storeId}
+      limit 1
+    `;
+    const shift = shiftRows[0];
+    if (!shift) return Response.json({ error: "確定シフトが見つかりません。" }, { status: 404 });
+
+    await sql`
+      update timecard_shifts
+      set scheduled_start = ${scheduledStart}::time,
+          scheduled_end = ${scheduledEnd}::time,
+          updated_at = now()
+      where id::text = ${shiftId}
+        and store_id::text = ${storeId}
+    `;
+    await notifyEmployee(
+      String(shift.employeeId),
+      "確定シフトが変更されました",
+      `${String(shift.workDate)} の確定シフトが ${scheduledStart}-${scheduledEnd} に変更されました。`,
+      "/store/timecard"
+    );
+    await writeAuditLog({
+      actorEmployeeId: session.id,
+      action: "timecard.shift.updated",
+      targetType: "timecard_shift",
+      targetId: shiftId,
+      metadata: {
+        storeId,
+        workDate: String(shift.workDate),
+        previousStart: String(shift.scheduledStart ?? ""),
+        previousEnd: String(shift.scheduledEnd ?? ""),
+        scheduledStart,
+        scheduledEnd
+      },
+      request
+    });
+    return Response.json({ ok: true });
   }
 
   if (action === "create_shift_request") {

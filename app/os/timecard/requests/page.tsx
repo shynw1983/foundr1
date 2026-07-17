@@ -224,7 +224,8 @@ export default function TimecardShiftRequestsPage() {
   const [message, setMessage] = useState("");
   const [publishNote, setPublishNote] = useState("");
   const [approvalDrafts, setApprovalDrafts] = useState<Record<string, ApprovalDraft>>({});
-  const [editingApprovedRequestId, setEditingApprovedRequestId] = useState("");
+  const [shiftDrafts, setShiftDrafts] = useState<Record<string, ApprovalDraft>>({});
+  const [editingShiftId, setEditingShiftId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   if (typeof window !== "undefined" && initialQueryRef.current === null) {
@@ -253,6 +254,10 @@ export default function TimecardShiftRequestsPage() {
         setSelectedStoreId(body.selectedStoreId);
         setMonth(body.month);
         setSelectedPeriodKey(body.schedulingPeriod?.key ?? "");
+        setShiftDrafts(Object.fromEntries((body.myShifts ?? []).map((shift) => [shift.id, {
+          approvedStart: shift.scheduledStart ?? "",
+          approvedEnd: shift.scheduledEnd ?? ""
+        }])));
         setApprovalDrafts((current) => {
           const next = { ...current };
           for (const request of body.requests ?? []) {
@@ -340,7 +345,28 @@ export default function TimecardShiftRequestsPage() {
       return;
     }
     setMessage(approved ? "申請を承認しました。" : "申請を却下しました。");
-    setEditingApprovedRequestId("");
+    await loadRequests(selectedStoreId, selectedPeriodKey);
+  }
+
+  async function updateConfirmedShift(shiftId: string, draft: ApprovalDraft) {
+    const response = await fetch("/api/timecard/shift-requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "update_confirmed_shift",
+        storeId: selectedStoreId,
+        shiftId,
+        approvedStart: draft.approvedStart,
+        approvedEnd: draft.approvedEnd
+      })
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setMessage(body.error ?? "確定シフトを変更できませんでした。");
+      return;
+    }
+    setMessage("確定シフトを変更しました。");
+    setEditingShiftId("");
     await loadRequests(selectedStoreId, selectedPeriodKey);
   }
 
@@ -464,7 +490,10 @@ export default function TimecardShiftRequestsPage() {
             const day = getBusinessDay(businessHours, workDate);
             const coverageSummary = getCoverageSummary(requests, shifts, day, approvalDrafts);
             const businessInterval = getBusinessInterval(day.open, day.close);
-            const shiftIntervals = shifts.map((shift) => getShiftInterval(shift.scheduledStart, shift.scheduledEnd, businessInterval));
+            const shiftIntervals = shifts.map((shift) => {
+              const draft = shiftDrafts[shift.id] ?? { approvedStart: shift.scheduledStart ?? "", approvedEnd: shift.scheduledEnd ?? "" };
+              return getShiftInterval(draft.approvedStart, draft.approvedEnd, businessInterval);
+            });
             const requestIntervals = requests.map((request) => {
               const window = getShiftWindow(request);
               const draft = approvalDrafts[request.id] ?? { approvedStart: window?.availableStart ?? "", approvedEnd: window?.availableEnd ?? "" };
@@ -486,7 +515,10 @@ export default function TimecardShiftRequestsPage() {
                       <span>{formatTimelineMinute(timelineInterval.start)}</span>
                       <span>{formatTimelineMinute(timelineInterval.end)}</span>
                     </div>
-                    {shifts.map((shift, shiftIndex) => (
+                    {shifts.map((shift, shiftIndex) => {
+                      const draft = shiftDrafts[shift.id] ?? { approvedStart: shift.scheduledStart ?? "", approvedEnd: shift.scheduledEnd ?? "" };
+                      const isEditingShift = editingShiftId === shift.id;
+                      return (
                       <div className="shift-coverage-row is-approved is-scheduled" key={`shift-${shift.id}`}>
                         <div className="shift-coverage-person">
                           <div className="shift-coverage-person-heading">
@@ -502,16 +534,51 @@ export default function TimecardShiftRequestsPage() {
                             style={getTimelineBarStyle(shiftIntervals[shiftIndex] ?? null, timelineInterval)}
                           />
                         </div>
-                        <div className="shift-coverage-controls">
-                          <strong>確定済み</strong>
+                        <div className={`shift-coverage-controls${isEditingShift ? "" : " is-compact"}`}>
+                          {isEditingShift ? (
+                            <>
+                              <input
+                                type="time"
+                                value={draft.approvedStart}
+                                onChange={(event) => setShiftDrafts((current) => ({ ...current, [shift.id]: { ...draft, approvedStart: event.target.value } }))}
+                              />
+                              <input
+                                type="time"
+                                value={draft.approvedEnd}
+                                onChange={(event) => setShiftDrafts((current) => ({ ...current, [shift.id]: { ...draft, approvedEnd: event.target.value } }))}
+                              />
+                              <button className="primary-button" type="button" onClick={() => updateConfirmedShift(shift.id, draft)}>変更を保存</button>
+                              <button
+                                className="secondary-button"
+                                type="button"
+                                onClick={() => {
+                                  setShiftDrafts((current) => ({
+                                    ...current,
+                                    [shift.id]: {
+                                      approvedStart: shift.scheduledStart ?? "",
+                                      approvedEnd: shift.scheduledEnd ?? ""
+                                    }
+                                  }));
+                                  setEditingShiftId("");
+                                }}
+                              >
+                                キャンセル
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span className="shift-coverage-status">確定済み</span>
+                              <button className="secondary-button" type="button" onClick={() => setEditingShiftId(shift.id)}>変更</button>
+                            </>
+                          )}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                     {requests.map((request, requestIndex) => {
                       const window = getShiftWindow(request);
                       const draft = approvalDrafts[request.id] ?? { approvedStart: window?.availableStart ?? "", approvedEnd: window?.availableEnd ?? "" };
                       const adjusted = draft.approvedStart !== (window?.availableStart ?? "") || draft.approvedEnd !== (window?.availableEnd ?? "");
-                      const isEditingApproved = request.status === "approved" && editingApprovedRequestId === request.id;
                       const requestedInterval = getShiftInterval(window?.availableStart, window?.availableEnd, businessInterval);
                       return (
                         <div className={`shift-coverage-row is-${request.status}`} id={`shift-request-${request.id}`} key={request.id}>
@@ -538,13 +605,13 @@ export default function TimecardShiftRequestsPage() {
                             <input
                               type="time"
                               value={draft.approvedStart}
-                              disabled={request.status !== "open" && !isEditingApproved}
+                              disabled={request.status !== "open"}
                               onChange={(event) => setApprovalDrafts((current) => ({ ...current, [request.id]: { ...draft, approvedStart: event.target.value } }))}
                             />
                             <input
                               type="time"
                               value={draft.approvedEnd}
-                              disabled={request.status !== "open" && !isEditingApproved}
+                              disabled={request.status !== "open"}
                               onChange={(event) => setApprovalDrafts((current) => ({ ...current, [request.id]: { ...draft, approvedEnd: event.target.value } }))}
                             />
                             {request.status === "open" ? (
@@ -552,36 +619,11 @@ export default function TimecardShiftRequestsPage() {
                                 <button className="primary-button" type="button" onClick={() => reviewRequest(request, true, "", draft)}>承認</button>
                                 <button className="secondary-button" type="button" onClick={() => reviewRequest(request, false)}>却下</button>
                               </>
-                            ) : isEditingApproved ? (
-                              <>
-                                <button className="primary-button" type="button" onClick={() => reviewRequest(request, true, "", draft)}>変更を保存</button>
-                                <button
-                                  className="secondary-button"
-                                  type="button"
-                                  onClick={() => {
-                                    setApprovalDrafts((current) => ({
-                                      ...current,
-                                      [request.id]: {
-                                        approvedStart: request.approvedStart ?? window?.availableStart ?? "",
-                                        approvedEnd: request.approvedEnd ?? window?.availableEnd ?? ""
-                                      }
-                                    }));
-                                    setEditingApprovedRequestId("");
-                                  }}
-                                >
-                                  キャンセル
-                                </button>
-                              </>
-                            ) : request.status === "approved" ? (
-                              <>
-                                <strong>承認済み</strong>
-                                <button className="secondary-button" type="button" onClick={() => setEditingApprovedRequestId(request.id)}>変更</button>
-                              </>
                             ) : (
                               <strong>{statusLabels[request.status]}</strong>
                             )}
                           </div>
-                          {adjusted && (request.status === "open" || isEditingApproved) ? <small>保存時にスタッフへ調整後の時間を通知します。</small> : null}
+                          {adjusted && request.status === "open" ? <small>承認時にスタッフへ調整後の時間を通知します。</small> : null}
                         </div>
                       );
                     })}
