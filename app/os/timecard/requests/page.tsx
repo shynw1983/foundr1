@@ -42,7 +42,7 @@ type ShiftRequestPayload = {
   schedulingDates?: string[];
   requests: ShiftRequestItem[];
   myShifts?: Array<{ id: string; employeeId: string; workDate: string; scheduledStart: string | null; scheduledEnd: string | null; employeeName: string }>;
-  monthlyShiftStats?: Array<{ employeeId: string; approvedDays: number; rejectedDays: number }>;
+  monthlyShiftStats?: Array<{ employeeId: string; confirmedDays: number; rejectedDays: number }>;
   publications: Array<{ id: string; scheduleMonth: string; note: string | null; publishedAt: string; publishedByName: string | null }>;
 };
 
@@ -199,16 +199,16 @@ function getCoverageSummary(
   return cursor >= business.end ? "充足" : "未充足";
 }
 
-function ShiftMonthStats({ stats }: { stats?: { approvedDays: number; rejectedDays: number } }) {
-  const approvedDays = stats?.approvedDays ?? 0;
+function ShiftMonthStats({ stats }: { stats?: { confirmedDays: number; rejectedDays: number } }) {
+  const confirmedDays = stats?.confirmedDays ?? 0;
   const rejectedDays = stats?.rejectedDays ?? 0;
-  const reviewedDays = approvedDays + rejectedDays;
-  const approvalRate = reviewedDays > 0 ? `${Math.round((approvedDays / reviewedDays) * 100)}%` : "—";
+  const decidedDays = confirmedDays + rejectedDays;
+  const confirmationRate = decidedDays > 0 ? `${Math.round((confirmedDays / decidedDays) * 100)}%` : "—";
   return (
-    <span className="shift-coverage-person-stats" aria-label={`今月の承認 ${approvedDays}日、却下 ${rejectedDays}日、承認率 ${approvalRate}`}>
-      <span className="shift-coverage-person-stat">承認 {approvedDays}日</span>
+    <span className="shift-coverage-person-stats" aria-label={`今月の確定 ${confirmedDays}日、却下 ${rejectedDays}日、確定率 ${confirmationRate}`}>
+      <span className="shift-coverage-person-stat">確定 {confirmedDays}日</span>
       <span className="shift-coverage-person-stat is-rejected">却下 {rejectedDays}日</span>
-      <span className="shift-coverage-person-stat is-rate">承認率 {approvalRate}</span>
+      <span className="shift-coverage-person-stat is-rate">確定率 {confirmationRate}</span>
     </span>
   );
 }

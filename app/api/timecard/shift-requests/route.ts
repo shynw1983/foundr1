@@ -475,15 +475,13 @@ export async function GET(request: Request) {
     select distinct
       employee_work_stores.employee_id::text as "employeeId",
       (
-        select count(distinct approved_requests.work_date)::int
-        from timecard_shift_requests approved_requests
-        where approved_requests.store_id::text = ${selectedStoreId}
-          and approved_requests.employee_id = employee_work_stores.employee_id
-          and approved_requests.request_type = 'availability'
-          and approved_requests.status = 'approved'
-          and approved_requests.work_date >= ${monthRange.startDate}::date
-          and approved_requests.work_date < ${monthRange.endDate}::date
-      ) as "approvedDays",
+        select count(distinct confirmed_shifts.work_date)::int
+        from timecard_shifts confirmed_shifts
+        where confirmed_shifts.store_id::text = ${selectedStoreId}
+          and confirmed_shifts.employee_id = employee_work_stores.employee_id
+          and confirmed_shifts.work_date >= ${monthRange.startDate}::date
+          and confirmed_shifts.work_date < ${monthRange.endDate}::date
+      ) as "confirmedDays",
       (
         select count(distinct rejected_requests.work_date)::int
         from timecard_shift_requests rejected_requests
