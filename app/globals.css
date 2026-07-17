@@ -19097,7 +19097,7 @@ body :where(
 
 .shift-coverage-business-line {
   position: absolute;
-  inset: 50% 0 auto;
+  top: 50%;
   height: 1px;
   background: #d8e0e8;
 }

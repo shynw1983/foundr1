@@ -8,6 +8,7 @@ import { OsNavList } from "../../components/OsNavList";
 import { UserBadge } from "../../components/UserBadge";
 import { getJstMonthLabel } from "../../../../lib/timecard";
 import { normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from "../../../../lib/store-business-hours";
+import { formatTimelineMinute, getBusinessInterval, getShiftInterval, getTimelineBarStyle, getTimelineInterval } from "../../../../lib/shift-timeline";
 
 type StoreOption = { id: string; name: string; businessHours?: unknown };
 type EmployeeOption = { id: string; name: string; role: string };
@@ -89,12 +90,6 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function timeToMinutes(value: string | null | undefined) {
-  const match = /^(\d{2}):(\d{2})$/.exec(String(value ?? ""));
-  if (!match) return 0;
-  return Number(match[1]) * 60 + Number(match[2]);
-}
-
 function getWeekdayKey(workDate: string): WeekdayKey {
   const date = new Date(`${workDate}T12:00:00+09:00`);
   const keys: WeekdayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as WeekdayKey[];
@@ -162,20 +157,6 @@ function getShiftWindow(request: ShiftRequestItem) {
   return request.windows.find((window) => window.workDate === request.workDate) ?? request.windows[0] ?? null;
 }
 
-function getBarStyle(start: string | null | undefined, end: string | null | undefined, open: string, close: string) {
-  const openMinutes = timeToMinutes(open);
-  const closeBase = timeToMinutes(close);
-  const closeMinutes = closeBase <= openMinutes ? closeBase + 1440 : closeBase;
-  const startBase = timeToMinutes(start);
-  const endBase = timeToMinutes(end);
-  const startMinutes = startBase < openMinutes ? startBase + 1440 : startBase;
-  const endMinutes = endBase <= startBase ? endBase + 1440 : endBase;
-  const total = Math.max(1, closeMinutes - openMinutes);
-  const left = Math.max(0, Math.min(100, ((startMinutes - openMinutes) / total) * 100));
-  const width = Math.max(4, Math.min(100 - left, ((endMinutes - startMinutes) / total) * 100));
-  return { left: `${left}%`, width: `${width}%` };
-}
-
 function getCoverageSummary(
   requests: ShiftRequestItem[],
   shifts: Array<{ scheduledStart: string | null; scheduledEnd: string | null }>,
@@ -183,44 +164,36 @@ function getCoverageSummary(
   drafts: Record<string, ApprovalDraft>
 ) {
   if (day.closed) return "休業日";
-  const openMinutes = timeToMinutes(day.open);
-  const closeBase = timeToMinutes(day.close);
-  const closeMinutes = closeBase <= openMinutes ? closeBase + 1440 : closeBase;
+  const business = getBusinessInterval(day.open, day.close);
   const requestIntervals = requests
     .filter((request) => request.status !== "rejected")
     .map((request) => {
       const window = getShiftWindow(request);
       const draft = drafts[request.id] ?? { approvedStart: window?.availableStart ?? "", approvedEnd: window?.availableEnd ?? "" };
-      const startBase = timeToMinutes(draft.approvedStart);
-      const endBase = timeToMinutes(draft.approvedEnd);
-      const start = startBase < openMinutes ? startBase + 1440 : startBase;
-      const end = endBase <= startBase ? endBase + 1440 : endBase;
+      const interval = getShiftInterval(draft.approvedStart, draft.approvedEnd, business);
       return {
-        start: Math.max(openMinutes, start),
-        end: Math.min(closeMinutes, end)
+        start: Math.max(business.start, interval?.start ?? business.start),
+        end: Math.min(business.end, interval?.end ?? business.start)
       };
     });
   const shiftIntervals = shifts.map((shift) => {
-    const startBase = timeToMinutes(shift.scheduledStart);
-    const endBase = timeToMinutes(shift.scheduledEnd);
-    const start = startBase < openMinutes ? startBase + 1440 : startBase;
-    const end = endBase <= startBase ? endBase + 1440 : endBase;
+    const interval = getShiftInterval(shift.scheduledStart, shift.scheduledEnd, business);
     return {
-      start: Math.max(openMinutes, start),
-      end: Math.min(closeMinutes, end)
+      start: Math.max(business.start, interval?.start ?? business.start),
+      end: Math.min(business.end, interval?.end ?? business.start)
     };
   });
   const intervals = [...requestIntervals, ...shiftIntervals]
     .filter((interval) => interval.end > interval.start)
     .sort((left, right) => left.start - right.start);
 
-  let cursor = openMinutes;
+  let cursor = business.start;
   for (const interval of intervals) {
     if (interval.start > cursor) return "未充足";
     cursor = Math.max(cursor, interval.end);
-    if (cursor >= closeMinutes) return "充足";
+    if (cursor >= business.end) return "充足";
   }
-  return cursor >= closeMinutes ? "充足" : "未充足";
+  return cursor >= business.end ? "充足" : "未充足";
 }
 
 export default function TimecardShiftRequestsPage() {
@@ -468,6 +441,14 @@ export default function TimecardShiftRequestsPage() {
             const shifts = shiftsByDate.get(workDate) ?? [];
             const day = getBusinessDay(businessHours, workDate);
             const coverageSummary = getCoverageSummary(requests, shifts, day, approvalDrafts);
+            const businessInterval = getBusinessInterval(day.open, day.close);
+            const shiftIntervals = shifts.map((shift) => getShiftInterval(shift.scheduledStart, shift.scheduledEnd, businessInterval));
+            const requestIntervals = requests.map((request) => {
+              const window = getShiftWindow(request);
+              const draft = approvalDrafts[request.id] ?? { approvedStart: window?.availableStart ?? "", approvedEnd: window?.availableEnd ?? "" };
+              return getShiftInterval(draft.approvedStart, draft.approvedEnd, businessInterval);
+            });
+            const timelineInterval = getTimelineInterval(businessInterval, [...shiftIntervals, ...requestIntervals]);
             return (
               <article className="panel shift-coverage-card" id={`shift-date-${workDate}`} key={workDate}>
                 <div className="shift-coverage-head">
@@ -480,20 +461,20 @@ export default function TimecardShiftRequestsPage() {
                 {!day.closed ? (
                   <div className="shift-coverage-timeline" aria-label={`${workDate} の希望シフト`}>
                     <div className="shift-coverage-axis">
-                      <span>{day.open}</span>
-                      <span>{day.close}</span>
+                      <span>{formatTimelineMinute(timelineInterval.start)}</span>
+                      <span>{formatTimelineMinute(timelineInterval.end)}</span>
                     </div>
-                    {shifts.map((shift) => (
+                    {shifts.map((shift, shiftIndex) => (
                       <div className="shift-coverage-row is-approved is-scheduled" key={`shift-${shift.id}`}>
                         <div className="shift-coverage-person">
                           <strong>{shift.employeeName}</strong>
                           <span>確定 {shift.scheduledStart ?? "--:--"}-{shift.scheduledEnd ?? "--:--"}</span>
                         </div>
                         <div className="shift-coverage-bar-track">
-                          <span className="shift-coverage-business-line" />
+                          <span className="shift-coverage-business-line" style={getTimelineBarStyle(businessInterval, timelineInterval)} />
                           <span
                             className="shift-coverage-approved-bar"
-                            style={getBarStyle(shift.scheduledStart, shift.scheduledEnd, day.open, day.close)}
+                            style={getTimelineBarStyle(shiftIntervals[shiftIndex] ?? null, timelineInterval)}
                           />
                         </div>
                         <div className="shift-coverage-controls">
@@ -501,10 +482,11 @@ export default function TimecardShiftRequestsPage() {
                         </div>
                       </div>
                     ))}
-                    {requests.map((request) => {
+                    {requests.map((request, requestIndex) => {
                       const window = getShiftWindow(request);
                       const draft = approvalDrafts[request.id] ?? { approvedStart: window?.availableStart ?? "", approvedEnd: window?.availableEnd ?? "" };
                       const adjusted = draft.approvedStart !== (window?.availableStart ?? "") || draft.approvedEnd !== (window?.availableEnd ?? "");
+                      const requestedInterval = getShiftInterval(window?.availableStart, window?.availableEnd, businessInterval);
                       return (
                         <div className={`shift-coverage-row is-${request.status}`} id={`shift-request-${request.id}`} key={request.id}>
                           <div className="shift-coverage-person">
@@ -513,14 +495,14 @@ export default function TimecardShiftRequestsPage() {
                             <small>提出 {formatDateTime(request.createdAt)}</small>
                           </div>
                           <div className="shift-coverage-bar-track">
-                            <span className="shift-coverage-business-line" />
+                            <span className="shift-coverage-business-line" style={getTimelineBarStyle(businessInterval, timelineInterval)} />
                             <span
                               className="shift-coverage-bar"
-                              style={getBarStyle(window?.availableStart, window?.availableEnd, day.open, day.close)}
+                              style={getTimelineBarStyle(requestedInterval, timelineInterval)}
                             />
                             <span
                               className={`shift-coverage-approved-bar${adjusted ? " is-adjusted" : ""}`}
-                              style={getBarStyle(draft.approvedStart, draft.approvedEnd, day.open, day.close)}
+                              style={getTimelineBarStyle(requestIntervals[requestIndex] ?? null, timelineInterval)}
                             />
                           </div>
                           <div className="shift-coverage-controls">
