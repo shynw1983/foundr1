@@ -34084,7 +34084,7 @@ body :where(
   }
 
   .store-pos-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .store-pos-menu-panel {
@@ -34093,6 +34093,25 @@ body :where(
 
   .store-pos-cart-panel {
     position: static;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .store-pos-total {
+    grid-template-columns: minmax(0, 1fr) minmax(0, max-content);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .store-pos-total strong {
+    min-width: 0;
+    max-width: 100%;
+    justify-self: end;
+    font-size: clamp(20px, 3vw, 24px);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
   }
 
   .store-pos-floating-checkout {
