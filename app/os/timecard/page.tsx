@@ -1022,9 +1022,13 @@ function getActualSelectionKey(selection: ActualSelection) {
   return `${selection.employeeId}:${selection.workDate}:${selection.shiftId ?? ""}`;
 }
 
-function compareShiftEntries(a: Pick<ShiftEntry, "scheduledStart" | "scheduledEnd" | "id">, b: Pick<ShiftEntry, "scheduledStart" | "scheduledEnd" | "id">) {
-  return String(a.scheduledStart ?? "").localeCompare(String(b.scheduledStart ?? ""))
-    || String(a.scheduledEnd ?? "").localeCompare(String(b.scheduledEnd ?? ""))
+function compareShiftEntries(a: ShiftEntry, b: ShiftEntry, businessHours: StoreBusinessHours | undefined) {
+  const aStart = a.scheduledStart ? getScheduledMinutesForWorkDate(a, a.scheduledStart, null, businessHours) : Number.POSITIVE_INFINITY;
+  const bStart = b.scheduledStart ? getScheduledMinutesForWorkDate(b, b.scheduledStart, null, businessHours) : Number.POSITIVE_INFINITY;
+  const aEnd = a.scheduledEnd ? getScheduledMinutesForWorkDate(a, a.scheduledEnd, a.scheduledStart, businessHours) : Number.POSITIVE_INFINITY;
+  const bEnd = b.scheduledEnd ? getScheduledMinutesForWorkDate(b, b.scheduledEnd, b.scheduledStart, businessHours) : Number.POSITIVE_INFINITY;
+  return aStart - bStart
+    || aEnd - bEnd
     || String(a.id ?? "").localeCompare(String(b.id ?? ""));
 }
 
@@ -1664,10 +1668,10 @@ export function TimecardPage({
     const map = new Map<string, ShiftEntry[]>();
     for (const shift of data?.shifts ?? []) {
       const key = `${shift.employeeId}:${shift.workDate}`;
-      map.set(key, [...(map.get(key) ?? []), shift].sort(compareShiftEntries));
+      map.set(key, [...(map.get(key) ?? []), shift].sort((a, b) => compareShiftEntries(a, b, selectedStoreBusinessHours)));
     }
     return map;
-  }, [data?.shifts]);
+  }, [data?.shifts, selectedStoreBusinessHours]);
   const scheduledCostByEmployee = useMemo(() => {
     const map = new Map<string, ScheduledCostEstimate>();
     const employeesById = new Map((data?.employees ?? []).map((employee) => [employee.id, employee]));
