@@ -26,6 +26,8 @@ type ShiftRequestItem = {
   employeeId: string;
   employeeName: string;
   reviewedByName: string | null;
+  approvedStart: string | null;
+  approvedEnd: string | null;
   windows: Array<{ id: string; workDate: string; availableStart: string | null; availableEnd: string | null; preference: string; note: string | null }>;
   candidates: Array<{ id: string; employeeId: string; employeeName: string; status: string; note: string | null; createdAt: string }>;
   messages: Array<{ id: string; employeeId: string | null; employeeName: string | null; message: string; createdAt: string }>;
@@ -39,7 +41,8 @@ type ShiftRequestPayload = {
   schedulingPeriod?: { key: string; periodType: "first_half" | "second_half"; startDate: string; endDate: string; label: string };
   schedulingDates?: string[];
   requests: ShiftRequestItem[];
-  myShifts?: Array<{ id: string; workDate: string; scheduledStart: string | null; scheduledEnd: string | null; employeeName: string }>;
+  myShifts?: Array<{ id: string; employeeId: string; workDate: string; scheduledStart: string | null; scheduledEnd: string | null; employeeName: string }>;
+  monthlyShiftStats?: Array<{ employeeId: string; approvedDays: number; rejectedDays: number }>;
   publications: Array<{ id: string; scheduleMonth: string; note: string | null; publishedAt: string; publishedByName: string | null }>;
 };
 
@@ -196,6 +199,20 @@ function getCoverageSummary(
   return cursor >= business.end ? "充足" : "未充足";
 }
 
+function ShiftMonthStats({ stats }: { stats?: { approvedDays: number; rejectedDays: number } }) {
+  const approvedDays = stats?.approvedDays ?? 0;
+  const rejectedDays = stats?.rejectedDays ?? 0;
+  const reviewedDays = approvedDays + rejectedDays;
+  const approvalRate = reviewedDays > 0 ? `${Math.round((approvedDays / reviewedDays) * 100)}%` : "—";
+  return (
+    <span className="shift-coverage-person-stats" aria-label={`今月の承認 ${approvedDays}日、却下 ${rejectedDays}日、承認率 ${approvalRate}`}>
+      <span className="shift-coverage-person-stat">承認 {approvedDays}日</span>
+      <span className="shift-coverage-person-stat is-rejected">却下 {rejectedDays}日</span>
+      <span className="shift-coverage-person-stat is-rate">承認率 {approvalRate}</span>
+    </span>
+  );
+}
+
 export default function TimecardShiftRequestsPage() {
   const initialQueryRef = useRef<{ storeId: string; requestId: string; date: string; handled: boolean } | null>(null);
   const [data, setData] = useState<ShiftRequestPayload | null>(null);
@@ -207,6 +224,7 @@ export default function TimecardShiftRequestsPage() {
   const [message, setMessage] = useState("");
   const [publishNote, setPublishNote] = useState("");
   const [approvalDrafts, setApprovalDrafts] = useState<Record<string, ApprovalDraft>>({});
+  const [editingApprovedRequestId, setEditingApprovedRequestId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   if (typeof window !== "undefined" && initialQueryRef.current === null) {
@@ -238,11 +256,11 @@ export default function TimecardShiftRequestsPage() {
         setApprovalDrafts((current) => {
           const next = { ...current };
           for (const request of body.requests ?? []) {
-            if (request.requestType !== "availability" || next[request.id]) continue;
+            if (request.requestType !== "availability" || (request.status === "open" && next[request.id])) continue;
             const window = getShiftWindow(request);
             next[request.id] = {
-              approvedStart: window?.availableStart ?? "",
-              approvedEnd: window?.availableEnd ?? ""
+              approvedStart: request.approvedStart ?? window?.availableStart ?? "",
+              approvedEnd: request.approvedEnd ?? window?.availableEnd ?? ""
             };
           }
           return next;
@@ -296,6 +314,9 @@ export default function TimecardShiftRequestsPage() {
     }
     return groups;
   }, [data?.myShifts]);
+  const monthlyShiftStatsByEmployee = useMemo(() => {
+    return new Map((data?.monthlyShiftStats ?? []).map((stats) => [stats.employeeId, stats]));
+  }, [data?.monthlyShiftStats]);
   const calendarDates = data?.schedulingDates ?? Array.from(availabilityByDate.keys()).sort((left, right) => left.localeCompare(right));
   const otherRequests = useMemo(() => filteredRequests.filter((request) => request.requestType !== "availability"), [filteredRequests]);
 
@@ -319,6 +340,7 @@ export default function TimecardShiftRequestsPage() {
       return;
     }
     setMessage(approved ? "申請を承認しました。" : "申請を却下しました。");
+    setEditingApprovedRequestId("");
     await loadRequests(selectedStoreId, selectedPeriodKey);
   }
 
@@ -467,7 +489,10 @@ export default function TimecardShiftRequestsPage() {
                     {shifts.map((shift, shiftIndex) => (
                       <div className="shift-coverage-row is-approved is-scheduled" key={`shift-${shift.id}`}>
                         <div className="shift-coverage-person">
-                          <strong>{shift.employeeName}</strong>
+                          <div className="shift-coverage-person-heading">
+                            <strong>{shift.employeeName}</strong>
+                            <ShiftMonthStats stats={monthlyShiftStatsByEmployee.get(shift.employeeId)} />
+                          </div>
                           <span>確定 {shift.scheduledStart ?? "--:--"}-{shift.scheduledEnd ?? "--:--"}</span>
                         </div>
                         <div className="shift-coverage-bar-track">
@@ -486,11 +511,15 @@ export default function TimecardShiftRequestsPage() {
                       const window = getShiftWindow(request);
                       const draft = approvalDrafts[request.id] ?? { approvedStart: window?.availableStart ?? "", approvedEnd: window?.availableEnd ?? "" };
                       const adjusted = draft.approvedStart !== (window?.availableStart ?? "") || draft.approvedEnd !== (window?.availableEnd ?? "");
+                      const isEditingApproved = request.status === "approved" && editingApprovedRequestId === request.id;
                       const requestedInterval = getShiftInterval(window?.availableStart, window?.availableEnd, businessInterval);
                       return (
                         <div className={`shift-coverage-row is-${request.status}`} id={`shift-request-${request.id}`} key={request.id}>
                           <div className="shift-coverage-person">
-                            <strong>{request.employeeName}</strong>
+                            <div className="shift-coverage-person-heading">
+                              <strong>{request.employeeName}</strong>
+                              <ShiftMonthStats stats={monthlyShiftStatsByEmployee.get(request.employeeId)} />
+                            </div>
                             <span>希望 {window?.availableStart ?? "--:--"}-{window?.availableEnd ?? "--:--"}</span>
                             <small>提出 {formatDateTime(request.createdAt)}</small>
                           </div>
@@ -509,13 +538,13 @@ export default function TimecardShiftRequestsPage() {
                             <input
                               type="time"
                               value={draft.approvedStart}
-                              disabled={request.status !== "open"}
+                              disabled={request.status !== "open" && !isEditingApproved}
                               onChange={(event) => setApprovalDrafts((current) => ({ ...current, [request.id]: { ...draft, approvedStart: event.target.value } }))}
                             />
                             <input
                               type="time"
                               value={draft.approvedEnd}
-                              disabled={request.status !== "open"}
+                              disabled={request.status !== "open" && !isEditingApproved}
                               onChange={(event) => setApprovalDrafts((current) => ({ ...current, [request.id]: { ...draft, approvedEnd: event.target.value } }))}
                             />
                             {request.status === "open" ? (
@@ -523,11 +552,36 @@ export default function TimecardShiftRequestsPage() {
                                 <button className="primary-button" type="button" onClick={() => reviewRequest(request, true, "", draft)}>承認</button>
                                 <button className="secondary-button" type="button" onClick={() => reviewRequest(request, false)}>却下</button>
                               </>
+                            ) : isEditingApproved ? (
+                              <>
+                                <button className="primary-button" type="button" onClick={() => reviewRequest(request, true, "", draft)}>変更を保存</button>
+                                <button
+                                  className="secondary-button"
+                                  type="button"
+                                  onClick={() => {
+                                    setApprovalDrafts((current) => ({
+                                      ...current,
+                                      [request.id]: {
+                                        approvedStart: request.approvedStart ?? window?.availableStart ?? "",
+                                        approvedEnd: request.approvedEnd ?? window?.availableEnd ?? ""
+                                      }
+                                    }));
+                                    setEditingApprovedRequestId("");
+                                  }}
+                                >
+                                  キャンセル
+                                </button>
+                              </>
+                            ) : request.status === "approved" ? (
+                              <>
+                                <strong>承認済み</strong>
+                                <button className="secondary-button" type="button" onClick={() => setEditingApprovedRequestId(request.id)}>変更</button>
+                              </>
                             ) : (
                               <strong>{statusLabels[request.status]}</strong>
                             )}
                           </div>
-                          {adjusted && request.status === "open" ? <small>承認時にスタッフへ調整後の時間を通知します。</small> : null}
+                          {adjusted && (request.status === "open" || isEditingApproved) ? <small>保存時にスタッフへ調整後の時間を通知します。</small> : null}
                         </div>
                       );
                     })}

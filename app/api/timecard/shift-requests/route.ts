@@ -354,6 +354,7 @@ export async function GET(request: Request) {
   const submissionDates = enumerateDates(submissionPeriod.startDate, submissionPeriod.endDate);
   const schedulingPeriod = getSchedulingPeriod(url.searchParams.get("period"));
   const month = schedulingPeriod.startDate.slice(0, 7);
+  const monthRange = getMonthRange(month);
   const schedulingDates = enumerateDates(schedulingPeriod.startDate, schedulingPeriod.endDate);
   const queryStartDate = schedulingPeriod.startDate;
   const schedulingEndExclusive = new Date(`${schedulingPeriod.endDate}T00:00:00+09:00`);
@@ -375,6 +376,32 @@ export async function GET(request: Request) {
       employees.id::text as "employeeId",
       employees.name as "employeeName",
       reviewer.name as "reviewedByName",
+      (
+        select to_char(approved_shift.scheduled_start, 'HH24:MI')
+        from timecard_shifts approved_shift
+        where approved_shift.store_id = timecard_shift_requests.store_id
+          and approved_shift.employee_id = timecard_shift_requests.employee_id
+          and approved_shift.work_date = timecard_shift_requests.work_date
+          and (
+            coalesce(approved_shift.note, '') = '希望シフト承認'
+            or coalesce(approved_shift.note, '') like '希望 % から調整'
+          )
+        order by approved_shift.updated_at desc
+        limit 1
+      ) as "approvedStart",
+      (
+        select to_char(approved_shift.scheduled_end, 'HH24:MI')
+        from timecard_shifts approved_shift
+        where approved_shift.store_id = timecard_shift_requests.store_id
+          and approved_shift.employee_id = timecard_shift_requests.employee_id
+          and approved_shift.work_date = timecard_shift_requests.work_date
+          and (
+            coalesce(approved_shift.note, '') = '希望シフト承認'
+            or coalesce(approved_shift.note, '') like '希望 % から調整'
+          )
+        order by approved_shift.updated_at desc
+        limit 1
+      ) as "approvedEnd",
       coalesce(
         json_agg(distinct jsonb_build_object(
           'id', timecard_shift_request_windows.id::text,
@@ -444,9 +471,38 @@ export async function GET(request: Request) {
     order by timecard_shift_requests.created_at desc
   ` : [];
 
+  const monthlyShiftStats = selectedStoreId ? await sql`
+    select distinct
+      employee_work_stores.employee_id::text as "employeeId",
+      (
+        select count(distinct approved_requests.work_date)::int
+        from timecard_shift_requests approved_requests
+        where approved_requests.store_id::text = ${selectedStoreId}
+          and approved_requests.employee_id = employee_work_stores.employee_id
+          and approved_requests.request_type = 'availability'
+          and approved_requests.status = 'approved'
+          and approved_requests.work_date >= ${monthRange.startDate}::date
+          and approved_requests.work_date < ${monthRange.endDate}::date
+      ) as "approvedDays",
+      (
+        select count(distinct rejected_requests.work_date)::int
+        from timecard_shift_requests rejected_requests
+        where rejected_requests.store_id::text = ${selectedStoreId}
+          and rejected_requests.employee_id = employee_work_stores.employee_id
+          and rejected_requests.request_type = 'availability'
+          and rejected_requests.status = 'rejected'
+          and rejected_requests.work_date >= ${monthRange.startDate}::date
+          and rejected_requests.work_date < ${monthRange.endDate}::date
+      ) as "rejectedDays"
+    from employee_work_stores
+    where employee_work_stores.store_id::text = ${selectedStoreId}
+      and (${canManageRequestScope} or employee_work_stores.employee_id::text = ${session.id})
+  ` : [];
+
   const myShifts = selectedStoreId ? await sql`
     select
       timecard_shifts.id::text,
+      timecard_shifts.employee_id::text as "employeeId",
       to_char(timecard_shifts.work_date, 'YYYY-MM-DD') as "workDate",
       to_char(timecard_shifts.scheduled_start, 'HH24:MI') as "scheduledStart",
       to_char(timecard_shifts.scheduled_end, 'HH24:MI') as "scheduledEnd",
@@ -513,6 +569,7 @@ export async function GET(request: Request) {
     schedulingPeriod,
     schedulingDates,
     requests,
+    monthlyShiftStats,
     myShifts,
     nextShift: nextShift[0] ?? null,
     publications

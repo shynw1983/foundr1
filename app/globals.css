@@ -19070,6 +19070,42 @@ body :where(
   min-width: 0;
 }
 
+.shift-coverage-person-heading,
+.shift-coverage-person-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.shift-coverage-person-heading {
+  gap: 6px;
+}
+
+.shift-coverage-person-stats {
+  gap: 4px;
+}
+
+.shift-coverage-person-stat {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.shift-coverage-person-stat.is-rejected {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.shift-coverage-person-stat.is-rate {
+  background: #eef2f4;
+  color: var(--muted);
+}
+
 .shift-coverage-person strong,
 .shift-coverage-person span,
 .shift-coverage-person small,
