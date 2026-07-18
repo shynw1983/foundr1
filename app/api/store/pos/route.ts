@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { requireOsSession } from "../../../../lib/api-auth";
 import { createPickupCode, findCustomerOrderById } from "../../../../lib/customer-orders";
 import { sql } from "../../../../lib/db";
@@ -21,6 +22,14 @@ type PosCheckoutItemInput = {
     optionIds?: string[];
   }>;
 };
+
+function publishPosOrderEventAfterResponse(eventName: "order.created" | "order.updated", orderId: string) {
+  after(async () => {
+    const order = await findCustomerOrderById(orderId).catch(() => null);
+    if (!order) return;
+    await publishCustomerOrderEvent(eventName, order).catch(() => undefined);
+  });
+}
 
 type PosCheckoutBody = {
   storeId?: string;
@@ -749,7 +758,7 @@ async function refreshTableQrOrderAfterAdjustment(input: {
       where order_id::text = ${input.orderId}
         and status <> 'ready'
     `;
-    await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(input.orderId));
+    publishPosOrderEventAfterResponse("order.updated", input.orderId);
     return;
   }
 
@@ -764,7 +773,7 @@ async function refreshTableQrOrderAfterAdjustment(input: {
   `;
   await sql`delete from order_production_tasks where order_id::text = ${input.orderId} and status <> 'ready'`;
   await ensureProductionTasksForOrder(input.orderId);
-  await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(input.orderId));
+  publishPosOrderEventAfterResponse("order.updated", input.orderId);
 }
 
 async function getPosSettings(selectedStoreId: string) {
@@ -1015,7 +1024,7 @@ export async function POST(request: Request) {
     for (const row of updatedRows as Array<{ id: string }>) {
       await ensureProductionTasksForOrder(row.id);
       await syncWebReservationToSalesOrder(row.id);
-      await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(row.id));
+      publishPosOrderEventAfterResponse("order.updated", row.id);
     }
     const todaySummary = await getTodaySummary(storeId);
     const taxRate = getOrderTaxRate(posSettings, "eat_in");
@@ -1524,7 +1533,7 @@ export async function POST(request: Request) {
   await ensureProductionTasksForOrder(orderId);
   const loyaltyMember = await awardLoyaltyForPaidOrder(orderId);
   await syncWebReservationToSalesOrder(orderId);
-  await publishCustomerOrderEvent("order.created", await findCustomerOrderById(orderId));
+  publishPosOrderEventAfterResponse("order.created", orderId);
   const todaySummary = await getTodaySummary(storeId);
   return Response.json({
     ok: true,
