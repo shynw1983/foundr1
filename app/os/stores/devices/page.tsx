@@ -20,6 +20,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
+import QRCodeGenerator from "qrcode";
 import { useUnsavedChangesGuard } from "../../../../components/UnsavedChangesGuard";
 import { normalizeIntegerInput } from "../../../../lib/number-input";
 import { storeTerminalNameOptions, storeTerminalWorkstations } from "../../../../lib/store-terminal-names";
@@ -30,9 +31,12 @@ import {
   getKitchenPrinterForBrand,
   getReceiptPrinter,
   printWithAndroidBridge,
+  resolvePosReceiptTemplate,
   type PosKitchenTicketTemplateSettings,
   type PosPrinterConnection,
-  type PosPrinterSettings
+  type PosPrinterSettings,
+  type PosReceiptTemplateBlock,
+  type PosReceiptTemplateSettings
 } from "../../../../lib/pos-printer";
 import { MobileNavMenu } from "../../components/MobileNavMenu";
 import { OsNavList } from "../../components/OsNavList";
@@ -177,6 +181,8 @@ export default function StoreDeviceSettingsPage() {
   const [message, setMessage] = useState("");
   const [hasNativePrintBridge, setHasNativePrintBridge] = useState(false);
   const [testPrinterTarget, setTestPrinterTarget] = useState("kitchen");
+  const [receiptPreviewMode, setReceiptPreviewMode] = useState<"receipt" | "invoice">("receipt");
+  const [receiptPreviewBrandId, setReceiptPreviewBrandId] = useState("");
   const [testPrinting, setTestPrinting] = useState(false);
   const [uploadingMediaType, setUploadingMediaType] = useState<"" | "image" | "video">("");
   const [terminalAccounts, setTerminalAccounts] = useState<StoreTerminalAccount[]>([]);
@@ -827,6 +833,31 @@ export default function StoreDeviceSettingsPage() {
             </div>
           ) : null}
           <div className="pos-admin-printer-card">
+            <div className="store-device-receipt-preview-heading">
+              <div>
+                <strong>レシート・領収書プレビュー</strong>
+                <p>現在保存されているテンプレートを、レシートプリンターの用紙幅で確認します。内容の編集は POS 設定から行えます。</p>
+              </div>
+              <div className="store-device-receipt-preview-controls">
+                <select value={receiptPreviewBrandId} onChange={(event) => setReceiptPreviewBrandId(event.target.value)}>
+                  <option value="">店舗共通</option>
+                  {settings.posBrandSettings.map((brand) => <option value={brand.brandId} key={brand.brandId}>{brand.brandName}</option>)}
+                </select>
+                <select value={receiptPreviewMode} onChange={(event) => setReceiptPreviewMode(event.target.value as "receipt" | "invoice")}>
+                  <option value="receipt">レシート</option>
+                  <option value="invoice">領収書</option>
+                </select>
+                <a className="secondary-button" href="/os/pos">テンプレートを編集</a>
+              </div>
+            </div>
+            <ReceiptTicketPreview
+              storeName={settings.storeName || "店舗名"}
+              paperWidth={receiptPrinter.paperWidth}
+              documentType={receiptPreviewMode}
+              template={resolvePosReceiptTemplate(settings.printerSettings, receiptPreviewBrandId, receiptPreviewMode)}
+            />
+          </div>
+          <div className="pos-admin-printer-card">
             <div>
               <strong>厨房伝票テンプレート</strong>
               <p>Web 予約と POS から厨房へ出す内部伝票の表示内容を設定します。お客様向けレシートとは別管理です。</p>
@@ -954,6 +985,103 @@ function KitchenTicketPreview({
         ) : null}
         <div className="pos-admin-receipt-paper-rule" />
         {template.showTimestamp ? <p>2026-06-15 12:34:56</p> : null}
+      </div>
+    </aside>
+  );
+}
+
+function receiptPreviewLines(value: string) {
+  return String(value || "").split("\n").map((line) => line.trim()).filter(Boolean);
+}
+
+function ReceiptPreviewQr({ template }: { template: PosReceiptTemplateSettings }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let active = true;
+    if (!template.qrCodeUrl.trim()) {
+      setSrc("");
+      return () => { active = false; };
+    }
+    void QRCodeGenerator.toDataURL(template.qrCodeUrl.trim(), { errorCorrectionLevel: "M", margin: 1, width: 320 })
+      .then((value) => { if (active) setSrc(value); })
+      .catch(() => { if (active) setSrc(""); });
+    return () => { active = false; };
+  }, [template.qrCodeUrl]);
+  return (
+    <div className={`pos-admin-receipt-paper-qr is-${template.qrCodeAlignment} is-${template.qrCodeSize}`}>
+      {src ? <img src={src} alt="" /> : <div>QR</div>}
+      {template.qrCodeLabel ? <p>{template.qrCodeLabel}</p> : null}
+    </div>
+  );
+}
+
+function ReceiptTicketPreview({
+  storeName,
+  paperWidth,
+  documentType,
+  template
+}: {
+  storeName: string;
+  paperWidth: PosPrinterConnection["paperWidth"];
+  documentType: "receipt" | "invoice";
+  template: PosReceiptTemplateSettings;
+}) {
+  function renderBlock(block: PosReceiptTemplateBlock) {
+    if (block === "logo") return template.showLogo ? (
+      template.logoUrl
+        ? <img className={`pos-admin-receipt-paper-logo is-${template.logoAlignment}`} style={{ width: `${template.logoWidthPercent}%`, marginBottom: `${template.logoBottomSpacing}px` }} src={template.logoUrl} alt="" />
+        : <div className={`pos-admin-receipt-paper-logo-placeholder is-${template.logoAlignment}`} style={{ width: `${template.logoWidthPercent}%`, marginBottom: `${template.logoBottomSpacing}px` }}>LOGO</div>
+    ) : null;
+    if (block === "business") return <h5 className={`is-${template.businessNameAlignment} is-size-${template.businessNameTextSize}`}>{template.businessName || storeName}</h5>;
+    if (block === "contact") return (
+      <div className="pos-admin-receipt-preview-block">
+        {receiptPreviewLines(template.companyInfo).map((line, index) => <p className={`is-${template.contactInfoAlignment}`} key={`company-${index}`}>{line}</p>)}
+        {receiptPreviewLines(template.address).map((line, index) => <p className={`is-${template.contactInfoAlignment}`} key={`address-${index}`}>{line}</p>)}
+        {template.taxRegistrationNumber ? <p className={`is-${template.contactInfoAlignment}`}>登録番号: {template.taxRegistrationNumber}</p> : null}
+        {template.phone ? <p className={`is-${template.contactInfoAlignment}`}>TEL: {template.phone}</p> : null}
+        {template.website ? <p className={`is-${template.contactInfoAlignment}`}>{template.website}</p> : null}
+      </div>
+    );
+    if (block === "message") return <div className={`pos-admin-receipt-preview-block is-message is-size-${template.messageTextSize}`}>{receiptPreviewLines(template.headerMessage).map((line, index) => <p className={`is-${template.messageAlignment}`} key={index}>{line}</p>)}</div>;
+    if (block === "promotion") return (
+      <div className={`pos-admin-receipt-preview-block is-message is-size-${template.messageTextSize}`}>
+        {template.promotionImageUrl ? <img className={`pos-admin-receipt-paper-promo is-${template.promotionImageAlignment}`} style={{ width: `${template.promotionImageWidthPercent}%` }} src={template.promotionImageUrl} alt="" /> : null}
+        {receiptPreviewLines(template.promotionMessage).map((line, index) => <p className={`is-${template.messageAlignment}`} key={index}>{line}</p>)}
+      </div>
+    );
+    if (block === "qr") return template.qrCodeEnabled ? <ReceiptPreviewQr template={template} /> : null;
+    if (block === "footer") return (
+      <div className={`pos-admin-receipt-preview-block is-message is-size-${template.messageTextSize}`}>
+        {receiptPreviewLines(template.footerMessage).map((line, index) => <p className={`is-${template.messageAlignment}`} key={index}>{line}</p>)}
+        {template.showTimestamp ? <p>2026-07-18 12:34:56</p> : null}
+      </div>
+    );
+    return (
+      <div className="pos-admin-receipt-preview-block is-receipt-content">
+        <div className="pos-admin-receipt-paper-rule" />
+        <h5 className={`is-size-${template.titleTextSize}`}>{documentType === "invoice" ? template.invoiceTitle : template.receiptTitle}</h5>
+        {documentType === "invoice" ? <><div className="pos-admin-receipt-paper-line is-strong"><span>{template.invoiceRecipientName}</span><span>様</span></div><p>但し {template.invoicePurposeText}として</p><div className="pos-admin-receipt-paper-rule" /></> : null}
+        <div className="pos-admin-receipt-paper-line is-strong"><span>No. F1-1234</span><span /></div>
+        <p>店内 / 現金</p>
+        <div className="pos-admin-receipt-paper-rule" />
+        <div className="pos-admin-receipt-paper-line"><span>ドリンク x1</span><span>¥650</span></div>
+        <p className="is-sub">  サイズ: R / 甘さ: ふつう</p>
+        <div className="pos-admin-receipt-paper-line"><span>トッポッキ x1</span><span>¥378</span></div>
+        <div className="pos-admin-receipt-paper-rule" />
+        <div className="pos-admin-receipt-paper-line"><span>小計</span><span>¥1,028</span></div>
+        {template.showTaxSummary ? <div className="pos-admin-receipt-paper-line"><span>内消費税 10%</span><span>¥93</span></div> : null}
+        <div className="pos-admin-receipt-paper-line is-total"><span>合計</span><span>¥1,028</span></div>
+        <div className="pos-admin-receipt-paper-line"><span>お預かり</span><span>¥2,000</span></div>
+        <div className="pos-admin-receipt-paper-line"><span>お釣り</span><span>¥972</span></div>
+        <div className="pos-admin-receipt-paper-rule" />
+      </div>
+    );
+  }
+  return (
+    <aside className="pos-admin-receipt-preview-panel store-device-receipt-preview" aria-label="レシート・領収書プレビュー">
+      <div className="pos-admin-receipt-preview-heading"><strong>{documentType === "invoice" ? "領収書" : "レシート"}プレビュー</strong><span>{paperWidth}</span></div>
+      <div className={`pos-admin-receipt-paper is-${template.density}`}>
+        {template.blockOrder.map((block) => <div className="pos-admin-receipt-paper-block" key={block}>{renderBlock(block)}</div>)}
       </div>
     </aside>
   );

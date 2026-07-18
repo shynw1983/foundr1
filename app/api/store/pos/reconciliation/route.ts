@@ -39,6 +39,9 @@ type ActiveCashResponsibleEmployee = {
   name: string;
   role: string;
   punchedAt: string;
+  attendanceStatus: "working" | "on_break" | "scheduled" | "clocked_out" | "manager";
+  scheduledStart: string;
+  scheduledEnd: string;
 };
 
 type PreviousClosedCashSession = {
@@ -283,27 +286,86 @@ async function getMovements(storeId: string, businessDate: string, sessionId?: s
   `;
 }
 
-async function getActiveCashResponsibleEmployees(storeId: string) {
+async function getActiveCashResponsibleEmployees(storeId: string, businessDate: string) {
   const rows = await sql`
-    select
-      employees.id::text,
-      employees.name,
-      employees.role,
-      latest_punch.punched_at::text as "punchedAt"
-    from (
+    with latest_punch as (
       select distinct on (timecard_punches.employee_id)
         timecard_punches.employee_id,
         timecard_punches.punch_type,
         timecard_punches.punched_at
       from timecard_punches
       where timecard_punches.store_id::text = ${storeId}
-        and timecard_punches.punched_at >= now() - interval '36 hours'
+        and timecard_punches.punched_at >= (${businessDate}::date::timestamp at time zone 'Asia/Tokyo')
+        and timecard_punches.punched_at < ((${businessDate}::date::timestamp + interval '36 hours') at time zone 'Asia/Tokyo')
       order by timecard_punches.employee_id, timecard_punches.punched_at desc
-    ) latest_punch
-    join employees on employees.id = latest_punch.employee_id
-    where latest_punch.punch_type in ('clock_in', 'break_end')
-      and employees.status = 'active'
-    order by latest_punch.punched_at desc, employees.name
+    ), scheduled_employees as (
+      select
+        timecard_shifts.employee_id,
+        min(timecard_shifts.scheduled_start) as scheduled_start,
+        max(timecard_shifts.scheduled_end) as scheduled_end
+      from timecard_shifts
+      where timecard_shifts.store_id::text = ${storeId}
+        and timecard_shifts.work_date = ${businessDate}::date
+      group by timecard_shifts.employee_id
+    ), privileged_employees as (
+      select employees.id as employee_id
+      from employees
+      where employees.status = 'active'
+        and (
+          employees.role in ('owner', 'manager')
+          or (
+            employees.role in ('store_owner', 'store_manager')
+            and exists (
+              select 1
+              from employee_scopes
+              where employee_scopes.employee_id = employees.id
+                and employee_scopes.scope_type = 'store'
+                and employee_scopes.store_id::text = ${storeId}
+            )
+          )
+        )
+    ), candidate_employees as (
+      select latest_punch.employee_id
+      from latest_punch
+      where latest_punch.punch_type in ('clock_in', 'break_start', 'break_end')
+      union
+      select scheduled_employees.employee_id
+      from scheduled_employees
+      union
+      select privileged_employees.employee_id
+      from privileged_employees
+    )
+    select
+      employees.id::text,
+      employees.name,
+      employees.role,
+      coalesce(latest_punch.punched_at::text, '') as "punchedAt",
+      case
+        when latest_punch.punch_type in ('clock_in', 'break_end') then 'working'
+        when latest_punch.punch_type = 'break_start' then 'on_break'
+        when latest_punch.punch_type = 'clock_out' then 'clocked_out'
+        when employees.role in ('owner', 'manager', 'store_owner', 'store_manager')
+          and scheduled_employees.employee_id is null then 'manager'
+        else 'scheduled'
+      end as "attendanceStatus",
+      coalesce(to_char(scheduled_employees.scheduled_start, 'HH24:MI'), '') as "scheduledStart",
+      coalesce(to_char(scheduled_employees.scheduled_end, 'HH24:MI'), '') as "scheduledEnd"
+    from candidate_employees
+    join employees on employees.id = candidate_employees.employee_id
+    left join latest_punch on latest_punch.employee_id = candidate_employees.employee_id
+    left join scheduled_employees on scheduled_employees.employee_id = candidate_employees.employee_id
+    where employees.status = 'active'
+    order by
+      case
+        when latest_punch.punch_type in ('clock_in', 'break_end') then 0
+        when latest_punch.punch_type = 'break_start' then 1
+        when scheduled_employees.employee_id is not null and latest_punch.punch_type is distinct from 'clock_out' then 2
+        when employees.role in ('owner', 'manager', 'store_owner', 'store_manager') then 3
+        else 4
+      end,
+      scheduled_employees.scheduled_start nulls last,
+      latest_punch.punched_at desc nulls last,
+      employees.name
   `;
   return rows as ActiveCashResponsibleEmployee[];
 }
@@ -390,7 +452,7 @@ export async function GET(request: Request) {
     getOrders(selectedStoreId, businessDate),
     getOrderCorrections(selectedStoreId, businessDate),
     getPaymentTotals(selectedStoreId, businessDate),
-    getActiveCashResponsibleEmployees(selectedStoreId)
+    getActiveCashResponsibleEmployees(selectedStoreId, businessDate)
   ]);
   const totals = sessions.reduce((sum, item) => ({
     openingAmount: sum.openingAmount + item.openingAmount,
@@ -534,9 +596,9 @@ export async function POST(request: Request) {
     if (!closingResponsibleEmployeeId || !isUuid(closingResponsibleEmployeeId)) {
       return Response.json({ error: "締め責任者を選択してください。" }, { status: 400 });
     }
-    const activeEmployees = await getActiveCashResponsibleEmployees(storeFilter);
+    const activeEmployees = await getActiveCashResponsibleEmployees(storeFilter, activeSession.businessDate);
     if (!activeEmployees.some((employee) => employee.id === closingResponsibleEmployeeId)) {
-      return Response.json({ error: "出勤中の従業員から締め責任者を選択してください。" }, { status: 400 });
+      return Response.json({ error: "出勤中・本日排班・責任者の候補から締め責任者を選択してください。" }, { status: 400 });
     }
     await sql`
       update pos_cash_sessions
@@ -692,7 +754,7 @@ export async function POST(request: Request) {
     getOrders(storeFilter, businessDate),
     getOrderCorrections(storeFilter, businessDate),
     getPaymentTotals(storeFilter, businessDate),
-    getActiveCashResponsibleEmployees(storeFilter)
+    getActiveCashResponsibleEmployees(storeFilter, businessDate)
   ]);
   const totals = sessions.reduce((sum, item) => ({
     openingAmount: sum.openingAmount + item.openingAmount,

@@ -3,6 +3,7 @@
 import {
   Boxes,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   ClipboardList,
   FileText,
@@ -1156,85 +1157,90 @@ export default function MenuAdminPage() {
           {translationStatus ? <p className="menu-auto-translation-status">{translationStatus}</p> : null}
         </section>
 
-        <section className="menu-sync-panel">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">External Platforms</p>
-              <h3>外部プラットフォーム反映</h3>
-            </div>
-            <span className={pendingSyncTasks.length ? "menu-sync-count is-pending" : "menu-sync-count"}>
-              未反映 {pendingSyncTasks.length}件
+        <details className="menu-sync-panel">
+          <summary className="section-heading menu-sync-summary">
+            <span className="menu-sync-summary-title">
+              <span className="eyebrow">External Platforms</span>
+              <span className="menu-sync-summary-heading">外部プラットフォーム反映</span>
             </span>
-          </div>
-          <div className="menu-platform-list">
-            {brandExternalPlatforms.map((platform) => (
-              <div className="menu-platform-row" key={platform.id}>
-                <label className="checkbox-group menu-inline-check">
+            <span className="menu-sync-summary-actions">
+              <span className={pendingSyncTasks.length ? "menu-sync-count is-pending" : "menu-sync-count"}>
+                未反映 {pendingSyncTasks.length}件
+              </span>
+              <ChevronDown className="menu-sync-chevron" size={20} aria-hidden="true" />
+            </span>
+          </summary>
+          <div className="menu-sync-body">
+            <div className="menu-platform-list">
+              {brandExternalPlatforms.map((platform) => (
+                <div className="menu-platform-row" key={platform.id}>
+                  <label className="checkbox-group menu-inline-check">
+                    <input
+                      type="checkbox"
+                      checked={platform.isActive}
+                      onChange={(event) => void saveExternalPlatform(platform, { isActive: event.target.checked })}
+                    />
+                    <span>{platform.name}</span>
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={platform.isActive}
-                    onChange={(event) => void saveExternalPlatform(platform, { isActive: event.target.checked })}
+                    value={platform.managementUrl}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setData((current) => ({
+                        ...current,
+                        externalPlatforms: current.externalPlatforms.map((entry) => (
+                          entry.id === platform.id ? { ...entry, managementUrl: value } : entry
+                        ))
+                      }));
+                    }}
+                    onBlur={(event) => void saveExternalPlatform(platform, { managementUrl: event.target.value })}
+                    placeholder="管理画面 URL"
                   />
-                  <span>{platform.name}</span>
-                </label>
-                <input
-                  value={platform.managementUrl}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setData((current) => ({
-                      ...current,
-                      externalPlatforms: current.externalPlatforms.map((entry) => (
-                        entry.id === platform.id ? { ...entry, managementUrl: value } : entry
-                      ))
-                    }));
-                  }}
-                  onBlur={(event) => void saveExternalPlatform(platform, { managementUrl: event.target.value })}
-                  placeholder="管理画面 URL"
-                />
-                {platform.managementUrl ? (
-                  <a className="secondary-button compact-button" href={platform.managementUrl} target="_blank" rel="noreferrer">
-                    開く
-                  </a>
-                ) : null}
-              </div>
-            ))}
-            {!brandExternalPlatforms.length ? <p className="empty-state">ブランドを選ぶと Uber Eats などの反映先が表示されます。</p> : null}
-          </div>
-          <div className="menu-sync-task-list">
-            {pendingSyncTasks.map((task) => (
-              <div className="menu-sync-task-row" key={task.id}>
-                <div>
-                  <strong>{task.platformName} / {task.targetLabel}</strong>
-                  <span>{task.changeSummary}</span>
-                  <small>{formatDateTime(task.createdAt)} {task.createdByName ? ` / ${task.createdByName}` : ""}</small>
+                  {platform.managementUrl ? (
+                    <a className="secondary-button compact-button" href={platform.managementUrl} target="_blank" rel="noreferrer">
+                      開く
+                    </a>
+                  ) : null}
                 </div>
-                <input
-                  value={syncCompletionNotes[task.id] || ""}
-                  onChange={(event) => setSyncCompletionNotes((current) => ({ ...current, [task.id]: event.target.value }))}
-                  placeholder="反映メモ"
-                />
-                <button className="primary-button compact-button" type="button" onClick={() => void completeSyncTask(task)}>
-                  <CheckCircle2 size={15} />
-                  反映済み
-                </button>
-              </div>
-            ))}
-            {!pendingSyncTasks.length ? <p className="empty-state">現在、外部プラットフォームへ反映待ちの変更はありません。</p> : null}
+              ))}
+              {!brandExternalPlatforms.length ? <p className="empty-state">ブランドを選ぶと Uber Eats などの反映先が表示されます。</p> : null}
+            </div>
+            <div className="menu-sync-task-list">
+              {pendingSyncTasks.map((task) => (
+                <div className="menu-sync-task-row" key={task.id}>
+                  <div>
+                    <strong>{task.platformName} / {task.targetLabel}</strong>
+                    <span>{task.changeSummary}</span>
+                    <small>{formatDateTime(task.createdAt)} {task.createdByName ? ` / ${task.createdByName}` : ""}</small>
+                  </div>
+                  <input
+                    value={syncCompletionNotes[task.id] || ""}
+                    onChange={(event) => setSyncCompletionNotes((current) => ({ ...current, [task.id]: event.target.value }))}
+                    placeholder="反映メモ"
+                  />
+                  <button className="primary-button compact-button" type="button" onClick={() => void completeSyncTask(task)}>
+                    <CheckCircle2 size={15} />
+                    反映済み
+                  </button>
+                </div>
+              ))}
+              {!pendingSyncTasks.length ? <p className="empty-state">現在、外部プラットフォームへ反映待ちの変更はありません。</p> : null}
+            </div>
+            {completedSyncTasks.length ? (
+              <details className="menu-sync-history">
+                <summary>最近の反映履歴</summary>
+                <div>
+                  {completedSyncTasks.map((task) => (
+                    <p key={task.id}>
+                      <strong>{task.platformName}</strong>
+                      <span>{task.targetLabel} / {formatDateTime(task.completedAt)} {task.completedByName ? ` / ${task.completedByName}` : ""}</span>
+                    </p>
+                  ))}
+                </div>
+              </details>
+            ) : null}
           </div>
-          {completedSyncTasks.length ? (
-            <details className="menu-sync-history">
-              <summary>最近の反映履歴</summary>
-              <div>
-                {completedSyncTasks.map((task) => (
-                  <p key={task.id}>
-                    <strong>{task.platformName}</strong>
-                    <span>{task.targetLabel} / {formatDateTime(task.completedAt)} {task.completedByName ? ` / ${task.completedByName}` : ""}</span>
-                  </p>
-                ))}
-              </div>
-            </details>
-          ) : null}
-        </section>
+        </details>
 
         <div className="filter-bar">
           <label>

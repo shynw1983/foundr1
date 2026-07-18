@@ -588,7 +588,11 @@ public class Foundr1PrinterBridge {
             int percent = Math.max(20, Math.min(100, template.optInt("logoWidthPercent", LOGO_MAX_WIDTH_PERCENT)));
             int maxWidth = Math.max(1, Math.round(contentWidth * percent / 100f));
             Bitmap logo = loadLogoBitmap(templateText(template, "logoUrl"), maxWidth, 0);
-            if (logo != null) blocks.get("logo").add(RasterLine.image(logo, templateAlignment(template, "logoAlignment", 1)));
+            if (logo != null) {
+                blocks.get("logo").add(RasterLine.image(logo, templateAlignment(template, "logoAlignment", 1)));
+                int bottomSpacing = Math.max(0, Math.min(40, template.optInt("logoBottomSpacing", 8)));
+                if (bottomSpacing > 0) blocks.get("logo").add(RasterLine.spacer(bottomSpacing));
+            }
         }
 
         Paint businessPaint = receiptTextPaint(template, "businessNameTextSize", 28, true);

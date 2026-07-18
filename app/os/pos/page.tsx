@@ -692,8 +692,8 @@ export default function PosPage() {
   function renderReceiptPreviewBlock(block: PosReceiptTemplateBlock) {
     if (block === "logo") return activeReceiptTemplate.showLogo ? (
       activeReceiptTemplate.logoUrl
-        ? <img className={`pos-admin-receipt-paper-logo is-${activeReceiptTemplate.logoAlignment}`} style={{ width: `${activeReceiptTemplate.logoWidthPercent}%` }} src={activeReceiptTemplate.logoUrl} alt="" />
-        : <div className={`pos-admin-receipt-paper-logo-placeholder is-${activeReceiptTemplate.logoAlignment}`} style={{ width: `${activeReceiptTemplate.logoWidthPercent}%` }}>LOGO</div>
+        ? <img className={`pos-admin-receipt-paper-logo is-${activeReceiptTemplate.logoAlignment}`} style={{ width: `${activeReceiptTemplate.logoWidthPercent}%`, marginBottom: `${activeReceiptTemplate.logoBottomSpacing}px` }} src={activeReceiptTemplate.logoUrl} alt="" />
+        : <div className={`pos-admin-receipt-paper-logo-placeholder is-${activeReceiptTemplate.logoAlignment}`} style={{ width: `${activeReceiptTemplate.logoWidthPercent}%`, marginBottom: `${activeReceiptTemplate.logoBottomSpacing}px` }}>LOGO</div>
     ) : null;
     if (block === "business") return <h5 className={`is-${activeReceiptTemplate.businessNameAlignment} is-size-${activeReceiptTemplate.businessNameTextSize}`}>{activeReceiptTemplate.businessName || taxSettings?.storeName || "店舗名"}</h5>;
     if (block === "contact") return (
@@ -1337,6 +1337,13 @@ export default function PosPage() {
                       <div className="pos-admin-receipt-range-control">
                         <input type="range" min="20" max="100" step="5" value={activeReceiptTemplate.logoWidthPercent} onChange={(event) => updateReceiptTemplate({ logoWidthPercent: Number(event.target.value) })} disabled={!canManagePosSettings} />
                         <output>{activeReceiptTemplate.logoWidthPercent}%</output>
+                      </div>
+                    </label>
+                    <label>
+                      <span>ロゴ下の間隔</span>
+                      <div className="pos-admin-receipt-range-control">
+                        <input type="range" min="0" max="40" step="2" value={activeReceiptTemplate.logoBottomSpacing} onChange={(event) => updateReceiptTemplate({ logoBottomSpacing: Number(event.target.value) })} disabled={!canManagePosSettings} />
+                        <output>{activeReceiptTemplate.logoBottomSpacing}</output>
                       </div>
                     </label>
                     <div className="pos-admin-receipt-image-field">

@@ -26,6 +26,7 @@ export type PosReceiptTemplateSettings = {
   logoUrl: string;
   logoAlignment: "left" | "center";
   logoWidthPercent: number;
+  logoBottomSpacing: number;
   promotionImageUrl: string;
   promotionImageAlignment: "left" | "center";
   promotionImageWidthPercent: number;
@@ -187,6 +188,7 @@ export const defaultPosReceiptTemplateSettings: PosReceiptTemplateSettings = {
   logoUrl: "",
   logoAlignment: "center",
   logoWidthPercent: 58,
+  logoBottomSpacing: 8,
   promotionImageUrl: "",
   promotionImageAlignment: "center",
   promotionImageWidthPercent: 100,
@@ -290,6 +292,7 @@ export function normalizePosReceiptTemplateSettings(value: unknown): PosReceiptT
   };
   const alignment = (next: unknown, fallback: "left" | "center") => next === "center" || next === "left" ? next : fallback;
   const rawLogoWidthPercent = Math.round(Number(source.logoWidthPercent ?? defaultPosReceiptTemplateSettings.logoWidthPercent));
+  const rawLogoBottomSpacing = Math.round(Number(source.logoBottomSpacing ?? defaultPosReceiptTemplateSettings.logoBottomSpacing));
   const rawPromotionImageWidthPercent = Math.round(Number(source.promotionImageWidthPercent ?? defaultPosReceiptTemplateSettings.promotionImageWidthPercent));
   const textSize = (next: unknown, fallback: "small" | "standard" | "large") => next === "small" || next === "large" || next === "standard" ? next : fallback;
   const qrSize = (next: unknown) => next === "small" || next === "large" || next === "medium" ? next : defaultPosReceiptTemplateSettings.qrCodeSize;
@@ -301,6 +304,7 @@ export function normalizePosReceiptTemplateSettings(value: unknown): PosReceiptT
     logoUrl: text(source.logoUrl, 500),
     logoAlignment: alignment(source.logoAlignment, defaultPosReceiptTemplateSettings.logoAlignment),
     logoWidthPercent: Number.isFinite(rawLogoWidthPercent) ? Math.max(20, Math.min(100, rawLogoWidthPercent)) : defaultPosReceiptTemplateSettings.logoWidthPercent,
+    logoBottomSpacing: Number.isFinite(rawLogoBottomSpacing) ? Math.max(0, Math.min(40, rawLogoBottomSpacing)) : defaultPosReceiptTemplateSettings.logoBottomSpacing,
     promotionImageUrl: text(source.promotionImageUrl, 500),
     promotionImageAlignment: alignment(source.promotionImageAlignment, defaultPosReceiptTemplateSettings.promotionImageAlignment),
     promotionImageWidthPercent: Number.isFinite(rawPromotionImageWidthPercent) ? Math.max(20, Math.min(100, rawPromotionImageWidthPercent)) : defaultPosReceiptTemplateSettings.promotionImageWidthPercent,

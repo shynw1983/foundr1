@@ -7681,14 +7681,67 @@ body :where(
 }
 
 .menu-sync-panel {
-  display: grid;
-  gap: 12px;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: white;
   padding: 14px;
   box-shadow: var(--shadow);
+}
+
+.menu-sync-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.menu-sync-summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu-sync-summary:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid var(--green);
+  outline-offset: 4px;
+}
+
+.menu-sync-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.menu-sync-summary-title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.menu-sync-summary-heading {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.menu-sync-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform 180ms ease;
+}
+
+.menu-sync-panel[open] .menu-sync-chevron {
+  transform: rotate(180deg);
+}
+
+.menu-sync-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .menu-sync-count {
@@ -14492,6 +14545,36 @@ body :where(
   margin: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.pos-admin-printer-card > .store-device-receipt-preview-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.store-device-receipt-preview-heading > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.store-device-receipt-preview-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.store-device-receipt-preview-controls select {
+  min-width: 130px;
+}
+
+.store-device-receipt-preview {
+  position: static;
+  width: min(100%, 360px);
+  justify-self: center;
 }
 
 .pos-admin-display-media-grid {
@@ -34979,6 +35062,15 @@ body :where(
 
   .pos-admin-receipt-preview-panel {
     position: static;
+  }
+
+  .pos-admin-printer-card > .store-device-receipt-preview-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .store-device-receipt-preview-controls {
+    justify-content: flex-start;
   }
 
   .pos-admin-receipt-paper {

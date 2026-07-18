@@ -237,7 +237,21 @@ type PosCashResponsibleEmployee = {
   name: string;
   role: string;
   punchedAt: string;
+  attendanceStatus: "working" | "on_break" | "scheduled" | "clocked_out" | "manager";
+  scheduledStart: string;
+  scheduledEnd: string;
 };
+
+function getCashResponsibleEmployeeLabel(employee: PosCashResponsibleEmployee) {
+  const schedule = employee.scheduledStart && employee.scheduledEnd
+    ? ` ${employee.scheduledStart}-${employee.scheduledEnd}`
+    : "";
+  if (employee.attendanceStatus === "working") return `${employee.name}（出勤中${schedule}）`;
+  if (employee.attendanceStatus === "on_break") return `${employee.name}（休憩中${schedule}）`;
+  if (employee.attendanceStatus === "clocked_out") return `${employee.name}（本日排班・退勤済み${schedule}）`;
+  if (employee.attendanceStatus === "manager") return `${employee.name}（責任者）`;
+  return `${employee.name}（本日排班${schedule}）`;
+}
 
 type PosMember = {
   id: string;
@@ -3211,10 +3225,10 @@ export default function StorePosPage() {
                   <span>締め責任者</span>
                   <select value={cashClosingResponsibleEmployeeId} onChange={(event) => setCashClosingResponsibleEmployeeId(event.target.value)}>
                     {reconciliation.activeCashResponsibleEmployees.length === 0 ? (
-                      <option value="">出勤中の従業員がいません</option>
+                      <option value="">締め責任者の候補がいません</option>
                     ) : (
                       reconciliation.activeCashResponsibleEmployees.map((employee) => (
-                        <option key={employee.id} value={employee.id}>{employee.name}</option>
+                        <option key={employee.id} value={employee.id}>{getCashResponsibleEmployeeLabel(employee)}</option>
                       ))
                     )}
                   </select>
