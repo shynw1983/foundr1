@@ -35,17 +35,15 @@ export async function loadCurrentEmployee() {
     .then(async (response) => {
       if (!response.ok) {
         cachedEmployee = null;
-        redirectToOsLogin();
+        if (response.status === 401) redirectToOsLogin();
         return null;
       }
       const body = await response.json().catch(() => ({})) as { employee?: CurrentEmployee };
       cachedEmployee = body.employee ?? null;
-      if (!cachedEmployee) redirectToOsLogin();
       return cachedEmployee;
     })
     .catch(() => {
       cachedEmployee = null;
-      redirectToOsLogin();
       return null;
     })
     .finally(() => {
