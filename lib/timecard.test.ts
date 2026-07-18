@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  summarizeTimecardDays,
   summarizePayroll,
   type SocialInsuranceRow,
   type TimecardDailySummary,
   type TimecardEmployee,
+  type TimecardPunch,
   type TimecardStorePayrollSetting
 } from "./timecard.ts";
 
@@ -76,6 +78,49 @@ function payrollFor(settings: TimecardStorePayrollSetting[], periodEndExclusive 
     socialInsuranceRows
   }).rows[0];
 }
+
+test("manager corrections take priority over later staff app punches in the same work segment", () => {
+  const punches: TimecardPunch[] = [
+    {
+      id: "manager-in",
+      employeeId: "employee-1",
+      employeeName: "テスト従業員",
+      storeId: "store-1",
+      storeName: "テスト店",
+      punchType: "clock_in",
+      punchedAt: "2026-07-09T02:30:00.000Z",
+      source: "manager_correction"
+    },
+    {
+      id: "manager-out",
+      employeeId: "employee-1",
+      employeeName: "テスト従業員",
+      storeId: "store-1",
+      storeName: "テスト店",
+      punchType: "clock_out",
+      punchedAt: "2026-07-09T09:00:00.000Z",
+      source: "manager_correction"
+    },
+    {
+      id: "staff-out-next-day",
+      employeeId: "employee-1",
+      employeeName: "テスト従業員",
+      storeId: "store-1",
+      storeName: "テスト店",
+      punchType: "clock_out",
+      punchedAt: "2026-07-10T02:31:00.000Z",
+      source: "mobile"
+    }
+  ];
+
+  const summary = summarizeTimecardDays(punches)[0];
+
+  assert.equal(summary.clockIn, "2026-07-09T02:30:00.000Z");
+  assert.equal(summary.clockOut, "2026-07-09T09:00:00.000Z");
+  assert.equal(summary.workMinutes, 390);
+  assert.equal(summary.isManualCorrection, true);
+  assert.equal(summary.punches?.length, 3);
+});
 
 test("current and historical payroll settings deduct monthly charges only once", () => {
   const row = payrollFor([

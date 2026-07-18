@@ -498,8 +498,16 @@ export function summarizeTimecardDays(
   const summaries: TimecardDailySummary[] = [];
   for (const [key, dayPunches] of groups.entries()) {
     const sortedPunches = [...dayPunches].sort((a, b) => new Date(a.punchedAt).getTime() - new Date(b.punchedAt).getTime());
-    const clockIns = sortedPunches.filter((punch) => punch.punchType === "clock_in");
-    const clockOuts = sortedPunches.filter((punch) => punch.punchType === "clock_out");
+    const manuallyCorrectedPunchTypes = new Set(
+      sortedPunches
+        .filter((punch) => punch.source === "manager_correction")
+        .map((punch) => punch.punchType)
+    );
+    const effectivePunches = sortedPunches.filter((punch) =>
+      !manuallyCorrectedPunchTypes.has(punch.punchType) || punch.source === "manager_correction"
+    );
+    const clockIns = effectivePunches.filter((punch) => punch.punchType === "clock_in");
+    const clockOuts = effectivePunches.filter((punch) => punch.punchType === "clock_out");
     const firstClockIn = clockIns[0]?.punchedAt ?? null;
     const lastClockOut = clockOuts.at(-1)?.punchedAt ?? null;
     const employeeName = sortedPunches[0]?.employeeName ?? "";
@@ -513,7 +521,7 @@ export function summarizeTimecardDays(
     let breakMinutes = 0;
     let activeBreakStart: string | null = null;
     const breakIntervals: Array<{ start: string; end: string }> = [];
-    for (const punch of sortedPunches) {
+    for (const punch of effectivePunches) {
       if (punch.punchType === "break_start") activeBreakStart = punch.punchedAt;
       if (punch.punchType === "break_end" && activeBreakStart) {
         breakMinutes += minutesBetween(activeBreakStart, punch.punchedAt);
