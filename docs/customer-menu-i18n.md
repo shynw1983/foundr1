@@ -101,7 +101,8 @@ Do not build new projects on brand-specific `*-compatible` menu endpoints. Those
 
 Expected usage:
 
-- Read `items` and `optionGroups` from the standard API.
+- Read menu items from `items` and render each product's already-scoped `item.optionGroups`. The top-level `optionGroups` collection is the brand master list and must not be shown indiscriminately for every product.
+- Option groups and individual options may contain `applicableCategories`; customer and POS surfaces must honor the per-item filtered result returned by the API.
 - Keep item and option IDs in the order payload.
 - Render labels with the fallback order above.
 - Send structured choices back to Foundr1 OS checkout APIs so POS, kitchen, customer display, receipts, and member order history can all resolve the same menu data.

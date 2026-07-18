@@ -178,10 +178,12 @@ export async function POST(request: Request) {
       menu_options.id::text,
       menu_options.option_key as "optionKey",
       menu_options.name,
+      coalesce(menu_options.applicable_categories, '{}') as "applicableCategories",
       coalesce(menu_options.price_delta, 0)::int as "priceDelta",
       menu_option_groups.id::text as "groupId",
       menu_option_groups.brand_id::text as "brandId",
       coalesce(menu_option_groups.menu_catalog_item_id::text, '') as "menuCatalogItemId",
+      coalesce(menu_option_groups.applicable_categories, '{}') as "groupApplicableCategories",
       menu_option_groups.group_key as "groupKey",
       menu_option_groups.name as "groupName",
       menu_option_groups.selection_type as "selectionType",
@@ -207,10 +209,12 @@ export async function POST(request: Request) {
     id: string;
     optionKey: string;
     name: string;
+    groupApplicableCategories: string[];
     priceDelta: number;
     groupId: string;
     brandId: string;
     menuCatalogItemId: string;
+    applicableCategories: string[];
     groupKey: string;
     groupName: string;
     selectionType: string;
@@ -236,6 +240,8 @@ export async function POST(request: Request) {
       const validSelected = selected.filter((option) => {
         if (option.brandId !== menuItem.brandId) return false;
         if (option.menuCatalogItemId && option.menuCatalogItemId !== menuItem.id) return false;
+        if (!option.menuCatalogItemId && option.groupApplicableCategories.length && !option.groupApplicableCategories.includes(menuItem.category || "未分類")) return false;
+        if (option.applicableCategories.length && !option.applicableCategories.includes(menuItem.category || "未分類")) return false;
         const allowedKeys = asStringArray(menuItem.variableSchema?.[getAllowedRuleKey(option.groupKey)]);
         if (!allowedKeys.length) return true;
         return allowedKeys.includes(option.optionKey) || allowedKeys.includes(option.name);

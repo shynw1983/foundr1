@@ -18,9 +18,11 @@ import {
   UserCog
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { useUnsavedChangesGuard } from "../../../../components/UnsavedChangesGuard";
 import { normalizeIntegerInput } from "../../../../lib/number-input";
+import { storeTerminalNameOptions, storeTerminalWorkstations } from "../../../../lib/store-terminal-names";
 import {
   createTestPrintPayload,
   defaultPosKitchenTicketTemplateSettings,
@@ -99,6 +101,15 @@ type StoreDeviceSettings = {
   posBrandSettings: PosBrandSetting[];
 };
 
+type StoreTerminalAccount = {
+  id: string;
+  name: string;
+  loginId: string;
+  status: string;
+  visibleStores?: StoreOption[];
+  canManage?: boolean;
+};
+
 const defaultCustomerDisplayMediaSettings: CustomerDisplayMediaSettings = {
   mode: "default",
   transition: "fade",
@@ -168,6 +179,33 @@ export default function StoreDeviceSettingsPage() {
   const [testPrinterTarget, setTestPrinterTarget] = useState("kitchen");
   const [testPrinting, setTestPrinting] = useState(false);
   const [uploadingMediaType, setUploadingMediaType] = useState<"" | "image" | "video">("");
+  const [terminalAccounts, setTerminalAccounts] = useState<StoreTerminalAccount[]>([]);
+  const [terminalLoading, setTerminalLoading] = useState(true);
+  const [terminalSavingId, setTerminalSavingId] = useState("");
+  const [canManageTerminals, setCanManageTerminals] = useState(false);
+  const [terminalMessage, setTerminalMessage] = useState("");
+
+  async function loadTerminalAccounts(storeId: string) {
+    if (!storeId) {
+      setTerminalAccounts([]);
+      setTerminalLoading(false);
+      return;
+    }
+    setTerminalLoading(true);
+    const response = await fetch("/api/staff", { cache: "no-store" });
+    if (!response.ok) {
+      setTerminalAccounts([]);
+      setCanManageTerminals(false);
+      setTerminalLoading(false);
+      return;
+    }
+    const body = await response.json() as { employees?: Array<StoreTerminalAccount & { role?: string }>; canManageStaff?: boolean };
+    setTerminalAccounts((body.employees ?? []).filter((account) => (
+      account.role === "store_terminal" && account.visibleStores?.some((store) => store.id === storeId)
+    )));
+    setCanManageTerminals(body.canManageStaff === true);
+    setTerminalLoading(false);
+  }
 
   async function load(storeId = selectedStoreId) {
     setLoading(true);
@@ -182,7 +220,8 @@ export default function StoreDeviceSettingsPage() {
     const body = await response.json();
     const nextSettings = body.settings ?? createEmptySettings();
     setStores(body.access?.stores ?? []);
-    setSelectedStoreId(body.selectedStoreId ?? nextSettings.storeId ?? "");
+    const nextStoreId = body.selectedStoreId ?? nextSettings.storeId ?? "";
+    setSelectedStoreId(nextStoreId);
     setCanManage(Boolean(body.access?.canManagePosSettings));
     const nextSettingsState: StoreDeviceSettings = {
       ...createEmptySettings(),
@@ -196,6 +235,69 @@ export default function StoreDeviceSettingsPage() {
     setSavedSettingsSnapshot(createStoreDeviceSettingsSnapshot(nextSettingsState));
     setMessage("");
     setLoading(false);
+    void loadTerminalAccounts(nextStoreId);
+  }
+
+  async function createTerminalAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedStoreId || !canManageTerminals) return;
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    setTerminalSavingId("new");
+    setTerminalMessage("");
+    const response = await fetch("/api/staff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        role: "store_terminal",
+        name: String(formData.get("name") ?? ""),
+        loginId: String(formData.get("loginId") ?? ""),
+        password: String(formData.get("password") ?? ""),
+        status: "active",
+        visibleStoreIds: [selectedStoreId],
+        workStoreIds: []
+      })
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setTerminalMessage(body.error ?? "店舗端末を追加できませんでした。");
+      setTerminalSavingId("");
+      return;
+    }
+    form.reset();
+    await loadTerminalAccounts(selectedStoreId);
+    setTerminalSavingId("");
+    setTerminalMessage("店舗端末を追加しました。");
+  }
+
+  async function updateTerminalAccount(event: FormEvent<HTMLFormElement>, account: StoreTerminalAccount) {
+    event.preventDefault();
+    if (!selectedStoreId || !canManageTerminals || account.canManage === false) return;
+    const formData = new FormData(event.currentTarget);
+    setTerminalSavingId(account.id);
+    setTerminalMessage("");
+    const response = await fetch(`/api/staff/${account.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        role: "store_terminal",
+        name: String(formData.get("name") ?? ""),
+        loginId: String(formData.get("loginId") ?? ""),
+        password: String(formData.get("password") ?? ""),
+        status: String(formData.get("status") ?? "active"),
+        visibleStoreIds: [selectedStoreId],
+        workStoreIds: []
+      })
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setTerminalMessage(body.error ?? "店舗端末を更新できませんでした。");
+      setTerminalSavingId("");
+      return;
+    }
+    await loadTerminalAccounts(selectedStoreId);
+    setTerminalSavingId("");
+    setTerminalMessage("店舗端末を更新しました。");
   }
 
   function updatePrinterSettings(patch: Partial<PosPrinterSettings>) {
@@ -480,6 +582,83 @@ export default function StoreDeviceSettingsPage() {
         </section>
 
         {hasUnsavedDeviceSettings ? <div className="action-notice is-warning">表示・設備設定に未保存の変更があります。移動前に保存してください。</div> : null}
+
+        <section className="panel store-terminal-settings">
+          <div className="panel-title">
+            <MonitorSmartphone />
+            <div>
+              <h3>店舗端末</h3>
+              <p>この店舗で使う Store App 端末の設置場所、ログイン ID、有効状態を管理します。</p>
+            </div>
+          </div>
+          {terminalMessage ? <div className="action-notice">{terminalMessage}</div> : null}
+          <div className="store-terminal-account-list">
+            {terminalLoading ? <p className="pos-admin-discount-empty">店舗端末を読み込んでいます。</p> : terminalAccounts.length ? terminalAccounts.map((account) => (
+              <form className="store-terminal-account-row" key={account.id} onSubmit={(event) => void updateTerminalAccount(event, account)}>
+                <label>
+                  <span>設置場所</span>
+                  <select name="name" defaultValue={account.name} disabled={!canManageTerminals || account.canManage === false} required>
+                    {storeTerminalWorkstations.map((workstation) => (
+                      <optgroup key={workstation.value} label={workstation.label}>
+                        {storeTerminalNameOptions.filter((option) => option.value.startsWith(`${workstation.value} `)).map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>ログイン ID</span>
+                  <input name="loginId" defaultValue={account.loginId} disabled={!canManageTerminals || account.canManage === false} required />
+                </label>
+                <label>
+                  <span>新しいパスワード</span>
+                  <input name="password" type="password" placeholder="変更時のみ入力" disabled={!canManageTerminals || account.canManage === false} />
+                </label>
+                <label>
+                  <span>状態</span>
+                  <select name="status" defaultValue={account.status} disabled={!canManageTerminals || account.canManage === false}>
+                    <option value="active">有効</option>
+                    <option value="inactive">停止</option>
+                  </select>
+                </label>
+                <button className="secondary-button" type="submit" disabled={!canManageTerminals || account.canManage === false || Boolean(terminalSavingId)}>
+                  {terminalSavingId === account.id ? "保存中..." : "保存"}
+                </button>
+              </form>
+            )) : <p className="pos-admin-discount-empty">この店舗にはまだ Store App 端末がありません。</p>}
+          </div>
+          {canManageTerminals ? (
+            <form className="store-terminal-create-form" onSubmit={(event) => void createTerminalAccount(event)}>
+              <div className="store-terminal-create-heading">
+                <strong>端末を追加</strong>
+                <span>名称は設置場所と端末番号から選択します。</span>
+              </div>
+              <label>
+                <span>設置場所</span>
+                <select name="name" defaultValue="" required>
+                  <option value="">選択してください</option>
+                  {storeTerminalWorkstations.map((workstation) => (
+                    <optgroup key={workstation.value} label={workstation.label}>
+                      {storeTerminalNameOptions.filter((option) => option.value.startsWith(`${workstation.value} `)).map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>ログイン ID</span>
+                <input name="loginId" autoComplete="off" placeholder="例: tenjin-kitchen-1" required />
+              </label>
+              <label>
+                <span>初期パスワード</span>
+                <input name="password" type="password" autoComplete="new-password" placeholder="10文字以上" required />
+              </label>
+              <button className="primary-button" type="submit" disabled={Boolean(terminalSavingId)}>{terminalSavingId === "new" ? "追加中..." : "追加"}</button>
+            </form>
+          ) : null}
+        </section>
 
         <section className="panel pos-admin-tax-settings">
           <div className="panel-title">

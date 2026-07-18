@@ -9,6 +9,7 @@ import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import { ModalHistoryScope } from "../components/useModalHistory";
+import { storeTerminalNameOptions, storeTerminalWorkstations } from "../../../lib/store-terminal-names";
 
 type StoreOption = {
   id: string;
@@ -202,7 +203,6 @@ const roleLabels: Record<string, string> = {
 
 const roleOptions = [
   { value: "staff", label: "店舗スタッフ" },
-  { value: "store_terminal", label: "店舗Pad" },
   { value: "store_owner", label: "加盟店オーナー" },
   { value: "store_manager", label: "店長" },
   { value: "manager", label: "本部マネージャー" },
@@ -218,7 +218,7 @@ function canForcePasswordChange(role: string) {
 function getAssignableRoleOptions(currentUserRole: string) {
   if (currentUserRole === "owner") return roleOptions;
   if (currentUserRole === "manager") return roleOptions.filter((option) => option.value !== "owner");
-  return roleOptions.filter((option) => option.value === "staff" || option.value === "store_terminal");
+  return roleOptions.filter((option) => option.value === "staff");
 }
 
 const staffCategoryLabels: Record<string, string> = {
@@ -463,7 +463,7 @@ export default function StaffPage() {
       currentUserRole?: string;
       canManageStaff?: boolean;
     };
-    setStaff(body.employees ?? []);
+    setStaff((body.employees ?? []).filter((employee) => employee.role !== "store_terminal"));
     setStores(body.stores ?? []);
     setCurrentUserId(body.currentUserId ?? "");
     setCurrentUserRole(body.currentUserRole ?? "");
@@ -710,12 +710,12 @@ export default function StaffPage() {
                   <select value={positionFilter} onChange={(event) => setPositionFilter(event.target.value)}>
                     <option value={ALL_FILTER}>すべての役職・区分</option>
                     <optgroup label="スタッフ区分">
-                      {Object.entries(staffCategoryLabels).map(([value, label]) => (
+                      {Object.entries(staffCategoryLabels).filter(([value]) => value !== "device").map(([value, label]) => (
                         <option key={value} value={`category:${value}`}>{label}</option>
                       ))}
                     </optgroup>
                     <optgroup label="権限">
-                      {Object.entries(roleLabels).map(([value, label]) => (
+                      {Object.entries(roleLabels).filter(([value]) => value !== "store_terminal").map(([value, label]) => (
                         <option key={value} value={`role:${value}`}>{label}</option>
                       ))}
                     </optgroup>
@@ -1464,7 +1464,23 @@ function StaffFormFields({
       <section className={activeTab === "basic" ? "staff-form-pane is-active" : "staff-form-pane"}>
         <label>
           <span>{isStoreTerminal ? "端末名" : "氏名"}</span>
-          <input name="name" defaultValue={member?.name ?? ""} placeholder={isStoreTerminal ? "例: 天神店 店舗Pad" : "例: 山田 太郎"} required />
+          {isStoreTerminal ? (
+            <>
+              <select name="name" defaultValue={member?.role === "store_terminal" ? member.name : ""} required>
+                <option value="">設置場所を選択</option>
+                {storeTerminalWorkstations.map((workstation) => (
+                  <optgroup key={workstation.value} label={workstation.label}>
+                    {storeTerminalNameOptions
+                      .filter((option) => option.value.startsWith(`${workstation.value} `))
+                      .map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+              <small className="staff-field-help">設置場所と端末番号を選択してください。端末名は統一された候補から設定されます。</small>
+            </>
+          ) : (
+            <input name="name" defaultValue={member?.name ?? ""} placeholder="例: 山田 太郎" required />
+          )}
         </label>
         {!isStoreTerminal ? (
           <>

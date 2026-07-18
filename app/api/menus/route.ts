@@ -38,6 +38,11 @@ function parseJsonObject(value: unknown) {
   }
 }
 
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.map((entry) => String(entry ?? "").trim()).filter(Boolean)));
+}
+
 function normalizeDisplayNames(value: unknown) {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   return Object.fromEntries(
@@ -184,6 +189,7 @@ async function readMenuAdminData() {
         id::text,
         brand_id::text as "brandId",
         coalesce(menu_catalog_item_id::text, '') as "menuCatalogItemId",
+        coalesce(applicable_categories, '{}') as "applicableCategories",
         coalesce(external_id, '') as "externalId",
         group_key as "groupKey",
         name,
@@ -200,6 +206,7 @@ async function readMenuAdminData() {
       select
         id::text,
         option_group_id::text as "optionGroupId",
+        coalesce(applicable_categories, '{}') as "applicableCategories",
         coalesce(external_id, '') as "externalId",
         option_key as "optionKey",
         name,
@@ -694,6 +701,20 @@ async function upsertCategory(body: Record<string, unknown>, employeeId: string)
         and (${storeId}::uuid is not null or store_id is null)
         and coalesce(nullif(category, ''), '未分類') = ${previousName}
     `;
+    await sql`
+      update menu_option_groups
+      set applicable_categories = array_replace(applicable_categories, ${previousName}, ${name}),
+          updated_at = now()
+      where brand_id = ${brandId}
+        and ${previousName} = any(applicable_categories)
+    `;
+    await sql`
+      update menu_options
+      set applicable_categories = array_replace(applicable_categories, ${previousName}, ${name}),
+          updated_at = now()
+      where ${previousName} = any(applicable_categories)
+        and option_group_id in (select id from menu_option_groups where brand_id = ${brandId})
+    `;
   }
 
   await recordMenuChangeSyncTasks({
@@ -730,6 +751,22 @@ async function deleteCategory(id: string, employeeId: string) {
       and (${category.storeId || null}::uuid is null or store_id = ${category.storeId || null})
       and (${category.storeId || null}::uuid is not null or store_id is null)
       and coalesce(nullif(category, ''), '未分類') = ${category.name}
+  `;
+  await sql`
+    update menu_option_groups
+    set applicable_categories = array_remove(applicable_categories, ${category.name}),
+        is_active = case when cardinality(applicable_categories) = 1 then false else is_active end,
+        updated_at = now()
+    where brand_id = ${category.brandId}
+      and ${category.name} = any(applicable_categories)
+  `;
+  await sql`
+    update menu_options
+    set applicable_categories = array_remove(applicable_categories, ${category.name}),
+        is_active = case when cardinality(applicable_categories) = 1 then false else is_active end,
+        updated_at = now()
+    where ${category.name} = any(applicable_categories)
+      and option_group_id in (select id from menu_option_groups where brand_id = ${category.brandId})
   `;
   await sql`delete from menu_categories where id = ${id}`;
   await recordMenuChangeSyncTasks({
@@ -953,6 +990,7 @@ async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
   const brandId = cleanOptionalId(body.brandId);
   const rawGroupKey = String(body.groupKey ?? "").trim();
   const menuCatalogItemId = cleanOptionalId(body.menuCatalogItemId);
+  const applicableCategories = menuCatalogItemId ? [] : normalizeStringArray(body.applicableCategories);
   const name = String(body.name ?? "").trim();
   if (!brandId || !name) throw new Error("ブランド、名称を入力してください。");
   const groupKey = await makeUniqueGroupKey({ id, brandId, menuCatalogItemId, preferredKey: rawGroupKey, name });
@@ -964,6 +1002,7 @@ async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
         set
           brand_id = ${brandId},
           menu_catalog_item_id = ${menuCatalogItemId},
+          applicable_categories = ${applicableCategories},
           external_id = ${String(body.externalId ?? "").trim()},
           group_key = ${groupKey},
           name = ${name},
@@ -981,6 +1020,7 @@ async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
         insert into menu_option_groups (
           brand_id,
           menu_catalog_item_id,
+          applicable_categories,
           external_id,
           group_key,
           name,
@@ -995,6 +1035,7 @@ async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
         values (
           ${brandId},
           ${menuCatalogItemId},
+          ${applicableCategories},
           ${String(body.externalId ?? "").trim()},
           ${groupKey},
           ${name},
@@ -1027,6 +1068,7 @@ async function upsertOption(body: Record<string, unknown>, employeeId: string) {
   const optionGroupId = cleanOptionalId(body.optionGroupId);
   const rawOptionKey = String(body.optionKey ?? "").trim();
   const name = String(body.name ?? "").trim();
+  const applicableCategories = normalizeStringArray(body.applicableCategories);
   if (!optionGroupId || !name) throw new Error("グループ、名称を入力してください。");
   const optionKey = await makeUniqueOptionKey({ id, optionGroupId, preferredKey: rawOptionKey, name });
   const displayNames = JSON.stringify(normalizeDisplayNames(body.displayNames));
@@ -1044,6 +1086,7 @@ async function upsertOption(body: Record<string, unknown>, employeeId: string) {
         update menu_options
         set
           option_group_id = ${optionGroupId},
+          applicable_categories = ${applicableCategories},
           external_id = ${String(body.externalId ?? "").trim()},
           option_key = ${optionKey},
           name = ${name},
@@ -1059,6 +1102,7 @@ async function upsertOption(body: Record<string, unknown>, employeeId: string) {
     : await sql`
         insert into menu_options (
           option_group_id,
+          applicable_categories,
           external_id,
           option_key,
           name,
@@ -1071,6 +1115,7 @@ async function upsertOption(body: Record<string, unknown>, employeeId: string) {
         )
         values (
           ${optionGroupId},
+          ${applicableCategories},
           ${String(body.externalId ?? "").trim()},
           ${optionKey},
           ${name},

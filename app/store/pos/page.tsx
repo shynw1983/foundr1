@@ -50,6 +50,7 @@ type PosMenuItem = {
 type PosMenuOption = {
   id: string;
   optionKey: string;
+  applicableCategories: string[];
   name: string;
   displayNames?: Record<string, string>;
   priceDelta: number | null;
@@ -60,6 +61,7 @@ type PosOptionGroup = {
   id: string;
   brandId: string;
   menuCatalogItemId: string;
+  applicableCategories: string[];
   groupKey: string;
   name: string;
   displayNames?: Record<string, string>;
@@ -1284,11 +1286,17 @@ export default function StorePosPage() {
   function getItemOptionGroups(item: PosMenuItem) {
     const weightPricing = getWeightPricingConfig(item, orderType);
     return optionGroups
-      .filter((group) => group.brandId === item.brandId && (!group.menuCatalogItemId || group.menuCatalogItemId === item.id))
+      .filter((group) => (
+        group.brandId === item.brandId
+        && (!group.menuCatalogItemId || group.menuCatalogItemId === item.id)
+        && (group.menuCatalogItemId || !group.applicableCategories.length || group.applicableCategories.includes(item.category || "未分類"))
+      ))
       .filter((group) => !weightPricing || isDineInWeightMalatangOptionGroup(group))
       .map((group) => {
         const allowed = asStringArray(item.variableSchema?.[getAllowedRuleKey(group.groupKey)]);
-        const options = group.options.filter((option) => !allowed.length || allowed.includes(option.optionKey) || allowed.includes(option.name));
+        const options = group.options
+          .filter((option) => !option.applicableCategories.length || option.applicableCategories.includes(item.category || "未分類"))
+          .filter((option) => !allowed.length || allowed.includes(option.optionKey) || allowed.includes(option.name));
         return { ...group, options };
       })
       .filter((group) => group.options.length);

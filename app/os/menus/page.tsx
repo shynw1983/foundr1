@@ -87,6 +87,7 @@ type MenuGroup = {
   id: string;
   brandId: string;
   menuCatalogItemId: string;
+  applicableCategories: string[];
   externalId: string;
   groupKey: string;
   name: string;
@@ -101,6 +102,7 @@ type MenuGroup = {
 type MenuOption = {
   id: string;
   optionGroupId: string;
+  applicableCategories: string[];
   externalId: string;
   optionKey: string;
   name: string;
@@ -222,6 +224,7 @@ const emptyGroup: MenuGroup = {
   id: "",
   brandId: "",
   menuCatalogItemId: "",
+  applicableCategories: [],
   externalId: "",
   groupKey: "",
   name: "",
@@ -236,6 +239,7 @@ const emptyGroup: MenuGroup = {
 const emptyOption: MenuOption = {
   id: "",
   optionGroupId: "",
+  applicableCategories: [],
   externalId: "",
   optionKey: "",
   name: "",
@@ -293,6 +297,12 @@ function getBrandName(brands: OptionItem[], id: string) {
 
 function getMenuItemName(items: MenuItem[], id: string) {
   return items.find((item) => item.id === id)?.name ?? "";
+}
+
+function getGroupScopeLabel(group: MenuGroup, items: MenuItem[]) {
+  if (group.menuCatalogItemId) return `商品専用: ${getMenuItemName(items, group.menuCatalogItemId) || "未設定"}`;
+  if (group.applicableCategories.length) return `分類: ${group.applicableCategories.join("、")}`;
+  return "ブランド全商品";
 }
 
 function getRuleKey(groupKey: string) {
@@ -510,8 +520,9 @@ export default function MenuAdminPage() {
 
   const visibleGroups = useMemo(() => data.groups.filter((group) => {
     if (!activeBrandId || group.brandId !== activeBrandId) return false;
-    return !group.menuCatalogItemId || group.menuCatalogItemId === itemDraft.id;
-  }), [activeBrandId, data.groups, itemDraft.id]);
+    if (group.menuCatalogItemId) return group.menuCatalogItemId === itemDraft.id;
+    return !group.applicableCategories.length || group.applicableCategories.includes(itemDraft.category || "未分類");
+  }), [activeBrandId, data.groups, itemDraft.category, itemDraft.id]);
   const brandGroups = useMemo(() => data.groups.filter((group) => {
     if (!activeBrandId || group.brandId !== activeBrandId) return false;
     if (!group.menuCatalogItemId) return true;
@@ -1021,6 +1032,20 @@ export default function MenuAdminPage() {
     setOptionDraft(emptyOption);
   }
 
+  function toggleGroupCategory(categoryName: string, checked: boolean) {
+    const next = new Set(groupDraft.applicableCategories);
+    if (checked) next.add(categoryName);
+    else next.delete(categoryName);
+    setGroupDraft({ ...groupDraft, menuCatalogItemId: "", applicableCategories: Array.from(next) });
+  }
+
+  function toggleOptionCategory(categoryName: string, checked: boolean) {
+    const next = new Set(optionDraft.applicableCategories);
+    if (checked) next.add(categoryName);
+    else next.delete(categoryName);
+    setOptionDraft({ ...optionDraft, applicableCategories: Array.from(next) });
+  }
+
   function editGroup(group: MenuGroup) {
     setActiveOptionGroupId(group.id);
     setGroupDraft(group);
@@ -1310,7 +1335,7 @@ export default function MenuAdminPage() {
                     >
                       <strong>{group.name}</strong>
                       <span>
-                        {group.menuCatalogItemId ? `商品専用: ${getMenuItemName(filteredItems, group.menuCatalogItemId) || "未設定"}` : "ブランド共通"}
+                        {getGroupScopeLabel(group, filteredItems)}
                         {" / "}
                         {group.groupKey}
                       </span>
@@ -1374,7 +1399,7 @@ export default function MenuAdminPage() {
                       >
                         <strong>{group.name}</strong>
                         <span>
-                          {group.menuCatalogItemId ? `商品専用: ${getMenuItemName(filteredItems, group.menuCatalogItemId) || "未設定"}` : "ブランド共通"}
+                          {getGroupScopeLabel(group, filteredItems)}
                           {" / "}
                           {group.groupKey}
                           {!group.isActive ? " / 停止中" : ""}
@@ -1399,11 +1424,29 @@ export default function MenuAdminPage() {
                       </div>
                       <label>
                         <span>対象</span>
-                        <select value={groupDraft.menuCatalogItemId} onChange={(event) => setGroupDraft({ ...groupDraft, menuCatalogItemId: event.target.value })}>
-                          <option value="">ブランド共通</option>
+                        <select value={groupDraft.menuCatalogItemId} onChange={(event) => setGroupDraft({ ...groupDraft, menuCatalogItemId: event.target.value, applicableCategories: event.target.value ? [] : groupDraft.applicableCategories })}>
+                          <option value="">分類またはブランド全体で指定</option>
                           {filteredItems.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
                         </select>
                       </label>
+                      {!groupDraft.menuCatalogItemId ? (
+                        <fieldset className="menu-category-scope">
+                          <legend>適用する商品分類</legend>
+                          <p>未選択の場合は、このブランドの全商品に表示されます。</p>
+                          <div className="menu-category-scope-grid">
+                            {categoryCounts.map((category) => (
+                              <label className="checkbox-group menu-inline-check" key={category.name}>
+                                <input
+                                  type="checkbox"
+                                  checked={groupDraft.applicableCategories.includes(category.name)}
+                                  onChange={(event) => toggleGroupCategory(category.name, event.target.checked)}
+                                />
+                                <span>{category.name}（{category.count}商品）</span>
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+                      ) : null}
                       <div className="menu-form-grid">
                         <label>
                           <span>表示名</span>
@@ -1524,6 +1567,22 @@ export default function MenuAdminPage() {
 	                          <input value={optionDraft.sortOrder} onChange={(event) => setOptionDraft({ ...optionDraft, sortOrder: Number(normalizeIntegerInput(event.target.value) || 0) })} inputMode="numeric" />
 	                        </label>
 	                      </div>
+                      <fieldset className="menu-category-scope">
+                        <legend>この選択肢を表示する商品分類</legend>
+                        <p>未選択の場合は、上の選択グループが適用される全商品に表示されます。</p>
+                        <div className="menu-category-scope-grid">
+                          {categoryCounts.map((category) => (
+                            <label className="checkbox-group menu-inline-check" key={category.name}>
+                              <input
+                                type="checkbox"
+                                checked={optionDraft.applicableCategories.includes(category.name)}
+                                onChange={(event) => toggleOptionCategory(category.name, event.target.checked)}
+                              />
+                              <span>{category.name}（{category.count}商品）</span>
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
                       <div className="menu-translation-panel">
                         <div>
                           <strong>客表示・会員・ブランドサイト用表示名</strong>
@@ -1815,7 +1874,11 @@ export default function MenuAdminPage() {
               </div>
               <div className="menu-rule-list">
                 {visibleGroups.map((group) => {
-                  const groupOptions = data.options.filter((option) => option.optionGroupId === group.id);
+                  const itemCategory = itemDraft.category || "未分類";
+                  const groupOptions = data.options.filter((option) => (
+                    option.optionGroupId === group.id
+                    && (!option.applicableCategories.length || option.applicableCategories.includes(itemCategory))
+                  ));
                   const allowedKeys = getAllowedKeys(itemDraft, group, groupOptions);
                   return (
                     <article className="menu-rule-card" key={group.id}>

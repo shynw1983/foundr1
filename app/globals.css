@@ -6403,6 +6403,93 @@ body :where(
   display: grid;
 }
 
+.store-terminal-settings {
+  display: grid;
+  gap: 16px;
+}
+
+.store-terminal-account-list {
+  display: grid;
+  gap: 8px;
+}
+
+.store-terminal-account-row,
+.store-terminal-create-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.15fr) minmax(150px, 1fr) minmax(160px, 1fr) minmax(100px, 0.65fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.store-terminal-account-row label,
+.store-terminal-create-form label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.store-terminal-account-row label > span,
+.store-terminal-create-form label > span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 550;
+}
+
+.store-terminal-account-row input,
+.store-terminal-account-row select,
+.store-terminal-create-form input,
+.store-terminal-create-form select {
+  width: 100%;
+  min-width: 0;
+}
+
+.store-terminal-create-form {
+  grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr) minmax(170px, 1fr) auto;
+  border-color: color-mix(in srgb, var(--green) 24%, var(--line));
+  background: color-mix(in srgb, var(--green) 4%, white);
+}
+
+.store-terminal-create-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.store-terminal-create-heading span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 1100px) {
+  .store-terminal-account-row,
+  .store-terminal-create-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .store-terminal-account-row .secondary-button,
+  .store-terminal-create-form .primary-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .store-terminal-account-row,
+  .store-terminal-create-form {
+    grid-template-columns: 1fr;
+  }
+
+  .store-terminal-create-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+}
+
 .staff-readonly-fields input:not([type="hidden"]),
 .staff-readonly-fields select,
 .staff-readonly-fields textarea,
@@ -8385,6 +8472,39 @@ body :where(
 .menu-inline-check input {
   width: 16px;
   min-height: 16px;
+}
+
+.menu-category-scope {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.menu-category-scope legend {
+  padding: 0 5px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.menu-category-scope > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.menu-category-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.menu-category-scope-grid .menu-inline-check {
+  min-height: 32px;
 }
 
 .menu-category-flags {
@@ -14550,6 +14670,16 @@ body :where(
   overflow-wrap: anywhere;
 }
 
+.pos-admin-receipt-paper h5.is-left,
+.pos-admin-receipt-paper p.is-left {
+  text-align: left;
+}
+
+.pos-admin-receipt-paper h5.is-center,
+.pos-admin-receipt-paper p.is-center {
+  text-align: center;
+}
+
 .pos-admin-receipt-paper p {
   margin: 0;
   color: #202720;
@@ -14577,6 +14707,16 @@ body :where(
   max-width: 72%;
   max-height: 64px;
   object-fit: contain;
+}
+
+.pos-admin-receipt-paper-logo.is-left,
+.pos-admin-receipt-paper-logo-placeholder.is-left {
+  justify-self: start;
+}
+
+.pos-admin-receipt-paper-logo.is-center,
+.pos-admin-receipt-paper-logo-placeholder.is-center {
+  justify-self: center;
 }
 
 .pos-admin-receipt-paper-promo {
@@ -14633,6 +14773,25 @@ body :where(
   display: grid;
   gap: 5px;
   min-width: 0;
+}
+
+.pos-admin-receipt-range-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 8px;
+}
+
+.pos-admin-receipt-range-control input[type="range"] {
+  width: 100%;
+  accent-color: var(--primary);
+}
+
+.pos-admin-receipt-range-control output {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
 }
 
 .pos-admin-receipt-image-control {
@@ -31784,6 +31943,7 @@ body :where(
 
   .menu-editor-layout,
   .menu-form-grid,
+  .menu-category-scope-grid,
   .menu-translation-grid,
   .menu-option-editor,
   .menu-choice-editor,

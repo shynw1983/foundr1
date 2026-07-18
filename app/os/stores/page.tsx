@@ -1273,13 +1273,13 @@ export default function StoresPage() {
                 <div className="store-payroll-settings">
                   <div className="store-payroll-summary">
                     <strong>表示・設備設定</strong>
-                    <p>客席表示、厨房表示、POS レシート、Web予約・POS 共通の厨房プリンターなど、店舗端末に紐づく設定を管理します。</p>
+                    <p>Store App の店舗端末、客席表示、厨房表示、POS レシート、Web予約・POS 共通の厨房プリンターを管理します。</p>
                   </div>
                   <div className="store-device-settings-link">
                     <MonitorSmartphone size={22} />
                     <div>
                       <strong>{editingStoreName || editingStore.name} の表示・設備設定</strong>
-                      <p>現在は客席表示の待機画面とプリンター接続を設定できます。今後、店頭端末や副屏の端末別設定もここに追加します。</p>
+                      <p>店舗端末のログインと設置場所、客席表示の待機画面、プリンター接続を店舗ごとに設定できます。</p>
                     </div>
                     <a className="secondary-button" href={`/os/stores/devices${editingStore.id ? `?storeId=${encodeURIComponent(editingStore.id)}` : ""}`}>
                       設定を開く

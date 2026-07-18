@@ -494,21 +494,24 @@ public class Foundr1PrinterBridge {
                 addText(lines, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), normal, contentWidth);
             }
         } else if (isReceipt && template != null && template.optBoolean("showLogo", false)) {
-            int logoMaxWidth = Math.max(1, Math.round(contentWidth * LOGO_MAX_WIDTH_PERCENT / 100f));
+            int logoWidthPercent = Math.max(20, Math.min(100, template.optInt("logoWidthPercent", LOGO_MAX_WIDTH_PERCENT)));
+            int logoMaxWidth = Math.max(1, Math.round(contentWidth * logoWidthPercent / 100f));
             Bitmap logo = loadLogoBitmap(template.optString("logoUrl", ""), logoMaxWidth, "58mm".equals(paperWidth) ? LOGO_MAX_HEIGHT_58MM : LOGO_MAX_HEIGHT_80MM);
             if (logo != null) {
-                lines.add(RasterLine.image(logo));
+                lines.add(RasterLine.image(logo, templateAlignment(template, "logoAlignment", 1)));
                 lines.add(RasterLine.spacer(LOGO_BOTTOM_GAP));
             }
         }
-        if (!isKitchen) addCenter(lines, displayName.isEmpty() ? payload.optString("storeName", "Foundr1 OS") : displayName, bold);
+        if (!isKitchen) addAlignedText(lines, displayName.isEmpty() ? payload.optString("storeName", "Foundr1 OS") : displayName, bold, contentWidth, templateAlignment(template, "businessNameAlignment", 1));
         if (!isKitchen && isReceipt && template != null) {
-            addMultiline(lines, templateText(template, "companyInfo"), small, contentWidth);
-            addMultiline(lines, templateText(template, "address"), small, contentWidth);
-            addTextIfPresent(lines, "登録番号: " + templateText(template, "taxRegistrationNumber"), templateText(template, "taxRegistrationNumber"), small, contentWidth);
-            addTextIfPresent(lines, "TEL: " + templateText(template, "phone"), templateText(template, "phone"), small, contentWidth);
-            addCenteredTextIfPresent(lines, templateText(template, "website"), small, contentWidth);
-            addMultiline(lines, templateText(template, "headerMessage"), small, contentWidth);
+            int contactAlignment = templateAlignment(template, "contactInfoAlignment", 0);
+            int messageAlignment = templateAlignment(template, "messageAlignment", 0);
+            addAlignedMultiline(lines, templateText(template, "companyInfo"), small, contentWidth, contactAlignment);
+            addAlignedMultiline(lines, templateText(template, "address"), small, contentWidth, contactAlignment);
+            addAlignedTextIfPresent(lines, "登録番号: " + templateText(template, "taxRegistrationNumber"), templateText(template, "taxRegistrationNumber"), small, contentWidth, contactAlignment);
+            addAlignedTextIfPresent(lines, "TEL: " + templateText(template, "phone"), templateText(template, "phone"), small, contentWidth, contactAlignment);
+            addAlignedTextIfPresent(lines, templateText(template, "website"), templateText(template, "website"), small, contentWidth, contactAlignment);
+            addAlignedMultiline(lines, templateText(template, "headerMessage"), small, contentWidth, messageAlignment);
         }
         if (!isKitchen) addSeparator(lines, contentWidth, normal);
         if (!isKitchen && order == null) {
@@ -573,8 +576,9 @@ public class Foundr1PrinterBridge {
         if (!isKitchen && isReceipt && template != null) {
             Bitmap promotionImage = loadTemplateBitmap(template.optString("promotionImageUrl", ""), contentWidth);
             if (promotionImage != null) lines.add(RasterLine.image(promotionImage));
-            addMultiline(lines, templateText(template, "promotionMessage"), small, contentWidth);
-            addMultiline(lines, templateText(template, "footerMessage"), small, contentWidth);
+            int messageAlignment = templateAlignment(template, "messageAlignment", 0);
+            addAlignedMultiline(lines, templateText(template, "promotionMessage"), small, contentWidth, messageAlignment);
+            addAlignedMultiline(lines, templateText(template, "footerMessage"), small, contentWidth, messageAlignment);
         }
         if (!isKitchen && (template == null || template.optBoolean("showTimestamp", true))) {
             addText(lines, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), normal, contentWidth);
@@ -597,6 +601,11 @@ public class Foundr1PrinterBridge {
         return template == null ? "" : template.optString(key, "").trim();
     }
 
+    private int templateAlignment(JSONObject template, String key, int fallback) {
+        if (template == null) return fallback;
+        return "center".equals(template.optString(key, "")) ? 1 : 0;
+    }
+
     private boolean kitchenBool(JSONObject template, String key, boolean fallback) {
         return template == null || !template.has(key) ? fallback : template.optBoolean(key, fallback);
     }
@@ -610,10 +619,20 @@ public class Foundr1PrinterBridge {
         if (!value.trim().isEmpty()) addText(lines, text, paint, contentWidth);
     }
 
+    private void addAlignedTextIfPresent(List<RasterLine> lines, String text, String value, Paint paint, int contentWidth, int alignment) {
+        if (!value.trim().isEmpty()) addAlignedText(lines, text, paint, contentWidth, alignment);
+    }
+
     private void addMultiline(List<RasterLine> lines, String text, Paint paint, int contentWidth) {
         String value = text == null ? "" : text.trim();
         if (value.isEmpty()) return;
         for (String part : value.split("\\n")) addText(lines, part.trim(), paint, contentWidth);
+    }
+
+    private void addAlignedMultiline(List<RasterLine> lines, String text, Paint paint, int contentWidth, int alignment) {
+        String value = text == null ? "" : text.trim();
+        if (value.isEmpty()) return;
+        for (String part : value.split("\\n")) addAlignedText(lines, part.trim(), paint, contentWidth, alignment);
     }
 
     private Bitmap loadLogoBitmap(String logoUrl, int maxWidth, int maxHeight) {
@@ -708,6 +727,12 @@ public class Foundr1PrinterBridge {
 
     private void addText(List<RasterLine> lines, String text, Paint paint, int contentWidth) {
         for (String line : wrapText(text, paint, contentWidth)) lines.add(RasterLine.left(line, paint));
+    }
+
+    private void addAlignedText(List<RasterLine> lines, String text, Paint paint, int contentWidth, int alignment) {
+        for (String line : wrapText(text, paint, contentWidth)) {
+            lines.add(alignment == 1 ? RasterLine.center(line, paint) : RasterLine.left(line, paint));
+        }
     }
 
     private void addCenteredTextIfPresent(List<RasterLine> lines, String text, Paint paint, int contentWidth) {
@@ -909,11 +934,11 @@ public class Foundr1PrinterBridge {
             this.spacerHeight = 0;
         }
 
-        private RasterLine(Bitmap image) {
+        private RasterLine(Bitmap image, int align) {
             this.left = "";
             this.right = "";
             this.paint = null;
-            this.align = 4;
+            this.align = align == 0 ? 6 : 4;
             this.image = image;
             this.spacerHeight = 0;
         }
@@ -944,7 +969,11 @@ public class Foundr1PrinterBridge {
         }
 
         static RasterLine image(Bitmap image) {
-            return new RasterLine(image);
+            return new RasterLine(image, 1);
+        }
+
+        static RasterLine image(Bitmap image, int align) {
+            return new RasterLine(image, align);
         }
 
         static RasterLine spacer(int height) {
@@ -961,7 +990,7 @@ public class Foundr1PrinterBridge {
         void draw(Canvas canvas, int leftEdge, int rightEdge, int top) {
             if (spacerHeight > 0) return;
             if (image != null) {
-                float x = leftEdge + (rightEdge - leftEdge - image.getWidth()) / 2f;
+                float x = align == 6 ? leftEdge : leftEdge + (rightEdge - leftEdge - image.getWidth()) / 2f;
                 canvas.drawBitmap(image, x, top + 5, null);
                 return;
             }

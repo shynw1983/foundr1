@@ -7,6 +7,7 @@ import { getStoreReservationWindowsForDate } from "../../../../lib/store-reserva
 type MenuOption = {
   id: string;
   optionGroupId: string;
+  applicableCategories: string[];
   externalId: string;
   optionKey: string;
   name: string;
@@ -19,6 +20,7 @@ type MenuOption = {
 type MenuOptionGroup = {
   id: string;
   menuCatalogItemId: string;
+  applicableCategories: string[];
   externalId: string;
   groupKey: string;
   name: string;
@@ -178,6 +180,7 @@ export async function GET(request: Request) {
     select
       id::text,
       coalesce(menu_catalog_item_id::text, '') as "menuCatalogItemId",
+      coalesce(applicable_categories, '{}') as "applicableCategories",
       coalesce(external_id, '') as "externalId",
       group_key as "groupKey",
       name,
@@ -196,6 +199,7 @@ export async function GET(request: Request) {
     select
       menu_options.id::text,
       menu_options.option_group_id::text as "optionGroupId",
+      coalesce(menu_options.applicable_categories, '{}') as "applicableCategories",
       coalesce(menu_options.external_id, '') as "externalId",
       menu_options.option_key as "optionKey",
       menu_options.name,
@@ -258,21 +262,13 @@ export async function GET(request: Request) {
     optionsByGroup.set(option.optionGroupId, groupOptions);
   }
 
-  const globalGroups: MenuOptionGroup[] = [];
-  const groupsByItem = new Map<string, MenuOptionGroup[]>();
+  const allGroups: MenuOptionGroup[] = [];
   for (const group of groups as MenuOptionGroup[]) {
     const hydratedGroup = {
       ...group,
       options: optionsByGroup.get(group.id) ?? []
     };
-
-    if (!group.menuCatalogItemId) {
-      globalGroups.push(hydratedGroup);
-    } else {
-      const itemGroups = groupsByItem.get(group.menuCatalogItemId) ?? [];
-      itemGroups.push(hydratedGroup);
-      groupsByItem.set(group.menuCatalogItemId, itemGroups);
-    }
+    allGroups.push(hydratedGroup);
   }
 
   const storeOperation = await applyStaffPresenceGateToPublicOperation(
@@ -318,7 +314,7 @@ export async function GET(request: Request) {
       reservationWindows
     },
     categories,
-    optionGroups: [...globalGroups, ...Array.from(groupsByItem.values()).flat()],
+    optionGroups: allGroups,
     items: items.map((item) => {
       const setting = settingsByItemId.get(item.id);
       return {
@@ -340,7 +336,17 @@ export async function GET(request: Request) {
           isAvailable: true,
           statusNote: ""
         },
-        optionGroups: [...globalGroups, ...(groupsByItem.get(item.id) ?? [])]
+        optionGroups: allGroups
+          .filter((group) => (
+            (!group.menuCatalogItemId || group.menuCatalogItemId === item.id)
+            && (group.menuCatalogItemId || !group.applicableCategories.length || group.applicableCategories.includes(String(item.category || "未分類")))
+          ))
+          .map((group) => ({
+            ...group,
+            options: group.options.filter((option) => (
+              !option.applicableCategories.length || option.applicableCategories.includes(String(item.category || "未分類"))
+            ))
+          }))
       };
     }),
     generatedAt: new Date().toISOString()

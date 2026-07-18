@@ -507,7 +507,7 @@ export default function PosPage() {
       setTestPrinting(false);
       return;
     }
-    const result = await printWithAndroidBridge(createTestPrintPayload(printer, taxSettings?.storeName || "Foundr1 OS"));
+    const result = await printWithAndroidBridge(createTestPrintPayload(printer, taxSettings?.storeName || "Foundr1 OS", taxForm.printerSettings.receiptTemplate));
     setTestPrintStatus(result.ok ? "プリンター設定を保存し、テスト印刷を送信しました。" : result.error || "テスト印刷に失敗しました。");
     setTestPrinting(false);
   }
@@ -1131,6 +1131,20 @@ export default function PosPage() {
                       />
                       <span>ロゴを表示</span>
                     </label>
+                    <label>
+                      <span>ロゴ位置</span>
+                      <select value={taxForm.printerSettings.receiptTemplate.logoAlignment} onChange={(event) => updateReceiptTemplate({ logoAlignment: event.target.value as PosReceiptTemplateSettings["logoAlignment"] })} disabled={!canManagePosSettings}>
+                        <option value="left">左揃え</option>
+                        <option value="center">中央揃え</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>ロゴ幅（用紙に対する比率）</span>
+                      <div className="pos-admin-receipt-range-control">
+                        <input type="range" min="20" max="100" step="5" value={taxForm.printerSettings.receiptTemplate.logoWidthPercent} onChange={(event) => updateReceiptTemplate({ logoWidthPercent: Number(event.target.value) })} disabled={!canManagePosSettings} />
+                        <output>{taxForm.printerSettings.receiptTemplate.logoWidthPercent}%</output>
+                      </div>
+                    </label>
                     <div className="pos-admin-receipt-image-field">
                       <span>ロゴ画像</span>
                       <div className="pos-admin-receipt-image-control">
@@ -1206,6 +1220,27 @@ export default function PosPage() {
                         placeholder="店舗名または会社名"
                         disabled={!canManagePosSettings}
                       />
+                    </label>
+                    <label>
+                      <span>店名・表示名の位置</span>
+                      <select value={taxForm.printerSettings.receiptTemplate.businessNameAlignment} onChange={(event) => updateReceiptTemplate({ businessNameAlignment: event.target.value as PosReceiptTemplateSettings["businessNameAlignment"] })} disabled={!canManagePosSettings}>
+                        <option value="left">左揃え</option>
+                        <option value="center">中央揃え</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>住所・連絡先の位置</span>
+                      <select value={taxForm.printerSettings.receiptTemplate.contactInfoAlignment} onChange={(event) => updateReceiptTemplate({ contactInfoAlignment: event.target.value as PosReceiptTemplateSettings["contactInfoAlignment"] })} disabled={!canManagePosSettings}>
+                        <option value="left">左揃え</option>
+                        <option value="center">中央揃え</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>お客様向けメッセージの位置</span>
+                      <select value={taxForm.printerSettings.receiptTemplate.messageAlignment} onChange={(event) => updateReceiptTemplate({ messageAlignment: event.target.value as PosReceiptTemplateSettings["messageAlignment"] })} disabled={!canManagePosSettings}>
+                        <option value="left">左揃え</option>
+                        <option value="center">中央揃え</option>
+                      </select>
                     </label>
                     <label>
                       <span>登録番号 / 税号</span>
@@ -1315,23 +1350,23 @@ export default function PosPage() {
                   <div className="pos-admin-receipt-paper">
                     {taxForm.printerSettings.receiptTemplate.showLogo ? (
                       taxForm.printerSettings.receiptTemplate.logoUrl ? (
-                        <img className="pos-admin-receipt-paper-logo" src={taxForm.printerSettings.receiptTemplate.logoUrl} alt="" />
+                        <img className={`pos-admin-receipt-paper-logo is-${taxForm.printerSettings.receiptTemplate.logoAlignment}`} style={{ width: `${taxForm.printerSettings.receiptTemplate.logoWidthPercent}%` }} src={taxForm.printerSettings.receiptTemplate.logoUrl} alt="" />
                       ) : (
-                        <div className="pos-admin-receipt-paper-logo-placeholder">LOGO</div>
+                        <div className={`pos-admin-receipt-paper-logo-placeholder is-${taxForm.printerSettings.receiptTemplate.logoAlignment}`} style={{ width: `${taxForm.printerSettings.receiptTemplate.logoWidthPercent}%` }}>LOGO</div>
                       )
                     ) : null}
-                    <h5>{taxForm.printerSettings.receiptTemplate.businessName || taxSettings?.storeName || "店舗名"}</h5>
+                    <h5 className={`is-${taxForm.printerSettings.receiptTemplate.businessNameAlignment}`}>{taxForm.printerSettings.receiptTemplate.businessName || taxSettings?.storeName || "店舗名"}</h5>
                     {getReceiptPreviewLines(taxForm.printerSettings.receiptTemplate.companyInfo).map((line, index) => (
-                      <p key={`company-${index}`}>{line}</p>
+                      <p className={`is-${taxForm.printerSettings.receiptTemplate.contactInfoAlignment}`} key={`company-${index}`}>{line}</p>
                     ))}
                     {getReceiptPreviewLines(taxForm.printerSettings.receiptTemplate.address).map((line, index) => (
-                      <p key={`address-${index}`}>{line}</p>
+                      <p className={`is-${taxForm.printerSettings.receiptTemplate.contactInfoAlignment}`} key={`address-${index}`}>{line}</p>
                     ))}
-                    {taxForm.printerSettings.receiptTemplate.taxRegistrationNumber ? <p>登録番号: {taxForm.printerSettings.receiptTemplate.taxRegistrationNumber}</p> : null}
-                    {taxForm.printerSettings.receiptTemplate.phone ? <p>TEL: {taxForm.printerSettings.receiptTemplate.phone}</p> : null}
-                    {taxForm.printerSettings.receiptTemplate.website ? <p>{taxForm.printerSettings.receiptTemplate.website}</p> : null}
+                    {taxForm.printerSettings.receiptTemplate.taxRegistrationNumber ? <p className={`is-${taxForm.printerSettings.receiptTemplate.contactInfoAlignment}`}>登録番号: {taxForm.printerSettings.receiptTemplate.taxRegistrationNumber}</p> : null}
+                    {taxForm.printerSettings.receiptTemplate.phone ? <p className={`is-${taxForm.printerSettings.receiptTemplate.contactInfoAlignment}`}>TEL: {taxForm.printerSettings.receiptTemplate.phone}</p> : null}
+                    {taxForm.printerSettings.receiptTemplate.website ? <p className={`is-${taxForm.printerSettings.receiptTemplate.contactInfoAlignment}`}>{taxForm.printerSettings.receiptTemplate.website}</p> : null}
                     {getReceiptPreviewLines(taxForm.printerSettings.receiptTemplate.headerMessage).map((line, index) => (
-                      <p key={`header-${index}`}>{line}</p>
+                      <p className={`is-${taxForm.printerSettings.receiptTemplate.messageAlignment}`} key={`header-${index}`}>{line}</p>
                     ))}
                     <div className="pos-admin-receipt-paper-rule" />
                     <h5>{receiptPreviewMode === "invoice" ? taxForm.printerSettings.receiptTemplate.invoiceTitle : taxForm.printerSettings.receiptTemplate.receiptTitle}</h5>
@@ -1367,10 +1402,10 @@ export default function PosPage() {
                     <div className="pos-admin-receipt-paper-rule" />
                     {taxForm.printerSettings.receiptTemplate.promotionImageUrl ? <img className="pos-admin-receipt-paper-promo" src={taxForm.printerSettings.receiptTemplate.promotionImageUrl} alt="" /> : null}
                     {getReceiptPreviewLines(taxForm.printerSettings.receiptTemplate.promotionMessage).map((line, index) => (
-                      <p key={`promotion-${index}`}>{line}</p>
+                      <p className={`is-${taxForm.printerSettings.receiptTemplate.messageAlignment}`} key={`promotion-${index}`}>{line}</p>
                     ))}
                     {getReceiptPreviewLines(taxForm.printerSettings.receiptTemplate.footerMessage).map((line, index) => (
-                      <p key={`footer-${index}`}>{line}</p>
+                      <p className={`is-${taxForm.printerSettings.receiptTemplate.messageAlignment}`} key={`footer-${index}`}>{line}</p>
                     ))}
                     {taxForm.printerSettings.receiptTemplate.showTimestamp ? <p>2026-06-14 12:34:56</p> : null}
                   </div>

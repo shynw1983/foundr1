@@ -19,12 +19,15 @@ export type PosBrandKitchenPrinterSetting = {
 export type PosReceiptTemplateSettings = {
   showLogo: boolean;
   logoUrl: string;
+  logoAlignment: "left" | "center";
+  logoWidthPercent: number;
   promotionImageUrl: string;
   receiptTitle: string;
   invoiceTitle: string;
   invoiceRecipientName: string;
   invoicePurposeText: string;
   businessName: string;
+  businessNameAlignment: "left" | "center";
   companyInfo: string;
   taxRegistrationNumber: string;
   phone: string;
@@ -33,6 +36,8 @@ export type PosReceiptTemplateSettings = {
   headerMessage: string;
   footerMessage: string;
   promotionMessage: string;
+  contactInfoAlignment: "left" | "center";
+  messageAlignment: "left" | "center";
   showTaxSummary: boolean;
   showOrderNote: boolean;
   showTimestamp: boolean;
@@ -143,12 +148,15 @@ export const defaultPosPrinterConnection: PosPrinterConnection = {
 export const defaultPosReceiptTemplateSettings: PosReceiptTemplateSettings = {
   showLogo: false,
   logoUrl: "",
+  logoAlignment: "center",
+  logoWidthPercent: 58,
   promotionImageUrl: "",
   receiptTitle: "レシート",
   invoiceTitle: "領収書",
   invoiceRecipientName: "上様",
   invoicePurposeText: "飲食代",
   businessName: "",
+  businessNameAlignment: "center",
   companyInfo: "",
   taxRegistrationNumber: "",
   phone: "",
@@ -157,6 +165,8 @@ export const defaultPosReceiptTemplateSettings: PosReceiptTemplateSettings = {
   headerMessage: "",
   footerMessage: "",
   promotionMessage: "",
+  contactInfoAlignment: "left",
+  messageAlignment: "left",
   showTaxSummary: true,
   showOrderNote: true,
   showTimestamp: true
@@ -222,15 +232,20 @@ export function normalizePosReceiptTemplateSettings(value: unknown): PosReceiptT
     const value = text(next, max);
     return value || fallback;
   };
+  const alignment = (next: unknown, fallback: "left" | "center") => next === "center" || next === "left" ? next : fallback;
+  const rawLogoWidthPercent = Math.round(Number(source.logoWidthPercent ?? defaultPosReceiptTemplateSettings.logoWidthPercent));
   return {
     showLogo: source.showLogo === true,
     logoUrl: text(source.logoUrl, 500),
+    logoAlignment: alignment(source.logoAlignment, defaultPosReceiptTemplateSettings.logoAlignment),
+    logoWidthPercent: Number.isFinite(rawLogoWidthPercent) ? Math.max(20, Math.min(100, rawLogoWidthPercent)) : defaultPosReceiptTemplateSettings.logoWidthPercent,
     promotionImageUrl: text(source.promotionImageUrl, 500),
     receiptTitle: textWithFallback(source.receiptTitle, defaultPosReceiptTemplateSettings.receiptTitle, 80),
     invoiceTitle: textWithFallback(source.invoiceTitle, defaultPosReceiptTemplateSettings.invoiceTitle, 80),
     invoiceRecipientName: textWithFallback(source.invoiceRecipientName, defaultPosReceiptTemplateSettings.invoiceRecipientName, 120),
     invoicePurposeText: textWithFallback(source.invoicePurposeText, defaultPosReceiptTemplateSettings.invoicePurposeText, 120),
     businessName: text(source.businessName, 120),
+    businessNameAlignment: alignment(source.businessNameAlignment, defaultPosReceiptTemplateSettings.businessNameAlignment),
     companyInfo: text(source.companyInfo, 500),
     taxRegistrationNumber: text(source.taxRegistrationNumber, 80),
     phone: text(source.phone, 80),
@@ -239,6 +254,8 @@ export function normalizePosReceiptTemplateSettings(value: unknown): PosReceiptT
     headerMessage: text(source.headerMessage, 500),
     footerMessage: text(source.footerMessage, 500),
     promotionMessage: text(source.promotionMessage, 500),
+    contactInfoAlignment: alignment(source.contactInfoAlignment, defaultPosReceiptTemplateSettings.contactInfoAlignment),
+    messageAlignment: alignment(source.messageAlignment, defaultPosReceiptTemplateSettings.messageAlignment),
     showTaxSummary: source.showTaxSummary !== false,
     showOrderNote: source.showOrderNote !== false,
     showTimestamp: source.showTimestamp !== false
@@ -326,14 +343,14 @@ export function createAutoStarBluetoothPrinter(fallback: PosPrinterConnection = 
   };
 }
 
-export function createTestPrintPayload(printer: PosPrinterConnection, storeName: string): PosPrintPayload {
+export function createTestPrintPayload(printer: PosPrinterConnection, storeName: string, receiptTemplate: PosReceiptTemplateSettings = defaultPosReceiptTemplateSettings): PosPrintPayload {
   return {
     version: 1,
     jobType: "test",
     printer,
     storeName,
     printedAt: new Date().toISOString(),
-    receiptTemplate: defaultPosReceiptTemplateSettings,
+    receiptTemplate,
     kitchenTicketTemplate: defaultPosKitchenTicketTemplateSettings,
     order: {
       pickupCode: "TEST",

@@ -2,6 +2,7 @@ import { requireStaffAdminSession, requireStaffViewSession, canAssignStaffRole, 
 import { writeAuditLog } from "../../../lib/audit-log";
 import { hashPassword, shouldRequirePasswordChangeForRole, validatePasswordStrength } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
+import { isStoreTerminalName } from "../../../lib/store-terminal-names";
 
 type StaffPayload = {
   name?: string;
@@ -524,6 +525,9 @@ export async function POST(request: Request) {
   }
   if (role === "store_terminal" && visibleStoreIds.length === 0) {
     return Response.json({ error: "店舗Pad は閲覧可能店舗を1つ以上選択してください。" }, { status: 400 });
+  }
+  if (role === "store_terminal" && !isStoreTerminalName(name)) {
+    return Response.json({ error: "店舗Pad の端末名は設置場所の候補から選択してください。" }, { status: 400 });
   }
   const passwordError = validatePasswordStrength(password);
   if (passwordError) {

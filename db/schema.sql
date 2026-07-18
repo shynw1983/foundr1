@@ -2005,6 +2005,7 @@ create table if not exists menu_option_groups (
   id uuid primary key default gen_random_uuid(),
   brand_id uuid not null references brands(id) on delete cascade,
   menu_catalog_item_id uuid references menu_catalog_items(id) on delete cascade,
+  applicable_categories text[] not null default '{}',
   external_id text,
   group_key text not null,
   name text not null,
@@ -2022,6 +2023,7 @@ create table if not exists menu_option_groups (
 create table if not exists menu_options (
   id uuid primary key default gen_random_uuid(),
   option_group_id uuid not null references menu_option_groups(id) on delete cascade,
+  applicable_categories text[] not null default '{}',
   external_id text,
   option_key text not null,
   name text not null,
@@ -2038,7 +2040,9 @@ create table if not exists menu_options (
 alter table menu_catalog_items add column if not exists display_names jsonb not null default '{}'::jsonb;
 alter table menu_catalog_items add column if not exists description_display_names jsonb not null default '{}'::jsonb;
 alter table menu_option_groups add column if not exists display_names jsonb not null default '{}'::jsonb;
+alter table menu_option_groups add column if not exists applicable_categories text[] not null default '{}';
 alter table menu_options add column if not exists display_names jsonb not null default '{}'::jsonb;
+alter table menu_options add column if not exists applicable_categories text[] not null default '{}';
 
 create table if not exists store_operations (
   store_id uuid primary key references stores(id) on delete cascade,
