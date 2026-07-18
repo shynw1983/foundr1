@@ -622,7 +622,7 @@ function getLocalizedDisplayName(name: string, displayNames: Record<string, stri
   return String(displayNames?.[language] || displayNames?.en || name || "").trim();
 }
 
-function getPhysicalCustomerDisplayLines(state: Record<string, unknown>) {
+function getPhysicalCustomerDisplayLines(state: Record<string, unknown>, settings: PosPrinterSettings["customerDisplay"]) {
   const status = String(state.status ?? "idle");
   const subtotal = Math.max(0, Math.round(Number(state.subtotal ?? 0)));
   const tendered = Math.max(0, Math.round(Number(state.cashTenderedAmount ?? 0)));
@@ -635,25 +635,25 @@ function getPhysicalCustomerDisplayLines(state: Record<string, unknown>) {
 
   if (status === "advertising" || status === "idle") {
     return {
-      line1: String(state.storeName || "いらっしゃいませ"),
-      line2: status === "advertising" ? "いらっしゃいませ" : "ご注文をどうぞ"
+      line1: settings.standbyLine1 || String(state.storeName || "いらっしゃいませ"),
+      line2: settings.standbyLine2
     };
   }
   if (status === "complete") {
     return {
-      line1: "ありがとうございました",
-      line2: String(state.paymentMethod) === "cash" ? `お釣り ${yen(change)}` : `お会計 ${yen(subtotal)}`
+      line1: settings.thankYouLine,
+      line2: String(state.paymentMethod) === "cash" ? `${settings.changeLabel} ${yen(change)}` : `${settings.totalLabel} ${yen(subtotal)}`
     };
   }
   if (status === "cash_change") {
-    return { line1: `お預かり ${yen(tendered)}`, line2: `お釣り ${yen(change)}` };
+    return { line1: `${settings.tenderedLabel} ${yen(tendered)}`, line2: `${settings.changeLabel} ${yen(change)}` };
   }
   if (status === "external_wait") {
-    return { line1: `${String(state.paymentLabel || "決済")} お支払い`, line2: `合計 ${yen(subtotal)}` };
+    return { line1: `${String(state.paymentLabel || "決済")} お支払い`, line2: `${settings.totalLabel} ${yen(subtotal)}` };
   }
   return {
-    line1: itemName ? `${itemName}${itemQuantity > 1 ? ` x${itemQuantity}` : ""}` : "ご注文内容",
-    line2: `合計 ${yen(subtotal)}`
+    line1: settings.showItemName && itemName ? `${itemName}${itemQuantity > 1 ? ` x${itemQuantity}` : ""}` : settings.orderPrompt,
+    line2: `${settings.totalLabel} ${yen(subtotal)}`
   };
 }
 
@@ -1584,7 +1584,7 @@ export default function StorePosPage() {
     const physicalDisplay = posSettings.printerSettings.customerDisplay;
     const receiptPrinter = getReceiptPrinter(posSettings.printerSettings);
     if (physicalDisplay.enabled && receiptPrinter.deviceType === "star_printer") {
-      const lines = getPhysicalCustomerDisplayLines(state);
+      const lines = getPhysicalCustomerDisplayLines(state, physicalDisplay);
       await displayWithAndroidBridge(createPhysicalCustomerDisplayPayload(
         posSettings.printerSettings,
         lines.line1,

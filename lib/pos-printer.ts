@@ -19,6 +19,14 @@ export type PosBrandKitchenPrinterSetting = {
 export type PosPhysicalCustomerDisplaySettings = {
   enabled: boolean;
   deviceType: "scd222u";
+  standbyLine1: string;
+  standbyLine2: string;
+  orderPrompt: string;
+  thankYouLine: string;
+  totalLabel: string;
+  tenderedLabel: string;
+  changeLabel: string;
+  showItemName: boolean;
 };
 
 export type PosReceiptTemplateSettings = {
@@ -239,7 +247,15 @@ export const defaultPosKitchenTicketTemplateSettings: PosKitchenTicketTemplateSe
 
 export const defaultPosPhysicalCustomerDisplaySettings: PosPhysicalCustomerDisplaySettings = {
   enabled: false,
-  deviceType: "scd222u"
+  deviceType: "scd222u",
+  standbyLine1: "",
+  standbyLine2: "いらっしゃいませ",
+  orderPrompt: "ご注文内容",
+  thankYouLine: "ありがとうございました",
+  totalLabel: "合計",
+  tenderedLabel: "お預かり",
+  changeLabel: "お釣り",
+  showItemName: true
 };
 
 export const defaultPosPrinterSettings: PosPrinterSettings = {
@@ -369,6 +385,10 @@ export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings 
   const brandKitchenPrinters = Array.isArray(source.brandKitchenPrinters) ? source.brandKitchenPrinters : [];
   const receiptTemplateVariants = Array.isArray(source.receiptTemplateVariants) ? source.receiptTemplateVariants : [];
   const kitchenCopies = Math.round(Number(source.kitchenCopies ?? defaultPosPrinterSettings.kitchenCopies));
+  const displayText = (value: unknown, fallback: string) => {
+    const normalized = String(value ?? "").replace(/[\r\n]+/g, " ").trim();
+    return Array.from(normalized || fallback).slice(0, 20).join("");
+  };
   return {
     enabled: source.enabled === true,
     receiptEnabled: source.receiptEnabled !== false,
@@ -379,7 +399,15 @@ export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings 
     kitchenPrinter,
     customerDisplay: {
       enabled: source.customerDisplay?.enabled === true,
-      deviceType: "scd222u"
+      deviceType: "scd222u",
+      standbyLine1: displayText(source.customerDisplay?.standbyLine1, defaultPosPhysicalCustomerDisplaySettings.standbyLine1),
+      standbyLine2: displayText(source.customerDisplay?.standbyLine2, defaultPosPhysicalCustomerDisplaySettings.standbyLine2),
+      orderPrompt: displayText(source.customerDisplay?.orderPrompt, defaultPosPhysicalCustomerDisplaySettings.orderPrompt),
+      thankYouLine: displayText(source.customerDisplay?.thankYouLine, defaultPosPhysicalCustomerDisplaySettings.thankYouLine),
+      totalLabel: displayText(source.customerDisplay?.totalLabel, defaultPosPhysicalCustomerDisplaySettings.totalLabel),
+      tenderedLabel: displayText(source.customerDisplay?.tenderedLabel, defaultPosPhysicalCustomerDisplaySettings.tenderedLabel),
+      changeLabel: displayText(source.customerDisplay?.changeLabel, defaultPosPhysicalCustomerDisplaySettings.changeLabel),
+      showItemName: source.customerDisplay?.showItemName !== false
     },
     receiptTemplate: normalizePosReceiptTemplateSettings(source.receiptTemplate),
     receiptTemplateVariants: receiptTemplateVariants.flatMap((item) => {
@@ -515,8 +543,8 @@ export function createPhysicalCustomerDisplayPayload(
     version: 1,
     deviceType: "scd222u",
     printer: getReceiptPrinter(settings),
-    line1: String(line1 || "").replace(/[\r\n]+/g, " ").trim().slice(0, 40),
-    line2: String(line2 || "").replace(/[\r\n]+/g, " ").trim().slice(0, 40)
+    line1: Array.from(String(line1 || "").replace(/[\r\n]+/g, " ").trim()).slice(0, 20).join(""),
+    line2: Array.from(String(line2 || "").replace(/[\r\n]+/g, " ").trim()).slice(0, 20).join("")
   };
 }
 

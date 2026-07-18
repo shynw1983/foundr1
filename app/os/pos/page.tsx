@@ -309,6 +309,7 @@ export default function PosPage() {
   const [nativePrinterScanning, setNativePrinterScanning] = useState(false);
   const [receiptPreviewMode, setReceiptPreviewMode] = useState<"receipt" | "invoice">("receipt");
   const [receiptPreviewBrandId, setReceiptPreviewBrandId] = useState("");
+  const [physicalDisplayPreviewMode, setPhysicalDisplayPreviewMode] = useState<"standby" | "order" | "cash" | "complete">("standby");
   const [hasNativePrintBridge, setHasNativePrintBridge] = useState(false);
   const [uploadingMediaType, setUploadingMediaType] = useState<"" | "image" | "video">("");
   const [uploadingReceiptImageSlot, setUploadingReceiptImageSlot] = useState<"" | "logo" | "promotion">("");
@@ -600,8 +601,8 @@ export default function PosPage() {
     }
     const result = await displayWithAndroidBridge(createPhysicalCustomerDisplayPayload(
       taxForm.printerSettings,
-      "Foundr1 OS",
-      "SCD222U TEST"
+      taxForm.printerSettings.customerDisplay.standbyLine1 || taxSettings?.storeName || "Foundr1 OS",
+      taxForm.printerSettings.customerDisplay.standbyLine2
     ));
     setTestPrintStatus(result.ok ? "カスタマーディスプレイ設定を保存し、テスト表示を送信しました。" : result.error || "カスタマーディスプレイのテストに失敗しました。");
     setTestPrinting(false);
@@ -1208,6 +1209,148 @@ export default function PosPage() {
                 <span>mPOPカスタマーディスプレイ（SCD222U）を使用</span>
               </label>
             </div>
+            {taxForm.printerSettings.customerDisplay.enabled ? (
+              <div className="pos-admin-printer-card">
+                <div>
+                  <strong>SCD222U 表示内容</strong>
+                  <p>2行表示に合わせて、各項目は20文字以内で設定します。1行目を空欄にすると店舗名を表示します。</p>
+                </div>
+                <div className="pos-admin-customer-display-preview">
+                  <div className="pos-admin-customer-display-preview-toolbar">
+                    <span>液晶プレビュー</span>
+                    <select value={physicalDisplayPreviewMode} onChange={(event) => setPhysicalDisplayPreviewMode(event.target.value as typeof physicalDisplayPreviewMode)}>
+                      <option value="standby">待機中</option>
+                      <option value="order">注文中</option>
+                      <option value="cash">現金会計</option>
+                      <option value="complete">会計完了</option>
+                    </select>
+                  </div>
+                  <div className="pos-admin-customer-display-screen" aria-label="SCD222U 表示プレビュー">
+                    {physicalDisplayPreviewMode === "standby" ? (
+                      <>
+                        <span>{taxForm.printerSettings.customerDisplay.standbyLine1 || taxSettings?.storeName || "店舗名"}</span>
+                        <span>{taxForm.printerSettings.customerDisplay.standbyLine2 || " "}</span>
+                      </>
+                    ) : physicalDisplayPreviewMode === "order" ? (
+                      <>
+                        <span>{taxForm.printerSettings.customerDisplay.showItemName ? "商品名サンプル x2" : taxForm.printerSettings.customerDisplay.orderPrompt || " "}</span>
+                        <span>{taxForm.printerSettings.customerDisplay.totalLabel || "合計"} ¥1,280</span>
+                      </>
+                    ) : physicalDisplayPreviewMode === "cash" ? (
+                      <>
+                        <span>{taxForm.printerSettings.customerDisplay.tenderedLabel || "お預かり"} ¥2,000</span>
+                        <span>{taxForm.printerSettings.customerDisplay.changeLabel || "お釣り"} ¥720</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>{taxForm.printerSettings.customerDisplay.thankYouLine || " "}</span>
+                        <span>{taxForm.printerSettings.customerDisplay.totalLabel || "合計"} ¥1,280</span>
+                      </>
+                    )}
+                  </div>
+                  <p>プレビューの金額と商品名は表示例です。</p>
+                </div>
+                <div className="pos-admin-printer-grid">
+                  <label>
+                    <span>待機中・1行目（空欄は店舗名）</span>
+                    <input
+                      value={taxForm.printerSettings.customerDisplay.standbyLine1}
+                      maxLength={20}
+                      placeholder={taxSettings?.storeName || "店舗名"}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        printerSettings: { ...current.printerSettings, customerDisplay: { ...current.printerSettings.customerDisplay, standbyLine1: event.target.value } }
+                      }))}
+                      disabled={!canManagePosSettings}
+                    />
+                  </label>
+                  <label>
+                    <span>待機中・2行目</span>
+                    <input
+                      value={taxForm.printerSettings.customerDisplay.standbyLine2}
+                      maxLength={20}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        printerSettings: { ...current.printerSettings, customerDisplay: { ...current.printerSettings.customerDisplay, standbyLine2: event.target.value } }
+                      }))}
+                      disabled={!canManagePosSettings}
+                    />
+                  </label>
+                  <label>
+                    <span>商品名を表示しない時の1行目</span>
+                    <input
+                      value={taxForm.printerSettings.customerDisplay.orderPrompt}
+                      maxLength={20}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        printerSettings: { ...current.printerSettings, customerDisplay: { ...current.printerSettings.customerDisplay, orderPrompt: event.target.value } }
+                      }))}
+                      disabled={!canManagePosSettings}
+                    />
+                  </label>
+                  <label>
+                    <span>会計完了・1行目</span>
+                    <input
+                      value={taxForm.printerSettings.customerDisplay.thankYouLine}
+                      maxLength={20}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        printerSettings: { ...current.printerSettings, customerDisplay: { ...current.printerSettings.customerDisplay, thankYouLine: event.target.value } }
+                      }))}
+                      disabled={!canManagePosSettings}
+                    />
+                  </label>
+                  <label>
+                    <span>合計金額のラベル</span>
+                    <input
+                      value={taxForm.printerSettings.customerDisplay.totalLabel}
+                      maxLength={20}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        printerSettings: { ...current.printerSettings, customerDisplay: { ...current.printerSettings.customerDisplay, totalLabel: event.target.value } }
+                      }))}
+                      disabled={!canManagePosSettings}
+                    />
+                  </label>
+                  <label>
+                    <span>お預かり金額のラベル</span>
+                    <input
+                      value={taxForm.printerSettings.customerDisplay.tenderedLabel}
+                      maxLength={20}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        printerSettings: { ...current.printerSettings, customerDisplay: { ...current.printerSettings.customerDisplay, tenderedLabel: event.target.value } }
+                      }))}
+                      disabled={!canManagePosSettings}
+                    />
+                  </label>
+                  <label>
+                    <span>お釣り金額のラベル</span>
+                    <input
+                      value={taxForm.printerSettings.customerDisplay.changeLabel}
+                      maxLength={20}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        printerSettings: { ...current.printerSettings, customerDisplay: { ...current.printerSettings.customerDisplay, changeLabel: event.target.value } }
+                      }))}
+                      disabled={!canManagePosSettings}
+                    />
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input
+                      type="checkbox"
+                      checked={taxForm.printerSettings.customerDisplay.showItemName}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        printerSettings: { ...current.printerSettings, customerDisplay: { ...current.printerSettings.customerDisplay, showItemName: event.target.checked } }
+                      }))}
+                      disabled={!canManagePosSettings}
+                    />
+                    <span>注文中に最後に追加した商品名を表示</span>
+                  </label>
+                </div>
+              </div>
+            ) : null}
             <div className="pos-admin-printer-card">
               <div>
                 <strong>レシートプリンター</strong>
