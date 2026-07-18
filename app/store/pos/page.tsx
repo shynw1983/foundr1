@@ -4,6 +4,7 @@ import { Banknote, Camera, CreditCard, Gift, Minus, Plus, ReceiptText, ScanLine,
 import jsQR from "jsqr";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
+import { addOfflinePosOrder, getOfflinePosSnapshot, listOfflinePosOrders, removeOfflinePosOrder, saveOfflinePosSnapshot, updateOfflinePosOrderError, type OfflinePosOrder } from "../../../lib/offline-pos";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
 import { createAutoStarBluetoothPrinter, defaultPosPrinterSettings, getKitchenPrinterForBrand, getReceiptPrinter, hasPosPrinterDestination, printWithAndroidBridge, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
 import { ModalHistoryScope } from "../../os/components/useModalHistory";
@@ -687,6 +688,10 @@ export default function StorePosPage() {
   const [externalRefundConfirmed, setExternalRefundConfirmed] = useState(false);
   const [completedDisplayState, setCompletedDisplayState] = useState<Record<string, unknown> | null>(null);
   const [customerDisplayMode, setCustomerDisplayMode] = useState<"business" | "advertising">("business");
+  const [offlineMode, setOfflineMode] = useState(false);
+  const [offlinePendingCount, setOfflinePendingCount] = useState(0);
+  const [browserOnline, setBrowserOnline] = useState(true);
+  const [offlineSyncError, setOfflineSyncError] = useState("");
 
   useEffect(() => {
     selectedStoreIdRef.current = selectedStoreId;
@@ -694,12 +699,13 @@ export default function StorePosPage() {
 
   async function loadReconciliation(storeId = selectedStoreId) {
     if (!storeId) return;
-    const params = new URLSearchParams({ storeId });
-    params.set("ts", String(Date.now()));
-    const response = await fetch(`/api/store/pos/reconciliation?${params.toString()}`, { cache: "no-store" });
-    if (!response.ok) return;
-    const body = await response.json();
-    setReconciliation({
+    try {
+      const params = new URLSearchParams({ storeId });
+      params.set("ts", String(Date.now()));
+      const response = await fetch(`/api/store/pos/reconciliation?${params.toString()}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const body = await response.json();
+      const nextReconciliation = {
       businessDate: body.businessDate ?? "",
       businessState: body.businessState ?? null,
       activeSession: body.activeSession ?? null,
@@ -707,11 +713,19 @@ export default function StorePosPage() {
       sessions: body.sessions ?? [],
       movements: body.movements ?? [],
       activeCashResponsibleEmployees: body.activeCashResponsibleEmployees ?? []
-    });
-    setCashClosingResponsibleEmployeeId((current) => {
-      const employees = (body.activeCashResponsibleEmployees ?? []) as PosCashResponsibleEmployee[];
-      return employees.some((employee) => employee.id === current) ? current : employees[0]?.id ?? "";
-    });
+      };
+      setReconciliation(nextReconciliation);
+      setCashClosingResponsibleEmployeeId((current) => {
+        const employees = (body.activeCashResponsibleEmployees ?? []) as PosCashResponsibleEmployee[];
+        return employees.some((employee) => employee.id === current) ? current : employees[0]?.id ?? "";
+      });
+      const snapshot = await getOfflinePosSnapshot(storeId).catch(() => undefined);
+      if (snapshot) {
+        await saveOfflinePosSnapshot({ ...snapshot, savedAt: new Date().toISOString(), reconciliation: nextReconciliation }).catch(() => undefined);
+      }
+    } catch {
+      // The cached reconciliation state remains available during offline checkout.
+    }
   }
 
   async function load(nextStoreId = selectedStoreId) {
@@ -722,17 +736,26 @@ export default function StorePosPage() {
       params.set("ts", String(Date.now()));
       return fetch(`/api/store/pos?${params.toString()}`, { cache: "no-store" });
     };
-    let response = await fetchPosData(nextStoreId);
-    if (response.status === 403 && nextStoreId) {
-      response = await fetchPosData("");
+    let body: Record<string, any>;
+    let loadedOnline = true;
+    try {
+      let response = await fetchPosData(nextStoreId);
+      if (response.status === 403 && nextStoreId) response = await fetchPosData("");
+      if (!response.ok) throw new Error("POS データを読み込めませんでした。");
+      body = await response.json();
+    } catch {
+      const snapshot = await getOfflinePosSnapshot(nextStoreId || getStoredStoreSelection()).catch(() => undefined);
+      const snapshotAge = snapshot ? Date.now() - new Date(snapshot.savedAt).getTime() : Number.POSITIVE_INFINITY;
+      if (!snapshot || !Number.isFinite(snapshotAge) || snapshotAge > 24 * 60 * 60 * 1000) {
+        setMessage("オフライン用のメニューがありません。オンラインで一度 POS を開いてください。");
+        setLoading(false);
+        return;
+      }
+      body = snapshot.data;
+      loadedOnline = false;
+      setOfflineMode(true);
+      if (snapshot.reconciliation) setReconciliation(snapshot.reconciliation as unknown as PosReconciliation);
     }
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({})) as { error?: string };
-      setMessage(errorBody.error || "POS データを読み込めませんでした。");
-      setLoading(false);
-      return;
-    }
-    const body = await response.json();
     const nextAccess = body.access as PosAccess;
     const nextBrands = body.brands as BrandOption[];
     const nextItems = body.items as PosMenuItem[];
@@ -768,12 +791,57 @@ export default function StorePosPage() {
     });
     setSelectedStoreId(responseStoreId);
     if (responseStoreId) setStoredStoreSelection(responseStoreId);
-    await loadReconciliation(responseStoreId);
+    if (loadedOnline) {
+      const previousSnapshot = await getOfflinePosSnapshot(responseStoreId).catch(() => undefined);
+      await saveOfflinePosSnapshot({
+        storeId: responseStoreId,
+        savedAt: new Date().toISOString(),
+        data: body,
+        reconciliation: previousSnapshot?.reconciliation ?? null
+      }).catch(() => undefined);
+      await loadReconciliation(responseStoreId);
+      setOfflineMode(false);
+    }
     setSelectedBrandId(nextBrandId);
     setSelectedCategory(null);
     setQuery("");
     setMessage("");
     setLoading(false);
+  }
+
+  async function refreshOfflinePendingCount() {
+    const pending = await listOfflinePosOrders().catch(() => []);
+    setOfflinePendingCount(pending.length);
+    return pending;
+  }
+
+  async function syncOfflineOrders() {
+    if (!navigator.onLine) return;
+    setOfflineSyncError("");
+    const pending = await refreshOfflinePendingCount();
+    const hadPendingOrders = pending.length > 0;
+    for (const order of pending) {
+      try {
+        const response = await fetch("/api/store/pos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(order.request)
+        });
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        if (!response.ok) throw new Error(body.error || "同期できませんでした。");
+        await removeOfflinePosOrder(order.clientOrderId);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "同期できませんでした。";
+        setOfflineSyncError(errorMessage);
+        await updateOfflinePosOrderError(order, errorMessage).catch(() => undefined);
+        break;
+      }
+    }
+    const remaining = await refreshOfflinePendingCount();
+    if (remaining.length === 0) {
+      setOfflineMode(false);
+      if (hadPendingOrders) void load(selectedStoreIdRef.current);
+    }
   }
 
   useVisibleRefresh(() => {
@@ -782,6 +850,22 @@ export default function StorePosPage() {
 
   useEffect(() => {
     void load(getStoredStoreSelection());
+    void refreshOfflinePendingCount().then(() => syncOfflineOrders());
+    setBrowserOnline(navigator.onLine);
+    const handleOnline = () => {
+      setBrowserOnline(true);
+      void syncOfflineOrders();
+    };
+    const handleOffline = () => {
+      setBrowserOnline(false);
+      setOfflineMode(true);
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -794,6 +878,15 @@ export default function StorePosPage() {
   useEffect(() => {
     memberLookupLoadingRef.current = memberLookupLoading;
   }, [memberLookupLoading]);
+
+  useEffect(() => {
+    if (!offlineMode) return;
+    setPaymentMethod("cash");
+    setDiscountPresetKey("");
+    setSelectedCouponId("");
+    setCustomerSelectedCouponId("");
+    clearSelectedMember();
+  }, [offlineMode]);
 
   useEffect(() => {
     if (!discountPresetKey) return;
@@ -1330,7 +1423,7 @@ export default function StorePosPage() {
         orderType,
         paymentMethod,
         paymentLabel: getPaymentDisplayLabel(paymentMethod),
-        note,
+        note: body.offline ? `[オフライン未同期] ${note}`.trim() : note,
         receiptRequested: isInvoice,
         receiptTitle: isInvoice ? receiptTemplate.invoiceTitle : receiptTemplate.receiptTitle,
         receiptRecipientName: isInvoice ? receiptTemplate.invoiceRecipientName : "",
@@ -1369,7 +1462,7 @@ export default function StorePosPage() {
         orderType,
         paymentMethod: "kitchen",
         paymentLabel: "厨房",
-        note,
+        note: body.offline ? `[オフライン未同期] ${note}`.trim() : note,
         subtotalAmount: kitchenTotal,
         discountAmount: 0,
         couponDiscountAmount: 0,
@@ -1732,10 +1825,16 @@ export default function StorePosPage() {
     setMessage("");
     try {
       const cartSnapshot = cart;
-      const response = await fetch("/api/store/pos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const offlineClientOrderId = window.crypto.randomUUID();
+      const offlineCreatedAt = new Date().toISOString();
+      const offlinePickupCode = cart.some((item) => /maamaa|まぁ麻|麻辣/i.test(item.brandName))
+        ? String(Number(bowlNumber)).padStart(2, "0")
+        : `${navigator.onLine ? "D" : "O"}${offlineClientOrderId.replaceAll("-", "").slice(0, 8).toUpperCase()}`;
+      const checkoutRequest = {
+          offlineClientOrderId,
+          offlineCreatedAt,
+          offlinePickupCode,
+          offlineExpectedAmount: activeCheckoutAmount,
           storeId: selectedStoreId,
           orderType,
           paymentMethod,
@@ -1763,10 +1862,66 @@ export default function StorePosPage() {
               return groups;
             }, {} as Record<string, { groupId: string; optionIds: string[] }>))
           }))
-        })
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "checkout failed");
+      };
+      let body: Record<string, any>;
+      let fallbackEligible = true;
+      try {
+        if (!navigator.onLine) throw new Error("offline");
+        const response = await fetch("/api/store/pos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(checkoutRequest)
+        });
+        const responseBody = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          fallbackEligible = response.status >= 500;
+          throw new Error(responseBody.error || "checkout failed");
+        }
+        body = responseBody;
+      } catch (error) {
+        if (!fallbackEligible && navigator.onLine) throw error;
+        if (paymentMethod !== "cash" || selectedMember || selectedCouponId || discountPresetKey || selectedTableCheckout) {
+          throw new Error("オフライン会計は、会員・クーポン・割引・テーブル会計を使わない現金注文のみ対応しています。");
+        }
+        if (!reconciliation.activeSession) {
+          throw new Error("オフライン会計を始める前に、オンラインでレジを開店してください。");
+        }
+        const offlineRequest = checkoutRequest;
+        body = {
+          ok: true,
+          offline: true,
+          orderId: offlineClientOrderId,
+          pickupCode: offlinePickupCode,
+          amount: activeCheckoutAmount,
+          subtotalAmount: activeCheckoutAmount,
+          taxableAmount: activeCheckoutAmount,
+          taxAmount: taxSummary.taxAmount,
+          taxRate,
+          priceTaxMode: posSettings.priceTaxMode,
+          discountAmount: 0,
+          couponDiscountAmount: 0,
+          cashTenderedAmount: cashTenderedValue,
+          cashChangeAmount: cashTenderedValue - activeCheckoutAmount,
+          receiptRequested,
+          todaySummary: {
+            ...summary,
+            orderCount: summary.orderCount + 1,
+            total: summary.total + activeCheckoutAmount,
+            average: Math.round((summary.total + activeCheckoutAmount) / (summary.orderCount + 1))
+          }
+        };
+        const offlineOrder: OfflinePosOrder = {
+          clientOrderId: offlineClientOrderId,
+          storeId: selectedStoreId,
+          createdAt: offlineCreatedAt,
+          request: offlineRequest,
+          localResponse: body,
+          lastError: ""
+        };
+        await addOfflinePosOrder(offlineOrder);
+        setOfflineMode(true);
+        await refreshOfflinePendingCount();
+      }
       const receiptPrintMessage = selectedTableCheckout ? "" : await printReceiptAfterCheckout(body, cartSnapshot);
       const kitchenPrintMessage = selectedTableCheckout ? "" : await printKitchenAfterCheckout(body, cartSnapshot);
       setCart([]);
@@ -1779,15 +1934,17 @@ export default function StorePosPage() {
       setDiscountPresetKey("");
       clearSelectedMember();
       setSummary(body.todaySummary as PosSummary);
-      if (transactionDialogOpen) await loadTransactions();
-      await loadReconciliation(selectedStoreId);
-      void load(selectedStoreId);
+      if (!body.offline && transactionDialogOpen) await loadTransactions();
+      if (!body.offline) {
+        await loadReconciliation(selectedStoreId);
+        void load(selectedStoreId);
+      }
       const discountLabel = body.discountAmount ? ` / 学割 -${formatYen(body.discountAmount)}` : "";
       const couponLabel = body.couponDiscountAmount ? ` / クーポン -${formatYen(body.couponDiscountAmount)}` : "";
       const changeLabel = paymentMethod === "cash" ? ` / お釣り ${formatYen(body.cashChangeAmount ?? cashTenderedValue - body.amount)}` : "";
       const receiptRequestLabel = receiptRequested ? " / 領収書" : "";
       const customerDisplayLanguage = getCustomerDisplayLanguage(selectedMember);
-      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${discountLabel}${couponLabel}${changeLabel}${receiptRequestLabel}${receiptPrintMessage}${kitchenPrintMessage}`);
+      setMessage(`${body.offline ? "オフライン会計を端末に保存しました" : "会計を保存しました"}。${body.pickupCode} / ${formatYen(body.amount)}${discountLabel}${couponLabel}${changeLabel}${receiptRequestLabel}${receiptPrintMessage}${kitchenPrintMessage}`);
       setCompletedDisplayState({
         status: "complete",
         storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",
@@ -1898,6 +2055,10 @@ export default function StorePosPage() {
 
   async function submitCashAction(action: "open" | "movement" | "close") {
     if (!selectedStoreId || cashSaving) return;
+    if (action === "close" && offlinePendingCount > 0) {
+      setMessage(`未同期のオフライン注文が ${offlinePendingCount} 件あります。同期完了後にレジ締めしてください。`);
+      return;
+    }
     setCashSaving(true);
     setMessage("");
     try {
@@ -2075,6 +2236,14 @@ export default function StorePosPage() {
       </section>
 
       {message ? <div className="action-notice store-pos-notice">{message}</div> : null}
+      {offlineMode || offlinePendingCount > 0 ? (
+        <div className="action-notice store-pos-offline-notice" role="status">
+          <strong>{offlineMode ? "オフライン応急モード" : "オフライン注文を同期中"}</strong>
+          <span> 未同期 {offlinePendingCount} 件</span>
+          {browserOnline && offlinePendingCount > 0 ? <button type="button" onClick={() => void syncOfflineOrders()}>今すぐ同期</button> : null}
+          {offlineSyncError ? <small>{offlineSyncError}</small> : null}
+        </div>
+      ) : null}
 
       <section className={`store-pos-cash-strip ${reconciliation.activeSession ? "is-open" : "is-locked"}`}>
         <div>
@@ -3000,7 +3169,7 @@ export default function StorePosPage() {
                   <span>差額理由</span>
                   <input value={cashClosingNote} onChange={(event) => setCashClosingNote(event.target.value)} placeholder={closingDifference ? "差額がある場合は必須" : "任意"} />
                 </label>
-                <button className="primary-button" type="button" onClick={() => submitCashAction("close")} disabled={cashSaving || !canCloseRegister}>
+                <button className="primary-button" type="button" onClick={() => submitCashAction("close")} disabled={cashSaving || !canCloseRegister || offlinePendingCount > 0}>
                   レジ締め
                 </button>
               </div>

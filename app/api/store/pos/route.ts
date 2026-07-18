@@ -32,6 +32,10 @@ function publishPosOrderEventAfterResponse(eventName: "order.created" | "order.u
 }
 
 type PosCheckoutBody = {
+  offlineClientOrderId?: string;
+  offlineCreatedAt?: string;
+  offlinePickupCode?: string;
+  offlineExpectedAmount?: number;
   storeId?: string;
   orderType?: string;
   paymentMethod?: string;
@@ -920,6 +924,10 @@ export async function POST(request: Request) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => ({})) as PosCheckoutBody;
+  const offlineClientOrderId = normalizeText(body.offlineClientOrderId);
+  const offlineCreatedAt = normalizeText(body.offlineCreatedAt);
+  const offlinePickupCode = normalizeText(body.offlinePickupCode);
+  const offlineExpectedAmount = Number(body.offlineExpectedAmount ?? 0);
   const storeId = normalizeText(body.storeId);
   const orderType = normalizeText(body.orderType) || "eat_in";
   const paymentMethod = normalizeText(body.paymentMethod) || "cash";
@@ -949,6 +957,23 @@ export async function POST(request: Request) {
   const storeFilter = getScopedStoreFilter(access, storeId);
   if (storeFilter === "__forbidden__" || !storeFilter) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
+  if (offlineClientOrderId) {
+    const existingRows = await sql`
+      select id::text as "orderId", pickup_code as "pickupCode", amount
+      from store_customer_orders
+      where offline_client_order_id = ${offlineClientOrderId}
+        and store_id::text = ${storeId}
+      limit 1
+    `;
+    if (existingRows[0]) {
+      return Response.json({
+        ok: true,
+        duplicate: true,
+        ...existingRows[0],
+        todaySummary: await getTodaySummary(storeId)
+      });
+    }
   }
   const posSettings = await getPosSettings(storeId);
   if (orderType === "eat_in" && !posSettings.dineInEnabled) {
@@ -1277,7 +1302,9 @@ export async function POST(request: Request) {
   const { pickupDate, pickupTime } = getJstParts();
   const pickupCode = containsMalatang
     ? String(normalizedBowlNumber).padStart(2, "0")
-    : createPickupCode("D");
+    : offlineClientOrderId && /^[A-Z0-9-]{1,12}$/.test(offlinePickupCode)
+      ? offlinePickupCode
+      : createPickupCode("D");
   if (containsMalatang) {
     const activeBowl = await sql`
       select 1
@@ -1358,6 +1385,9 @@ export async function POST(request: Request) {
     priceTaxMode: posSettings.priceTaxMode
   });
   const amount = taxSummary.amount;
+  if (offlineClientOrderId && Number.isFinite(offlineExpectedAmount) && offlineExpectedAmount > 0 && amount !== Math.round(offlineExpectedAmount)) {
+    return Response.json({ error: `オフライン会計時の金額と現在のメニュー金額が一致しません（会計時 ${offlineExpectedAmount}円 / 現在 ${amount}円）。管理者の確認が必要です。` }, { status: 409 });
+  }
   if (
     paymentMethod === "cash" &&
     (cashTenderedAmount === null || !Number.isFinite(cashTenderedAmount) || cashTenderedAmount < amount)
@@ -1371,6 +1401,8 @@ export async function POST(request: Request) {
       brand_id,
       store_id,
       order_source,
+      offline_client_order_id,
+      offline_created_at,
       pickup_code,
       status,
       payment_status,
@@ -1392,6 +1424,8 @@ export async function POST(request: Request) {
       ${brandId},
       ${storeId},
       'store_pos',
+      ${offlineClientOrderId || null},
+      ${offlineCreatedAt || null},
       ${pickupCode},
       'new',
       'paid',

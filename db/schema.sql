@@ -2205,6 +2205,8 @@ create table if not exists store_customer_orders (
   brand_id uuid references brands(id) on delete set null,
   store_id uuid references stores(id) on delete set null,
   order_source text not null default 'nanacha_web',
+  offline_client_order_id text,
+  offline_created_at timestamptz,
   pickup_code text not null,
   status text not null default 'pending_payment',
   payment_status text not null default 'pending',
@@ -2249,6 +2251,8 @@ alter table store_customer_orders add column if not exists preparing_at timestam
 alter table store_customer_orders add column if not exists ready_at timestamptz;
 alter table store_customer_orders add column if not exists completed_at timestamptz;
 alter table store_customer_orders add column if not exists cancelled_at timestamptz;
+alter table store_customer_orders add column if not exists offline_client_order_id text;
+alter table store_customer_orders add column if not exists offline_created_at timestamptz;
 alter table store_customer_orders add column if not exists payment_provider text not null default 'square';
 alter table store_customer_orders add column if not exists payment_account_id uuid references store_payment_accounts(id) on delete set null;
 alter table store_customer_orders add column if not exists payment_session_id text;
@@ -3672,6 +3676,9 @@ create unique index if not exists idx_menu_change_sync_tasks_pending_unique
 create index if not exists idx_stores_external_id on stores(external_id);
 create index if not exists idx_stores_company_id on stores(company_id);
 create index if not exists idx_store_customer_orders_store_status on store_customer_orders(store_id, status, created_at desc);
+create unique index if not exists idx_store_customer_orders_offline_client_order
+  on store_customer_orders(offline_client_order_id)
+  where offline_client_order_id is not null;
 create index if not exists idx_store_customer_orders_pickup on store_customer_orders(pickup_code, pickup_date);
 create index if not exists idx_store_customer_orders_square_order on store_customer_orders(square_order_id);
 create index if not exists idx_store_customer_orders_payment_account on store_customer_orders(payment_account_id, created_at desc);

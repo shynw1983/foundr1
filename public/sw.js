@@ -1,18 +1,54 @@
+self.__FOUNDR1_STORE_CACHE = "foundr1-store-shell-v1";
+
 self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys
+      .filter((key) => key.startsWith("foundr1-store-shell-") && key !== self.__FOUNDR1_STORE_CACHE)
+      .map((key) => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
+  const requestUrl = new URL(event.request.url);
+
+  if (requestUrl.origin === self.location.origin && requestUrl.pathname.startsWith("/_next/static/")) {
+    event.respondWith((async () => {
+      const cached = await caches.match(event.request);
+      if (cached) return cached;
+      const response = await fetch(event.request);
+      if (response.ok) {
+        const cache = await caches.open(self.__FOUNDR1_STORE_CACHE);
+        await cache.put(event.request, response.clone());
+      }
+      return response;
+    })());
+    return;
+  }
+
   if (event.request.mode !== "navigate") return;
 
   event.respondWith((async () => {
     try {
-      return await fetch(event.request);
+      const response = await fetch(event.request);
+      if (response.ok && requestUrl.origin === self.location.origin && requestUrl.pathname.startsWith("/store")) {
+        const cache = await caches.open(self.__FOUNDR1_STORE_CACHE);
+        await cache.put(event.request, response.clone());
+      }
+      return response;
     } catch {
+      const cached = await caches.match(event.request);
+      if (cached) return cached;
+      if (requestUrl.pathname === "/store/pos") {
+        const cachedPos = await caches.match(new Request(`${self.location.origin}/store/pos`));
+        if (cachedPos) return cachedPos;
+      }
       return new Response(`<!doctype html>
 <html lang="ja">
   <head>
