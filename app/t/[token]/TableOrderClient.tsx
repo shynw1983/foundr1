@@ -34,6 +34,7 @@ type MenuOptionGroup = {
   name: string;
   displayNames?: Record<string, string>;
   selectionType: string;
+  ruleJson: Record<string, unknown>;
   options: MenuOption[];
 };
 
@@ -85,6 +86,18 @@ function effectiveSelectionType(group: MenuOptionGroup) {
   if (["size", "temperature", "sweetness", "ice", "option"].includes(group.groupKey)) return "single";
   if (group.groupKey === "topping") return "multiple";
   return group.selectionType || "single";
+}
+
+function defaultOptionId(group: MenuOptionGroup, categoryName: string) {
+  const categoryDefaults = group.ruleJson?.defaultOptionKeysByCategory;
+  const categoryDefaultOptionKey = categoryDefaults && typeof categoryDefaults === "object" && !Array.isArray(categoryDefaults)
+    ? String((categoryDefaults as Record<string, unknown>)[categoryName] ?? "").trim()
+    : "";
+  const defaultOptionKey = categoryDefaultOptionKey || String(group.ruleJson?.defaultOptionKey ?? "").trim();
+  const configuredOption = defaultOptionKey
+    ? group.options.find((option) => option.optionKey === defaultOptionKey || option.name === defaultOptionKey || option.id === defaultOptionKey)
+    : null;
+  return configuredOption?.id || group.options[0]?.id || "";
 }
 
 export function TableOrderClient({ token }: { token: string }) {
@@ -167,7 +180,7 @@ export function TableOrderClient({ token }: { token: string }) {
     for (const group of item.optionGroups) {
       const availableOptions = group.options ?? [];
       if (effectiveSelectionType(group) === "single" && availableOptions[0]) {
-        defaults[group.id] = [availableOptions[0].id];
+        defaults[group.id] = [defaultOptionId(group, item.category || "未分類")];
       }
     }
     setActiveItem(item);

@@ -325,7 +325,17 @@ function groupUsesFallbackAll(group: MenuGroup) {
   return group.ruleJson?.defaultBehavior === "all_when_missing_or_empty";
 }
 
-function getDefaultOptionKey(group: Pick<MenuGroup, "ruleJson">) {
+function getCategoryDefaultOptionKey(group: Pick<MenuGroup, "ruleJson">, categoryName: string) {
+  const categoryDefaults = group.ruleJson?.defaultOptionKeysByCategory;
+  if (categoryName && categoryDefaults && typeof categoryDefaults === "object" && !Array.isArray(categoryDefaults)) {
+    return String((categoryDefaults as Record<string, unknown>)[categoryName] ?? "").trim();
+  }
+  return "";
+}
+
+function getDefaultOptionKey(group: Pick<MenuGroup, "ruleJson">, categoryName = "") {
+  const categoryDefault = categoryName ? getCategoryDefaultOptionKey(group, categoryName) : "";
+  if (categoryDefault) return categoryDefault;
   return String(group.ruleJson?.defaultOptionKey ?? "").trim();
 }
 
@@ -336,6 +346,19 @@ function updateGroupDefaultOption(group: MenuGroup, defaultOptionKey: string): M
   } else {
     delete nextRuleJson.defaultOptionKey;
   }
+  return { ...group, ruleJson: nextRuleJson };
+}
+
+function updateGroupCategoryDefaultOption(group: MenuGroup, categoryName: string, defaultOptionKey: string): MenuGroup {
+  const current = group.ruleJson?.defaultOptionKeysByCategory;
+  const categoryDefaults = current && typeof current === "object" && !Array.isArray(current)
+    ? { ...current as Record<string, unknown> }
+    : {};
+  if (defaultOptionKey) categoryDefaults[categoryName] = defaultOptionKey;
+  else delete categoryDefaults[categoryName];
+  const nextRuleJson = { ...(group.ruleJson ?? {}) };
+  if (Object.keys(categoryDefaults).length) nextRuleJson.defaultOptionKeysByCategory = categoryDefaults;
+  else delete nextRuleJson.defaultOptionKeysByCategory;
   return { ...group, ruleJson: nextRuleJson };
 }
 
@@ -535,6 +558,16 @@ export default function MenuAdminPage() {
       ? brandGroups.find((group) => group.id === groupDraft.id)
       : undefined;
   const activeGroupOptions = activeOptionGroup ? data.options.filter((option) => option.optionGroupId === activeOptionGroup.id) : [];
+  const groupDefaultCategories = useMemo(() => {
+    if (groupDraft.menuCatalogItemId) {
+      const targetItem = filteredItems.find((item) => item.id === groupDraft.menuCatalogItemId);
+      return targetItem ? [targetItem.category || "未分類"] : [];
+    }
+    const applicable = new Set(groupDraft.applicableCategories);
+    return categoryCounts
+      .map((category) => category.name)
+      .filter((categoryName) => !applicable.size || applicable.has(categoryName));
+  }, [categoryCounts, filteredItems, groupDraft.applicableCategories, groupDraft.menuCatalogItemId]);
 
   function selectBrand(brandId: string) {
     const brandItems = data.items.filter((item) => item.brandId === brandId && !item.storeId);
@@ -1470,7 +1503,7 @@ export default function MenuAdminPage() {
                           </select>
                         </label>
                         <label>
-                          <span>デフォルト選択肢</span>
+                          <span>全分類のデフォルト</span>
                           <select
                             value={getDefaultOptionKey(groupDraft)}
                             onChange={(event) => setGroupDraft(updateGroupDefaultOption(groupDraft, event.target.value))}
@@ -1481,13 +1514,39 @@ export default function MenuAdminPage() {
                               <option value={getOptionKey(option)} key={option.id}>{option.name}</option>
                             ))}
                           </select>
-                          <small>POS で商品を選んだ時に最初から選択されます。</small>
+                          <small>分類別の指定がない場合に使う共通の初期値です。</small>
                         </label>
 	                        <label>
 	                          <span>並び順</span>
 	                          <input value={groupDraft.sortOrder} onChange={(event) => setGroupDraft({ ...groupDraft, sortOrder: Number(normalizeIntegerInput(event.target.value) || 0) })} inputMode="numeric" />
 	                        </label>
 	                      </div>
+                      <fieldset className="menu-category-defaults">
+                        <legend>商品分類ごとのデフォルト</legend>
+                        <p>POS・テーブル注文で商品を選んだ時の初期値です。「全分類に従う」で上の共通値を使います。</p>
+                        <div className="menu-category-default-list">
+                          {groupDefaultCategories.map((categoryName) => {
+                            const categoryOptions = activeGroupOptions.filter((option) => (
+                              !option.applicableCategories.length || option.applicableCategories.includes(categoryName)
+                            ));
+                            return (
+                              <label key={categoryName}>
+                                <span>{categoryName}</span>
+                                <select
+                                  value={getCategoryDefaultOptionKey(groupDraft, categoryName)}
+                                  onChange={(event) => setGroupDraft(updateGroupCategoryDefaultOption(groupDraft, categoryName, event.target.value))}
+                                  disabled={!groupDraft.id || !categoryOptions.length}
+                                >
+                                  <option value="">全分類に従う</option>
+                                  {categoryOptions.map((option) => (
+                                    <option value={getOptionKey(option)} key={option.id}>{option.name}</option>
+                                  ))}
+                                </select>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
                       <div className="menu-translation-panel">
                         <div>
                           <strong>客表示・会員・ブランドサイト用表示名</strong>

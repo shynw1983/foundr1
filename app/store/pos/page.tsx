@@ -595,8 +595,12 @@ function getOptionGroupLimit(group: Pick<PosOptionGroup, "groupKey" | "selection
   return getEffectiveSelectionType(group) === "single" ? 1 : 99;
 }
 
-function getDefaultOptionId(group: PosOptionGroup) {
-  const defaultOptionKey = String(group.ruleJson?.defaultOptionKey ?? "").trim();
+function getDefaultOptionId(group: PosOptionGroup, categoryName: string) {
+  const categoryDefaults = group.ruleJson?.defaultOptionKeysByCategory;
+  const categoryDefaultOptionKey = categoryDefaults && typeof categoryDefaults === "object" && !Array.isArray(categoryDefaults)
+    ? String((categoryDefaults as Record<string, unknown>)[categoryName] ?? "").trim()
+    : "";
+  const defaultOptionKey = categoryDefaultOptionKey || String(group.ruleJson?.defaultOptionKey ?? "").trim();
   const configuredOption = defaultOptionKey
     ? group.options.find((option) => option.optionKey === defaultOptionKey || option.name === defaultOptionKey || option.id === defaultOptionKey)
     : null;
@@ -1791,7 +1795,7 @@ export default function StorePosPage() {
     const nextDraft: Record<string, string[]> = {};
     for (const group of groups) {
       if (getEffectiveSelectionType(group) === "single" && group.options.length) {
-        nextDraft[group.id] = [getDefaultOptionId(group)];
+        nextDraft[group.id] = [getDefaultOptionId(group, item.category || "未分類")];
       } else {
         nextDraft[group.id] = [];
       }

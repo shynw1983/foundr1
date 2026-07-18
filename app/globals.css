@@ -8560,6 +8560,40 @@ body :where(
   min-height: 32px;
 }
 
+.menu-category-defaults {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.menu-category-defaults legend {
+  padding: 0 5px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.menu-category-defaults > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.menu-category-default-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.menu-category-default-list label {
+  display: grid;
+  gap: 6px;
+}
+
 .menu-category-flags {
   display: grid;
   gap: 8px;
@@ -32172,6 +32206,7 @@ body :where(
   .menu-editor-layout,
   .menu-form-grid,
   .menu-category-scope-grid,
+  .menu-category-default-list,
   .menu-translation-grid,
   .menu-option-editor,
   .menu-choice-editor,

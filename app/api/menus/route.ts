@@ -709,6 +709,19 @@ async function upsertCategory(body: Record<string, unknown>, employeeId: string)
         and ${previousName} = any(applicable_categories)
     `;
     await sql`
+      update menu_option_groups
+      set rule_json = jsonb_set(
+            rule_json,
+            '{defaultOptionKeysByCategory}',
+            ((rule_json -> 'defaultOptionKeysByCategory') - ${previousName})
+              || jsonb_build_object(${name}, rule_json -> 'defaultOptionKeysByCategory' -> ${previousName}),
+            true
+          ),
+          updated_at = now()
+      where brand_id = ${brandId}
+        and coalesce(rule_json -> 'defaultOptionKeysByCategory', '{}'::jsonb) ? ${previousName}
+    `;
+    await sql`
       update menu_options
       set applicable_categories = array_replace(applicable_categories, ${previousName}, ${name}),
           updated_at = now()
@@ -759,6 +772,18 @@ async function deleteCategory(id: string, employeeId: string) {
         updated_at = now()
     where brand_id = ${category.brandId}
       and ${category.name} = any(applicable_categories)
+  `;
+  await sql`
+    update menu_option_groups
+    set rule_json = jsonb_set(
+          rule_json,
+          '{defaultOptionKeysByCategory}',
+          (rule_json -> 'defaultOptionKeysByCategory') - ${category.name},
+          true
+        ),
+        updated_at = now()
+    where brand_id = ${category.brandId}
+      and coalesce(rule_json -> 'defaultOptionKeysByCategory', '{}'::jsonb) ? ${category.name}
   `;
   await sql`
     update menu_options
