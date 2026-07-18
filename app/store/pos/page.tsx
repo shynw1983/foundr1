@@ -1136,18 +1136,13 @@ export default function StorePosPage() {
           startPolling();
           return;
         }
-        const { default: Pusher } = await import("pusher-js");
+        const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
         if (!active) return;
-        pusher = new Pusher(config.key, {
-          cluster: config.cluster,
-          channelAuthorization: {
-            endpoint: "/api/store/realtime-auth",
-            transport: "ajax"
-          }
-        });
+        pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
         pusher.connection.bind("unavailable", startPolling);
         pusher.connection.bind("failed", startPolling);
         pusher.connection.bind("disconnected", startPolling);
+        const refreshReconciliation = () => void loadReconciliation(selectedStoreIdRef.current);
         channels = config.channels.map((channelName: string) => {
           const channel = pusher.subscribe(channelName);
           channel.bind("pusher:subscription_succeeded", stopPolling);
@@ -1155,6 +1150,9 @@ export default function StorePosPage() {
           channel.bind("pos.customer-display.updated", (payload: { state?: { memberScanRequest?: { id?: string; code?: string } | null } }) => {
             handleScanRequest(payload?.state?.memberScanRequest);
           });
+          channel.bind("pos.reconciliation.updated", refreshReconciliation);
+          channel.bind("order.created", refreshReconciliation);
+          channel.bind("order.updated", refreshReconciliation);
           return channel;
         });
       })
@@ -1165,6 +1163,9 @@ export default function StorePosPage() {
       stopPolling();
       channels.forEach((channel) => {
         channel.unbind("pos.customer-display.updated");
+        channel.unbind("pos.reconciliation.updated");
+        channel.unbind("order.created");
+        channel.unbind("order.updated");
         pusher?.unsubscribe(channel.name);
       });
       pusher?.disconnect();

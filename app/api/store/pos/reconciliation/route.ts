@@ -1,6 +1,7 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
 import { reverseLoyaltyForRefundedOrder } from "../../../../../lib/loyalty";
+import { publishStoreOperationalEvent } from "../../../../../lib/order-realtime";
 import { getCashBreakdownTotal, normalizeCashBreakdown, type CashBreakdown } from "../../../../../lib/pos-cash-denominations";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import { getStoreCashBusinessDayState } from "../../../../../lib/store-business-hours";
@@ -702,5 +703,6 @@ export async function POST(request: Request) {
     cashIn: sum.cashIn + item.cashIn,
     cashOut: sum.cashOut + item.cashOut
   }), { openingAmount: 0, expectedCashAmount: 0, countedCashAmount: 0, differenceAmount: 0, cashSales: 0, cashIn: 0, cashOut: 0 });
+  await publishStoreOperationalEvent(storeFilter, "pos.reconciliation.updated").catch(() => undefined);
   return Response.json({ ok: true, selectedStoreId: storeFilter, businessDate, businessState, activeSession, previousClosedSession, sessions, movements, orders, orderCorrections, paymentTotals, activeCashResponsibleEmployees, totals });
 }

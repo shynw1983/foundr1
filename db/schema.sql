@@ -3484,6 +3484,19 @@ create index if not exists idx_delivery_batches_order_status on delivery_batches
 create index if not exists idx_purchase_exceptions_status on purchase_exceptions(status);
 create index if not exists idx_price_records_product_recorded on price_records(product_id, recorded_at desc);
 create index if not exists idx_os_notifications_recipient_read on os_notifications(recipient_employee_id, read_at, created_at desc);
+create index if not exists idx_employee_scopes_employee_type_store
+  on employee_scopes(employee_id, scope_type, store_id);
+create index if not exists idx_employee_scopes_store_type_employee
+  on employee_scopes(store_id, scope_type, employee_id)
+  where store_id is not null;
+create index if not exists idx_purchase_actuals_item_recorded
+  on purchase_actuals(purchase_order_item_id, recorded_at desc);
+create index if not exists idx_purchase_actuals_supplier_recorded
+  on purchase_actuals(supplier_id, recorded_at desc)
+  where supplier_id is not null;
+create index if not exists idx_product_supplier_options_active_supplier
+  on product_supplier_options(supplier_id, product_id)
+  where is_active = true;
 create index if not exists idx_external_service_usage_events_metric_recorded
   on external_service_usage_events(service_key, metric_key, recorded_at desc);
 create index if not exists idx_external_service_alert_events_period

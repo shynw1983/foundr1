@@ -160,15 +160,9 @@ export default function StorePickupDisplayPage() {
           setRealtimeStatus("polling");
           return;
         }
-        const { default: Pusher } = await import("pusher-js");
+        const { acquireSharedPusher } = await import("../../../../lib/shared-pusher-client");
         if (!active) return;
-        pusher = new Pusher(config.key, {
-          cluster: config.cluster,
-          channelAuthorization: {
-            endpoint: "/api/store/realtime-auth",
-            transport: "ajax"
-          }
-        });
+        pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
         pusher.connection.bind("unavailable", () => {
           if (active) setRealtimeStatus("polling");
         });

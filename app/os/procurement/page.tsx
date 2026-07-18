@@ -5,6 +5,7 @@ import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
+import { getCachedCurrentEmployee } from "../components/currentEmployeeStore";
 import { useModalHistory } from "../components/useModalHistory";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -154,6 +155,16 @@ const pendingProcurementTaskItemStorageKey = "foundr1-os:procurement-pending-tas
 const recentProcurementTaskItemRetentionMs = 120000;
 const procurementLiveRefreshIntervalMs = 60000;
 const procurementMasterRefreshIntervalMs = 30 * 60 * 1000;
+
+type ProcurementMasterData = {
+  products?: Product[];
+  productSupplierOptions?: ProductSupplierGroup[];
+  suppliers?: Supplier[];
+  supplierLocations?: SupplierLocation[];
+  staffOptions?: StaffOption[];
+};
+
+let procurementMasterCache: { employeeId: string; savedAt: number; data: ProcurementMasterData } | null = null;
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
@@ -925,9 +936,19 @@ export default function ProcurementPage() {
     const requestId = dashboardLoadRequestRef.current + 1;
     dashboardLoadRequestRef.current = requestId;
     setDashboardSyncState(options?.background ? "refreshing" : "loading");
+    const now = Date.now();
+    const employeeId = getCachedCurrentEmployee()?.id ?? "";
+    const cachedMasterData = procurementMasterCache
+      && employeeId
+      && procurementMasterCache.employeeId === employeeId
+      && now - procurementMasterCache.savedAt < procurementMasterRefreshIntervalMs
+      ? procurementMasterCache
+      : null;
     const includeMasterData = options?.full === true
-      || options?.background !== true
-      || Date.now() - lastFullDashboardLoadedAtRef.current >= procurementMasterRefreshIntervalMs;
+      || (!cachedMasterData && (
+        options?.background !== true
+        || now - lastFullDashboardLoadedAtRef.current >= procurementMasterRefreshIntervalMs
+      ));
 
     try {
       const params = new URLSearchParams({ ts: String(Date.now()) });
@@ -941,7 +962,7 @@ export default function ProcurementPage() {
       });
       if (!response.ok) throw new Error("Dashboard data request failed.");
 
-      const data = await response.json() as {
+      const responseData = await response.json() as {
         products?: Product[];
         productSupplierOptions?: ProductSupplierGroup[];
         suppliers?: Supplier[];
@@ -953,8 +974,25 @@ export default function ProcurementPage() {
         staffOptions?: StaffOption[];
         procurementStaffAvailability?: ProcurementStaffUnavailableSlot[];
       };
+      const data = includeMasterData || !cachedMasterData
+        ? responseData
+        : { ...cachedMasterData.data, ...responseData };
 
       if (dashboardLoadRequestRef.current !== requestId) return false;
+
+      if (includeMasterData) {
+        procurementMasterCache = {
+          employeeId,
+          savedAt: Date.now(),
+          data: {
+            products: responseData.products,
+            productSupplierOptions: responseData.productSupplierOptions,
+            suppliers: responseData.suppliers,
+            supplierLocations: responseData.supplierLocations,
+            staffOptions: responseData.staffOptions
+          }
+        };
+      }
 
       if (data.products) setProducts(data.products);
       if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
@@ -985,7 +1023,9 @@ export default function ProcurementPage() {
       if (data.procurementStaffAvailability) setProcurementStaffAvailability(data.procurementStaffAvailability);
       setDashboardSyncState("synced");
       lastDashboardLoadedAtRef.current = Date.now();
-      if (includeMasterData) lastFullDashboardLoadedAtRef.current = Date.now();
+      if (includeMasterData || cachedMasterData) {
+        lastFullDashboardLoadedAtRef.current = includeMasterData ? Date.now() : (cachedMasterData?.savedAt ?? 0);
+      }
       return true;
     } catch {
       if (dashboardLoadRequestRef.current === requestId) {
@@ -1016,15 +1056,9 @@ export default function ProcurementPage() {
       .then((response) => (response.ok ? response.json() : null))
       .then(async (config) => {
         if (!active || !config?.key || !config?.cluster || !config?.channels?.length) return;
-        const { default: Pusher } = await import("pusher-js");
+        const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
         if (!active) return;
-        pusher = new Pusher(config.key, {
-          cluster: config.cluster,
-          channelAuthorization: {
-            endpoint: "/api/store/realtime-auth",
-            transport: "ajax"
-          }
-        });
+        pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
         pusher.connection.bind("unavailable", () => { procurementRealtimeConnectedRef.current = false; });
         pusher.connection.bind("failed", () => { procurementRealtimeConnectedRef.current = false; });
         pusher.connection.bind("disconnected", () => { procurementRealtimeConnectedRef.current = false; });

@@ -133,15 +133,9 @@ export function StoreNativeOrderNotifier() {
       .then((response) => (response.ok ? response.json() : null))
       .then(async (config) => {
         if (!active || !config?.key || !config?.cluster || !config?.channels?.length) return;
-        const { default: Pusher } = await import("pusher-js");
+        const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
         if (!active) return;
-        pusher = new Pusher(config.key, {
-          cluster: config.cluster,
-          channelAuthorization: {
-            endpoint: "/api/store/realtime-auth",
-            transport: "ajax"
-          }
-        });
+        pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
         pusher.connection.bind("unavailable", startPolling);
         pusher.connection.bind("failed", startPolling);
         pusher.connection.bind("disconnected", startPolling);

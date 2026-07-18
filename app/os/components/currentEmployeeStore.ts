@@ -1,6 +1,7 @@
 "use client";
 
 export type CurrentEmployee = {
+  id: string;
   name: string;
   loginId: string;
   role: string;

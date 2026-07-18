@@ -281,15 +281,9 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
         if (!config?.key || !config?.cluster || !config?.channels?.length) {
           return;
         }
-        const { default: Pusher } = await import("pusher-js");
+        const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
         if (!activeListener) return;
-        pusher = new Pusher(config.key, {
-          cluster: config.cluster,
-          channelAuthorization: {
-            endpoint: "/api/store/realtime-auth",
-            transport: "ajax"
-          }
-        });
+        pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
         pusher.connection.bind("unavailable", startPolling);
         pusher.connection.bind("failed", startPolling);
         pusher.connection.bind("disconnected", startPolling);

@@ -61,7 +61,7 @@ export async function publishPosCustomerDisplayEvent(storeId: string, state: Rec
 
 export async function publishStoreOperationalEvent(
   storeId: string,
-  eventName: "store.seats.updated" | "procurement.updated"
+  eventName: "store.seats.updated" | "procurement.updated" | "pos.reconciliation.updated"
 ) {
   const pusher = getPusher();
   if (!pusher || !storeId) return;

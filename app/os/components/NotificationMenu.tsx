@@ -88,15 +88,9 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
       .then((response) => (response.ok ? response.json() : null))
       .then(async (config) => {
         if (!active || !config?.key || !config?.cluster || !config?.channel) return;
-        const { default: Pusher } = await import("pusher-js");
+        const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
         if (!active) return;
-        pusher = new Pusher(config.key, {
-          cluster: config.cluster,
-          channelAuthorization: {
-            endpoint: "/api/store/realtime-auth",
-            transport: "ajax"
-          }
-        });
+        pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
         pusher.connection.bind("unavailable", startFallback);
         pusher.connection.bind("failed", startFallback);
         pusher.connection.bind("disconnected", startFallback);

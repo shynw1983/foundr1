@@ -52,6 +52,8 @@ export default function RootLayout({
           initialVersion={version}
           initialShortVersion={getShortAppVersion(version)}
           pathPrefixes={["/os"]}
+          realtimeConfigEndpoint="/api/notifications/realtime-config"
+          realtimeEventName="store.version.updated"
         />
         <OsTranslationProvider>{children}</OsTranslationProvider>
         <FloatingFeedbackButton />

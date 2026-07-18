@@ -33,7 +33,7 @@ type VersionEventPayload = {
   shortVersion?: string;
 };
 
-const checkIntervalMs = 60_000;
+const fallbackCheckIntervalMs = 10 * 60_000;
 
 export function AppVersionNotice({
   appName,
@@ -87,17 +87,17 @@ export function AppVersionNotice({
     };
 
     void checkVersion();
-    timer = window.setInterval(checkVersion, checkIntervalMs);
+    if (!realtimeConfigEndpoint) timer = window.setInterval(checkVersion, fallbackCheckIntervalMs);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("focus", handleFocus);
 
     return () => {
       active = false;
-      window.clearInterval(timer);
+      if (timer) window.clearInterval(timer);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleFocus);
     };
-  }, [initialVersion, isHiddenPath, isIncludedPath, showUpdateNotice, versionEndpoint]);
+  }, [initialVersion, isHiddenPath, isIncludedPath, realtimeConfigEndpoint, showUpdateNotice, versionEndpoint]);
 
   useEffect(() => {
     if (!isIncludedPath || isHiddenPath || !realtimeConfigEndpoint || !initialVersion || initialVersion === "local") return;
@@ -113,15 +113,9 @@ export function AppVersionNotice({
       .then((response) => (response.ok ? response.json() : null))
       .then(async (config: RealtimeConfigResponse | null) => {
         if (!active || !config?.key || !config.cluster) return;
-        const { default: Pusher } = await import("pusher-js");
+        const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
         if (!active) return;
-        pusher = new Pusher(config.key, {
-          cluster: config.cluster,
-          channelAuthorization: {
-            endpoint: "/api/store/realtime-auth",
-            transport: "ajax"
-          }
-        });
+        pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
         channels = [config.versionChannel, ...(config.channels ?? [])].filter(Boolean).map((channelName) => {
           const channel = pusher.subscribe(channelName);
           channel.bind(realtimeEventName, handleVersionUpdated);

@@ -33,7 +33,6 @@ export function useVisibleRefresh(refresh: () => void, options: VisibleRefreshOp
     window.addEventListener("online", runWhenVisible);
     window.addEventListener("focus", runWhenVisible);
     window.addEventListener("pageshow", runWhenVisible);
-    window.addEventListener("pointerdown", runWhenVisible);
     document.addEventListener("visibilitychange", runOnVisibleChange);
     const timer = intervalMs > 0 ? window.setInterval(runWhenVisible, intervalMs) : 0;
 
@@ -41,7 +40,6 @@ export function useVisibleRefresh(refresh: () => void, options: VisibleRefreshOp
       window.removeEventListener("online", runWhenVisible);
       window.removeEventListener("focus", runWhenVisible);
       window.removeEventListener("pageshow", runWhenVisible);
-      window.removeEventListener("pointerdown", runWhenVisible);
       document.removeEventListener("visibilitychange", runOnVisibleChange);
       if (timer) window.clearInterval(timer);
     };
