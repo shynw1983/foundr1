@@ -138,6 +138,10 @@ export function StorePrintStation() {
       if (timer) window.clearInterval(timer);
       timer = window.setInterval(poll, intervalMs);
     };
+    const stopPolling = () => {
+      if (timer) window.clearInterval(timer);
+      timer = 0;
+    };
 
     void poll();
     startPolling();
@@ -160,7 +164,7 @@ export function StorePrintStation() {
         pusher.connection.bind("disconnected", () => startPolling());
         channels = config.channels.map((channelName: string) => {
           const channel = pusher.subscribe(channelName);
-          channel.bind("pusher:subscription_succeeded", () => startPolling(60000));
+          channel.bind("pusher:subscription_succeeded", stopPolling);
           channel.bind("pusher:subscription_error", () => startPolling());
           channel.bind("order.created", poll);
           channel.bind("order.updated", poll);

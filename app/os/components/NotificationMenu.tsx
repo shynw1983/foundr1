@@ -2,7 +2,7 @@
 
 import { Bell } from "lucide-react";
 import type { MouseEvent } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useCloseOnOutside } from "./useCloseOnOutside";
 
 type OsNotification = {
@@ -51,7 +51,7 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
     return true;
   }
 
-  async function loadNotifications() {
+  const loadNotifications = useCallback(async () => {
     const response = await fetch("/api/notifications", { cache: "no-store" });
     if (!response.ok) return;
     const body = await response.json() as {
@@ -60,13 +60,65 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
     };
     setNotifications(body.notifications ?? []);
     setUnreadCount(body.unreadCount ?? 0);
-  }
+  }, []);
 
   useEffect(() => {
+    let active = true;
+    let pusher: any;
+    let channel: any;
+    let fallbackTimer = 0;
+
+    const startFallback = () => {
+      if (fallbackTimer) window.clearInterval(fallbackTimer);
+      fallbackTimer = window.setInterval(() => {
+        if (document.visibilityState === "visible") void loadNotifications();
+      }, 10 * 60_000);
+    };
+    const stopFallback = () => {
+      if (fallbackTimer) window.clearInterval(fallbackTimer);
+      fallbackTimer = 0;
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void loadNotifications();
+    };
+
     void loadNotifications();
-    const intervalId = window.setInterval(() => void loadNotifications(), 60_000);
-    return () => window.clearInterval(intervalId);
-  }, []);
+    startFallback();
+    fetch("/api/notifications/realtime-config", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(async (config) => {
+        if (!active || !config?.key || !config?.cluster || !config?.channel) return;
+        const { default: Pusher } = await import("pusher-js");
+        if (!active) return;
+        pusher = new Pusher(config.key, {
+          cluster: config.cluster,
+          channelAuthorization: {
+            endpoint: "/api/store/realtime-auth",
+            transport: "ajax"
+          }
+        });
+        pusher.connection.bind("unavailable", startFallback);
+        pusher.connection.bind("failed", startFallback);
+        pusher.connection.bind("disconnected", startFallback);
+        channel = pusher.subscribe(config.channel);
+        channel.bind("pusher:subscription_succeeded", stopFallback);
+        channel.bind("pusher:subscription_error", startFallback);
+        channel.bind("notification.updated", loadNotifications);
+      })
+      .catch(startFallback);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      active = false;
+      stopFallback();
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      channel?.unbind("notification.updated", loadNotifications);
+      if (channel) pusher?.unsubscribe(channel.name);
+      pusher?.disconnect();
+    };
+  }, [loadNotifications]);
 
   useEffect(() => {
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {

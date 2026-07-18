@@ -841,6 +841,7 @@ export default function ProcurementPage() {
   const recentDeliveryStatesRef = useRef<Record<string, { state: DeliveryState; updatedAt: number }>>({});
   const dashboardLoadRequestRef = useRef(0);
   const dashboardRefreshTimerRef = useRef(0);
+  const procurementRealtimeConnectedRef = useRef(false);
   const lastDashboardLoadedAtRef = useRef(0);
   const lastFullDashboardLoadedAtRef = useRef(0);
   const [products, setProducts] = useState<Product[]>([]);
@@ -1024,8 +1025,13 @@ export default function ProcurementPage() {
             transport: "ajax"
           }
         });
+        pusher.connection.bind("unavailable", () => { procurementRealtimeConnectedRef.current = false; });
+        pusher.connection.bind("failed", () => { procurementRealtimeConnectedRef.current = false; });
+        pusher.connection.bind("disconnected", () => { procurementRealtimeConnectedRef.current = false; });
         channels = config.channels.map((channelName: string) => {
           const channel = pusher.subscribe(channelName);
+          channel.bind("pusher:subscription_succeeded", () => { procurementRealtimeConnectedRef.current = true; });
+          channel.bind("pusher:subscription_error", () => { procurementRealtimeConnectedRef.current = false; });
           channel.bind("procurement.updated", scheduleDashboardRefresh);
           return channel;
         });
@@ -1034,6 +1040,7 @@ export default function ProcurementPage() {
 
     return () => {
       active = false;
+      procurementRealtimeConnectedRef.current = false;
       channels.forEach((channel) => {
         channel.unbind("procurement.updated", scheduleDashboardRefresh);
         pusher?.unsubscribe(channel.name);
@@ -1131,6 +1138,7 @@ export default function ProcurementPage() {
 
     const refreshDashboardWhenVisible = () => {
       if (document.visibilityState !== "visible") return;
+      if (procurementRealtimeConnectedRef.current) return;
       const now = Date.now();
       if (now - lastDashboardLoadedAtRef.current < procurementLiveRefreshIntervalMs) return;
       void loadDashboardData({ background: true });

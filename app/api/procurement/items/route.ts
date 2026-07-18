@@ -1,5 +1,6 @@
 import { canAccessStore, requireOwnerOsSession, requireWritableOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { publishOsNotificationEvent } from "../../../../lib/notification-realtime";
 import { publishStoreOperationalEvent } from "../../../../lib/order-realtime";
 import { roleHasPermission } from "../../../../lib/role-permissions";
 
@@ -646,7 +647,7 @@ export async function PATCH(request: Request) {
     !itemDetail.isAdditionalPurchase &&
     !["delivered", "received"].includes(String(itemDetail.currentStatus ?? ""))
   ) {
-    await sql`
+    const insertedNotifications = await sql`
       insert into os_notifications (
         recipient_employee_id,
         notification_type,
@@ -677,7 +678,11 @@ export async function PATCH(request: Request) {
             and os_notifications.href = ${`/os/orders#order-${itemDetail.orderNo}`}
             and os_notifications.created_at > now() - interval '30 minutes'
         )
+      returning recipient_employee_id::text as "employeeId"
     `;
+    await Promise.all(insertedNotifications.map((notification) =>
+      publishOsNotificationEvent(String(notification.employeeId)).catch(() => undefined)
+    ));
   }
 
   if (body.clearActualPrice === true) {

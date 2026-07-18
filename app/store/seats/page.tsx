@@ -158,7 +158,7 @@ export default function StoreSeatsPage() {
         pusher.connection.bind("disconnected", () => startPolling());
         channels = config.channels.map((channelName: string) => {
           const channel = pusher.subscribe(channelName);
-          channel.bind("pusher:subscription_succeeded", () => startPolling(60000));
+          channel.bind("pusher:subscription_succeeded", stopPolling);
           channel.bind("pusher:subscription_error", () => startPolling());
           channel.bind("store.seats.updated", refreshBoard);
           channel.bind("order.created", refreshBoard);

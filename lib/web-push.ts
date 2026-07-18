@@ -1,5 +1,6 @@
 import webPush from "web-push";
 import { sql } from "./db";
+import { publishOsNotificationEvent } from "./notification-realtime";
 
 type PushSubscriptionInput = {
   endpoint?: unknown;
@@ -150,6 +151,7 @@ export async function createOsNotification(input: {
     insert into os_notifications (recipient_employee_id, notification_type, title, message, href)
     values (${input.employeeId}, ${input.type}, ${input.title}, ${input.message}, ${input.href})
   `;
+  await publishOsNotificationEvent(input.employeeId).catch(() => undefined);
   if (input.sendPush === false) return;
   await sendWebPushToEmployee(input.employeeId, {
     title: input.title,

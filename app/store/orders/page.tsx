@@ -542,15 +542,15 @@ export default function StoreOrdersPage() {
     };
     window.addEventListener("focus", refreshFromResume);
     window.addEventListener("pageshow", refreshFromResume);
-    window.addEventListener("pointerdown", refreshFromResume);
+    if (realtimeStatus !== "connected") window.addEventListener("pointerdown", refreshFromResume);
     document.addEventListener("visibilitychange", refreshWhenVisible);
-    const timer = window.setInterval(refresh, realtimeStatus === "connected" ? 60000 : 8000);
+    const timer = realtimeStatus === "connected" ? 0 : window.setInterval(refresh, 8000);
     return () => {
       window.removeEventListener("focus", refreshFromResume);
       window.removeEventListener("pageshow", refreshFromResume);
-      window.removeEventListener("pointerdown", refreshFromResume);
+      if (realtimeStatus !== "connected") window.removeEventListener("pointerdown", refreshFromResume);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
-      window.clearInterval(timer);
+      if (timer) window.clearInterval(timer);
     };
   }, [realtimeStatus, statsDays, selectedStoreId]);
 

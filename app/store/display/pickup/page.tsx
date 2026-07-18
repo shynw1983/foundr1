@@ -126,11 +126,12 @@ export default function StorePickupDisplayPage() {
 
   useEffect(() => {
     void load();
+    if (realtimeStatus === "connected") return;
     const timer = window.setInterval(
       () => {
         if (document.visibilityState === "visible") void load(selectedStoreIdRef.current);
       },
-      realtimeStatus === "connected" ? 60000 : 8000
+      8000
     );
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps

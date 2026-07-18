@@ -2,6 +2,7 @@ import { canAccessStore, getSessionStoreScope, requireOsSession, requireWritable
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 import { sendPurchaseOrderLarkNotification } from "../../../lib/lark";
+import { publishOsNotificationEvent } from "../../../lib/notification-realtime";
 import { roleHasPermission } from "../../../lib/role-permissions";
 
 function toTokyoDateParts(date: Date) {
@@ -180,6 +181,7 @@ async function notifyBuyerAboutOrder({
     returning id
   `;
   const notificationId = insertedNotifications[0]?.id;
+  await publishOsNotificationEvent(buyerStaffId).catch(() => undefined);
 
   const buyerRows = await sql`
     select

@@ -696,10 +696,11 @@ export default function CustomerDisplayPage() {
     const storeId = params.get("storeId") || getStoredStoreSelection();
     selectedStoreIdRef.current = storeId;
     void load(storeId);
+    if (realtimeStatus === "connected") return;
     const interval = window.setInterval(() => {
       const currentStoreId = new URLSearchParams(window.location.search).get("storeId") || selectedStoreIdRef.current || getStoredStoreSelection();
       void load(currentStoreId);
-    }, realtimeStatus === "connected" ? 60000 : 15000);
+    }, 15000);
     return () => window.clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realtimeStatus]);

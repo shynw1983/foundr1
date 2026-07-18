@@ -1,5 +1,6 @@
 import { canAccessStore, requireWritableOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { publishOsNotificationEvent } from "../../../../lib/notification-realtime";
 
 const additionalPurchaseNotePrefix = "追加購入";
 
@@ -214,7 +215,7 @@ export async function PATCH(request: Request) {
   `;
 
   if (deliveredRows[0]?.purchaseOrderId) {
-    await sql`
+    const insertedNotifications = await sql`
       insert into os_notifications (
         recipient_employee_id,
         notification_type,
@@ -247,7 +248,11 @@ export async function PATCH(request: Request) {
           employees.role in ('owner', 'manager')
           or employee_scopes.store_id = purchase_orders.store_id
         )
+      returning recipient_employee_id::text as "employeeId"
     `;
+    await Promise.all(insertedNotifications.map((notification) =>
+      publishOsNotificationEvent(String(notification.employeeId)).catch(() => undefined)
+    ));
   }
 
   return Response.json({ ok: true });
