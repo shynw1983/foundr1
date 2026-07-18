@@ -521,8 +521,7 @@ public class Foundr1PrinterBridge {
         if (template != null && template.optBoolean("showLogo", false)) {
             int percent = Math.max(20, Math.min(100, template.optInt("logoWidthPercent", LOGO_MAX_WIDTH_PERCENT)));
             int maxWidth = Math.max(1, Math.round(contentWidth * percent / 100f));
-            int baseHeight = "58mm".equals(paperWidth) ? LOGO_MAX_HEIGHT_58MM : LOGO_MAX_HEIGHT_80MM;
-            Bitmap logo = loadLogoBitmap(templateText(template, "logoUrl"), maxWidth, Math.max(1, Math.round(baseHeight * percent / (float) LOGO_MAX_WIDTH_PERCENT)));
+            Bitmap logo = loadLogoBitmap(templateText(template, "logoUrl"), maxWidth, 0);
             if (logo != null) blocks.get("logo").add(RasterLine.image(logo, templateAlignment(template, "logoAlignment", 1)));
         }
 

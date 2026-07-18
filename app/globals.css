@@ -14820,11 +14820,10 @@ body :where(
   font-size: 17px;
 }
 
-.pos-admin-receipt-paper-logo,
-.pos-admin-receipt-paper-promo {
+.pos-admin-receipt-paper-logo {
   justify-self: center;
   max-width: 100%;
-  max-height: 64px;
+  height: auto;
   object-fit: contain;
 }
 
@@ -14839,8 +14838,10 @@ body :where(
 }
 
 .pos-admin-receipt-paper-promo {
+  justify-self: center;
   max-width: 100%;
   max-height: 92px;
+  object-fit: contain;
 }
 
 .pos-admin-receipt-paper-promo.is-left { justify-self: start; }
