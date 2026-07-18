@@ -16,6 +16,8 @@ import {
   Plus,
   Printer,
   QrCode,
+  ArrowDown,
+  ArrowUp,
   Search,
   ShoppingCart,
   WalletCards,
@@ -26,9 +28,10 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import QRCodeGenerator from "qrcode";
 import { useUnsavedChangesGuard } from "../../../components/UnsavedChangesGuard";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
-import { createTestPrintPayload, defaultPosPrinterSettings, getReceiptPrinter, listPairedNativePrinters, printWithAndroidBridge, type NativePrinterDevice, type PosPrinterConnection, type PosPrinterSettings, type PosReceiptTemplateSettings } from "../../../lib/pos-printer";
+import { createTestPrintPayload, defaultPosPrinterSettings, getReceiptPrinter, listPairedNativePrinters, printWithAndroidBridge, resolvePosReceiptTemplate, type NativePrinterDevice, type PosPrinterConnection, type PosPrinterSettings, type PosReceiptTemplateBlock, type PosReceiptTemplateSettings } from "../../../lib/pos-printer";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -234,6 +237,38 @@ function getReceiptPreviewLines(value: string) {
   return String(value || "").split("\n").map((line) => line.trim()).filter(Boolean);
 }
 
+const receiptTemplateBlockLabels: Record<PosReceiptTemplateBlock, string> = {
+  logo: "ロゴ",
+  business: "店名",
+  contact: "住所・連絡先",
+  message: "上部メッセージ",
+  receipt: "会計内容",
+  promotion: "販促画像・メッセージ",
+  qr: "QRコード",
+  footer: "下部メッセージ・印刷日時"
+};
+
+function ReceiptQrPreview({ value, label, size, alignment }: { value: string; label: string; size: PosReceiptTemplateSettings["qrCodeSize"]; alignment: PosReceiptTemplateSettings["qrCodeAlignment"] }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let active = true;
+    if (!value.trim()) {
+      setSrc("");
+      return () => { active = false; };
+    }
+    void QRCodeGenerator.toDataURL(value.trim(), { errorCorrectionLevel: "M", margin: 1, width: 320 })
+      .then((next) => { if (active) setSrc(next); })
+      .catch(() => { if (active) setSrc(""); });
+    return () => { active = false; };
+  }, [value]);
+  return (
+    <div className={`pos-admin-receipt-paper-qr is-${alignment} is-${size}`}>
+      {src ? <img src={src} alt="" /> : <div>QR</div>}
+      {label ? <p>{label}</p> : null}
+    </div>
+  );
+}
+
 function getPaymentLabel(value: string) {
   if (value === "cash") return "現金";
   if (value === "card") return "カード";
@@ -273,6 +308,7 @@ export default function PosPage() {
   const [nativePrinterDevices, setNativePrinterDevices] = useState<NativePrinterDevice[]>([]);
   const [nativePrinterScanning, setNativePrinterScanning] = useState(false);
   const [receiptPreviewMode, setReceiptPreviewMode] = useState<"receipt" | "invoice">("receipt");
+  const [receiptPreviewBrandId, setReceiptPreviewBrandId] = useState("");
   const [hasNativePrintBridge, setHasNativePrintBridge] = useState(false);
   const [uploadingMediaType, setUploadingMediaType] = useState<"" | "image" | "video">("");
   const [uploadingReceiptImageSlot, setUploadingReceiptImageSlot] = useState<"" | "logo" | "promotion">("");
@@ -310,6 +346,8 @@ export default function PosPage() {
     const nextSettings = settingsBody?.settings ?? body.posSettings ?? null;
     setStores(body.access?.stores ?? []);
     setSelectedStoreId(selectedId);
+    setReceiptPreviewBrandId("");
+    setReceiptPreviewMode("receipt");
     setSummary(body.todaySummary ?? { orderCount: 0, total: 0, average: 0, latestOrders: [] });
     setTaxSettings(nextSettings);
     setCanManagePosSettings(Boolean(settingsBody?.access?.canManagePosSettings));
@@ -394,14 +432,48 @@ export default function PosPage() {
     }
   }
 
+  const activeReceiptTemplate = resolvePosReceiptTemplate(taxForm.printerSettings, receiptPreviewBrandId, receiptPreviewMode);
+
   function updateReceiptTemplate(patch: Partial<PosReceiptTemplateSettings>) {
     setTaxForm((current) => ({
       ...current,
       printerSettings: {
         ...current.printerSettings,
-        receiptTemplate: { ...current.printerSettings.receiptTemplate, ...patch }
+        ...(receiptPreviewBrandId || receiptPreviewMode === "invoice" ? {
+          receiptTemplateVariants: [
+            ...current.printerSettings.receiptTemplateVariants.filter((item) => item.brandId !== receiptPreviewBrandId || item.documentType !== receiptPreviewMode),
+            {
+              brandId: receiptPreviewBrandId,
+              brandName: current.posBrandSettings.find((item) => item.brandId === receiptPreviewBrandId)?.brandName ?? "",
+              documentType: receiptPreviewMode,
+              template: { ...resolvePosReceiptTemplate(current.printerSettings, receiptPreviewBrandId, receiptPreviewMode), ...patch }
+            }
+          ]
+        } : {
+          receiptTemplate: { ...current.printerSettings.receiptTemplate, ...patch }
+        })
       }
     }));
+  }
+
+  function removeReceiptTemplateOverride() {
+    if (!receiptPreviewBrandId && receiptPreviewMode === "receipt") return;
+    setTaxForm((current) => ({
+      ...current,
+      printerSettings: {
+        ...current.printerSettings,
+        receiptTemplateVariants: current.printerSettings.receiptTemplateVariants.filter((item) => item.brandId !== receiptPreviewBrandId || item.documentType !== receiptPreviewMode)
+      }
+    }));
+  }
+
+  function moveReceiptTemplateBlock(block: PosReceiptTemplateBlock, direction: -1 | 1) {
+    const order = [...activeReceiptTemplate.blockOrder];
+    const index = order.indexOf(block);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= order.length) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    updateReceiptTemplate({ blockOrder: order });
   }
 
   function createSavePayloadForm(section: PosSettingsSaveSection = "all") {
@@ -507,7 +579,7 @@ export default function PosPage() {
       setTestPrinting(false);
       return;
     }
-    const result = await printWithAndroidBridge(createTestPrintPayload(printer, taxSettings?.storeName || "Foundr1 OS", taxForm.printerSettings.receiptTemplate));
+    const result = await printWithAndroidBridge(createTestPrintPayload(printer, taxSettings?.storeName || "Foundr1 OS", activeReceiptTemplate));
     setTestPrintStatus(result.ok ? "プリンター設定を保存し、テスト印刷を送信しました。" : result.error || "テスト印刷に失敗しました。");
     setTestPrinting(false);
   }
@@ -593,6 +665,65 @@ export default function PosPage() {
     title: "POS 設定に未保存の変更があります",
     message: "店舗を切り替える、または別ページへ移動する前に、現在の店舗設定を保存できます。"
   });
+
+  function renderReceiptPreviewBlock(block: PosReceiptTemplateBlock) {
+    if (block === "logo") return activeReceiptTemplate.showLogo ? (
+      activeReceiptTemplate.logoUrl
+        ? <img className={`pos-admin-receipt-paper-logo is-${activeReceiptTemplate.logoAlignment}`} style={{ width: `${activeReceiptTemplate.logoWidthPercent}%` }} src={activeReceiptTemplate.logoUrl} alt="" />
+        : <div className={`pos-admin-receipt-paper-logo-placeholder is-${activeReceiptTemplate.logoAlignment}`} style={{ width: `${activeReceiptTemplate.logoWidthPercent}%` }}>LOGO</div>
+    ) : null;
+    if (block === "business") return <h5 className={`is-${activeReceiptTemplate.businessNameAlignment} is-size-${activeReceiptTemplate.businessNameTextSize}`}>{activeReceiptTemplate.businessName || taxSettings?.storeName || "店舗名"}</h5>;
+    if (block === "contact") return (
+      <div className="pos-admin-receipt-preview-block">
+        {getReceiptPreviewLines(activeReceiptTemplate.companyInfo).map((line, index) => <p className={`is-${activeReceiptTemplate.contactInfoAlignment}`} key={`company-${index}`}>{line}</p>)}
+        {getReceiptPreviewLines(activeReceiptTemplate.address).map((line, index) => <p className={`is-${activeReceiptTemplate.contactInfoAlignment}`} key={`address-${index}`}>{line}</p>)}
+        {activeReceiptTemplate.taxRegistrationNumber ? <p className={`is-${activeReceiptTemplate.contactInfoAlignment}`}>登録番号: {activeReceiptTemplate.taxRegistrationNumber}</p> : null}
+        {activeReceiptTemplate.phone ? <p className={`is-${activeReceiptTemplate.contactInfoAlignment}`}>TEL: {activeReceiptTemplate.phone}</p> : null}
+        {activeReceiptTemplate.website ? <p className={`is-${activeReceiptTemplate.contactInfoAlignment}`}>{activeReceiptTemplate.website}</p> : null}
+      </div>
+    );
+    if (block === "message") return (
+      <div className={`pos-admin-receipt-preview-block is-message is-size-${activeReceiptTemplate.messageTextSize}`}>
+        {getReceiptPreviewLines(activeReceiptTemplate.headerMessage).map((line, index) => <p className={`is-${activeReceiptTemplate.messageAlignment}`} key={`header-${index}`}>{line}</p>)}
+      </div>
+    );
+    if (block === "promotion") return activeReceiptTemplate.promotionImageUrl || activeReceiptTemplate.promotionMessage ? (
+      <div className={`pos-admin-receipt-preview-block is-message is-size-${activeReceiptTemplate.messageTextSize}`}>
+        {activeReceiptTemplate.promotionImageUrl ? <img className={`pos-admin-receipt-paper-promo is-${activeReceiptTemplate.promotionImageAlignment}`} style={{ width: `${activeReceiptTemplate.promotionImageWidthPercent}%` }} src={activeReceiptTemplate.promotionImageUrl} alt="" /> : null}
+        {getReceiptPreviewLines(activeReceiptTemplate.promotionMessage).map((line, index) => <p className={`is-${activeReceiptTemplate.messageAlignment}`} key={`promotion-${index}`}>{line}</p>)}
+      </div>
+    ) : null;
+    if (block === "qr") return activeReceiptTemplate.qrCodeEnabled ? <ReceiptQrPreview value={activeReceiptTemplate.qrCodeUrl} label={activeReceiptTemplate.qrCodeLabel} size={activeReceiptTemplate.qrCodeSize} alignment={activeReceiptTemplate.qrCodeAlignment} /> : null;
+    if (block === "footer") return (
+      <div className={`pos-admin-receipt-preview-block is-message is-size-${activeReceiptTemplate.messageTextSize}`}>
+        {getReceiptPreviewLines(activeReceiptTemplate.footerMessage).map((line, index) => <p className={`is-${activeReceiptTemplate.messageAlignment}`} key={`footer-${index}`}>{line}</p>)}
+        {activeReceiptTemplate.showTimestamp ? <p>2026-06-14 12:34:56</p> : null}
+      </div>
+    );
+    return (
+      <div className="pos-admin-receipt-preview-block is-receipt-content">
+        <div className="pos-admin-receipt-paper-rule" />
+        <h5 className={`is-size-${activeReceiptTemplate.titleTextSize}`}>{receiptPreviewMode === "invoice" ? activeReceiptTemplate.invoiceTitle : activeReceiptTemplate.receiptTitle}</h5>
+        {receiptPreviewMode === "invoice" ? <><div className="pos-admin-receipt-paper-line is-strong"><span>{activeReceiptTemplate.invoiceRecipientName}</span><span>様</span></div><p>但し {activeReceiptTemplate.invoicePurposeText}として</p><div className="pos-admin-receipt-paper-rule" /></> : null}
+        <div className="pos-admin-receipt-paper-line is-strong"><span>No. F1-1234</span><span /></div>
+        <p>店内 / 現金</p>
+        <div className="pos-admin-receipt-paper-rule" />
+        <div className="pos-admin-receipt-paper-line"><span>麻辣湯 250g x1</span><span>{formatYen(1000)}</span></div>
+        <p className="is-sub">  辛さ: 普通 / しびれ: 普通</p>
+        <div className="pos-admin-receipt-paper-line"><span>ドリンク x1</span><span>{formatYen(450)}</span></div>
+        <p className="is-sub">  氷: 少なめ</p>
+        <div className="pos-admin-receipt-paper-rule" />
+        <div className="pos-admin-receipt-paper-line"><span>小計</span><span>{formatYen(1450)}</span></div>
+        <div className="pos-admin-receipt-paper-line"><span>割引</span><span>-{formatYen(145)}</span></div>
+        {activeReceiptTemplate.showTaxSummary ? <div className="pos-admin-receipt-paper-line"><span>消費税 10%</span><span>{formatYen(130)}</span></div> : null}
+        <div className="pos-admin-receipt-paper-line is-total"><span>合計</span><span>{formatYen(1305)}</span></div>
+        <div className="pos-admin-receipt-paper-line"><span>お預かり</span><span>{formatYen(2000)}</span></div>
+        <div className="pos-admin-receipt-paper-line"><span>お釣り</span><span>{formatYen(695)}</span></div>
+        {activeReceiptTemplate.showOrderNote ? <><div className="pos-admin-receipt-paper-rule" /><p>備考: 領収書希望</p></> : null}
+        <div className="pos-admin-receipt-paper-rule" />
+      </div>
+    );
+  }
 
   useEffect(() => {
     const detectNativePrintBridge = () => {
@@ -1119,13 +1250,34 @@ export default function PosPage() {
                 <strong>レシートテンプレート</strong>
                 <p>レシートに表示する店舗情報、登録番号、連絡先、販促メッセージを管理します。右側で印刷イメージを確認できます。</p>
               </div>
+              <div className="pos-admin-receipt-scope-bar">
+                <label>
+                  <span>ブランド</span>
+                  <select value={receiptPreviewBrandId} onChange={(event) => setReceiptPreviewBrandId(event.target.value)}>
+                    <option value="">店舗共通</option>
+                    {taxForm.posBrandSettings.map((brand) => <option value={brand.brandId} key={brand.brandId}>{brand.brandName}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>帳票</span>
+                  <select value={receiptPreviewMode} onChange={(event) => setReceiptPreviewMode(event.target.value as "receipt" | "invoice")}>
+                    <option value="receipt">レシート</option>
+                    <option value="invoice">領収書</option>
+                  </select>
+                </label>
+                {(receiptPreviewBrandId || receiptPreviewMode === "invoice") ? (
+                  <button className="secondary-button" type="button" onClick={removeReceiptTemplateOverride} disabled={!canManagePosSettings || !taxForm.printerSettings.receiptTemplateVariants.some((item) => item.brandId === receiptPreviewBrandId && item.documentType === receiptPreviewMode)}>
+                    共通設定に戻す
+                  </button>
+                ) : <small>このテンプレートが未設定のブランド・帳票の基準になります。</small>}
+              </div>
               <div className="pos-admin-receipt-template-workspace">
                 <div className="pos-admin-receipt-template-editor">
                   <div className="pos-admin-printer-grid">
                     <label className="pos-admin-discount-check">
                       <input
                         type="checkbox"
-                        checked={taxForm.printerSettings.receiptTemplate.showLogo}
+                        checked={activeReceiptTemplate.showLogo}
                         onChange={(event) => updateReceiptTemplate({ showLogo: event.target.checked })}
                         disabled={!canManagePosSettings}
                       />
@@ -1133,7 +1285,7 @@ export default function PosPage() {
                     </label>
                     <label>
                       <span>ロゴ位置</span>
-                      <select value={taxForm.printerSettings.receiptTemplate.logoAlignment} onChange={(event) => updateReceiptTemplate({ logoAlignment: event.target.value as PosReceiptTemplateSettings["logoAlignment"] })} disabled={!canManagePosSettings}>
+                      <select value={activeReceiptTemplate.logoAlignment} onChange={(event) => updateReceiptTemplate({ logoAlignment: event.target.value as PosReceiptTemplateSettings["logoAlignment"] })} disabled={!canManagePosSettings}>
                         <option value="left">左揃え</option>
                         <option value="center">中央揃え</option>
                       </select>
@@ -1141,15 +1293,15 @@ export default function PosPage() {
                     <label>
                       <span>ロゴ幅（用紙に対する比率）</span>
                       <div className="pos-admin-receipt-range-control">
-                        <input type="range" min="20" max="100" step="5" value={taxForm.printerSettings.receiptTemplate.logoWidthPercent} onChange={(event) => updateReceiptTemplate({ logoWidthPercent: Number(event.target.value) })} disabled={!canManagePosSettings} />
-                        <output>{taxForm.printerSettings.receiptTemplate.logoWidthPercent}%</output>
+                        <input type="range" min="20" max="100" step="5" value={activeReceiptTemplate.logoWidthPercent} onChange={(event) => updateReceiptTemplate({ logoWidthPercent: Number(event.target.value) })} disabled={!canManagePosSettings} />
+                        <output>{activeReceiptTemplate.logoWidthPercent}%</output>
                       </div>
                     </label>
                     <div className="pos-admin-receipt-image-field">
                       <span>ロゴ画像</span>
                       <div className="pos-admin-receipt-image-control">
-                        {taxForm.printerSettings.receiptTemplate.logoUrl ? (
-                          <img src={taxForm.printerSettings.receiptTemplate.logoUrl} alt="" />
+                        {activeReceiptTemplate.logoUrl ? (
+                          <img src={activeReceiptTemplate.logoUrl} alt="" />
                         ) : (
                           <div>Logo</div>
                         )}
@@ -1168,7 +1320,7 @@ export default function PosPage() {
                               }}
                             />
                           </label>
-                          {taxForm.printerSettings.receiptTemplate.logoUrl ? (
+                          {activeReceiptTemplate.logoUrl ? (
                             <button className="secondary-button" type="button" onClick={() => updateReceiptTemplate({ logoUrl: "", showLogo: false })} disabled={!canManagePosSettings}>
                               クリア
                             </button>
@@ -1179,7 +1331,7 @@ export default function PosPage() {
                     <label>
                       <span>通常タイトル</span>
                       <input
-                        value={taxForm.printerSettings.receiptTemplate.receiptTitle}
+                        value={activeReceiptTemplate.receiptTitle}
                         onChange={(event) => updateReceiptTemplate({ receiptTitle: event.target.value })}
                         placeholder="レシート"
                         disabled={!canManagePosSettings}
@@ -1188,7 +1340,7 @@ export default function PosPage() {
                     <label>
                       <span>領収書タイトル</span>
                       <input
-                        value={taxForm.printerSettings.receiptTemplate.invoiceTitle}
+                        value={activeReceiptTemplate.invoiceTitle}
                         onChange={(event) => updateReceiptTemplate({ invoiceTitle: event.target.value })}
                         placeholder="領収書"
                         disabled={!canManagePosSettings}
@@ -1197,7 +1349,7 @@ export default function PosPage() {
                     <label>
                       <span>領収書 宛名</span>
                       <input
-                        value={taxForm.printerSettings.receiptTemplate.invoiceRecipientName}
+                        value={activeReceiptTemplate.invoiceRecipientName}
                         onChange={(event) => updateReceiptTemplate({ invoiceRecipientName: event.target.value })}
                         placeholder="上様"
                         disabled={!canManagePosSettings}
@@ -1206,7 +1358,7 @@ export default function PosPage() {
                     <label>
                       <span>領収書 但し書き</span>
                       <input
-                        value={taxForm.printerSettings.receiptTemplate.invoicePurposeText}
+                        value={activeReceiptTemplate.invoicePurposeText}
                         onChange={(event) => updateReceiptTemplate({ invoicePurposeText: event.target.value })}
                         placeholder="飲食代"
                         disabled={!canManagePosSettings}
@@ -1215,7 +1367,7 @@ export default function PosPage() {
                     <label>
                       <span>表示名</span>
                       <input
-                        value={taxForm.printerSettings.receiptTemplate.businessName}
+                        value={activeReceiptTemplate.businessName}
                         onChange={(event) => updateReceiptTemplate({ businessName: event.target.value })}
                         placeholder="店舗名または会社名"
                         disabled={!canManagePosSettings}
@@ -1223,29 +1375,53 @@ export default function PosPage() {
                     </label>
                     <label>
                       <span>店名・表示名の位置</span>
-                      <select value={taxForm.printerSettings.receiptTemplate.businessNameAlignment} onChange={(event) => updateReceiptTemplate({ businessNameAlignment: event.target.value as PosReceiptTemplateSettings["businessNameAlignment"] })} disabled={!canManagePosSettings}>
+                      <select value={activeReceiptTemplate.businessNameAlignment} onChange={(event) => updateReceiptTemplate({ businessNameAlignment: event.target.value as PosReceiptTemplateSettings["businessNameAlignment"] })} disabled={!canManagePosSettings}>
                         <option value="left">左揃え</option>
                         <option value="center">中央揃え</option>
                       </select>
                     </label>
                     <label>
                       <span>住所・連絡先の位置</span>
-                      <select value={taxForm.printerSettings.receiptTemplate.contactInfoAlignment} onChange={(event) => updateReceiptTemplate({ contactInfoAlignment: event.target.value as PosReceiptTemplateSettings["contactInfoAlignment"] })} disabled={!canManagePosSettings}>
+                      <select value={activeReceiptTemplate.contactInfoAlignment} onChange={(event) => updateReceiptTemplate({ contactInfoAlignment: event.target.value as PosReceiptTemplateSettings["contactInfoAlignment"] })} disabled={!canManagePosSettings}>
                         <option value="left">左揃え</option>
                         <option value="center">中央揃え</option>
                       </select>
                     </label>
                     <label>
                       <span>お客様向けメッセージの位置</span>
-                      <select value={taxForm.printerSettings.receiptTemplate.messageAlignment} onChange={(event) => updateReceiptTemplate({ messageAlignment: event.target.value as PosReceiptTemplateSettings["messageAlignment"] })} disabled={!canManagePosSettings}>
+                      <select value={activeReceiptTemplate.messageAlignment} onChange={(event) => updateReceiptTemplate({ messageAlignment: event.target.value as PosReceiptTemplateSettings["messageAlignment"] })} disabled={!canManagePosSettings}>
                         <option value="left">左揃え</option>
                         <option value="center">中央揃え</option>
                       </select>
                     </label>
                     <label>
+                      <span>店名の文字サイズ</span>
+                      <select value={activeReceiptTemplate.businessNameTextSize} onChange={(event) => updateReceiptTemplate({ businessNameTextSize: event.target.value as PosReceiptTemplateSettings["businessNameTextSize"] })} disabled={!canManagePosSettings}>
+                        <option value="small">小</option><option value="standard">標準</option><option value="large">大</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>帳票タイトルの文字サイズ</span>
+                      <select value={activeReceiptTemplate.titleTextSize} onChange={(event) => updateReceiptTemplate({ titleTextSize: event.target.value as PosReceiptTemplateSettings["titleTextSize"] })} disabled={!canManagePosSettings}>
+                        <option value="small">小</option><option value="standard">標準</option><option value="large">大</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>メッセージの文字サイズ</span>
+                      <select value={activeReceiptTemplate.messageTextSize} onChange={(event) => updateReceiptTemplate({ messageTextSize: event.target.value as PosReceiptTemplateSettings["messageTextSize"] })} disabled={!canManagePosSettings}>
+                        <option value="small">小</option><option value="standard">標準</option><option value="large">大</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>印刷の間隔</span>
+                      <select value={activeReceiptTemplate.density} onChange={(event) => updateReceiptTemplate({ density: event.target.value as PosReceiptTemplateSettings["density"] })} disabled={!canManagePosSettings}>
+                        <option value="standard">標準</option><option value="compact">コンパクト（紙を節約）</option>
+                      </select>
+                    </label>
+                    <label>
                       <span>登録番号 / 税号</span>
                       <input
-                        value={taxForm.printerSettings.receiptTemplate.taxRegistrationNumber}
+                        value={activeReceiptTemplate.taxRegistrationNumber}
                         onChange={(event) => updateReceiptTemplate({ taxRegistrationNumber: event.target.value })}
                         placeholder="T1234567890123"
                         disabled={!canManagePosSettings}
@@ -1254,7 +1430,7 @@ export default function PosPage() {
                     <label>
                       <span>電話番号</span>
                       <input
-                        value={taxForm.printerSettings.receiptTemplate.phone}
+                        value={activeReceiptTemplate.phone}
                         onChange={(event) => updateReceiptTemplate({ phone: event.target.value })}
                         placeholder="03-0000-0000"
                         disabled={!canManagePosSettings}
@@ -1263,7 +1439,7 @@ export default function PosPage() {
                     <label>
                       <span>Web / SNS</span>
                       <input
-                        value={taxForm.printerSettings.receiptTemplate.website}
+                        value={activeReceiptTemplate.website}
                         onChange={(event) => updateReceiptTemplate({ website: event.target.value })}
                         placeholder="https://foundr1.jp"
                         disabled={!canManagePosSettings}
@@ -1273,29 +1449,29 @@ export default function PosPage() {
                   <div className="pos-admin-receipt-template-textareas">
                     <label>
                       <span>会社情報</span>
-                      <textarea value={taxForm.printerSettings.receiptTemplate.companyInfo} onChange={(event) => updateReceiptTemplate({ companyInfo: event.target.value })} disabled={!canManagePosSettings} />
+                      <textarea value={activeReceiptTemplate.companyInfo} onChange={(event) => updateReceiptTemplate({ companyInfo: event.target.value })} disabled={!canManagePosSettings} />
                     </label>
                     <label>
                       <span>住所</span>
-                      <textarea value={taxForm.printerSettings.receiptTemplate.address} onChange={(event) => updateReceiptTemplate({ address: event.target.value })} disabled={!canManagePosSettings} />
+                      <textarea value={activeReceiptTemplate.address} onChange={(event) => updateReceiptTemplate({ address: event.target.value })} disabled={!canManagePosSettings} />
                     </label>
                     <label>
                       <span>上部メッセージ</span>
-                      <textarea value={taxForm.printerSettings.receiptTemplate.headerMessage} onChange={(event) => updateReceiptTemplate({ headerMessage: event.target.value })} disabled={!canManagePosSettings} />
+                      <textarea value={activeReceiptTemplate.headerMessage} onChange={(event) => updateReceiptTemplate({ headerMessage: event.target.value })} disabled={!canManagePosSettings} />
                     </label>
                     <label>
                       <span>下部メッセージ</span>
-                      <textarea value={taxForm.printerSettings.receiptTemplate.footerMessage} onChange={(event) => updateReceiptTemplate({ footerMessage: event.target.value })} disabled={!canManagePosSettings} />
+                      <textarea value={activeReceiptTemplate.footerMessage} onChange={(event) => updateReceiptTemplate({ footerMessage: event.target.value })} disabled={!canManagePosSettings} />
                     </label>
                     <label>
                       <span>販促メッセージ</span>
-                      <textarea value={taxForm.printerSettings.receiptTemplate.promotionMessage} onChange={(event) => updateReceiptTemplate({ promotionMessage: event.target.value })} disabled={!canManagePosSettings} />
+                      <textarea value={activeReceiptTemplate.promotionMessage} onChange={(event) => updateReceiptTemplate({ promotionMessage: event.target.value })} disabled={!canManagePosSettings} />
                     </label>
                     <div className="pos-admin-receipt-image-field">
                       <span>販促画像</span>
                       <div className="pos-admin-receipt-image-control">
-                        {taxForm.printerSettings.receiptTemplate.promotionImageUrl ? (
-                          <img src={taxForm.printerSettings.receiptTemplate.promotionImageUrl} alt="" />
+                        {activeReceiptTemplate.promotionImageUrl ? (
+                          <img src={activeReceiptTemplate.promotionImageUrl} alt="" />
                         ) : (
                           <div>Promotion</div>
                         )}
@@ -1314,7 +1490,7 @@ export default function PosPage() {
                               }}
                             />
                           </label>
-                          {taxForm.printerSettings.receiptTemplate.promotionImageUrl ? (
+                          {activeReceiptTemplate.promotionImageUrl ? (
                             <button className="secondary-button" type="button" onClick={() => updateReceiptTemplate({ promotionImageUrl: "" })} disabled={!canManagePosSettings}>
                               クリア
                             </button>
@@ -1322,20 +1498,53 @@ export default function PosPage() {
                         </div>
                       </div>
                     </div>
+                    <label>
+                      <span>販促画像の位置</span>
+                      <select value={activeReceiptTemplate.promotionImageAlignment} onChange={(event) => updateReceiptTemplate({ promotionImageAlignment: event.target.value as PosReceiptTemplateSettings["promotionImageAlignment"] })} disabled={!canManagePosSettings}>
+                        <option value="left">左揃え</option><option value="center">中央揃え</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>販促画像の幅</span>
+                      <div className="pos-admin-receipt-range-control">
+                        <input type="range" min="20" max="100" step="5" value={activeReceiptTemplate.promotionImageWidthPercent} onChange={(event) => updateReceiptTemplate({ promotionImageWidthPercent: Number(event.target.value) })} disabled={!canManagePosSettings} />
+                        <output>{activeReceiptTemplate.promotionImageWidthPercent}%</output>
+                      </div>
+                    </label>
+                  </div>
+                  <div className="pos-admin-receipt-qr-settings">
+                    <label className="pos-admin-discount-check">
+                      <input type="checkbox" checked={activeReceiptTemplate.qrCodeEnabled} onChange={(event) => updateReceiptTemplate({ qrCodeEnabled: event.target.checked })} disabled={!canManagePosSettings} />
+                      <span>QRコードを表示</span>
+                    </label>
+                    <label><span>リンク先</span><input type="url" value={activeReceiptTemplate.qrCodeUrl} onChange={(event) => updateReceiptTemplate({ qrCodeUrl: event.target.value })} placeholder="https://foundr1.jp/member" disabled={!canManagePosSettings} /></label>
+                    <label><span>QR下の案内</span><input value={activeReceiptTemplate.qrCodeLabel} onChange={(event) => updateReceiptTemplate({ qrCodeLabel: event.target.value })} placeholder="会員登録はこちら" disabled={!canManagePosSettings} /></label>
+                    <label><span>QRサイズ</span><select value={activeReceiptTemplate.qrCodeSize} onChange={(event) => updateReceiptTemplate({ qrCodeSize: event.target.value as PosReceiptTemplateSettings["qrCodeSize"] })} disabled={!canManagePosSettings}><option value="small">小</option><option value="medium">標準</option><option value="large">大</option></select></label>
+                    <label><span>QR位置</span><select value={activeReceiptTemplate.qrCodeAlignment} onChange={(event) => updateReceiptTemplate({ qrCodeAlignment: event.target.value as PosReceiptTemplateSettings["qrCodeAlignment"] })} disabled={!canManagePosSettings}><option value="left">左揃え</option><option value="center">中央揃え</option></select></label>
                   </div>
                   <div className="pos-admin-printer-toggles">
                     <label className="pos-admin-discount-check">
-                      <input type="checkbox" checked={taxForm.printerSettings.receiptTemplate.showTaxSummary} onChange={(event) => updateReceiptTemplate({ showTaxSummary: event.target.checked })} disabled={!canManagePosSettings} />
+                      <input type="checkbox" checked={activeReceiptTemplate.showTaxSummary} onChange={(event) => updateReceiptTemplate({ showTaxSummary: event.target.checked })} disabled={!canManagePosSettings} />
                       <span>税明細を表示</span>
                     </label>
                     <label className="pos-admin-discount-check">
-                      <input type="checkbox" checked={taxForm.printerSettings.receiptTemplate.showOrderNote} onChange={(event) => updateReceiptTemplate({ showOrderNote: event.target.checked })} disabled={!canManagePosSettings} />
+                      <input type="checkbox" checked={activeReceiptTemplate.showOrderNote} onChange={(event) => updateReceiptTemplate({ showOrderNote: event.target.checked })} disabled={!canManagePosSettings} />
                       <span>備考を表示</span>
                     </label>
                     <label className="pos-admin-discount-check">
-                      <input type="checkbox" checked={taxForm.printerSettings.receiptTemplate.showTimestamp} onChange={(event) => updateReceiptTemplate({ showTimestamp: event.target.checked })} disabled={!canManagePosSettings} />
+                      <input type="checkbox" checked={activeReceiptTemplate.showTimestamp} onChange={(event) => updateReceiptTemplate({ showTimestamp: event.target.checked })} disabled={!canManagePosSettings} />
                       <span>印刷日時を表示</span>
                     </label>
+                  </div>
+                  <div className="pos-admin-receipt-block-order">
+                    <div><strong>印刷ブロックの順序</strong><span>矢印で上から順に並べ替えます。</span></div>
+                    {activeReceiptTemplate.blockOrder.map((block, index) => (
+                      <div className="pos-admin-receipt-block-row" key={block}>
+                        <span>{index + 1}</span><strong>{receiptTemplateBlockLabels[block]}</strong>
+                        <button className="icon-button" type="button" aria-label={`${receiptTemplateBlockLabels[block]}を上へ`} onClick={() => moveReceiptTemplateBlock(block, -1)} disabled={!canManagePosSettings || index === 0}><ArrowUp size={14} /></button>
+                        <button className="icon-button" type="button" aria-label={`${receiptTemplateBlockLabels[block]}を下へ`} onClick={() => moveReceiptTemplateBlock(block, 1)} disabled={!canManagePosSettings || index === activeReceiptTemplate.blockOrder.length - 1}><ArrowDown size={14} /></button>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 <aside className="pos-admin-receipt-preview-panel" aria-label="レシート印刷プレビュー">
@@ -1347,67 +1556,8 @@ export default function PosPage() {
                     </select>
                     <span>{getReceiptPrinter(taxForm.printerSettings).paperWidth}</span>
                   </div>
-                  <div className="pos-admin-receipt-paper">
-                    {taxForm.printerSettings.receiptTemplate.showLogo ? (
-                      taxForm.printerSettings.receiptTemplate.logoUrl ? (
-                        <img className={`pos-admin-receipt-paper-logo is-${taxForm.printerSettings.receiptTemplate.logoAlignment}`} style={{ width: `${taxForm.printerSettings.receiptTemplate.logoWidthPercent}%` }} src={taxForm.printerSettings.receiptTemplate.logoUrl} alt="" />
-                      ) : (
-                        <div className={`pos-admin-receipt-paper-logo-placeholder is-${taxForm.printerSettings.receiptTemplate.logoAlignment}`} style={{ width: `${taxForm.printerSettings.receiptTemplate.logoWidthPercent}%` }}>LOGO</div>
-                      )
-                    ) : null}
-                    <h5 className={`is-${taxForm.printerSettings.receiptTemplate.businessNameAlignment}`}>{taxForm.printerSettings.receiptTemplate.businessName || taxSettings?.storeName || "店舗名"}</h5>
-                    {getReceiptPreviewLines(taxForm.printerSettings.receiptTemplate.companyInfo).map((line, index) => (
-                      <p className={`is-${taxForm.printerSettings.receiptTemplate.contactInfoAlignment}`} key={`company-${index}`}>{line}</p>
-                    ))}
-                    {getReceiptPreviewLines(taxForm.printerSettings.receiptTemplate.address).map((line, index) => (
-                      <p className={`is-${taxForm.printerSettings.receiptTemplate.contactInfoAlignment}`} key={`address-${index}`}>{line}</p>
-                    ))}
-                    {taxForm.printerSettings.receiptTemplate.taxRegistrationNumber ? <p className={`is-${taxForm.printerSettings.receiptTemplate.contactInfoAlignment}`}>登録番号: {taxForm.printerSettings.receiptTemplate.taxRegistrationNumber}</p> : null}
-                    {taxForm.printerSettings.receiptTemplate.phone ? <p className={`is-${taxForm.printerSettings.receiptTemplate.contactInfoAlignment}`}>TEL: {taxForm.printerSettings.receiptTemplate.phone}</p> : null}
-                    {taxForm.printerSettings.receiptTemplate.website ? <p className={`is-${taxForm.printerSettings.receiptTemplate.contactInfoAlignment}`}>{taxForm.printerSettings.receiptTemplate.website}</p> : null}
-                    {getReceiptPreviewLines(taxForm.printerSettings.receiptTemplate.headerMessage).map((line, index) => (
-                      <p className={`is-${taxForm.printerSettings.receiptTemplate.messageAlignment}`} key={`header-${index}`}>{line}</p>
-                    ))}
-                    <div className="pos-admin-receipt-paper-rule" />
-                    <h5>{receiptPreviewMode === "invoice" ? taxForm.printerSettings.receiptTemplate.invoiceTitle : taxForm.printerSettings.receiptTemplate.receiptTitle}</h5>
-                    {receiptPreviewMode === "invoice" ? (
-                      <>
-                        <div className="pos-admin-receipt-paper-line is-strong"><span>{taxForm.printerSettings.receiptTemplate.invoiceRecipientName}</span><span>様</span></div>
-                        <p>但し {taxForm.printerSettings.receiptTemplate.invoicePurposeText}として</p>
-                        <div className="pos-admin-receipt-paper-rule" />
-                      </>
-                    ) : null}
-                    <div className="pos-admin-receipt-paper-line is-strong"><span>No. F1-1234</span><span /></div>
-                    <p>店内 / 現金</p>
-                    <div className="pos-admin-receipt-paper-rule" />
-                    <div className="pos-admin-receipt-paper-line"><span>麻辣湯 250g x1</span><span>{formatYen(1000)}</span></div>
-                    <p className="is-sub">  辛さ: 普通 / しびれ: 普通</p>
-                    <div className="pos-admin-receipt-paper-line"><span>ドリンク x1</span><span>{formatYen(450)}</span></div>
-                    <p className="is-sub">  氷: 少なめ</p>
-                    <div className="pos-admin-receipt-paper-rule" />
-                    <div className="pos-admin-receipt-paper-line"><span>小計</span><span>{formatYen(1450)}</span></div>
-                    <div className="pos-admin-receipt-paper-line"><span>割引</span><span>-{formatYen(145)}</span></div>
-                    {taxForm.printerSettings.receiptTemplate.showTaxSummary ? (
-                      <div className="pos-admin-receipt-paper-line"><span>消費税 10%</span><span>{formatYen(130)}</span></div>
-                    ) : null}
-                    <div className="pos-admin-receipt-paper-line is-total"><span>合計</span><span>{formatYen(1305)}</span></div>
-                    <div className="pos-admin-receipt-paper-line"><span>お預かり</span><span>{formatYen(2000)}</span></div>
-                    <div className="pos-admin-receipt-paper-line"><span>お釣り</span><span>{formatYen(695)}</span></div>
-                    {taxForm.printerSettings.receiptTemplate.showOrderNote ? (
-                      <>
-                        <div className="pos-admin-receipt-paper-rule" />
-                        <p>備考: 領収書希望</p>
-                      </>
-                    ) : null}
-                    <div className="pos-admin-receipt-paper-rule" />
-                    {taxForm.printerSettings.receiptTemplate.promotionImageUrl ? <img className="pos-admin-receipt-paper-promo" src={taxForm.printerSettings.receiptTemplate.promotionImageUrl} alt="" /> : null}
-                    {getReceiptPreviewLines(taxForm.printerSettings.receiptTemplate.promotionMessage).map((line, index) => (
-                      <p className={`is-${taxForm.printerSettings.receiptTemplate.messageAlignment}`} key={`promotion-${index}`}>{line}</p>
-                    ))}
-                    {getReceiptPreviewLines(taxForm.printerSettings.receiptTemplate.footerMessage).map((line, index) => (
-                      <p className={`is-${taxForm.printerSettings.receiptTemplate.messageAlignment}`} key={`footer-${index}`}>{line}</p>
-                    ))}
-                    {taxForm.printerSettings.receiptTemplate.showTimestamp ? <p>2026-06-14 12:34:56</p> : null}
+                  <div className={`pos-admin-receipt-paper is-${activeReceiptTemplate.density}`}>
+                    {activeReceiptTemplate.blockOrder.map((block) => <div className="pos-admin-receipt-paper-block" key={block}>{renderReceiptPreviewBlock(block)}</div>)}
                   </div>
                 </aside>
               </div>

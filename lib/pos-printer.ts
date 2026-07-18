@@ -22,6 +22,8 @@ export type PosReceiptTemplateSettings = {
   logoAlignment: "left" | "center";
   logoWidthPercent: number;
   promotionImageUrl: string;
+  promotionImageAlignment: "left" | "center";
+  promotionImageWidthPercent: number;
   receiptTitle: string;
   invoiceTitle: string;
   invoiceRecipientName: string;
@@ -38,9 +40,28 @@ export type PosReceiptTemplateSettings = {
   promotionMessage: string;
   contactInfoAlignment: "left" | "center";
   messageAlignment: "left" | "center";
+  businessNameTextSize: "small" | "standard" | "large";
+  titleTextSize: "small" | "standard" | "large";
+  messageTextSize: "small" | "standard" | "large";
+  density: "compact" | "standard";
+  blockOrder: PosReceiptTemplateBlock[];
+  qrCodeEnabled: boolean;
+  qrCodeUrl: string;
+  qrCodeLabel: string;
+  qrCodeAlignment: "left" | "center";
+  qrCodeSize: "small" | "medium" | "large";
   showTaxSummary: boolean;
   showOrderNote: boolean;
   showTimestamp: boolean;
+};
+
+export type PosReceiptTemplateBlock = "logo" | "business" | "contact" | "message" | "receipt" | "promotion" | "qr" | "footer";
+
+export type PosReceiptTemplateVariant = {
+  brandId: string;
+  brandName: string;
+  documentType: "receipt" | "invoice";
+  template: PosReceiptTemplateSettings;
 };
 
 export type PosKitchenTicketTemplateSettings = {
@@ -66,6 +87,7 @@ export type PosPrinterSettings = PosPrinterConnection & {
   kitchenPrinter: PosPrinterConnection;
   brandKitchenPrinters: PosBrandKitchenPrinterSetting[];
   receiptTemplate: PosReceiptTemplateSettings;
+  receiptTemplateVariants: PosReceiptTemplateVariant[];
   kitchenTicketTemplate: PosKitchenTicketTemplateSettings;
 };
 
@@ -151,6 +173,8 @@ export const defaultPosReceiptTemplateSettings: PosReceiptTemplateSettings = {
   logoAlignment: "center",
   logoWidthPercent: 58,
   promotionImageUrl: "",
+  promotionImageAlignment: "center",
+  promotionImageWidthPercent: 100,
   receiptTitle: "レシート",
   invoiceTitle: "領収書",
   invoiceRecipientName: "上様",
@@ -167,6 +191,16 @@ export const defaultPosReceiptTemplateSettings: PosReceiptTemplateSettings = {
   promotionMessage: "",
   contactInfoAlignment: "left",
   messageAlignment: "left",
+  businessNameTextSize: "standard",
+  titleTextSize: "standard",
+  messageTextSize: "standard",
+  density: "standard",
+  blockOrder: ["logo", "business", "contact", "message", "receipt", "promotion", "qr", "footer"],
+  qrCodeEnabled: false,
+  qrCodeUrl: "",
+  qrCodeLabel: "",
+  qrCodeAlignment: "center",
+  qrCodeSize: "medium",
   showTaxSummary: true,
   showOrderNote: true,
   showTimestamp: true
@@ -196,6 +230,7 @@ export const defaultPosPrinterSettings: PosPrinterSettings = {
   kitchenPrinter: defaultPosPrinterConnection,
   brandKitchenPrinters: [],
   receiptTemplate: defaultPosReceiptTemplateSettings,
+  receiptTemplateVariants: [],
   kitchenTicketTemplate: defaultPosKitchenTicketTemplateSettings
 };
 
@@ -234,12 +269,20 @@ export function normalizePosReceiptTemplateSettings(value: unknown): PosReceiptT
   };
   const alignment = (next: unknown, fallback: "left" | "center") => next === "center" || next === "left" ? next : fallback;
   const rawLogoWidthPercent = Math.round(Number(source.logoWidthPercent ?? defaultPosReceiptTemplateSettings.logoWidthPercent));
+  const rawPromotionImageWidthPercent = Math.round(Number(source.promotionImageWidthPercent ?? defaultPosReceiptTemplateSettings.promotionImageWidthPercent));
+  const textSize = (next: unknown, fallback: "small" | "standard" | "large") => next === "small" || next === "large" || next === "standard" ? next : fallback;
+  const qrSize = (next: unknown) => next === "small" || next === "large" || next === "medium" ? next : defaultPosReceiptTemplateSettings.qrCodeSize;
+  const validBlocks: PosReceiptTemplateBlock[] = ["logo", "business", "contact", "message", "receipt", "promotion", "qr", "footer"];
+  const suppliedBlocks = Array.isArray(source.blockOrder) ? source.blockOrder.filter((item): item is PosReceiptTemplateBlock => validBlocks.includes(item as PosReceiptTemplateBlock)) : [];
+  const blockOrder = [...new Set([...suppliedBlocks, ...validBlocks])];
   return {
     showLogo: source.showLogo === true,
     logoUrl: text(source.logoUrl, 500),
     logoAlignment: alignment(source.logoAlignment, defaultPosReceiptTemplateSettings.logoAlignment),
     logoWidthPercent: Number.isFinite(rawLogoWidthPercent) ? Math.max(20, Math.min(100, rawLogoWidthPercent)) : defaultPosReceiptTemplateSettings.logoWidthPercent,
     promotionImageUrl: text(source.promotionImageUrl, 500),
+    promotionImageAlignment: alignment(source.promotionImageAlignment, defaultPosReceiptTemplateSettings.promotionImageAlignment),
+    promotionImageWidthPercent: Number.isFinite(rawPromotionImageWidthPercent) ? Math.max(20, Math.min(100, rawPromotionImageWidthPercent)) : defaultPosReceiptTemplateSettings.promotionImageWidthPercent,
     receiptTitle: textWithFallback(source.receiptTitle, defaultPosReceiptTemplateSettings.receiptTitle, 80),
     invoiceTitle: textWithFallback(source.invoiceTitle, defaultPosReceiptTemplateSettings.invoiceTitle, 80),
     invoiceRecipientName: textWithFallback(source.invoiceRecipientName, defaultPosReceiptTemplateSettings.invoiceRecipientName, 120),
@@ -256,6 +299,16 @@ export function normalizePosReceiptTemplateSettings(value: unknown): PosReceiptT
     promotionMessage: text(source.promotionMessage, 500),
     contactInfoAlignment: alignment(source.contactInfoAlignment, defaultPosReceiptTemplateSettings.contactInfoAlignment),
     messageAlignment: alignment(source.messageAlignment, defaultPosReceiptTemplateSettings.messageAlignment),
+    businessNameTextSize: textSize(source.businessNameTextSize, defaultPosReceiptTemplateSettings.businessNameTextSize),
+    titleTextSize: textSize(source.titleTextSize, defaultPosReceiptTemplateSettings.titleTextSize),
+    messageTextSize: textSize(source.messageTextSize, defaultPosReceiptTemplateSettings.messageTextSize),
+    density: source.density === "compact" ? "compact" : "standard",
+    blockOrder,
+    qrCodeEnabled: source.qrCodeEnabled === true,
+    qrCodeUrl: text(source.qrCodeUrl, 500),
+    qrCodeLabel: text(source.qrCodeLabel, 160),
+    qrCodeAlignment: alignment(source.qrCodeAlignment, defaultPosReceiptTemplateSettings.qrCodeAlignment),
+    qrCodeSize: qrSize(source.qrCodeSize),
     showTaxSummary: source.showTaxSummary !== false,
     showOrderNote: source.showOrderNote !== false,
     showTimestamp: source.showTimestamp !== false
@@ -289,6 +342,7 @@ export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings 
   const receiptPrinter = normalizePosPrinterConnection(source.receiptPrinter, legacyPrinter);
   const kitchenPrinter = normalizePosPrinterConnection(source.kitchenPrinter, legacyPrinter);
   const brandKitchenPrinters = Array.isArray(source.brandKitchenPrinters) ? source.brandKitchenPrinters : [];
+  const receiptTemplateVariants = Array.isArray(source.receiptTemplateVariants) ? source.receiptTemplateVariants : [];
   const kitchenCopies = Math.round(Number(source.kitchenCopies ?? defaultPosPrinterSettings.kitchenCopies));
   return {
     enabled: source.enabled === true,
@@ -299,6 +353,17 @@ export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings 
     receiptPrinter,
     kitchenPrinter,
     receiptTemplate: normalizePosReceiptTemplateSettings(source.receiptTemplate),
+    receiptTemplateVariants: receiptTemplateVariants.flatMap((item) => {
+      const record = item && typeof item === "object" && !Array.isArray(item) ? item as Partial<PosReceiptTemplateVariant> : {};
+      const brandId = String(record.brandId ?? "").trim().slice(0, 80);
+      const documentType: PosReceiptTemplateVariant["documentType"] = record.documentType === "invoice" ? "invoice" : "receipt";
+      return [{
+        brandId,
+        brandName: String(record.brandName ?? "").trim().slice(0, 120),
+        documentType,
+        template: normalizePosReceiptTemplateSettings(record.template)
+      }];
+    }).filter((variant, index, variants) => variants.findIndex((item) => item.brandId === variant.brandId && item.documentType === variant.documentType) === index).slice(0, 60),
     kitchenTicketTemplate: normalizePosKitchenTicketTemplateSettings(source.kitchenTicketTemplate),
     brandKitchenPrinters: brandKitchenPrinters.flatMap((item) => {
       const record = item && typeof item === "object" && !Array.isArray(item) ? item as Partial<PosBrandKitchenPrinterSetting> : {};
@@ -311,6 +376,13 @@ export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings 
       }];
     }).slice(0, 30)
   };
+}
+
+export function resolvePosReceiptTemplate(settings: PosPrinterSettings, brandId: string | null | undefined, documentType: "receipt" | "invoice") {
+  const normalizedBrandId = String(brandId ?? "").trim();
+  return settings.receiptTemplateVariants.find((item) => item.brandId === normalizedBrandId && item.documentType === documentType)?.template
+    ?? settings.receiptTemplateVariants.find((item) => !item.brandId && item.documentType === documentType)?.template
+    ?? settings.receiptTemplate;
 }
 
 export function getReceiptPrinter(settings: PosPrinterSettings) {

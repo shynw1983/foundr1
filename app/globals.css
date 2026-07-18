@@ -14606,6 +14606,98 @@ body :where(
   gap: 14px;
 }
 
+.pos-admin-receipt-scope-bar {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) minmax(120px, 170px) minmax(0, 1fr);
+  align-items: end;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--green) 20%, var(--line));
+  border-radius: 8px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--green) 3%, white);
+}
+
+.pos-admin-receipt-scope-bar label,
+.pos-admin-receipt-qr-settings label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pos-admin-receipt-scope-bar label > span,
+.pos-admin-receipt-qr-settings label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pos-admin-receipt-scope-bar small {
+  align-self: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.pos-admin-receipt-qr-settings {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.7fr) repeat(2, minmax(160px, 1fr)) repeat(2, minmax(110px, 0.65fr));
+  align-items: end;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}
+
+.pos-admin-receipt-qr-settings input,
+.pos-admin-receipt-qr-settings select {
+  width: 100%;
+  min-width: 0;
+}
+
+.pos-admin-receipt-block-order {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.pos-admin-receipt-block-order > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pos-admin-receipt-block-order > div:first-child strong {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.pos-admin-receipt-block-order > div:first-child span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.pos-admin-receipt-block-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 30px 30px;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.pos-admin-receipt-block-row > span {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.pos-admin-receipt-block-row > strong {
+  font-size: 12px;
+  font-weight: 550;
+}
+
 .pos-admin-receipt-template-editor {
   display: grid;
   gap: 10px;
@@ -14661,6 +14753,26 @@ body :where(
   line-height: 1.35;
 }
 
+.pos-admin-receipt-paper.is-compact {
+  gap: 1px;
+  padding-top: 10px;
+  padding-bottom: 12px;
+  line-height: 1.2;
+}
+
+.pos-admin-receipt-paper-block:empty,
+.pos-admin-receipt-preview-block:empty {
+  display: none;
+}
+
+.pos-admin-receipt-preview-block,
+.pos-admin-receipt-paper-block,
+.pos-admin-receipt-preview-block.is-receipt-content {
+  display: grid;
+  gap: inherit;
+  min-width: 0;
+}
+
 .pos-admin-receipt-paper h5 {
   margin: 0;
   text-align: center;
@@ -14669,6 +14781,13 @@ body :where(
   font-weight: 700;
   overflow-wrap: anywhere;
 }
+
+.pos-admin-receipt-paper h5.is-size-small { font-size: 12px; }
+.pos-admin-receipt-paper h5.is-size-standard { font-size: 15px; }
+.pos-admin-receipt-paper h5.is-size-large { font-size: 18px; }
+.pos-admin-receipt-preview-block.is-message.is-size-small p { font-size: 9px; }
+.pos-admin-receipt-preview-block.is-message.is-size-standard p { font-size: 11px; }
+.pos-admin-receipt-preview-block.is-message.is-size-large p { font-size: 13px; }
 
 .pos-admin-receipt-paper h5.is-left,
 .pos-admin-receipt-paper p.is-left {
@@ -14704,7 +14823,7 @@ body :where(
 .pos-admin-receipt-paper-logo,
 .pos-admin-receipt-paper-promo {
   justify-self: center;
-  max-width: 72%;
+  max-width: 100%;
   max-height: 64px;
   object-fit: contain;
 }
@@ -14722,6 +14841,31 @@ body :where(
 .pos-admin-receipt-paper-promo {
   max-width: 100%;
   max-height: 92px;
+}
+
+.pos-admin-receipt-paper-promo.is-left { justify-self: start; }
+.pos-admin-receipt-paper-promo.is-center { justify-self: center; }
+
+.pos-admin-receipt-paper-qr {
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+}
+
+.pos-admin-receipt-paper-qr.is-left { justify-self: start; }
+.pos-admin-receipt-paper-qr.is-center { justify-self: center; }
+.pos-admin-receipt-paper-qr img,
+.pos-admin-receipt-paper-qr > div { width: 72px; height: 72px; }
+.pos-admin-receipt-paper-qr.is-small img,
+.pos-admin-receipt-paper-qr.is-small > div { width: 54px; height: 54px; }
+.pos-admin-receipt-paper-qr.is-large img,
+.pos-admin-receipt-paper-qr.is-large > div { width: 92px; height: 92px; }
+.pos-admin-receipt-paper-qr > div {
+  display: grid;
+  place-items: center;
+  border: 1px dashed #888;
+  color: #777;
+  font-weight: 700;
 }
 
 .pos-admin-receipt-paper-logo-placeholder {
@@ -34825,6 +34969,8 @@ body :where(
   .pos-admin-printer-grid,
   .pos-admin-receipt-template-textareas,
   .pos-admin-receipt-template-workspace,
+  .pos-admin-receipt-scope-bar,
+  .pos-admin-receipt-qr-settings,
   .pos-admin-printer-brand-row {
     display: grid;
     grid-template-columns: 1fr;

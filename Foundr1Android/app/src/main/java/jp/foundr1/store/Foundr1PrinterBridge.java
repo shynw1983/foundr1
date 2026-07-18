@@ -47,6 +47,10 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.MultiFormatWriter;
+import com.google.zxing.common.BitMatrix;
+
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -428,7 +432,6 @@ public class Foundr1PrinterBridge {
         int contentWidth = paperDots - padding * 2;
         JSONObject order = payload.optJSONObject("order");
         JSONObject template = payload.optJSONObject("receiptTemplate");
-        boolean isReceipt = "receipt".equals(payload.optString("jobType", "receipt"));
         boolean isKitchen = "kitchen".equals(payload.optString("jobType", ""));
         JSONObject kitchenTemplate = payload.optJSONObject("kitchenTicketTemplate");
         boolean largeKitchenText = isKitchen && kitchenBool(kitchenTemplate, "largeText", true);
@@ -436,7 +439,6 @@ public class Foundr1PrinterBridge {
         Paint small = textPaint(largeKitchenText ? 24 : 21, false);
         Paint bold = textPaint(largeKitchenText ? 34 : 28, true);
         List<RasterLine> lines = new ArrayList<>();
-        String displayName = templateText(template, "businessName");
 
         if (isKitchen) {
             if (kitchenBool(kitchenTemplate, "showTitle", true)) {
@@ -493,108 +495,133 @@ public class Foundr1PrinterBridge {
             if (kitchenBool(kitchenTemplate, "showTimestamp", true)) {
                 addText(lines, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), normal, contentWidth);
             }
-        } else if (isReceipt && template != null && template.optBoolean("showLogo", false)) {
-            int logoWidthPercent = Math.max(20, Math.min(100, template.optInt("logoWidthPercent", LOGO_MAX_WIDTH_PERCENT)));
-            int logoMaxWidth = Math.max(1, Math.round(contentWidth * logoWidthPercent / 100f));
-            Bitmap logo = loadLogoBitmap(template.optString("logoUrl", ""), logoMaxWidth, "58mm".equals(paperWidth) ? LOGO_MAX_HEIGHT_58MM : LOGO_MAX_HEIGHT_80MM);
-            if (logo != null) {
-                lines.add(RasterLine.image(logo, templateAlignment(template, "logoAlignment", 1)));
-                lines.add(RasterLine.spacer(LOGO_BOTTOM_GAP));
-            }
-        }
-        if (!isKitchen) addAlignedText(lines, displayName.isEmpty() ? payload.optString("storeName", "Foundr1 OS") : displayName, bold, contentWidth, templateAlignment(template, "businessNameAlignment", 1));
-        if (!isKitchen && isReceipt && template != null) {
-            int contactAlignment = templateAlignment(template, "contactInfoAlignment", 0);
-            int messageAlignment = templateAlignment(template, "messageAlignment", 0);
-            addAlignedMultiline(lines, templateText(template, "companyInfo"), small, contentWidth, contactAlignment);
-            addAlignedMultiline(lines, templateText(template, "address"), small, contentWidth, contactAlignment);
-            addAlignedTextIfPresent(lines, "登録番号: " + templateText(template, "taxRegistrationNumber"), templateText(template, "taxRegistrationNumber"), small, contentWidth, contactAlignment);
-            addAlignedTextIfPresent(lines, "TEL: " + templateText(template, "phone"), templateText(template, "phone"), small, contentWidth, contactAlignment);
-            addAlignedTextIfPresent(lines, templateText(template, "website"), templateText(template, "website"), small, contentWidth, contactAlignment);
-            addAlignedMultiline(lines, templateText(template, "headerMessage"), small, contentWidth, messageAlignment);
-        }
-        if (!isKitchen) addSeparator(lines, contentWidth, normal);
-        if (!isKitchen && order == null) {
-            addText(lines, "No order payload", normal, contentWidth);
-        } else if (!isKitchen) {
-            boolean receiptRequested = order.optBoolean("receiptRequested", false);
-            String receiptTitle = order.optString("receiptTitle", "").trim();
-            if (receiptTitle.isEmpty()) {
-                receiptTitle = templateText(template, receiptRequested ? "invoiceTitle" : "receiptTitle");
-            }
-            if (receiptTitle.isEmpty()) receiptTitle = receiptRequested ? "領収書" : "レシート";
-            addCenter(lines, receiptTitle, bold);
-            if (receiptRequested) {
-                String recipient = order.optString("receiptRecipientName", "").trim();
-                if (recipient.isEmpty()) recipient = templateText(template, "invoiceRecipientName");
-                if (recipient.isEmpty()) recipient = "上様";
-                String purpose = order.optString("receiptPurposeText", "").trim();
-                if (purpose.isEmpty()) purpose = templateText(template, "invoicePurposeText");
-                if (purpose.isEmpty()) purpose = "飲食代";
-                addPair(lines, recipient, "様", bold, contentWidth);
-                addText(lines, "但し " + purpose + "として", small, contentWidth);
-                addSeparator(lines, contentWidth, normal);
-            }
-            addText(lines, "No. " + order.optString("pickupCode", ""), bold, contentWidth);
-            addText(lines, joinReceiptMeta(formatOrderTypeLabel(order.optString("orderType", "")), formatPaymentLabel(order)), normal, contentWidth);
-            addSeparator(lines, contentWidth, normal);
-            JSONArray items = order.optJSONArray("items");
-            if (items != null) {
-                for (int i = 0; i < items.length(); i += 1) {
-                    JSONObject item = items.optJSONObject(i);
-                    if (item == null) continue;
-                    addPair(lines, item.optString("name", "Item") + " x" + item.optInt("quantity", 1), yen(item.optInt("amount", 0)), normal, contentWidth);
-                    JSONArray options = item.optJSONArray("options");
-                    if (options != null) {
-                        for (int optionIndex = 0; optionIndex < options.length(); optionIndex += 1) {
-                            addText(lines, "  " + options.optString(optionIndex), small, contentWidth);
-                        }
-                    }
-                }
-            }
-            addSeparator(lines, contentWidth, normal);
-            addPair(lines, "小計", yen(order.optInt("subtotalAmount", 0)), normal, contentWidth);
-            int discount = order.optInt("discountAmount", 0);
-            if (discount > 0) addPair(lines, "割引", "-" + yen(discount), normal, contentWidth);
-            int coupon = order.optInt("couponDiscountAmount", 0);
-            if (coupon > 0) addPair(lines, "クーポン", "-" + yen(coupon), normal, contentWidth);
-            if (template == null || template.optBoolean("showTaxSummary", true)) {
-                addPair(lines, formatTaxLabel(order), yen(order.optInt("taxAmount", 0)), normal, contentWidth);
-            }
-            addPair(lines, "合計", yen(order.optInt("totalAmount", 0)), bold, contentWidth);
-            if ("cash".equals(order.optString("paymentMethod", ""))) {
-                addPair(lines, "お預かり", yen(order.optInt("cashTenderedAmount", 0)), normal, contentWidth);
-                addPair(lines, "お釣り", yen(order.optInt("cashChangeAmount", 0)), normal, contentWidth);
-            }
-            String note = order.optString("note", "").trim();
-            if (!note.isEmpty() && (template == null || template.optBoolean("showOrderNote", true))) {
-                addSeparator(lines, contentWidth, normal);
-                addText(lines, "備考: " + note, small, contentWidth);
-            }
-        }
-        if (!isKitchen) addSeparator(lines, contentWidth, normal);
-        if (!isKitchen && isReceipt && template != null) {
-            Bitmap promotionImage = loadTemplateBitmap(template.optString("promotionImageUrl", ""), contentWidth);
-            if (promotionImage != null) lines.add(RasterLine.image(promotionImage));
-            int messageAlignment = templateAlignment(template, "messageAlignment", 0);
-            addAlignedMultiline(lines, templateText(template, "promotionMessage"), small, contentWidth, messageAlignment);
-            addAlignedMultiline(lines, templateText(template, "footerMessage"), small, contentWidth, messageAlignment);
-        }
-        if (!isKitchen && (template == null || template.optBoolean("showTimestamp", true))) {
-            addText(lines, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), normal, contentWidth);
+        } else {
+            addReceiptTemplateBlocks(lines, payload, order, template, paperWidth, contentWidth, normal, small, bold);
         }
 
+        boolean compact = !isKitchen && template != null && "compact".equals(template.optString("density", "standard"));
         int height = padding * 2;
-        for (RasterLine line : lines) height += line.height();
+        for (RasterLine line : lines) height += line.height(compact);
         Bitmap bitmap = Bitmap.createBitmap(paperDots, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
         int y = padding;
         for (RasterLine line : lines) {
             line.draw(canvas, padding, paperDots - padding, y);
-            y += line.height();
+            y += line.height(compact);
         }
         return bitmap;
+    }
+
+    private void addReceiptTemplateBlocks(List<RasterLine> output, JSONObject payload, JSONObject order, JSONObject template, String paperWidth, int contentWidth, Paint normal, Paint small, Paint bold) {
+        HashMap<String, List<RasterLine>> blocks = new HashMap<>();
+        String[] keys = { "logo", "business", "contact", "message", "receipt", "promotion", "qr", "footer" };
+        for (String key : keys) blocks.put(key, new ArrayList<>());
+
+        if (template != null && template.optBoolean("showLogo", false)) {
+            int percent = Math.max(20, Math.min(100, template.optInt("logoWidthPercent", LOGO_MAX_WIDTH_PERCENT)));
+            int maxWidth = Math.max(1, Math.round(contentWidth * percent / 100f));
+            int baseHeight = "58mm".equals(paperWidth) ? LOGO_MAX_HEIGHT_58MM : LOGO_MAX_HEIGHT_80MM;
+            Bitmap logo = loadLogoBitmap(templateText(template, "logoUrl"), maxWidth, Math.max(1, Math.round(baseHeight * percent / (float) LOGO_MAX_WIDTH_PERCENT)));
+            if (logo != null) blocks.get("logo").add(RasterLine.image(logo, templateAlignment(template, "logoAlignment", 1)));
+        }
+
+        Paint businessPaint = receiptTextPaint(template, "businessNameTextSize", 28, true);
+        String displayName = templateText(template, "businessName");
+        addAlignedText(blocks.get("business"), displayName.isEmpty() ? payload.optString("storeName", "Foundr1 OS") : displayName, businessPaint, contentWidth, templateAlignment(template, "businessNameAlignment", 1));
+
+        int contactAlign = templateAlignment(template, "contactInfoAlignment", 0);
+        addAlignedMultiline(blocks.get("contact"), templateText(template, "companyInfo"), small, contentWidth, contactAlign);
+        addAlignedMultiline(blocks.get("contact"), templateText(template, "address"), small, contentWidth, contactAlign);
+        addAlignedTextIfPresent(blocks.get("contact"), "登録番号: " + templateText(template, "taxRegistrationNumber"), templateText(template, "taxRegistrationNumber"), small, contentWidth, contactAlign);
+        addAlignedTextIfPresent(blocks.get("contact"), "TEL: " + templateText(template, "phone"), templateText(template, "phone"), small, contentWidth, contactAlign);
+        addAlignedTextIfPresent(blocks.get("contact"), templateText(template, "website"), templateText(template, "website"), small, contentWidth, contactAlign);
+
+        int messageAlign = templateAlignment(template, "messageAlignment", 0);
+        Paint messagePaint = receiptTextPaint(template, "messageTextSize", 21, false);
+        addAlignedMultiline(blocks.get("message"), templateText(template, "headerMessage"), messagePaint, contentWidth, messageAlign);
+        addReceiptContent(blocks.get("receipt"), order, template, contentWidth, normal, small, bold);
+
+        int promoPercent = template == null ? 100 : Math.max(20, Math.min(100, template.optInt("promotionImageWidthPercent", 100)));
+        Bitmap promo = loadTemplateBitmap(templateText(template, "promotionImageUrl"), Math.max(1, Math.round(contentWidth * promoPercent / 100f)), 0, true);
+        if (promo != null) blocks.get("promotion").add(RasterLine.image(promo, templateAlignment(template, "promotionImageAlignment", 1)));
+        addAlignedMultiline(blocks.get("promotion"), templateText(template, "promotionMessage"), messagePaint, contentWidth, messageAlign);
+
+        if (template != null && template.optBoolean("qrCodeEnabled", false) && !templateText(template, "qrCodeUrl").isEmpty()) {
+            String qrSize = template.optString("qrCodeSize", "medium");
+            int dots = "small".equals(qrSize) ? Math.round(contentWidth * .34f) : "large".equals(qrSize) ? Math.round(contentWidth * .58f) : Math.round(contentWidth * .46f);
+            Bitmap qr = createQrBitmap(templateText(template, "qrCodeUrl"), dots);
+            if (qr != null) blocks.get("qr").add(RasterLine.image(qr, templateAlignment(template, "qrCodeAlignment", 1)));
+            addAlignedTextIfPresent(blocks.get("qr"), templateText(template, "qrCodeLabel"), templateText(template, "qrCodeLabel"), messagePaint, contentWidth, templateAlignment(template, "qrCodeAlignment", 1));
+        }
+
+        addAlignedMultiline(blocks.get("footer"), templateText(template, "footerMessage"), messagePaint, contentWidth, messageAlign);
+        if (template == null || template.optBoolean("showTimestamp", true)) addText(blocks.get("footer"), new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), normal, contentWidth);
+
+        Set<String> added = new java.util.HashSet<>();
+        JSONArray requested = template == null ? null : template.optJSONArray("blockOrder");
+        if (requested != null) for (int index = 0; index < requested.length(); index += 1) {
+            String key = requested.optString(index, "");
+            if (blocks.containsKey(key) && added.add(key)) output.addAll(blocks.get(key));
+        }
+        for (String key : keys) if (added.add(key)) output.addAll(blocks.get(key));
+    }
+
+    private void addReceiptContent(List<RasterLine> lines, JSONObject order, JSONObject template, int contentWidth, Paint normal, Paint small, Paint bold) {
+        addSeparator(lines, contentWidth, normal);
+        if (order == null) {
+            addText(lines, "No order payload", normal, contentWidth);
+            return;
+        }
+        boolean invoice = order.optBoolean("receiptRequested", false);
+        String title = order.optString("receiptTitle", "").trim();
+        if (title.isEmpty()) title = templateText(template, invoice ? "invoiceTitle" : "receiptTitle");
+        if (title.isEmpty()) title = invoice ? "領収書" : "レシート";
+        addCenter(lines, title, receiptTextPaint(template, "titleTextSize", 28, true));
+        if (invoice) {
+            String recipient = order.optString("receiptRecipientName", "").trim();
+            if (recipient.isEmpty()) recipient = templateText(template, "invoiceRecipientName");
+            String purpose = order.optString("receiptPurposeText", "").trim();
+            if (purpose.isEmpty()) purpose = templateText(template, "invoicePurposeText");
+            addPair(lines, recipient.isEmpty() ? "上様" : recipient, "様", bold, contentWidth);
+            addText(lines, "但し " + (purpose.isEmpty() ? "飲食代" : purpose) + "として", small, contentWidth);
+            addSeparator(lines, contentWidth, normal);
+        }
+        addText(lines, "No. " + order.optString("pickupCode", ""), bold, contentWidth);
+        addText(lines, joinReceiptMeta(formatOrderTypeLabel(order.optString("orderType", "")), formatPaymentLabel(order)), normal, contentWidth);
+        addSeparator(lines, contentWidth, normal);
+        JSONArray items = order.optJSONArray("items");
+        if (items != null) for (int index = 0; index < items.length(); index += 1) {
+            JSONObject item = items.optJSONObject(index);
+            if (item == null) continue;
+            addPair(lines, item.optString("name", "Item") + " x" + item.optInt("quantity", 1), yen(item.optInt("amount", 0)), normal, contentWidth);
+            JSONArray options = item.optJSONArray("options");
+            if (options != null) for (int optionIndex = 0; optionIndex < options.length(); optionIndex += 1) addText(lines, "  " + options.optString(optionIndex), small, contentWidth);
+        }
+        addSeparator(lines, contentWidth, normal);
+        addPair(lines, "小計", yen(order.optInt("subtotalAmount", 0)), normal, contentWidth);
+        int discount = order.optInt("discountAmount", 0);
+        if (discount > 0) addPair(lines, "割引", "-" + yen(discount), normal, contentWidth);
+        int coupon = order.optInt("couponDiscountAmount", 0);
+        if (coupon > 0) addPair(lines, "クーポン", "-" + yen(coupon), normal, contentWidth);
+        if (template == null || template.optBoolean("showTaxSummary", true)) addPair(lines, formatTaxLabel(order), yen(order.optInt("taxAmount", 0)), normal, contentWidth);
+        addPair(lines, "合計", yen(order.optInt("totalAmount", 0)), bold, contentWidth);
+        if ("cash".equals(order.optString("paymentMethod", ""))) {
+            addPair(lines, "お預かり", yen(order.optInt("cashTenderedAmount", 0)), normal, contentWidth);
+            addPair(lines, "お釣り", yen(order.optInt("cashChangeAmount", 0)), normal, contentWidth);
+        }
+        String note = order.optString("note", "").trim();
+        if (!note.isEmpty() && (template == null || template.optBoolean("showOrderNote", true))) {
+            addSeparator(lines, contentWidth, normal);
+            addText(lines, "備考: " + note, small, contentWidth);
+        }
+        addSeparator(lines, contentWidth, normal);
+    }
+
+    private Paint receiptTextPaint(JSONObject template, String key, int standardSize, boolean bold) {
+        String size = template == null ? "standard" : template.optString(key, "standard");
+        int dots = "small".equals(size) ? Math.round(standardSize * .82f) : "large".equals(size) ? Math.round(standardSize * 1.22f) : standardSize;
+        return textPaint(dots, bold);
     }
 
     private String templateText(JSONObject template, String key) {
@@ -636,7 +663,20 @@ public class Foundr1PrinterBridge {
     }
 
     private Bitmap loadLogoBitmap(String logoUrl, int maxWidth, int maxHeight) {
-        return loadTemplateBitmap(logoUrl, maxWidth, maxHeight);
+        return loadTemplateBitmap(logoUrl, maxWidth, maxHeight, true);
+    }
+
+    private Bitmap createQrBitmap(String value, int size) {
+        try {
+            BitMatrix matrix = new MultiFormatWriter().encode(value, BarcodeFormat.QR_CODE, size, size);
+            Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            for (int y = 0; y < size; y += 1) {
+                for (int x = 0; x < size; x += 1) bitmap.setPixel(x, y, matrix.get(x, y) ? Color.BLACK : Color.WHITE);
+            }
+            return bitmap;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private Bitmap loadTemplateBitmap(String logoUrl, int maxWidth) {
@@ -644,11 +684,15 @@ public class Foundr1PrinterBridge {
     }
 
     private Bitmap loadTemplateBitmap(String logoUrl, int maxWidth, int maxHeight) {
+        return loadTemplateBitmap(logoUrl, maxWidth, maxHeight, false);
+    }
+
+    private Bitmap loadTemplateBitmap(String logoUrl, int maxWidth, int maxHeight, boolean allowUpscale) {
         if (logoUrl == null || logoUrl.trim().isEmpty()) return null;
         try (InputStream stream = new URL(logoUrl.trim()).openStream()) {
             Bitmap source = BitmapFactory.decodeStream(stream);
             if (source == null) return null;
-            float scale = Math.min(1f, maxWidth / (float) source.getWidth());
+            float scale = allowUpscale ? maxWidth / (float) source.getWidth() : Math.min(1f, maxWidth / (float) source.getWidth());
             if (maxHeight > 0) scale = Math.min(scale, maxHeight / (float) source.getHeight());
             int width = Math.max(1, Math.round(source.getWidth() * scale));
             int height = Math.max(1, Math.round(source.getHeight() * scale));
@@ -981,10 +1025,14 @@ public class Foundr1PrinterBridge {
         }
 
         int height() {
+            return height(false);
+        }
+
+        int height(boolean compact) {
             if (spacerHeight > 0) return spacerHeight;
-            if (image != null) return image.getHeight() + 10;
+            if (image != null) return image.getHeight() + (compact ? 6 : 10);
             Paint.FontMetrics metrics = paint.getFontMetrics();
-            return Math.round(metrics.descent - metrics.ascent) + 8;
+            return Math.round(metrics.descent - metrics.ascent) + (compact ? 3 : 8);
         }
 
         void draw(Canvas canvas, int leftEdge, int rightEdge, int top) {

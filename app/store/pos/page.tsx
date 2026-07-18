@@ -6,7 +6,7 @@ import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useStat
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { addOfflinePosOrder, getOfflinePosSnapshot, listOfflinePosOrders, removeOfflinePosOrder, saveOfflinePosSnapshot, updateOfflinePosOrderError, type OfflinePosOrder } from "../../../lib/offline-pos";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
-import { createAutoStarBluetoothPrinter, defaultPosPrinterSettings, getKitchenPrinterForBrand, getReceiptPrinter, hasPosPrinterDestination, printWithAndroidBridge, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
+import { createAutoStarBluetoothPrinter, defaultPosPrinterSettings, getKitchenPrinterForBrand, getReceiptPrinter, hasPosPrinterDestination, printWithAndroidBridge, resolvePosReceiptTemplate, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
 import { ModalHistoryScope } from "../../os/components/useModalHistory";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
@@ -1417,8 +1417,9 @@ export default function StorePosPage() {
   }
 
   function createReceiptPrintPayload(body: Record<string, unknown>, cartSnapshot: PosCartItem[], printer = getStoreReceiptPrinter()): PosPrintPayload {
-    const receiptTemplate = posSettings.printerSettings.receiptTemplate;
     const isInvoice = Boolean(body.receiptRequested ?? receiptRequested);
+    const brandIds = Array.from(new Set(cartSnapshot.map((item) => item.brandId).filter(Boolean)));
+    const receiptTemplate = resolvePosReceiptTemplate(posSettings.printerSettings, brandIds.length === 1 ? brandIds[0] : null, isInvoice ? "invoice" : "receipt");
     return {
       version: 1,
       jobType: "receipt",
