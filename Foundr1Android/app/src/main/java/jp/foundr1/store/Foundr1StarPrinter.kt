@@ -7,6 +7,7 @@ import com.starmicronics.stario10.InterfaceType
 import com.starmicronics.stario10.StarConnectionSettings
 import com.starmicronics.stario10.StarPrinter
 import com.starmicronics.stario10.starxpandcommand.DocumentBuilder
+import com.starmicronics.stario10.starxpandcommand.DisplayBuilder
 import com.starmicronics.stario10.starxpandcommand.DrawerBuilder
 import com.starmicronics.stario10.starxpandcommand.PrinterBuilder
 import com.starmicronics.stario10.starxpandcommand.StarXpandCommandBuilder
@@ -22,6 +23,7 @@ object Foundr1StarPrinter {
     private const val TAG = "Foundr1StarPrinter"
 
     @JvmStatic
+    @Synchronized
     fun print(
         context: Context,
         connectionType: String,
@@ -33,6 +35,7 @@ object Foundr1StarPrinter {
         runBlocking {
             withContext(Dispatchers.IO) {
                 val interfaceType = toInterfaceType(connectionType)
+                val command = createCommand(bitmap, cutPaper, openCashDrawer)
                 val requestedIdentifier = identifier.ifBlank { StarConnectionSettings.FIRST_FOUND_DEVICE }
                 val identifiers = buildList {
                     add(requestedIdentifier)
@@ -47,13 +50,11 @@ object Foundr1StarPrinter {
                 var lastError: Throwable? = null
                 for (candidateIdentifier in identifiers) {
                     try {
-                        printWithIdentifier(
+                        sendCommandWithIdentifier(
                             context,
                             interfaceType,
                             candidateIdentifier,
-                            bitmap,
-                            cutPaper,
-                            openCashDrawer,
+                            command,
                         )
                         return@withContext
                     } catch (error: Throwable) {
@@ -67,13 +68,51 @@ object Foundr1StarPrinter {
         }
     }
 
-    private suspend fun printWithIdentifier(
+    @JvmStatic
+    @Synchronized
+    fun display(
+        context: Context,
+        connectionType: String,
+        identifier: String,
+        line1: String,
+        line2: String,
+    ) {
+        runBlocking {
+            withContext(Dispatchers.IO) {
+                val interfaceType = toInterfaceType(connectionType)
+                val command = createDisplayCommand(line1, line2)
+                val requestedIdentifier = identifier.ifBlank { StarConnectionSettings.FIRST_FOUND_DEVICE }
+                val identifiers = buildList {
+                    add(requestedIdentifier)
+                    if (
+                        interfaceType == InterfaceType.Bluetooth &&
+                        requestedIdentifier != StarConnectionSettings.FIRST_FOUND_DEVICE
+                    ) {
+                        add(StarConnectionSettings.FIRST_FOUND_DEVICE)
+                    }
+                }
+
+                var lastError: Throwable? = null
+                for (candidateIdentifier in identifiers) {
+                    try {
+                        sendCommandWithIdentifier(context, interfaceType, candidateIdentifier, command)
+                        return@withContext
+                    } catch (error: Throwable) {
+                        lastError = error
+                        Log.w(TAG, "Star display failed via $interfaceType ($candidateIdentifier)", error)
+                    }
+                }
+
+                throw lastError ?: IllegalStateException("Star customer display connection failed.")
+            }
+        }
+    }
+
+    private suspend fun sendCommandWithIdentifier(
         context: Context,
         interfaceType: InterfaceType,
         identifier: String,
-        bitmap: Bitmap,
-        cutPaper: Boolean,
-        openCashDrawer: Boolean,
+        command: String,
     ) {
         val settings = StarConnectionSettings(interfaceType, identifier)
         val printer = StarPrinter(settings, context)
@@ -82,7 +121,7 @@ object Foundr1StarPrinter {
         try {
             printer.openAsync().await()
             opened = true
-            printer.printAsync(createCommand(bitmap, cutPaper, openCashDrawer)).await()
+            printer.printAsync(command).await()
         } catch (error: Throwable) {
             primaryError = error
             val sdkErrors = printer.errorDetail.autoSwitchInterfaceOpenErrors.orEmpty()
@@ -136,6 +175,17 @@ object Foundr1StarPrinter {
 
         return StarXpandCommandBuilder()
             .addDocument(document)
+            .getCommands()
+    }
+
+    private fun createDisplayCommand(line1: String, line2: String): String {
+        val display = DisplayBuilder()
+            .actionClearAll()
+            .actionSetBackLightState(true)
+            .actionShowText("${line1.replace("\n", " ")}\n${line2.replace("\n", " ")}")
+
+        return StarXpandCommandBuilder()
+            .addDocument(DocumentBuilder().addDisplay(display))
             .getCommands()
     }
 }

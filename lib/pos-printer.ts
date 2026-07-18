@@ -16,6 +16,11 @@ export type PosBrandKitchenPrinterSetting = {
   printer: PosPrinterConnection;
 };
 
+export type PosPhysicalCustomerDisplaySettings = {
+  enabled: boolean;
+  deviceType: "scd222u";
+};
+
 export type PosReceiptTemplateSettings = {
   showLogo: boolean;
   logoUrl: string;
@@ -86,9 +91,18 @@ export type PosPrinterSettings = PosPrinterConnection & {
   receiptPrinter: PosPrinterConnection;
   kitchenPrinter: PosPrinterConnection;
   brandKitchenPrinters: PosBrandKitchenPrinterSetting[];
+  customerDisplay: PosPhysicalCustomerDisplaySettings;
   receiptTemplate: PosReceiptTemplateSettings;
   receiptTemplateVariants: PosReceiptTemplateVariant[];
   kitchenTicketTemplate: PosKitchenTicketTemplateSettings;
+};
+
+export type PosPhysicalCustomerDisplayPayload = {
+  version: 1;
+  deviceType: "scd222u";
+  printer: PosPrinterConnection;
+  line1: string;
+  line2: string;
 };
 
 export type PosPrintLineItem = {
@@ -149,6 +163,7 @@ declare global {
   interface Window {
     Foundr1Printer?: {
       print?: (payloadJson: string) => BridgePrintResult | Promise<BridgePrintResult> | string | void;
+      display?: (payloadJson: string) => BridgePrintResult | Promise<BridgePrintResult> | string | void;
       listPairedPrinters?: () => string | Promise<string>;
       isAvailable?: () => boolean;
     };
@@ -220,6 +235,11 @@ export const defaultPosKitchenTicketTemplateSettings: PosKitchenTicketTemplateSe
   largeText: true
 };
 
+export const defaultPosPhysicalCustomerDisplaySettings: PosPhysicalCustomerDisplaySettings = {
+  enabled: false,
+  deviceType: "scd222u"
+};
+
 export const defaultPosPrinterSettings: PosPrinterSettings = {
   enabled: false,
   receiptEnabled: true,
@@ -229,6 +249,7 @@ export const defaultPosPrinterSettings: PosPrinterSettings = {
   receiptPrinter: defaultPosPrinterConnection,
   kitchenPrinter: defaultPosPrinterConnection,
   brandKitchenPrinters: [],
+  customerDisplay: defaultPosPhysicalCustomerDisplaySettings,
   receiptTemplate: defaultPosReceiptTemplateSettings,
   receiptTemplateVariants: [],
   kitchenTicketTemplate: defaultPosKitchenTicketTemplateSettings
@@ -352,6 +373,10 @@ export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings 
     ...receiptPrinter,
     receiptPrinter,
     kitchenPrinter,
+    customerDisplay: {
+      enabled: source.customerDisplay?.enabled === true,
+      deviceType: "scd222u"
+    },
     receiptTemplate: normalizePosReceiptTemplateSettings(source.receiptTemplate),
     receiptTemplateVariants: receiptTemplateVariants.flatMap((item) => {
       const record = item && typeof item === "object" && !Array.isArray(item) ? item as Partial<PosReceiptTemplateVariant> : {};
@@ -474,6 +499,37 @@ export async function printWithAndroidBridge(payload: PosPrintPayload) {
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "印刷に失敗しました。" };
+  }
+}
+
+export function createPhysicalCustomerDisplayPayload(
+  settings: PosPrinterSettings,
+  line1: string,
+  line2: string
+): PosPhysicalCustomerDisplayPayload {
+  return {
+    version: 1,
+    deviceType: "scd222u",
+    printer: getReceiptPrinter(settings),
+    line1: String(line1 || "").replace(/[\r\n]+/g, " ").trim().slice(0, 40),
+    line2: String(line2 || "").replace(/[\r\n]+/g, " ").trim().slice(0, 40)
+  };
+}
+
+export async function displayWithAndroidBridge(payload: PosPhysicalCustomerDisplayPayload) {
+  if (typeof window === "undefined" || !window.Foundr1Printer?.display) {
+    return { ok: false, error: "Android カスタマーディスプレイブリッジが見つかりません。" };
+  }
+  try {
+    const result = await window.Foundr1Printer.display(JSON.stringify(payload));
+    if (typeof result === "string") {
+      const parsed = JSON.parse(result) as BridgePrintResult;
+      return parsed.ok === false ? { ok: false, error: parsed.error || "カスタマーディスプレイの更新に失敗しました。" } : { ok: true };
+    }
+    if (result?.ok === false) return { ok: false, error: result.error || "カスタマーディスプレイの更新に失敗しました。" };
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "カスタマーディスプレイの更新に失敗しました。" };
   }
 }
 

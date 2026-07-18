@@ -31,7 +31,7 @@ import { useEffect, useState } from "react";
 import QRCodeGenerator from "qrcode";
 import { useUnsavedChangesGuard } from "../../../components/UnsavedChangesGuard";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
-import { createTestPrintPayload, defaultPosPrinterSettings, getReceiptPrinter, listPairedNativePrinters, printWithAndroidBridge, resolvePosReceiptTemplate, type NativePrinterDevice, type PosPrinterConnection, type PosPrinterSettings, type PosReceiptTemplateBlock, type PosReceiptTemplateSettings } from "../../../lib/pos-printer";
+import { createPhysicalCustomerDisplayPayload, createTestPrintPayload, defaultPosPrinterSettings, displayWithAndroidBridge, getReceiptPrinter, listPairedNativePrinters, printWithAndroidBridge, resolvePosReceiptTemplate, type NativePrinterDevice, type PosPrinterConnection, type PosPrinterSettings, type PosReceiptTemplateBlock, type PosReceiptTemplateSettings } from "../../../lib/pos-printer";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -584,6 +584,29 @@ export default function PosPage() {
     setTestPrinting(false);
   }
 
+  async function testPhysicalCustomerDisplay() {
+    if (testPrinting) return;
+    const printer = getReceiptPrinter(taxForm.printerSettings);
+    if (printer.deviceType !== "star_printer") {
+      setTestPrintStatus("mPOPカスタマーディスプレイを使うには、レシートプリンターを Star プリンターに設定してください。");
+      return;
+    }
+    setTestPrinting(true);
+    setTestPrintStatus("");
+    const saved = await savePosSettings({ quiet: true, section: "receipt" });
+    if (!saved) {
+      setTestPrinting(false);
+      return;
+    }
+    const result = await displayWithAndroidBridge(createPhysicalCustomerDisplayPayload(
+      taxForm.printerSettings,
+      "Foundr1 OS",
+      "SCD222U TEST"
+    ));
+    setTestPrintStatus(result.ok ? "カスタマーディスプレイ設定を保存し、テスト表示を送信しました。" : result.error || "カスタマーディスプレイのテストに失敗しました。");
+    setTestPrinting(false);
+  }
+
   async function uploadCustomerDisplayMedia(file: File, type: "image" | "video") {
     if (!canManagePosSettings || uploadingMediaType) return;
     setUploadingMediaType(type);
@@ -1132,6 +1155,10 @@ export default function PosPage() {
                   <Printer size={15} />
                   {testPrinting ? "送信中..." : hasNativePrintBridge ? "テスト印刷" : "アプリでテスト"}
                 </button>
+                <button className="secondary-button" type="button" onClick={() => void testPhysicalCustomerDisplay()} disabled={!canManagePosSettings || taxSaving || testPrinting || !hasNativePrintBridge || !taxForm.printerSettings.customerDisplay.enabled}>
+                  <MonitorSmartphone size={15} />
+                  客表示テスト
+                </button>
                 <button className="secondary-button" type="button" onClick={() => void refreshNativePrinterDevices()} disabled={!canManagePosSettings || !hasNativePrintBridge || nativePrinterScanning}>
                   {nativePrinterScanning ? "読込中..." : "接続済みを読込"}
                 </button>
@@ -1164,6 +1191,21 @@ export default function PosPage() {
                   disabled={!canManagePosSettings}
                 />
                 <span>会計後にレシート印刷</span>
+              </label>
+              <label className="pos-admin-discount-check">
+                <input
+                  type="checkbox"
+                  checked={taxForm.printerSettings.customerDisplay.enabled}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    printerSettings: {
+                      ...current.printerSettings,
+                      customerDisplay: { ...current.printerSettings.customerDisplay, enabled: event.target.checked }
+                    }
+                  }))}
+                  disabled={!canManagePosSettings || getReceiptPrinter(taxForm.printerSettings).deviceType !== "star_printer"}
+                />
+                <span>mPOPカスタマーディスプレイ（SCD222U）を使用</span>
               </label>
             </div>
             <div className="pos-admin-printer-card">

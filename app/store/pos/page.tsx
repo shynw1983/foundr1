@@ -6,7 +6,7 @@ import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useStat
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { addOfflinePosOrder, getOfflinePosSnapshot, listOfflinePosOrders, removeOfflinePosOrder, saveOfflinePosSnapshot, updateOfflinePosOrderError, type OfflinePosOrder } from "../../../lib/offline-pos";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
-import { createAutoStarBluetoothPrinter, defaultPosPrinterSettings, getKitchenPrinterForBrand, getReceiptPrinter, hasPosPrinterDestination, printWithAndroidBridge, resolvePosReceiptTemplate, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
+import { createAutoStarBluetoothPrinter, createPhysicalCustomerDisplayPayload, defaultPosPrinterSettings, displayWithAndroidBridge, getKitchenPrinterForBrand, getReceiptPrinter, hasPosPrinterDestination, normalizePosPrinterSettings, printWithAndroidBridge, resolvePosReceiptTemplate, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
 import { ModalHistoryScope } from "../../os/components/useModalHistory";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
@@ -604,6 +604,41 @@ function getLocalizedDisplayName(name: string, displayNames: Record<string, stri
   return String(displayNames?.[language] || displayNames?.en || name || "").trim();
 }
 
+function getPhysicalCustomerDisplayLines(state: Record<string, unknown>) {
+  const status = String(state.status ?? "idle");
+  const subtotal = Math.max(0, Math.round(Number(state.subtotal ?? 0)));
+  const tendered = Math.max(0, Math.round(Number(state.cashTenderedAmount ?? 0)));
+  const change = Math.max(0, Math.round(Number(state.cashChangeAmount ?? 0)));
+  const yen = (value: number) => `¥${value.toLocaleString("ja-JP")}`;
+  const items = Array.isArray(state.items) ? state.items as Array<Record<string, unknown>> : [];
+  const latestItem = items.at(-1);
+  const itemName = String(latestItem?.name ?? "").trim();
+  const itemQuantity = Math.max(1, Math.round(Number(latestItem?.quantity ?? 1)));
+
+  if (status === "advertising" || status === "idle") {
+    return {
+      line1: String(state.storeName || "いらっしゃいませ"),
+      line2: status === "advertising" ? "いらっしゃいませ" : "ご注文をどうぞ"
+    };
+  }
+  if (status === "complete") {
+    return {
+      line1: "ありがとうございました",
+      line2: String(state.paymentMethod) === "cash" ? `お釣り ${yen(change)}` : `お会計 ${yen(subtotal)}`
+    };
+  }
+  if (status === "cash_change") {
+    return { line1: `お預かり ${yen(tendered)}`, line2: `お釣り ${yen(change)}` };
+  }
+  if (status === "external_wait") {
+    return { line1: `${String(state.paymentLabel || "決済")} お支払い`, line2: `合計 ${yen(subtotal)}` };
+  }
+  return {
+    line1: itemName ? `${itemName}${itemQuantity > 1 ? ` x${itemQuantity}` : ""}` : "ご注文内容",
+    line2: `合計 ${yen(subtotal)}`
+  };
+}
+
 function getCategories(items: PosMenuItem[], categories: PosMenuCategory[], brandId: string) {
   const counts = new Map<string, number>();
   const masters = new Map<string, PosMenuCategory>();
@@ -783,7 +818,7 @@ export default function StorePosPage() {
       externalPaymentTerminalBrand: body.posSettings?.externalPaymentTerminalBrand ?? "PayCAS",
       priceTaxMode: body.posSettings?.priceTaxMode ?? "tax_included",
       discountPresets: Array.isArray(body.posSettings?.discountPresets) ? body.posSettings.discountPresets : [],
-      printerSettings: body.posSettings?.printerSettings ?? defaultPosPrinterSettings
+      printerSettings: normalizePosPrinterSettings(body.posSettings?.printerSettings ?? defaultPosPrinterSettings)
     };
     setPosSettings(nextPosSettings);
     setOrderType((current) => {
@@ -1528,6 +1563,16 @@ export default function StorePosPage() {
 
   async function publishCustomerDisplayState(state: Record<string, unknown>) {
     if (!selectedStoreId) return;
+    const physicalDisplay = posSettings.printerSettings.customerDisplay;
+    const receiptPrinter = getReceiptPrinter(posSettings.printerSettings);
+    if (physicalDisplay.enabled && receiptPrinter.deviceType === "star_printer") {
+      const lines = getPhysicalCustomerDisplayLines(state);
+      await displayWithAndroidBridge(createPhysicalCustomerDisplayPayload(
+        posSettings.printerSettings,
+        lines.line1,
+        lines.line2
+      ));
+    }
     await fetch("/api/store/pos/customer-display", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2049,7 +2094,7 @@ export default function StorePosPage() {
     }, 180);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, posSettings.priceTaxMode, selectedCoupon?.id, selectedCoupon?.name, selectedCoupon?.couponCode, selectedDiscountPreset?.key, selectedDiscountPreset?.name, selectedMember, selectedStoreId, payableAmount, posDiscountAmount, couponDiscountAmount, taxRate, taxSummary.taxAmount, canUseRegister, activeCheckoutAmount, selectedTableCheckout, tableCheckoutAmount]);
+  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, posSettings.priceTaxMode, posSettings.printerSettings.customerDisplay.enabled, posSettings.printerSettings.receiptPrinter.connectionType, posSettings.printerSettings.receiptPrinter.deviceType, posSettings.printerSettings.receiptPrinter.identifier, selectedCoupon?.id, selectedCoupon?.name, selectedCoupon?.couponCode, selectedDiscountPreset?.key, selectedDiscountPreset?.name, selectedMember, selectedStoreId, payableAmount, posDiscountAmount, couponDiscountAmount, taxRate, taxSummary.taxAmount, canUseRegister, activeCheckoutAmount, selectedTableCheckout, tableCheckoutAmount]);
 
   useEffect(() => {
     if (!selectedStoreId || !canUseRegister) return;
@@ -2060,7 +2105,7 @@ export default function StorePosPage() {
     }, 10000);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUseRegister, completedDisplayState, customerDisplayMode, hasCurrentTransaction, orderType, paymentMethod, selectedStoreId]);
+  }, [canUseRegister, completedDisplayState, customerDisplayMode, hasCurrentTransaction, orderType, paymentMethod, posSettings.printerSettings.customerDisplay.enabled, posSettings.printerSettings.receiptPrinter.connectionType, posSettings.printerSettings.receiptPrinter.deviceType, posSettings.printerSettings.receiptPrinter.identifier, selectedStoreId]);
 
   async function submitCashAction(action: "open" | "movement" | "close") {
     if (!selectedStoreId || cashSaving) return;

@@ -27,6 +27,7 @@ import android.hardware.usb.UsbManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.DisplayCutout;
 import android.view.Window;
 import android.view.WindowInsets;
@@ -67,8 +68,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class Foundr1PrinterBridge {
+    private static final String TAG = "Foundr1PrinterBridge";
     private static final int LINE_CHARS_80MM = 48;
     private static final int LINE_CHARS_58MM = 32;
     private static final int PAPER_DOTS_80MM = 576;
@@ -80,6 +86,9 @@ public class Foundr1PrinterBridge {
     private static final UUID BLUETOOTH_SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
 
     private final MainActivity activity;
+    private final ExecutorService displayExecutor = Executors.newSingleThreadExecutor();
+    private final AtomicReference<String> pendingDisplayPayload = new AtomicReference<>();
+    private final AtomicBoolean displayWorkerRunning = new AtomicBoolean(false);
 
     public Foundr1PrinterBridge(MainActivity activity) {
         this.activity = activity;
@@ -138,6 +147,35 @@ public class Foundr1PrinterBridge {
             activity.runOnUiThread(() -> Toast.makeText(activity, "印刷に失敗しました: " + message, Toast.LENGTH_LONG).show());
             return "{\"ok\":false,\"error\":\"" + jsonEscape(message) + "\"}";
         }
+    }
+
+    @JavascriptInterface
+    public String display(String payloadJson) {
+        if (payloadJson == null || payloadJson.trim().isEmpty()) {
+            return "{\"ok\":false,\"error\":\"Display payload is empty.\"}";
+        }
+        pendingDisplayPayload.set(payloadJson);
+        scheduleDisplayWorker();
+        return "{\"ok\":true}";
+    }
+
+    private void scheduleDisplayWorker() {
+        if (!displayWorkerRunning.compareAndSet(false, true)) return;
+        displayExecutor.execute(() -> {
+            try {
+                String nextPayload;
+                while ((nextPayload = pendingDisplayPayload.getAndSet(null)) != null) {
+                    try {
+                        sendStarDisplayJob(nextPayload);
+                    } catch (Exception error) {
+                        Log.w(TAG, "SCD222U display update failed", error);
+                    }
+                }
+            } finally {
+                displayWorkerRunning.set(false);
+                if (pendingDisplayPayload.get() != null) scheduleDisplayWorker();
+            }
+        });
     }
 
     private void requestBluetoothPermissionIfNeeded() {
@@ -354,6 +392,34 @@ public class Foundr1PrinterBridge {
             bitmap.recycle();
         }
         return new PrintResult("Star プリンターに印刷を送信しました");
+    }
+
+    private void sendStarDisplayJob(String payloadJson) throws Exception {
+        JSONObject payload = new JSONObject(payloadJson);
+        JSONObject printer = payload.optJSONObject("printer");
+        if (printer == null || !"star_printer".equals(printer.optString("deviceType", ""))) {
+            throw new IllegalArgumentException("SCD222U requires a Star printer connection.");
+        }
+        String connectionType = printer.optString("connectionType", "bluetooth");
+        String identifier = printer.optString("identifier", "").trim();
+        if (!"usb".equals(connectionType) && identifier.isEmpty()) {
+            BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+            if (adapter == null) throw new IllegalArgumentException("Bluetooth is not available on this device.");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && activity.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                requestBluetoothPermissionIfNeeded();
+                throw new IllegalArgumentException("Bluetooth permission is not granted.");
+            }
+            BluetoothDevice device = findAutoStarBluetoothDevice(adapter);
+            identifier = device.getAddress() == null || device.getAddress().isEmpty() ? device.getName() : device.getAddress();
+        }
+        Foundr1StarPrinter.display(
+            activity,
+            connectionType,
+            identifier,
+            payload.optString("line1", ""),
+            payload.optString("line2", "")
+        );
     }
 
     private byte[] buildEscPos(JSONObject payload) throws Exception {
