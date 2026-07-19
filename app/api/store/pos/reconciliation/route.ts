@@ -598,7 +598,7 @@ export async function POST(request: Request) {
     }
     const activeEmployees = await getActiveCashResponsibleEmployees(storeFilter, activeSession.businessDate);
     if (!activeEmployees.some((employee) => employee.id === closingResponsibleEmployeeId)) {
-      return Response.json({ error: "出勤中・本日排班・責任者の候補から締め責任者を選択してください。" }, { status: 400 });
+      return Response.json({ error: "出勤中・本日シフト・責任者の候補から締め責任者を選択してください。" }, { status: 400 });
     }
     await sql`
       update pos_cash_sessions

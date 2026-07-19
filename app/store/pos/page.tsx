@@ -248,9 +248,9 @@ function getCashResponsibleEmployeeLabel(employee: PosCashResponsibleEmployee) {
     : "";
   if (employee.attendanceStatus === "working") return `${employee.name}（出勤中${schedule}）`;
   if (employee.attendanceStatus === "on_break") return `${employee.name}（休憩中${schedule}）`;
-  if (employee.attendanceStatus === "clocked_out") return `${employee.name}（本日排班・退勤済み${schedule}）`;
+  if (employee.attendanceStatus === "clocked_out") return `${employee.name}（本日シフト・退勤済み${schedule}）`;
   if (employee.attendanceStatus === "manager") return `${employee.name}（責任者）`;
-  return `${employee.name}（本日排班${schedule}）`;
+  return `${employee.name}（本日シフト${schedule}）`;
 }
 
 type PosMember = {
