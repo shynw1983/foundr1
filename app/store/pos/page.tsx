@@ -940,6 +940,11 @@ export default function StorePosPage() {
     setDiscountPresetKey("");
     setSelectedCouponId("");
     setCustomerSelectedCouponId("");
+    setSelectedTableCheckoutKey("");
+    setMemberScannerOpen(false);
+    setCustomerDisplayScanPending(false);
+    setTransactionDialogOpen(false);
+    setCashDialog(null);
     clearSelectedMember();
   }, [offlineMode]);
 
@@ -1108,12 +1113,14 @@ export default function StorePosPage() {
     (recommendedCouponExpiringSoon || recommendedCouponDiscountAmount > selectedCouponDiscountAmount)
   );
   const canUseRegister = Boolean(reconciliation.activeSession);
+  const offlineCheckoutOnly = offlineMode || !browserOnline;
   const cashTenderedValue = Number(cashTenderedAmount || 0);
   const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue - activeCheckoutAmount : null;
   const canCheckout = Boolean(
     (cart.length > 0 || selectedTableCheckout) &&
     !saving &&
     canUseRegister &&
+    (!offlineCheckoutOnly || (!selectedTableCheckout && !selectedMember && !selectedCouponId && !discountPresetKey && paymentMethod === "cash")) &&
     (paymentMethod !== "cash" || (cashTenderedAmount.trim() !== "" && cashTenderedValue >= activeCheckoutAmount))
   );
   const hasCurrentTransaction = Boolean(
@@ -1183,6 +1190,10 @@ export default function StorePosPage() {
   }
 
   async function lookupMember(scannedCode?: string) {
+    if (offlineCheckoutOnly) {
+      setMessage("オフライン中は会員証・クーポンを利用できません。");
+      return;
+    }
     const code = (scannedCode ?? memberLookupInput).trim();
     if (!selectedStoreId || !code || memberLookupLoading) return;
     setMemberLookupLoading(true);
@@ -1216,6 +1227,10 @@ export default function StorePosPage() {
   }
 
   async function openCustomerDisplayMemberScanner() {
+    if (offlineCheckoutOnly) {
+      setMessage("オフライン中は客席表示の会員 QR 読取を利用できません。");
+      return;
+    }
     if (!selectedStoreId || customerDisplayScannerLoading) return;
     setCustomerDisplayScannerLoading(true);
     setMessage("");
@@ -1237,7 +1252,7 @@ export default function StorePosPage() {
   }
 
   useEffect(() => {
-    if (!selectedStoreId) return;
+    if (!selectedStoreId || offlineCheckoutOnly) return;
     let active = true;
     let pusher: any;
     let channels: any[] = [];
@@ -1319,7 +1334,7 @@ export default function StorePosPage() {
       pusher?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerDisplayScanPending, selectedStoreId]);
+  }, [customerDisplayScanPending, offlineCheckoutOnly, selectedStoreId]);
 
   useEffect(() => {
     if (!customerDisplayScanPending) return;
@@ -1591,6 +1606,7 @@ export default function StorePosPage() {
         lines.line2
       ));
     }
+    if (offlineCheckoutOnly) return;
     await fetch("/api/store/pos/customer-display", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1646,6 +1662,10 @@ export default function StorePosPage() {
   }
 
   function selectTableCheckout(request: PosTableCheckoutRequest) {
+    if (offlineCheckoutOnly) {
+      setMessage("オフライン中はテーブル会計を処理できません。");
+      return;
+    }
     if (!canUseRegister) {
       setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
       return;
@@ -1672,6 +1692,10 @@ export default function StorePosPage() {
     itemId?: string;
     quantity?: number;
   }) {
+    if (offlineCheckoutOnly) {
+      setMessage("オフライン中はテーブル注文を修正できません。");
+      return;
+    }
     if (!selectedStoreId || !selectedTableCheckout || tableCheckoutAdjustingKey) return;
     const key = `${input.action}:${input.orderId}:${input.itemId ?? ""}`;
     setTableCheckoutAdjustingKey(key);
@@ -1885,6 +1909,10 @@ export default function StorePosPage() {
       setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
       return;
     }
+    if (offlineCheckoutOnly && (paymentMethod !== "cash" || selectedMember || selectedCouponId || discountPresetKey || selectedTableCheckout)) {
+      setMessage("オフライン会計は、会員・クーポン・割引・テーブル会計を使わない現金注文のみ対応しています。");
+      return;
+    }
     if (cart.some((item) => /maamaa|まぁ麻|麻辣/i.test(item.brandName)) && !/^(?:0?[1-9]|[12]\d|30)$/.test(bowlNumber)) {
       setMessage("マーラータンのボウル番号（1〜30）を入力してください。");
       return;
@@ -1952,13 +1980,14 @@ export default function StorePosPage() {
         body = responseBody;
       } catch (error) {
         if (!fallbackEligible && navigator.onLine) throw error;
+        setOfflineMode(true);
         if (paymentMethod !== "cash" || selectedMember || selectedCouponId || discountPresetKey || selectedTableCheckout) {
           throw new Error("オフライン会計は、会員・クーポン・割引・テーブル会計を使わない現金注文のみ対応しています。");
         }
         if (!reconciliation.activeSession) {
           throw new Error("オフライン会計を始める前に、オンラインでレジを開店してください。");
         }
-        const offlineRequest = checkoutRequest;
+        const offlineRequest = { ...checkoutRequest, offlineQueued: true };
         body = {
           ok: true,
           offline: true,
@@ -2126,6 +2155,10 @@ export default function StorePosPage() {
   }, [canUseRegister, completedDisplayState, customerDisplayMode, hasCurrentTransaction, orderType, paymentMethod, posSettings.printerSettings.customerDisplay.enabled, posSettings.printerSettings.receiptPrinter.connectionType, posSettings.printerSettings.receiptPrinter.deviceType, posSettings.printerSettings.receiptPrinter.identifier, selectedStoreId]);
 
   async function submitCashAction(action: "open" | "movement" | "close") {
+    if (offlineCheckoutOnly) {
+      setMessage("オフライン中は開店確認・入出金・レジ締めを変更できません。");
+      return;
+    }
     if (!selectedStoreId || cashSaving) return;
     if (action === "close" && offlinePendingCount > 0) {
       setMessage(`未同期のオフライン注文が ${offlinePendingCount} 件あります。同期完了後にレジ締めしてください。`);
@@ -2221,15 +2254,24 @@ export default function StorePosPage() {
   }
 
   async function openTransactionDialog() {
+    if (offlineCheckoutOnly) {
+      setMessage("オフライン中は取引履歴・返金を利用できません。");
+      return;
+    }
     setTransactionDialogOpen(true);
     await loadTransactions("");
   }
 
   async function selectTransaction(orderId: string) {
+    if (offlineCheckoutOnly) return;
     await loadTransactions(orderId);
   }
 
   async function refundTransaction(itemIds: string[] = []) {
+    if (offlineCheckoutOnly) {
+      setMessage("オフライン中は返金を利用できません。");
+      return;
+    }
     if (!selectedStoreId || !selectedTransaction || refundSaving) return;
     if (!itemIds.length) return;
     const refundingId = selectedTransaction.id;
@@ -2308,10 +2350,11 @@ export default function StorePosPage() {
       </section>
 
       {message ? <div className="action-notice store-pos-notice">{message}</div> : null}
-      {offlineMode || offlinePendingCount > 0 ? (
+      {offlineCheckoutOnly || offlinePendingCount > 0 ? (
         <div className="action-notice store-pos-offline-notice" role="status">
-          <strong>{offlineMode ? "オフライン応急モード" : "オフライン注文を同期中"}</strong>
+          <strong>{offlineCheckoutOnly ? "オフライン応急モード（現金のみ）" : "オフライン注文を同期中"}</strong>
           <span> 未同期 {offlinePendingCount} 件</span>
+          {offlineCheckoutOnly ? <small>会員・クーポン・割引・外部決済・テーブル会計・レジ操作はオンライン復帰後に利用できます。</small> : null}
           {browserOnline && offlinePendingCount > 0 ? <button type="button" onClick={() => void syncOfflineOrders()}>今すぐ同期</button> : null}
           {offlineSyncError ? <small>{offlineSyncError}</small> : null}
         </div>
@@ -2354,11 +2397,11 @@ export default function StorePosPage() {
         <div className="store-pos-cash-strip-actions">
           {reconciliation.activeSession ? (
             <>
-              <button className="secondary-button" type="button" onClick={() => setCashDialog("movement")}>入出金</button>
-              <button className="primary-button" type="button" onClick={() => setCashDialog("close")}>レジ締め</button>
+              <button className="secondary-button" type="button" onClick={() => setCashDialog("movement")} disabled={offlineCheckoutOnly}>入出金</button>
+              <button className="primary-button" type="button" onClick={() => setCashDialog("close")} disabled={offlineCheckoutOnly}>レジ締め</button>
             </>
           ) : (
-            <button className="primary-button" type="button" onClick={() => setCashDialog("open")}>開店確認</button>
+            <button className="primary-button" type="button" onClick={() => setCashDialog("open")} disabled={offlineCheckoutOnly}>開店確認</button>
           )}
         </div>
       </section>
@@ -2458,7 +2501,7 @@ export default function StorePosPage() {
               <h3>会計内容</h3>
             </div>
             <div className="store-pos-cart-head-actions">
-              <button className="secondary-button" type="button" onClick={() => void openTransactionDialog()}>履歴</button>
+              <button className="secondary-button" type="button" onClick={() => void openTransactionDialog()} disabled={offlineCheckoutOnly}>履歴</button>
               <strong>{cartCount} 点</strong>
             </div>
           </div>
@@ -2469,6 +2512,7 @@ export default function StorePosPage() {
                 <span>テーブル会計待ち</span>
                 <strong>{tableCheckoutRequests.length}件</strong>
               </div>
+              {offlineCheckoutOnly ? <small>オフライン中はテーブル会計を処理できません。</small> : null}
               <div className="store-pos-table-checkout-list">
                 {tableCheckoutRequests.map((request) => (
                   <button
@@ -2476,7 +2520,7 @@ export default function StorePosPage() {
                     className={selectedTableCheckoutKey === request.tableSessionKey ? "is-active" : ""}
                     type="button"
                     onClick={() => selectTableCheckout(request)}
-                    disabled={!canUseRegister || saving}
+                    disabled={!canUseRegister || saving || offlineCheckoutOnly}
                   >
                     <span>
                       <strong>{request.tableLabel}</strong>
@@ -2627,7 +2671,9 @@ export default function StorePosPage() {
                 </button>
               ) : null}
             </div>
-            {selectedMember ? (
+            {offlineCheckoutOnly ? (
+              <small className="store-pos-member-empty-coupon">オフライン中は会員証・クーポンを利用できません。</small>
+            ) : selectedMember ? (
               <>
                 <div className="store-pos-member-card">
                   <strong>{selectedMember.displayName || selectedMember.email || selectedMember.memberNumber}</strong>
@@ -2740,7 +2786,7 @@ export default function StorePosPage() {
                   key={preset.key}
                   className={isActive ? "is-active" : ""}
                   type="button"
-                  disabled={subtotal > 0 && discount <= 0}
+                  disabled={offlineCheckoutOnly || (subtotal > 0 && discount <= 0)}
                   onClick={() => {
                     setDiscountPresetKey((current) => current === preset.key ? "" : preset.key);
                     if (!preset.allowCouponCombination) setSelectedCouponId("");
@@ -2751,7 +2797,9 @@ export default function StorePosPage() {
                 </button>
               );
             }) : <small>設定済みの割引はありません。</small>}
-            {selectedDiscountPreset ? (
+            {offlineCheckoutOnly ? (
+              <small>オフライン中は割引を利用できません。</small>
+            ) : selectedDiscountPreset ? (
               <small>
                 {getDiscountTargetLabel(selectedDiscountPreset)}
                 {selectedDiscountPreset.allowCouponCombination ? " / クーポン併用可" : " / クーポン併用不可"}
@@ -2768,7 +2816,9 @@ export default function StorePosPage() {
                   key={option.value}
                   className={paymentMethod === option.value ? "is-active" : ""}
                   type="button"
+                  disabled={offlineCheckoutOnly && option.value !== "cash"}
                   onClick={() => setPaymentMethod(option.value)}
+                  title={offlineCheckoutOnly && option.value !== "cash" ? "オフライン中は現金のみ利用できます" : undefined}
                 >
                   <Icon size={18} />
                   {option.value === "card" ? getPaymentDisplayLabel(option.value) : option.label}
@@ -2882,7 +2932,7 @@ export default function StorePosPage() {
         </aside>
       ) : null}
 
-      {memberScannerOpen ? (
+      {memberScannerOpen && !offlineCheckoutOnly ? (
         <ModalHistoryScope historyKey="store-pos-member-scanner" onClose={() => setMemberScannerOpen(false)}>
           <div className="store-pos-scanner-overlay" role="dialog" aria-modal="true" aria-label="会員 QR 読取">
             <div className="store-pos-scanner-dialog">
@@ -2909,7 +2959,7 @@ export default function StorePosPage() {
         </ModalHistoryScope>
       ) : null}
 
-      {transactionDialogOpen ? (
+      {transactionDialogOpen && !offlineCheckoutOnly ? (
         <ModalHistoryScope historyKey="store-pos-transactions" onClose={() => setTransactionDialogOpen(false)}>
           <div className="store-pos-transaction-overlay" role="dialog" aria-modal="true" aria-label="取引履歴">
             <div className="store-pos-transaction-dialog">
@@ -3110,7 +3160,7 @@ export default function StorePosPage() {
         </ModalHistoryScope>
       ) : null}
 
-      {cashDialog ? (
+      {cashDialog && !offlineCheckoutOnly ? (
         <ModalHistoryScope historyKey="store-pos-cash" onClose={() => setCashDialog(null)}>
           <div className="store-pos-cash-overlay" role="dialog" aria-modal="true" aria-label="レジ操作">
             <div className="store-pos-cash-dialog">

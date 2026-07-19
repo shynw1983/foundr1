@@ -32,6 +32,7 @@ function publishPosOrderEventAfterResponse(eventName: "order.created" | "order.u
 }
 
 type PosCheckoutBody = {
+  offlineQueued?: boolean;
   offlineClientOrderId?: string;
   offlineCreatedAt?: string;
   offlinePickupCode?: string;
@@ -926,6 +927,7 @@ export async function POST(request: Request) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => ({})) as PosCheckoutBody;
+  const offlineQueued = body.offlineQueued === true;
   const offlineClientOrderId = normalizeText(body.offlineClientOrderId);
   const offlineCreatedAt = normalizeText(body.offlineCreatedAt);
   const offlinePickupCode = normalizeText(body.offlinePickupCode);
@@ -959,6 +961,15 @@ export async function POST(request: Request) {
   const storeFilter = getScopedStoreFilter(access, storeId);
   if (storeFilter === "__forbidden__" || !storeFilter) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
+  if (
+    offlineQueued && (
+      paymentMethod !== "cash" ||
+      memberId || memberToken || memberPhone || memberEmail || memberName || memberLanguage ||
+      couponId || discountPresetKey || tableSessionKey || diningSessionId
+    )
+  ) {
+    return Response.json({ error: "オフライン会計は、会員・クーポン・割引・テーブル会計を使わない現金注文のみ同期できます。" }, { status: 400 });
   }
   if (offlineClientOrderId) {
     const existingRows = await sql`
