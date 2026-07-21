@@ -3656,6 +3656,13 @@ on conflict (store_id) do update set
   updated_at = now();
 create index if not exists idx_store_tables_token on store_tables(qr_token);
 create index if not exists idx_menu_categories_brand_store on menu_categories(brand_id, store_id, sort_order);
+create unique index if not exists idx_menu_categories_external_id_unique_scope
+  on menu_categories (
+    brand_id,
+    coalesce(store_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    lower(external_id)
+  )
+  where nullif(btrim(external_id), '') is not null;
 create index if not exists idx_menu_catalog_items_brand_store on menu_catalog_items(brand_id, store_id, is_active);
 create index if not exists idx_menu_option_groups_item on menu_option_groups(menu_catalog_item_id, sort_order);
 create index if not exists idx_menu_options_group on menu_options(option_group_id, sort_order);

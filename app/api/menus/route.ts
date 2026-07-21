@@ -64,6 +64,37 @@ function makeInternalKey(value: unknown, fallbackPrefix: string) {
   return base || `${fallbackPrefix}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+async function makeUniqueCategoryExternalId(input: {
+  id: string | null;
+  brandId: string;
+  storeId: string | null;
+  preferredId: unknown;
+  name: string;
+}) {
+  const suppliedId = String(input.preferredId ?? "").trim();
+  const baseId = makeInternalKey(suppliedId || input.name, "category");
+  const candidateLimit = suppliedId ? 1 : 100;
+
+  for (let index = 0; index < candidateLimit; index += 1) {
+    const candidate = index === 0 ? baseId : `${baseId}-${index + 1}`;
+    const rows = await sql`
+      select id::text
+      from menu_categories
+      where brand_id::text = ${input.brandId}
+        and coalesce(store_id::text, '') = ${input.storeId ?? ""}
+        and lower(external_id) = lower(${candidate})
+        and (${input.id === null} or id::text <> ${input.id ?? ""})
+      limit 1
+    `;
+    if (!rows.length) return candidate;
+  }
+
+  if (suppliedId) {
+    throw new Error(`公開 ID「${baseId}」は同じブランド内ですでに使用されています。`);
+  }
+  return `${baseId}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
 async function makeUniqueGroupKey(input: {
   id: string | null;
   brandId: string;
@@ -648,6 +679,13 @@ async function upsertCategory(body: Record<string, unknown>, employeeId: string)
       `;
   const targetId = id || currentRows[0]?.id;
   const previousName = String(currentRows[0]?.name ?? "");
+  const externalId = await makeUniqueCategoryExternalId({
+    id: targetId || null,
+    brandId,
+    storeId,
+    preferredId: body.externalId,
+    name
+  });
 
   const rows = targetId
     ? await sql`
@@ -655,7 +693,7 @@ async function upsertCategory(body: Record<string, unknown>, employeeId: string)
         set
           brand_id = ${brandId},
           store_id = ${storeId},
-          external_id = ${String(body.externalId ?? "").trim()},
+          external_id = ${externalId},
           name = ${name},
           note = ${String(body.note ?? "").trim()},
           is_tapioca_free = ${body.isTapiocaFree === true},
@@ -680,7 +718,7 @@ async function upsertCategory(body: Record<string, unknown>, employeeId: string)
         values (
           ${brandId},
           ${storeId},
-          ${String(body.externalId ?? "").trim()},
+          ${externalId},
           ${name},
           ${String(body.note ?? "").trim()},
           ${body.isTapiocaFree === true},
@@ -743,7 +781,7 @@ async function upsertCategory(body: Record<string, unknown>, employeeId: string)
     employeeId
   });
 
-  return { ok: true, id: rows[0]?.id };
+  return { ok: true, id: rows[0]?.id, externalId };
 }
 
 async function deleteCategory(id: string, employeeId: string) {

@@ -653,7 +653,7 @@ export default function MenuAdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind, ...payload })
       });
-      const result = await response.json().catch(() => ({})) as { id?: string; error?: string };
+      const result = await response.json().catch(() => ({})) as { id?: string; externalId?: string; error?: string };
       if (!response.ok) {
         setMessage(result.error || "保存できませんでした。");
         return;
@@ -662,7 +662,12 @@ export default function MenuAdminPage() {
       setMessage("保存しました。");
       if (kind === "category") {
         const nextName = String(payload.name ?? "").trim();
-        setCategoryDraft((current) => ({ ...current, id: result.id || current.id, name: nextName }));
+        setCategoryDraft((current) => ({
+          ...current,
+          id: result.id || current.id,
+          externalId: result.externalId || current.externalId,
+          name: nextName
+        }));
         setActiveCategory(nextName || null);
         await loadMenus("");
         setSelectedItemId("");
@@ -1728,6 +1733,7 @@ export default function MenuAdminPage() {
                   <label>
                     <span>公開 ID</span>
                     <input value={categoryDraft.externalId} onChange={(event) => setCategoryDraft({ ...categoryDraft, externalId: event.target.value })} placeholder="例: tapioca" />
+                    <small>未入力なら分類名から自動生成します。同じブランド内では重複できません。</small>
                   </label>
                   <label>
                     <span>並び順</span>
