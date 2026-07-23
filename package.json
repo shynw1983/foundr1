@@ -19,7 +19,6 @@
     "apk:staff": "node scripts/publish-android-apk.mjs staff"
   },
   "dependencies": {
-    "@clerk/nextjs": "^7.4.3",
     "@neondatabase/serverless": "^1.1.0",
     "@sparticuz/chromium": "^149.0.0",
     "@vercel/blob": "^2.4.0",

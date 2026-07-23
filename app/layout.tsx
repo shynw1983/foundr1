@@ -1,4 +1,3 @@
-import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata, Viewport } from "next";
 import { FloatingFeedbackButton } from "../components/feedback/FloatingFeedbackButton";
 import { AppZoomGuard } from "./os/components/AppZoomGuard";
@@ -34,8 +33,6 @@ export const viewport: Viewport = {
   themeColor: "#202a36"
 };
 
-const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
 export default function RootLayout({
   children
 }: Readonly<{
@@ -61,11 +58,5 @@ export default function RootLayout({
     </html>
   );
 
-  if (!clerkPublishableKey) return body;
-
-  return (
-    <ClerkProvider publishableKey={clerkPublishableKey} afterSignOutUrl="/member?loggedOut=1">
-      {body}
-    </ClerkProvider>
-  );
+  return body;
 }

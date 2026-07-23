@@ -17,6 +17,12 @@ type CouponEmailInput = BirthdayCouponEmailInput & {
   bodyText?: string;
 };
 
+type MemberVerificationEmailInput = {
+  to: string;
+  code: string;
+  expiresInMinutes: number;
+};
+
 let resendClient: Resend | null = null;
 const DEFAULT_EMAIL_BRAND_NAME = "Foundr1 Members";
 
@@ -134,4 +140,54 @@ export async function sendBirthdayCouponEmail(input: BirthdayCouponEmailInput) {
     subject: `【${input.brandName?.trim() || DEFAULT_EMAIL_BRAND_NAME}】お誕生日特典クーポンをお届けしました`,
     introText: "お誕生日月おめでとうございます。Foundr1 Members に誕生日特典クーポンをお届けしました。"
   });
+}
+
+export async function sendMemberVerificationEmail(input: MemberVerificationEmailInput) {
+  const client = getResendClient();
+  if (!client) return { status: "skipped", id: "", error: "RESEND_API_KEY is not configured." };
+
+  const subject = "【Foundr1 Members】メールアドレス確認コード";
+  const text = [
+    "Foundr1 Members のメールアドレス確認コードです。",
+    "",
+    `確認コード: ${input.code}`,
+    `有効期限: ${input.expiresInMinutes}分`,
+    "",
+    "この操作に心当たりがない場合は、このメールを無視してください。"
+  ].join("\n");
+
+  try {
+    const response = await client.emails.send({
+      from: getFromAddress(),
+      to: input.to,
+      subject,
+      text,
+      html: `
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.7;color:#1f2937;">
+          <p>Foundr1 Members のメールアドレス確認コードです。</p>
+          <div style="border:1px solid #dbe3df;border-radius:10px;padding:20px;margin:18px 0;background:#f8fafc;text-align:center;">
+            <p style="margin:0 0 8px;color:#64748b;font-size:13px;">確認コード</p>
+            <p style="margin:0;font-size:32px;font-weight:700;letter-spacing:0.2em;">${escapeHtml(input.code)}</p>
+          </div>
+          <p>このコードは ${input.expiresInMinutes} 分間有効です。</p>
+          <p style="color:#64748b;font-size:13px;">この操作に心当たりがない場合は、このメールを無視してください。</p>
+        </div>
+      `
+    });
+    if (response.error) return { status: "failed", id: "", error: response.error.message };
+    await recordExternalServiceUsage({
+      serviceKey: "resend",
+      metricKey: "emails_sent",
+      quantity: 1,
+      unit: "count",
+      source: "member_verification",
+      metadata: {
+        subject,
+        recipientDomain: input.to.includes("@") ? input.to.split("@").pop() : ""
+      }
+    });
+    return { status: "sent", id: response.data?.id ?? "", error: "" };
+  } catch (error) {
+    return { status: "failed", id: "", error: error instanceof Error ? error.message : "Email send failed." };
+  }
 }

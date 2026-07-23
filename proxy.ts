@@ -1,4 +1,3 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
 const authCookieName = "foundr1_os_session";
@@ -161,8 +160,6 @@ function getFallbackPagePath(permittedPaths: Set<string>) {
   return Array.from(permittedPaths).find((path) => path.startsWith("/os/")) ?? "/store";
 }
 
-const clerkKeysConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
-
 async function runFoundr1Proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isOsPath = pathname.startsWith("/os");
@@ -236,12 +233,8 @@ async function runFoundr1Proxy(request: NextRequest) {
   return NextResponse.redirect(url);
 }
 
-const foundr1Proxy = clerkKeysConfigured
-  ? clerkMiddleware(async (_auth, request) => runFoundr1Proxy(request))
-  : async (request: NextRequest) => runFoundr1Proxy(request);
-
-export default foundr1Proxy;
+export default runFoundr1Proxy;
 
 export const config = {
-  matcher: ["/os/:path*", "/store/:path*", "/staff/:path*", "/member/:path*", "/api/:path*", "/__clerk/:path*"]
+  matcher: ["/os/:path*", "/store/:path*", "/staff/:path*", "/member/:path*", "/api/:path*"]
 };

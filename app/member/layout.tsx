@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { MemberLanguageProvider } from "../../components/member/MemberLanguageProvider";
+import { MemberSessionProvider } from "../../components/member/MemberSessionProvider";
 
 export const metadata: Metadata = {
   title: "Foundr1 MEMBER",
@@ -36,10 +37,12 @@ export default function MemberLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <MemberLanguageProvider>
-      <div className="notranslate" translate="no">
-        {children}
-      </div>
-    </MemberLanguageProvider>
+    <MemberSessionProvider>
+      <MemberLanguageProvider>
+        <div className="notranslate" translate="no">
+          {children}
+        </div>
+      </MemberLanguageProvider>
+    </MemberSessionProvider>
   );
 }

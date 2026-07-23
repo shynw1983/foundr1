@@ -1,12 +1,12 @@
 "use client";
 
-import { SignOutButton, useUser } from "@clerk/nextjs";
 import { BadgePercent, ExternalLink, Gift, Loader2, LogIn, LogOut, Megaphone, QrCode, RefreshCw, Settings, ShoppingBag, Sparkles, Stamp, Ticket, UserPlus, UserRound, X } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MemberAccountMenu } from "../../components/member/MemberAccountMenu";
 import { MemberAuthPanel } from "../../components/member/MemberAuthPanel";
 import { MemberLanguageSwitcher, useMemberLanguage } from "../../components/member/MemberLanguageProvider";
+import { MemberSignOutButton, useMemberSession } from "../../components/member/MemberSessionProvider";
 import type { MemberOrderHistory } from "../../components/member/MemberOrderHistoryPanel";
 import { memberText } from "../../components/member/memberTranslations";
 
@@ -89,7 +89,6 @@ type MemberResponse = {
   error?: string;
 };
 
-const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 const memberReturnStorageKey = "foundr1-member-return-to";
 const memberPopupDismissedStorageKey = "foundr1-member-popup-dismissed";
 
@@ -295,8 +294,8 @@ function getMemberCardDisplayName(member?: MemberProfile | null, fallback = "会
   return withJapaneseHonorific(displayName, language);
 }
 
-function getAccountDisplayName(member?: MemberProfile | null, user?: { username?: string | null; primaryEmailAddress?: { emailAddress?: string | null } | null }, fallback = "会員") {
-  return member?.displayName?.trim() || user?.username || user?.primaryEmailAddress?.emailAddress || fallback;
+function getAccountDisplayName(member?: MemberProfile | null, user?: { displayName?: string; email?: string } | null, fallback = "会員") {
+  return member?.displayName?.trim() || user?.displayName || user?.email || fallback;
 }
 
 function MemberAppPopup({
@@ -356,42 +355,13 @@ function MemberAppPopup({
 }
 
 export default function MemberPage() {
-  const { language } = useMemberLanguage();
-  const text = memberText[language];
-  if (!clerkConfigured) {
-    return (
-      <main className="member-portal-page">
-        <header className="member-portal-topbar">
-          <div className="member-portal-brand" aria-label="Foundr1 Members">
-            <span><img src="/icons/foundr1-member-512.png" alt="Foundr1" /></span>
-            <strong>Members</strong>
-          </div>
-          <MemberLanguageSwitcher />
-        </header>
-
-        <section className="member-portal-hero">
-          <div>
-            <p className="eyebrow">{text.memberCard}</p>
-            <h1>{text.memberCardTitle}</h1>
-            <span>{text.memberCardDescription}</span>
-          </div>
-        </section>
-
-        <section className="member-portal-config">
-          <strong>{text.notConfiguredTitle}</strong>
-          <p>{text.memberNotConfiguredBody}</p>
-        </section>
-      </main>
-    );
-  }
-
   return <ConfiguredMemberPortal />;
 }
 
 function ConfiguredMemberPortal() {
   const { language, syncPreferredLanguage } = useMemberLanguage();
   const text = memberText[language];
-  const { isLoaded, isSignedIn, user } = useUser();
+  const { isLoaded, isSignedIn, user } = useMemberSession();
   const couponPanelRef = useRef<HTMLElement | null>(null);
   const [returnTo, setReturnTo] = useState("");
   const [handoffEnabled, setHandoffEnabled] = useState(false);
@@ -601,12 +571,12 @@ function ConfiguredMemberPortal() {
         </div>
         <div className="member-topbar-actions">
           <MemberLanguageSwitcher />
-        {clerkConfigured && isSignedIn ? (
+        {isSignedIn ? (
           <MemberAccountMenu
             label={text.memberMenu}
             signedInLabel={text.signedIn}
             displayName={getAccountDisplayName(data.member, user, text.member)}
-            detail={data.member?.memberNumber || user?.primaryEmailAddress?.emailAddress || text.signedIn}
+            detail={data.member?.memberNumber || user?.email || text.signedIn}
             memberNumberLabel={text.memberNumber}
             memberNumber={data.member?.memberNumber}
           >
@@ -628,18 +598,14 @@ function ConfiguredMemberPortal() {
                   {text.returnToSite}
                 </a>
               ) : null}
-              <SignOutButton redirectUrl="/member?loggedOut=1">
-                <button className="member-account-menu-item" type="button">
-                  <LogOut size={16} />
-                  {text.signOut}
-                </button>
-              </SignOutButton>
-              <SignOutButton redirectUrl="/member?loggedOut=1&switchAccount=1">
-                <button className="member-account-menu-item is-muted" type="button">
-                  <UserPlus size={16} />
-                  {text.switchAccount}
-                </button>
-              </SignOutButton>
+              <MemberSignOutButton>
+                <LogOut size={16} />
+                {text.signOut}
+              </MemberSignOutButton>
+              <MemberSignOutButton className="member-account-menu-item is-muted" redirectUrl="/member?loggedOut=1&switchAccount=1">
+                <UserPlus size={16} />
+                {text.switchAccount}
+              </MemberSignOutButton>
           </MemberAccountMenu>
         ) : null}
         </div>
@@ -663,7 +629,7 @@ function ConfiguredMemberPortal() {
             </section>
           ) : null}
 
-          {clerkConfigured && !isLoaded ? (
+          {!isLoaded ? (
             <section className="member-portal-login-panel member-return-panel" aria-live="polite">
               <Loader2 size={34} />
               <h2>{text.loadingAuth}</h2>
@@ -674,7 +640,7 @@ function ConfiguredMemberPortal() {
           {isLoaded && !isSignedIn ? (
             <MemberAuthPanel
               title={loggedOut ? text.signedOutTitle : text.loginOrRegister}
-              description={loggedOut ? text.signedOutDescription : text.loginDescription}
+              description={loggedOut ? text.signedOutDescription : undefined}
               afterAuthUrl={profileCompletionUrl}
             />
           ) : null}

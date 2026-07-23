@@ -1,11 +1,11 @@
 "use client";
 
-import { SignOutButton, useUser } from "@clerk/nextjs";
 import { BadgePercent, CalendarDays, Home, Loader2, LogOut, RefreshCw, Settings, ShoppingBag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MemberAccountMenu } from "../../../components/member/MemberAccountMenu";
 import { MemberAuthPanel } from "../../../components/member/MemberAuthPanel";
 import { MemberLanguageSwitcher, useMemberLanguage } from "../../../components/member/MemberLanguageProvider";
+import { MemberSignOutButton, useMemberSession } from "../../../components/member/MemberSessionProvider";
 import { localizedMemberStoreName } from "../../../components/member/memberDisplayLocalization";
 import { memberText } from "../../../components/member/memberTranslations";
 
@@ -34,7 +34,6 @@ type MemberPointsResponse = {
   error?: string;
 };
 
-const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 type PointHistoryRange = "latest" | "30d" | "90d" | "1y" | "custom";
 
 function formatYen(value: number) {
@@ -55,14 +54,14 @@ function movementLabel(value: string, text: typeof memberText[keyof typeof membe
   return value || "-";
 }
 
-function getAccountDisplayName(member?: MemberProfile | null, user?: { username?: string | null; primaryEmailAddress?: { emailAddress?: string | null } | null }, fallback = "会員") {
-  return member?.displayName?.trim() || user?.username || user?.primaryEmailAddress?.emailAddress || fallback;
+function getAccountDisplayName(member?: MemberProfile | null, user?: { displayName?: string; email?: string } | null, fallback = "会員") {
+  return member?.displayName?.trim() || user?.displayName || user?.email || fallback;
 }
 
 export default function MemberPointsPage() {
   const { language, syncPreferredLanguage } = useMemberLanguage();
   const text = memberText[language];
-  const { isLoaded, isSignedIn, user } = useUser();
+  const { isLoaded, isSignedIn, user } = useMemberSession();
   const [data, setData] = useState<MemberPointsResponse>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -114,24 +113,6 @@ export default function MemberPointsPage() {
     if (isLoaded && isSignedIn) void loadPoints("latest", "", "");
   }
 
-  if (!clerkConfigured) {
-    return (
-      <main className="member-portal-page">
-        <header className="member-portal-topbar">
-          <a className="member-portal-brand" href="/member" aria-label="Foundr1 Members">
-            <span><img src="/icons/foundr1-member-512.png" alt="Foundr1" /></span>
-            <strong>Members</strong>
-          </a>
-          <MemberLanguageSwitcher />
-        </header>
-        <section className="member-portal-config">
-          <strong>{text.notConfiguredTitle}</strong>
-          <p>{text.memberNotConfiguredBody}</p>
-        </section>
-      </main>
-    );
-  }
-
   return (
     <main className="member-portal-page">
       <header className="member-portal-topbar">
@@ -146,7 +127,7 @@ export default function MemberPointsPage() {
             label={text.memberMenu}
             signedInLabel={text.signedIn}
             displayName={getAccountDisplayName(data.member, user, text.member)}
-            detail={data.member?.memberNumber || user?.primaryEmailAddress?.emailAddress || text.signedIn}
+            detail={data.member?.memberNumber || user?.email || text.signedIn}
             memberNumberLabel={text.memberNumber}
             memberNumber={data.member?.memberNumber}
           >
@@ -162,12 +143,10 @@ export default function MemberPointsPage() {
                 <ShoppingBag size={16} />
                 {text.ordersAndReceipts}
               </a>
-              <SignOutButton redirectUrl="/member?loggedOut=1">
-                <button className="member-account-menu-item" type="button">
-                  <LogOut size={16} />
-                  {text.signOut}
-                </button>
-              </SignOutButton>
+              <MemberSignOutButton className="member-account-menu-item">
+                <LogOut size={16} />
+                {text.signOut}
+              </MemberSignOutButton>
           </MemberAccountMenu>
         ) : null}
         </div>
@@ -202,7 +181,6 @@ export default function MemberPointsPage() {
       {isLoaded && !isSignedIn ? (
         <MemberAuthPanel
           title={text.pointHistory}
-          description={text.loginDescription}
           afterAuthUrl="/member/points"
         />
       ) : null}

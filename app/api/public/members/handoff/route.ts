@@ -1,6 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
-import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
+import { getMemberSession } from "../../../../../lib/member-auth";
 import { findMember, getMemberAvailableCoupons, upsertMember } from "../../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
@@ -8,28 +8,8 @@ export const runtime = "nodejs";
 
 const handoffMaxAgeMs = 10 * 60 * 1000;
 
-function clerkConfigured() {
-  return Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
-}
-
 function getSecret() {
   return process.env.AUTH_SECRET || process.env.DATABASE_URL || "foundr1-local-dev-secret";
-}
-
-function firstEmail(user: Awaited<ReturnType<typeof currentUser>>) {
-  const primaryId = user?.primaryEmailAddressId;
-  const primary = user?.emailAddresses?.find((email) => email.id === primaryId);
-  return primary?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? "";
-}
-
-function firstPhone(user: Awaited<ReturnType<typeof currentUser>>) {
-  const primaryId = user?.primaryPhoneNumberId;
-  const primary = user?.phoneNumbers?.find((phone) => phone.id === primaryId);
-  return primary?.phoneNumber ?? user?.phoneNumbers?.[0]?.phoneNumber ?? "";
-}
-
-function displayName(user: Awaited<ReturnType<typeof currentUser>>) {
-  return [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() || user?.username || "";
 }
 
 function base64Url(input: string) {
@@ -135,12 +115,8 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!clerkConfigured()) {
-    return Response.json({ error: "Clerk is not configured." }, { status: 503 });
-  }
-
-  const session = await auth();
-  if (!session.isAuthenticated || !session.userId) {
+  const session = await getMemberSession();
+  if (!session) {
     return Response.json({ error: "ログインしてください。" }, { status: 401 });
   }
 
@@ -150,23 +126,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "戻り先 URL が許可されていません。" }, { status: 400 });
   }
 
-  const user = await currentUser();
-  if (!user) return Response.json({ error: "ログインしてください。" }, { status: 401 });
-
-  const email = firstEmail(user);
-  const member = await upsertMember({
-    email,
-    phone: firstPhone(user),
-    displayName: displayName(user),
-    identityProvider: "clerk",
-    identitySubject: user.id,
-    identityLabel: email,
-    metadata: {
-      clerkUserId: user.id,
-      imageUrl: user.imageUrl ?? "",
-      source: "clerk_member_handoff"
-    }
-  });
+  const member = await upsertMember({ memberId: session.memberId });
   if (!member) return Response.json({ error: "会員を保存できませんでした。" }, { status: 500 });
 
   const redirectUrl = new URL(returnTo);

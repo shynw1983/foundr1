@@ -2315,6 +2315,62 @@ create table if not exists member_identity_links (
 create index if not exists idx_member_identity_links_member
   on member_identity_links(member_id);
 
+create table if not exists member_credentials (
+  member_id uuid primary key references members(id) on delete cascade,
+  email text not null,
+  password_hash text not null,
+  password_updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_member_credentials_email_unique
+  on member_credentials(lower(email));
+
+create table if not exists member_verification_challenges (
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  code_hash text not null,
+  purpose text not null default 'set_password',
+  attempt_count integer not null default 0,
+  expires_at timestamptz not null,
+  consumed_at timestamptz,
+  request_ip text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_member_verification_challenges_email_created
+  on member_verification_challenges(lower(email), created_at desc);
+
+create table if not exists member_sessions (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id) on delete cascade,
+  token_hash text not null unique,
+  user_agent text not null default '',
+  ip_address text not null default '',
+  last_seen_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  revoked_at timestamptz,
+  revoke_reason text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_member_sessions_member_active
+  on member_sessions(member_id, expires_at desc)
+  where revoked_at is null;
+
+create table if not exists member_auth_attempts (
+  id bigserial primary key,
+  email text not null default '',
+  action text not null,
+  success boolean not null default false,
+  ip_address text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_member_auth_attempts_lookup
+  on member_auth_attempts(lower(email), ip_address, action, created_at desc);
+
 create table if not exists member_brand_links (
   member_id uuid not null references members(id) on delete cascade,
   brand_id uuid not null references brands(id) on delete cascade,

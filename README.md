@@ -157,21 +157,22 @@ npm run db:seed
 Required:
 
 - `DATABASE_URL`: Neon/Postgres connection string.
-- `AUTH_SECRET`: session signing secret.
+- `AUTH_SECRET`: dedicated secret used for OS sessions and member verification-code hashing. Recommended in production; existing server auth falls back to `DATABASE_URL`.
 
 Optional:
 
 - `BLOB_READ_WRITE_TOKEN`: Vercel Blob upload token for product/comparison/receipt photos.
 - `NEXT_PUBLIC_APP_URL`: public app URL used in generated links.
-- `RESEND_API_KEY`: Resend API key for member email notifications such as birthday coupons.
+- `RESEND_API_KEY`: Resend API key for member verification codes and notifications such as birthday coupons. Member registration/password reset requires it.
 - `RESEND_FROM_EMAIL`: verified sender address, for example `Foundr1 Members <members@foundr1.jp>`.
 - `CRON_SECRET`: optional bearer token for protected scheduled job endpoints.
 - `LARK_APP_ID`, `LARK_APP_SECRET`, `LARK_WEBHOOK_URL`, `LARK_ENABLED`.
-- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`: Clerk keys for public customer member login on `/member`. Clerk is used only for customer identity; Foundr1 OS employee login still uses `foundr1_os_session`.
+- Public customer member login on `/member` is stored in Neon and does not require Clerk. See `docs/member-auth.md`.
 
 ## Documentation
 
 - Chinese business framework: `docs/procurement-backoffice-framework.md`
 - Japanese operation framework: `docs/procurement-backoffice-framework.ja.md`
 - Operations platform roadmap: `docs/operations-platform-roadmap.md`
+- Member authentication: `docs/member-auth.md`
 - Agent/developer guide: `AGENTS.md`
