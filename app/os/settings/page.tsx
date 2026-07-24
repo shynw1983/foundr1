@@ -790,7 +790,7 @@ export default function OsSettingsPage() {
               <div className="settings-manual-rate-heading">
                 <div>
                   <strong>手当・加給ルール</strong>
-                  <span>月額手当と、繁忙時間帯のワンオペ加給を給与明細に反映します。既存ルールを変更する場合は停止して新しく作成してください。</span>
+                  <span>時間帯の時給加算率、Uber売上別の勤務手当、月額手当、ワンオペ加給を給与明細に反映します。既存ルールを変更する場合は停止して新しく作成してください。</span>
                 </div>
               </div>
               <div className="settings-allowance-form">
@@ -874,17 +874,38 @@ export default function OsSettingsPage() {
                 ) : null}
                 {allowanceRuleType === "performance_tier_per_shift" ? (
                   <div className="settings-allowance-tiers">
-                    <strong>Uber売上別の1勤務手当</strong>
+                    <div className="settings-allowance-tier-heading">
+                      <div>
+                        <strong>Uber売上別の1勤務手当</strong>
+                        <span>条件は自由に追加できます。該当する最も高い売上条件の手当を1勤務につき1回だけ支給します。</span>
+                      </div>
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={() => setAllowanceTiers((current) => [...current, { salesThreshold: "", amount: "" }])}
+                      >
+                        条件を追加
+                      </button>
+                    </div>
                     {allowanceTiers.map((tier, index) => (
-                      <div key={index}>
+                      <div className="settings-allowance-tier-row" key={index}>
                         <label className="settings-field">
-                          <span>売上以上</span>
+                          <span>Uber売上（税込）以上</span>
                           <input value={tier.salesThreshold} inputMode="numeric" onChange={(event) => setAllowanceTiers((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, salesThreshold: normalizeIntegerInput(event.target.value) } : item))} />
                         </label>
                         <label className="settings-field">
-                          <span>手当</span>
+                          <span>1勤務の手当</span>
                           <input value={tier.amount} inputMode="numeric" onChange={(event) => setAllowanceTiers((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: normalizeIntegerInput(event.target.value) } : item))} />
                         </label>
+                        <button
+                          aria-label={`売上条件${index + 1}を削除`}
+                          className="text-button is-danger"
+                          type="button"
+                          disabled={allowanceTiers.length === 1}
+                          onClick={() => setAllowanceTiers((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                        >
+                          削除
+                        </button>
                       </div>
                     ))}
                   </div>
