@@ -162,7 +162,7 @@ type PayrollRow = {
   allowanceItems?: Array<{
     ruleId: string;
     name: string;
-    ruleType: "fixed_monthly" | "one_person_busy_hourly";
+    ruleType: "fixed_monthly" | "one_person_busy_hourly" | "time_performance_multiplier" | "performance_tier_per_shift";
     storeId: string | null;
     workDate: string | null;
     minutes: number;

@@ -1131,10 +1131,16 @@ create index if not exists payroll_payment_batch_items_batch_idx
 create table if not exists payroll_allowance_rules (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  rule_type text not null check (rule_type in ('fixed_monthly', 'one_person_busy_hourly')),
+  rule_type text not null check (rule_type in ('fixed_monthly', 'one_person_busy_hourly', 'time_performance_multiplier', 'performance_tier_per_shift')),
   store_id uuid references stores(id) on delete cascade,
   employee_id uuid references employees(id) on delete cascade,
   amount numeric(12, 2) not null default 0,
+  base_multiplier numeric(6, 3),
+  trigger_multiplier numeric(6, 3),
+  sales_threshold integer,
+  order_threshold integer,
+  source_platform text not null default 'uber_eats',
+  tier_config jsonb not null default '[]'::jsonb,
   include_in_premium_base boolean not null default true,
   valid_from date not null default '1970-01-01',
   valid_to date,
@@ -1147,6 +1153,16 @@ create table if not exists payroll_allowance_rules (
 alter table payroll_allowance_rules add column if not exists include_in_premium_base boolean not null default true;
 alter table payroll_allowance_rules add column if not exists valid_to date;
 alter table payroll_allowance_rules add column if not exists is_enabled boolean not null default true;
+alter table payroll_allowance_rules add column if not exists base_multiplier numeric(6, 3);
+alter table payroll_allowance_rules add column if not exists trigger_multiplier numeric(6, 3);
+alter table payroll_allowance_rules add column if not exists sales_threshold integer;
+alter table payroll_allowance_rules add column if not exists order_threshold integer;
+alter table payroll_allowance_rules add column if not exists source_platform text not null default 'uber_eats';
+alter table payroll_allowance_rules add column if not exists tier_config jsonb not null default '[]'::jsonb;
+alter table payroll_allowance_rules drop constraint if exists payroll_allowance_rules_rule_type_check;
+alter table payroll_allowance_rules
+  add constraint payroll_allowance_rules_rule_type_check
+  check (rule_type in ('fixed_monthly', 'one_person_busy_hourly', 'time_performance_multiplier', 'performance_tier_per_shift'));
 
 create table if not exists payroll_allowance_rule_windows (
   id uuid primary key default gen_random_uuid(),

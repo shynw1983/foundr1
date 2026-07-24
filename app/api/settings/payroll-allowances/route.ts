@@ -3,7 +3,7 @@ import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
 
 const payrollSettingsRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
-const ruleTypes = new Set(["fixed_monthly", "one_person_busy_hourly"]);
+const ruleTypes = new Set(["fixed_monthly", "one_person_busy_hourly", "time_performance_multiplier", "performance_tier_per_shift"]);
 
 function normalizeDate(value: unknown, fallback: string | null) {
   const text = String(value ?? "");
@@ -67,6 +67,12 @@ export async function GET() {
       payroll_allowance_rules.employee_id::text as "employeeId",
       employees.name as "employeeName",
       payroll_allowance_rules.amount,
+      payroll_allowance_rules.base_multiplier as "baseMultiplier",
+      payroll_allowance_rules.trigger_multiplier as "triggerMultiplier",
+      payroll_allowance_rules.sales_threshold as "salesThreshold",
+      payroll_allowance_rules.order_threshold as "orderThreshold",
+      payroll_allowance_rules.source_platform as "sourcePlatform",
+      payroll_allowance_rules.tier_config as tiers,
       payroll_allowance_rules.include_in_premium_base as "includeInPremiumBase",
       to_char(payroll_allowance_rules.valid_from, 'YYYY-MM-DD') as "validFrom",
       to_char(payroll_allowance_rules.valid_to, 'YYYY-MM-DD') as "validTo",
@@ -114,6 +120,12 @@ export async function POST(request: Request) {
     weekdays?: number[];
     startTime?: string;
     endTime?: string;
+    baseMultiplier?: number | string;
+    triggerMultiplier?: number | string;
+    salesThreshold?: number | string;
+    orderThreshold?: number | string;
+    sourcePlatform?: string;
+    tiers?: Array<{ salesThreshold?: number | string; amount?: number | string }>;
   };
   const stores = await getVisibleStores(session);
   const visibleStoreIds = new Set(stores.map((store) => String(store.id)));
@@ -143,12 +155,32 @@ export async function POST(request: Request) {
   const ruleType = ruleTypes.has(String(body.ruleType)) ? String(body.ruleType) : "";
   const name = String(body.name ?? "").trim();
   const amount = Math.max(0, Math.round(Number(body.amount ?? 0) || 0));
+  const baseMultiplier = Math.max(1, Number(body.baseMultiplier ?? 1) || 1);
+  const triggerMultiplier = Math.max(baseMultiplier, Number(body.triggerMultiplier ?? baseMultiplier) || baseMultiplier);
+  const salesThreshold = Math.max(0, Math.round(Number(body.salesThreshold ?? 0) || 0));
+  const orderThreshold = Math.max(0, Math.round(Number(body.orderThreshold ?? 0) || 0));
+  const sourcePlatform = "uber_eats";
+  const tiers = (Array.isArray(body.tiers) ? body.tiers : [])
+    .map((tier) => ({
+      salesThreshold: Math.max(0, Math.round(Number(tier.salesThreshold ?? 0) || 0)),
+      amount: Math.max(0, Math.round(Number(tier.amount ?? 0) || 0))
+    }))
+    .filter((tier) => tier.salesThreshold > 0 && tier.amount > 0)
+    .sort((a, b) => a.salesThreshold - b.salesThreshold);
   const storeId = body.storeId && visibleStoreIds.has(String(body.storeId)) ? String(body.storeId) : null;
   const employeeId = body.employeeId ? String(body.employeeId) : null;
   const validFrom = normalizeDate(body.validFrom, new Date().toISOString().slice(0, 10)) as string;
   const validTo = normalizeDate(body.validTo, null);
-  if (!ruleType || !name || amount <= 0) {
-    return Response.json({ error: "ルール名、種類、金額を入力してください。" }, { status: 400 });
+  const hasValidAmount = ruleType === "time_performance_multiplier"
+    ? baseMultiplier > 1 && triggerMultiplier >= baseMultiplier && (salesThreshold > 0 || orderThreshold > 0)
+    : ruleType === "performance_tier_per_shift"
+      ? tiers.length > 0
+      : amount > 0;
+  if (!ruleType || !name || !hasValidAmount) {
+    return Response.json({ error: "ルール名と、選択した種類に必要な加算率・条件・金額を入力してください。" }, { status: 400 });
+  }
+  if (validTo && validTo < validFrom) {
+    return Response.json({ error: "有効終了日は有効開始日以降にしてください。" }, { status: 400 });
   }
 
   const [rule] = await sql`
@@ -158,6 +190,12 @@ export async function POST(request: Request) {
       store_id,
       employee_id,
       amount,
+      base_multiplier,
+      trigger_multiplier,
+      sales_threshold,
+      order_threshold,
+      source_platform,
+      tier_config,
       include_in_premium_base,
       valid_from,
       valid_to,
@@ -169,6 +207,12 @@ export async function POST(request: Request) {
       ${storeId},
       ${employeeId},
       ${amount},
+      ${ruleType === "time_performance_multiplier" ? baseMultiplier : null},
+      ${ruleType === "time_performance_multiplier" ? triggerMultiplier : null},
+      ${ruleType === "time_performance_multiplier" ? salesThreshold || null : null},
+      ${ruleType === "time_performance_multiplier" ? orderThreshold || null : null},
+      ${sourcePlatform},
+      ${JSON.stringify(ruleType === "performance_tier_per_shift" ? tiers : [])}::jsonb,
       ${body.includeInPremiumBase !== false},
       ${validFrom}::date,
       ${validTo}::date,
@@ -177,7 +221,7 @@ export async function POST(request: Request) {
     returning id::text
   `;
 
-  if (ruleType === "one_person_busy_hourly") {
+  if (ruleType !== "fixed_monthly") {
     const weekdays = normalizeWeekdays(body.weekdays);
     const startTime = normalizeTime(body.startTime, "18:00");
     const endTime = normalizeTime(body.endTime, "21:00");
@@ -194,7 +238,7 @@ export async function POST(request: Request) {
     action: "settings.payroll_allowance.created",
     targetType: "payroll_allowance_rule",
     targetId: String(rule.id),
-    metadata: { name, ruleType, storeId, employeeId, amount, validFrom, validTo },
+    metadata: { name, ruleType, storeId, employeeId, amount, baseMultiplier, triggerMultiplier, salesThreshold, orderThreshold, tiers, validFrom, validTo },
     request
   });
   return Response.json({ ok: true, id: String(rule.id) });

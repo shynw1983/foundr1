@@ -15,6 +15,7 @@ import {
   type SocialInsuranceRow,
   type TimecardEmployee,
   type TimecardPayrollAllowanceRule,
+  type TimecardPerformanceOrder,
   type TimecardPunch,
   type WithholdingTaxRow
 } from "../../../lib/timecard";
@@ -418,6 +419,12 @@ async function getPayrollAllowanceRules(visibleStoreIds: string[]) {
       payroll_allowance_rules.store_id::text as "storeId",
       payroll_allowance_rules.employee_id::text as "employeeId",
       payroll_allowance_rules.amount,
+      payroll_allowance_rules.base_multiplier as "baseMultiplier",
+      payroll_allowance_rules.trigger_multiplier as "triggerMultiplier",
+      payroll_allowance_rules.sales_threshold as "salesThreshold",
+      payroll_allowance_rules.order_threshold as "orderThreshold",
+      payroll_allowance_rules.source_platform as "sourcePlatform",
+      payroll_allowance_rules.tier_config as tiers,
       payroll_allowance_rules.include_in_premium_base as "includeInPremiumBase",
       to_char(payroll_allowance_rules.valid_from, 'YYYY-MM-DD') as "validFrom",
       to_char(payroll_allowance_rules.valid_to, 'YYYY-MM-DD') as "validTo",
@@ -443,10 +450,23 @@ async function getPayrollAllowanceRules(visibleStoreIds: string[]) {
   return rows.map((row) => ({
     id: String(row.id),
     name: String(row.name),
-    ruleType: row.ruleType === "fixed_monthly" ? "fixed_monthly" : "one_person_busy_hourly",
+    ruleType: ["fixed_monthly", "one_person_busy_hourly", "time_performance_multiplier", "performance_tier_per_shift"].includes(String(row.ruleType))
+      ? String(row.ruleType) as TimecardPayrollAllowanceRule["ruleType"]
+      : "one_person_busy_hourly",
     storeId: row.storeId ? String(row.storeId) : null,
     employeeId: row.employeeId ? String(row.employeeId) : null,
     amount: Number(row.amount ?? 0),
+    baseMultiplier: row.baseMultiplier === null ? null : Number(row.baseMultiplier),
+    triggerMultiplier: row.triggerMultiplier === null ? null : Number(row.triggerMultiplier),
+    salesThreshold: row.salesThreshold === null ? null : Number(row.salesThreshold),
+    orderThreshold: row.orderThreshold === null ? null : Number(row.orderThreshold),
+    sourcePlatform: String(row.sourcePlatform ?? "uber_eats"),
+    tiers: Array.isArray(row.tiers)
+      ? row.tiers.map((tier) => ({
+        salesThreshold: Number(tier.salesThreshold ?? 0),
+        amount: Number(tier.amount ?? 0)
+      })).filter((tier) => tier.salesThreshold > 0 && tier.amount > 0)
+      : [],
     includeInPremiumBase: row.includeInPremiumBase !== false,
     validFrom: String(row.validFrom),
     validTo: row.validTo ? String(row.validTo) : null,
@@ -459,6 +479,31 @@ async function getPayrollAllowanceRules(visibleStoreIds: string[]) {
       }))
       : []
   })) satisfies TimecardPayrollAllowanceRule[];
+}
+
+async function getPayrollPerformanceOrders(storeIds: string[], startUtc: Date, endUtc: Date) {
+  if (!storeIds.length) return [] satisfies TimecardPerformanceOrder[];
+  const rows = await sql`
+    select
+      store_id::text as "storeId",
+      ordered_at as "orderedAt",
+      total,
+      source_platform as "sourcePlatform"
+    from sales_orders
+    where store_id::text = any(${storeIds})
+      and ordered_at >= ${new Date(startUtc.getTime() - 24 * 60 * 60 * 1000).toISOString()}
+      and ordered_at < ${new Date(endUtc.getTime() + 24 * 60 * 60 * 1000).toISOString()}
+      and status <> 'cancelled'
+      and payment_status <> 'failed'
+      and total > 0
+    order by ordered_at
+  `;
+  return rows.map((row) => ({
+    storeId: String(row.storeId),
+    orderedAt: new Date(String(row.orderedAt)).toISOString(),
+    total: Number(row.total ?? 0),
+    sourcePlatform: String(row.sourcePlatform)
+  })) satisfies TimecardPerformanceOrder[];
 }
 
 async function canPunchForEmployee(storeId: string, employeeId: string) {
@@ -1165,6 +1210,9 @@ export async function GET(request: Request) {
   const socialInsuranceRows = canViewPayroll ? await getSocialInsuranceRowsForMonth(month) : [];
   const employmentInsuranceRateRows = canViewPayroll ? await getEmploymentInsuranceRateRowsForMonth(month) : [];
   const allowanceRules = canViewPayroll ? await getPayrollAllowanceRules(visibleStoreIds) : [];
+  const performanceOrders = canViewPayroll && selectedStoreId
+    ? await getPayrollPerformanceOrders([selectedStoreId], startUtc, endUtc)
+    : [];
 
   const punches = selectedStoreId ? await sql`
     select
@@ -1246,7 +1294,8 @@ export async function GET(request: Request) {
     withholdingTaxRows,
     socialInsuranceRows,
     employmentInsuranceRateRows,
-    allowanceRules
+    allowanceRules,
+    performanceOrders
   }) : { rows: [], totals: emptyPayrollTotals };
   const payrollConfirmation = canViewPayroll && selectedStoreId
     ? await getPayrollConfirmation(selectedStoreId, month)
@@ -1532,6 +1581,7 @@ export async function POST(request: Request) {
     const socialInsuranceRows = await getSocialInsuranceRowsForMonth(month);
     const employmentInsuranceRateRows = await getEmploymentInsuranceRateRowsForMonth(month);
     const allowanceRules = await getPayrollAllowanceRules(visibleStoreIds);
+    const performanceOrders = await getPayrollPerformanceOrders([storeId], startUtc, endUtc);
     const punches = await sql`
       select
         timecard_punches.id::text,
@@ -1608,7 +1658,8 @@ export async function POST(request: Request) {
       withholdingTaxRows,
       socialInsuranceRows,
       employmentInsuranceRateRows,
-      allowanceRules
+      allowanceRules,
+      performanceOrders
     });
 
     const upserted = await sql`

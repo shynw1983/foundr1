@@ -91,12 +91,18 @@ type PayrollStatutoryAlert = {
 type PayrollAllowanceRule = {
   id: string;
   name: string;
-  ruleType: "fixed_monthly" | "one_person_busy_hourly";
+  ruleType: "fixed_monthly" | "one_person_busy_hourly" | "time_performance_multiplier" | "performance_tier_per_shift";
   storeId: string | null;
   storeName: string | null;
   employeeId: string | null;
   employeeName: string | null;
   amount: number;
+  baseMultiplier: number | null;
+  triggerMultiplier: number | null;
+  salesThreshold: number | null;
+  orderThreshold: number | null;
+  sourcePlatform: string;
+  tiers: Array<{ salesThreshold: number; amount: number }>;
   includeInPremiumBase: boolean;
   validFrom: string;
   validTo: string | null;
@@ -175,15 +181,24 @@ export default function OsSettingsPage() {
   const [employmentInsuranceEffectiveTo, setEmploymentInsuranceEffectiveTo] = useState(`${new Date().getFullYear() + 1}-03-31`);
   const [employmentInsuranceBusinessType, setEmploymentInsuranceBusinessType] = useState("general");
   const [allowanceName, setAllowanceName] = useState("");
-  const [allowanceRuleType, setAllowanceRuleType] = useState<"fixed_monthly" | "one_person_busy_hourly">("one_person_busy_hourly");
+  const [allowanceRuleType, setAllowanceRuleType] = useState<PayrollAllowanceRule["ruleType"]>("time_performance_multiplier");
   const [allowanceStoreId, setAllowanceStoreId] = useState("");
   const [allowanceEmployeeId, setAllowanceEmployeeId] = useState("");
   const [allowanceAmount, setAllowanceAmount] = useState("");
   const [allowanceValidFrom, setAllowanceValidFrom] = useState(new Date().toISOString().slice(0, 10));
   const [allowanceValidTo, setAllowanceValidTo] = useState("");
-  const [allowanceStartTime, setAllowanceStartTime] = useState("18:00");
-  const [allowanceEndTime, setAllowanceEndTime] = useState("21:00");
+  const [allowanceStartTime, setAllowanceStartTime] = useState("20:00");
+  const [allowanceEndTime, setAllowanceEndTime] = useState("22:00");
   const [allowanceWeekdays, setAllowanceWeekdays] = useState([0, 1, 2, 3, 4, 5, 6]);
+  const [allowanceBasePercent, setAllowanceBasePercent] = useState("25");
+  const [allowanceTriggerPercent, setAllowanceTriggerPercent] = useState("50");
+  const [allowanceSalesThreshold, setAllowanceSalesThreshold] = useState("50000");
+  const [allowanceOrderThreshold, setAllowanceOrderThreshold] = useState("15");
+  const [allowanceTiers, setAllowanceTiers] = useState([
+    { salesThreshold: "25000", amount: "1000" },
+    { salesThreshold: "30000", amount: "1500" },
+    { salesThreshold: "40000", amount: "2000" }
+  ]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingNavigationSettings, setSavingNavigationSettings] = useState(false);
@@ -357,7 +372,13 @@ export default function OsSettingsPage() {
         validTo: allowanceValidTo || null,
         weekdays: allowanceWeekdays,
         startTime: allowanceStartTime,
-        endTime: allowanceEndTime
+        endTime: allowanceEndTime,
+        baseMultiplier: 1 + (Number(allowanceBasePercent) || 0) / 100,
+        triggerMultiplier: 1 + (Number(allowanceTriggerPercent) || 0) / 100,
+        salesThreshold: allowanceSalesThreshold,
+        orderThreshold: allowanceOrderThreshold,
+        sourcePlatform: "uber_eats",
+        tiers: allowanceTiers
       })
     });
     setSavingPayrollAllowance(false);
@@ -775,19 +796,33 @@ export default function OsSettingsPage() {
               <div className="settings-allowance-form">
                 <label className="settings-field">
                   <span>種類</span>
-                  <select value={allowanceRuleType} onChange={(event) => setAllowanceRuleType(event.target.value === "fixed_monthly" ? "fixed_monthly" : "one_person_busy_hourly")}>
-                    <option value="one_person_busy_hourly">ワンオペ繁忙加給（時給加算）</option>
+                  <select value={allowanceRuleType} onChange={(event) => {
+                    const nextType = event.target.value as PayrollAllowanceRule["ruleType"];
+                    setAllowanceRuleType(nextType);
+                    if (nextType === "time_performance_multiplier") {
+                      setAllowanceStartTime("20:00");
+                      setAllowanceEndTime("22:00");
+                    } else if (nextType === "performance_tier_per_shift") {
+                      setAllowanceStartTime("00:00");
+                      setAllowanceEndTime("05:00");
+                    }
+                  }}>
+                    <option value="time_performance_multiplier">時間帯の時給加算率（%）</option>
+                    <option value="performance_tier_per_shift">Uber売上別の勤務手当（定額）</option>
+                    <option value="one_person_busy_hourly">ワンオペ繁忙加給（時給に金額加算）</option>
                     <option value="fixed_monthly">固定手当（月額）</option>
                   </select>
                 </label>
                 <label className="settings-field">
                   <span>名称</span>
-                  <input value={allowanceName} onChange={(event) => setAllowanceName(event.target.value)} placeholder={allowanceRuleType === "fixed_monthly" ? "例: 店長手当" : "例: ワンオペ繁忙加給"} />
+                  <input value={allowanceName} onChange={(event) => setAllowanceName(event.target.value)} placeholder={allowanceRuleType === "fixed_monthly" ? "例: 店長手当" : allowanceRuleType === "time_performance_multiplier" ? "例: 20〜22時 高負荷枠" : allowanceRuleType === "performance_tier_per_shift" ? "例: 深夜担当者手当" : "例: ワンオペ繁忙加給"} />
                 </label>
-                <label className="settings-field">
-                  <span>{allowanceRuleType === "fixed_monthly" ? "月額" : "加給時給"}</span>
-                  <input value={allowanceAmount} inputMode="numeric" onChange={(event) => setAllowanceAmount(normalizeIntegerInput(event.target.value))} placeholder={allowanceRuleType === "fixed_monthly" ? "例: 10000" : "例: 100"} />
-                </label>
+                {allowanceRuleType === "fixed_monthly" || allowanceRuleType === "one_person_busy_hourly" ? (
+                  <label className="settings-field">
+                    <span>{allowanceRuleType === "fixed_monthly" ? "月額" : "加給時給"}</span>
+                    <input value={allowanceAmount} inputMode="numeric" onChange={(event) => setAllowanceAmount(normalizeIntegerInput(event.target.value))} placeholder={allowanceRuleType === "fixed_monthly" ? "例: 10000" : "例: 100"} />
+                  </label>
+                ) : null}
                 <label className="settings-field">
                   <span>対象店舗</span>
                   <select value={allowanceStoreId} onChange={(event) => setAllowanceStoreId(event.target.value)}>
@@ -814,14 +849,54 @@ export default function OsSettingsPage() {
                   <span>有効終了</span>
                   <input type="date" value={allowanceValidTo} onChange={(event) => setAllowanceValidTo(event.target.value)} />
                 </label>
-                {allowanceRuleType === "one_person_busy_hourly" ? (
+                {allowanceRuleType === "time_performance_multiplier" ? (
                   <>
                     <label className="settings-field">
-                      <span>開始</span>
+                      <span>通常時給への保証加算率（%）</span>
+                      <input value={allowanceBasePercent} inputMode="decimal" onChange={(event) => setAllowanceBasePercent(event.target.value)} placeholder="25" />
+                    </label>
+                    <label className="settings-field">
+                      <span>条件達成時の加算率（%）</span>
+                      <input value={allowanceTriggerPercent} inputMode="decimal" onChange={(event) => setAllowanceTriggerPercent(event.target.value)} placeholder="50" />
+                    </label>
+                    <label className="settings-field">
+                      <span>Uber売上条件</span>
+                      <input value={allowanceSalesThreshold} inputMode="numeric" onChange={(event) => setAllowanceSalesThreshold(normalizeIntegerInput(event.target.value))} placeholder="50000" />
+                    </label>
+                    <label className="settings-field">
+                      <span>Uber注文数条件</span>
+                      <input value={allowanceOrderThreshold} inputMode="numeric" onChange={(event) => setAllowanceOrderThreshold(normalizeIntegerInput(event.target.value))} placeholder="15" />
+                    </label>
+                    <p className="settings-field-note">
+                      通常時給に加算します。25%なら1.25倍、50%なら1.5倍です。売上または注文数のどちらかを達成すると条件達成時の加算率を適用します。
+                    </p>
+                  </>
+                ) : null}
+                {allowanceRuleType === "performance_tier_per_shift" ? (
+                  <div className="settings-allowance-tiers">
+                    <strong>Uber売上別の1勤務手当</strong>
+                    {allowanceTiers.map((tier, index) => (
+                      <div key={index}>
+                        <label className="settings-field">
+                          <span>売上以上</span>
+                          <input value={tier.salesThreshold} inputMode="numeric" onChange={(event) => setAllowanceTiers((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, salesThreshold: normalizeIntegerInput(event.target.value) } : item))} />
+                        </label>
+                        <label className="settings-field">
+                          <span>手当</span>
+                          <input value={tier.amount} inputMode="numeric" onChange={(event) => setAllowanceTiers((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: normalizeIntegerInput(event.target.value) } : item))} />
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {allowanceRuleType !== "fixed_monthly" ? (
+                  <>
+                    <label className="settings-field">
+                      <span>対象開始</span>
                       <input type="time" value={allowanceStartTime} onChange={(event) => setAllowanceStartTime(event.target.value)} />
                     </label>
                     <label className="settings-field">
-                      <span>終了</span>
+                      <span>対象終了</span>
                       <input type="time" value={allowanceEndTime} onChange={(event) => setAllowanceEndTime(event.target.value)} />
                     </label>
                     <div className="settings-allowance-weekdays">
@@ -845,11 +920,25 @@ export default function OsSettingsPage() {
                     <div>
                       <strong>{rule.name}</strong>
                       <span>
-                        {rule.ruleType === "fixed_monthly" ? "固定手当" : "ワンオペ繁忙加給"}
+                        {rule.ruleType === "fixed_monthly"
+                          ? "固定手当"
+                          : rule.ruleType === "time_performance_multiplier"
+                            ? `時給加算 +${Math.round(((rule.baseMultiplier ?? 1) - 1) * 100)}% → +${Math.round(((rule.triggerMultiplier ?? 1) - 1) * 100)}%`
+                            : rule.ruleType === "performance_tier_per_shift"
+                              ? "業績連動・勤務手当"
+                              : "ワンオペ繁忙加給"}
                         {" / "}{rule.storeName ?? "全店舗"}
                         {" / "}{rule.employeeName ?? "全員"}
-                        {" / ¥"}{Math.round(rule.amount).toLocaleString("ja-JP")}
+                        {rule.ruleType === "fixed_monthly" || rule.ruleType === "one_person_busy_hourly"
+                          ? ` / ¥${Math.round(rule.amount).toLocaleString("ja-JP")}`
+                          : null}
                       </span>
+                      {rule.ruleType === "time_performance_multiplier" ? (
+                        <small>Uber売上 ¥{Math.round(rule.salesThreshold ?? 0).toLocaleString("ja-JP")} または {rule.orderThreshold ?? 0}件以上</small>
+                      ) : null}
+                      {rule.ruleType === "performance_tier_per_shift" ? (
+                        <small>{rule.tiers.map((tier) => `¥${tier.salesThreshold.toLocaleString("ja-JP")}以上: ¥${tier.amount.toLocaleString("ja-JP")}`).join("、")}</small>
+                      ) : null}
                       {rule.windows.length ? <small>{rule.windows.map((window) => `${weekdayLabels[window.weekday] ?? ""} ${window.startTime}-${window.endTime}`).join("、")}</small> : null}
                     </div>
                     {rule.isEnabled ? (

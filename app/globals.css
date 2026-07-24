@@ -6036,6 +6036,32 @@ body :where(
   font-weight: 600;
 }
 
+.settings-field-note {
+  align-self: center;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-allowance-tiers {
+  display: grid;
+  grid-column: span 2;
+  gap: 8px;
+}
+
+.settings-allowance-tiers > strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-allowance-tiers > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 8px;
+}
+
 .settings-allowance-list {
   display: grid;
   gap: 8px;
@@ -30652,6 +30678,10 @@ body :where(
 
   .settings-allowance-form {
     grid-template-columns: 1fr;
+  }
+
+  .settings-allowance-tiers {
+    grid-column: 1;
   }
 
   .settings-allowance-list article {

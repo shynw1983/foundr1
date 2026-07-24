@@ -102,7 +102,7 @@ export type TimecardDailySummary = {
 export type TimecardPayrollAllowanceItem = {
   ruleId: string;
   name: string;
-  ruleType: "fixed_monthly" | "one_person_busy_hourly";
+  ruleType: PayrollAllowanceRuleType;
   storeId: string | null;
   workDate: string | null;
   minutes: number;
@@ -111,13 +111,32 @@ export type TimecardPayrollAllowanceItem = {
   note: string;
 };
 
+export type PayrollAllowanceRuleType =
+  | "fixed_monthly"
+  | "one_person_busy_hourly"
+  | "time_performance_multiplier"
+  | "performance_tier_per_shift";
+
+export type TimecardPerformanceOrder = {
+  storeId: string;
+  orderedAt: string;
+  total: number;
+  sourcePlatform: string;
+};
+
 export type TimecardPayrollAllowanceRule = {
   id: string;
   name: string;
-  ruleType: "fixed_monthly" | "one_person_busy_hourly";
+  ruleType: PayrollAllowanceRuleType;
   storeId: string | null;
   employeeId: string | null;
   amount: number;
+  baseMultiplier: number | null;
+  triggerMultiplier: number | null;
+  salesThreshold: number | null;
+  orderThreshold: number | null;
+  sourcePlatform: string;
+  tiers: Array<{ salesThreshold: number; amount: number }>;
   includeInPremiumBase: boolean;
   validFrom: string;
   validTo: string | null;
@@ -375,9 +394,11 @@ function getWeekdayIndex(workDate: string) {
 
 function isMinuteInWindow(minute: number, startTime: string, endTime: string) {
   const start = timeTextToMinutes(startTime);
-  const endBase = timeTextToMinutes(endTime);
-  const end = endBase <= start ? endBase + 1440 : endBase;
-  return minute >= start && minute < end;
+  const end = timeTextToMinutes(endTime);
+  const normalizedMinute = ((minute % 1440) + 1440) % 1440;
+  return end <= start
+    ? normalizedMinute >= start || normalizedMinute < end
+    : normalizedMinute >= start && normalizedMinute < end;
 }
 
 function formatAllowanceMinuteRange(minutes: number[]) {
@@ -580,6 +601,7 @@ export function summarizePayroll(
     socialInsuranceRows?: SocialInsuranceRow[];
     employmentInsuranceRateRows?: EmploymentInsuranceRateRow[];
     allowanceRules?: TimecardPayrollAllowanceRule[];
+    performanceOrders?: TimecardPerformanceOrder[];
   } = {}
 ) {
   const payrollMonth = options.month ?? getJstMonthLabel();
@@ -588,6 +610,7 @@ export function summarizePayroll(
   const socialInsuranceRows = options.socialInsuranceRows ?? [];
   const employmentInsuranceRateRows = options.employmentInsuranceRateRows ?? [];
   const allowanceRules = (options.allowanceRules ?? []).filter((rule) => rule.isEnabled !== false);
+  const performanceOrders = options.performanceOrders ?? [];
   const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
   const rowsByEmployee = new Map<string, TimecardPayrollRow>();
   const daysByEmployeeAndStore = new Map<string, TimecardDailySummary[]>();
@@ -700,6 +723,7 @@ export function summarizePayroll(
     let incomeTax = 0;
     let residentTax = 0;
     let commuteAllowance = 0;
+    const appliedPerShiftAllowanceKeys = new Set<string>();
     const monthlyDeductionSettingByStore = new Map<string, TimecardStorePayrollSetting>();
     for (const storeId of new Set((employee?.storePayrollSettings ?? []).map((setting) => setting.storeId))) {
       const setting = getEffectivePayrollSetting(employee, storeId, payrollPeriodReferenceDate);
@@ -793,10 +817,78 @@ export function summarizePayroll(
           for (const window of windows) {
             const eligibleMinutes = activeMinutes.filter((minute) => {
               if (!isMinuteInWindow(minute, window.startTime, window.endTime)) return false;
+              if (rule.ruleType !== "one_person_busy_hourly") return true;
               const employeesAtMinute = storeCoverage.get(minute);
               return employeesAtMinute?.size === 1 && employeesAtMinute.has(day.employeeId);
             });
             if (!eligibleMinutes.length) continue;
+            const eligibleDayOffsets = new Set(eligibleMinutes.map((minute) => Math.floor(minute / 1440)));
+            const matchingOrders = performanceOrders.filter((order) => {
+              if (order.storeId !== day.storeId || order.sourcePlatform !== rule.sourcePlatform) return false;
+              const orderMinute = minutesSinceWorkDateStart(day.workDate, order.orderedAt);
+              return eligibleDayOffsets.has(Math.floor(orderMinute / 1440))
+                && isMinuteInWindow(orderMinute, window.startTime, window.endTime);
+            });
+            const performanceSales = matchingOrders.reduce((sum, order) => sum + order.total, 0);
+            const performanceOrderCount = matchingOrders.length;
+
+            if (rule.ruleType === "performance_tier_per_shift") {
+              const occurrenceOffset = Math.min(...eligibleMinutes.map((minute) => Math.floor(minute / 1440)));
+              const applicationKey = `${rule.id}:${day.storeId}:${day.workDate}:${occurrenceOffset}`;
+              if (appliedPerShiftAllowanceKeys.has(applicationKey)) continue;
+              appliedPerShiftAllowanceKeys.add(applicationKey);
+              const tier = rule.tiers
+                .filter((item) => performanceSales >= item.salesThreshold)
+                .sort((a, b) => b.salesThreshold - a.salesThreshold)[0];
+              if (!tier) continue;
+              const amount = Math.ceil(tier.amount);
+              allowancePay += amount;
+              storeTaxablePay += amount;
+              allowanceItems.push({
+                ruleId: rule.id,
+                name: rule.name,
+                ruleType: rule.ruleType,
+                storeId: rule.storeId,
+                workDate: day.workDate,
+                minutes: eligibleMinutes.length,
+                amount,
+                premiumAmount: 0,
+                note: `${formatAllowanceMinuteRange(eligibleMinutes)} / Uber売上 ¥${Math.round(performanceSales).toLocaleString("ja-JP")}・${performanceOrderCount}件`
+              });
+              continue;
+            }
+
+            if (rule.ruleType === "time_performance_multiplier") {
+              const triggered = (rule.salesThreshold !== null && performanceSales >= rule.salesThreshold)
+                || (rule.orderThreshold !== null && performanceOrderCount >= rule.orderThreshold);
+              const multiplier = triggered ? rule.triggerMultiplier : rule.baseMultiplier;
+              const additionalRate = Math.max(0, Number(multiplier ?? 1) - 1);
+              if (additionalRate <= 0) continue;
+              const amount = (eligibleMinutes.length / 60) * hourlyBase * additionalRate;
+              const overtimeMinuteSet = overtimeMinutesByDay.get(day.key) ?? new Set<number>();
+              const overtimeMinutesForAllowance = eligibleMinutes.filter((minute) => overtimeMinuteSet.has(minute)).length;
+              const nightMinutesForAllowance = eligibleMinutes.filter(isNightMinute).length;
+              const premiumAmount = rule.includeInPremiumBase
+                ? (overtimeMinutesForAllowance / 60) * hourlyBase * additionalRate * (overtimePremiumRate - 1)
+                  + (nightMinutesForAllowance / 60) * hourlyBase * additionalRate * nightPremiumRate
+                : 0;
+              allowancePay += amount;
+              allowancePremiumPay += premiumAmount;
+              storeTaxablePay += Math.ceil(amount + premiumAmount);
+              allowanceItems.push({
+                ruleId: rule.id,
+                name: rule.name,
+                ruleType: rule.ruleType,
+                storeId: rule.storeId,
+                workDate: day.workDate,
+                minutes: eligibleMinutes.length,
+                amount: Math.ceil(amount),
+                premiumAmount: Math.ceil(premiumAmount),
+                note: `${formatAllowanceMinuteRange(eligibleMinutes)} / ${Number(multiplier).toFixed(2)}倍（Uber売上 ¥${Math.round(performanceSales).toLocaleString("ja-JP")}・${performanceOrderCount}件）`
+              });
+              continue;
+            }
+
             const amount = (eligibleMinutes.length / 60) * rule.amount;
             const overtimeMinuteSet = overtimeMinutesByDay.get(day.key) ?? new Set<number>();
             const overtimeMinutesForAllowance = eligibleMinutes.filter((minute) => overtimeMinuteSet.has(minute)).length;
