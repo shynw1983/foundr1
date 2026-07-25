@@ -1,6 +1,7 @@
 import { canAccessStore, requireOsSession } from "../../../../lib/api-auth";
+import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
-import { reverseLoyaltyForRefundedOrder } from "../../../../lib/loyalty";
+import { reconcileMemberAccountFromLoyaltyLedger, reverseLoyaltyForRefundedOrder } from "../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 
@@ -246,13 +247,15 @@ export async function DELETE(request: Request) {
   const { startUtc, endUtc } = getJstDateRange(startDate, endDate);
   const targets = await sql`
     select
-      id::text,
-      source_order_id::text as "sourceOrderId"
+      sales_orders.id::text,
+      sales_orders.source_order_id::text as "sourceOrderId",
+      store_customer_orders.member_id::text as "memberId"
     from sales_orders
-    where id::text = any(${salesOrderIds})
-      and store_id::text = ${storeId}
-      and ordered_at >= ${startUtc.toISOString()}
-      and ordered_at < ${endUtc.toISOString()}
+    left join store_customer_orders on store_customer_orders.id = sales_orders.source_order_id
+    where sales_orders.id::text = any(${salesOrderIds})
+      and sales_orders.store_id::text = ${storeId}
+      and sales_orders.ordered_at >= ${startUtc.toISOString()}
+      and sales_orders.ordered_at < ${endUtc.toISOString()}
   `;
   if (targets.length !== salesOrderIds.length) {
     return Response.json({ error: "削除対象に、期間外または権限外の注文が含まれています。" }, { status: 400 });
@@ -260,6 +263,7 @@ export async function DELETE(request: Request) {
 
   const targetSalesOrderIds = targets.map((row) => String(row.id));
   const customerOrderIds = Array.from(new Set(targets.map((row) => String(row.sourceOrderId ?? "")).filter(isUuid)));
+  const affectedMemberIds = Array.from(new Set(targets.map((row) => String(row.memberId ?? "")).filter(isUuid)));
 
   for (const orderId of customerOrderIds) {
     await reverseLoyaltyForRefundedOrder(orderId, "テストデータ削除による会員特典取消");
@@ -305,6 +309,27 @@ export async function DELETE(request: Request) {
     `;
     deletedCustomerOrderCount = deletedCustomerRows.length;
   }
+
+  for (const memberId of affectedMemberIds) {
+    await reconcileMemberAccountFromLoyaltyLedger(memberId);
+  }
+
+  await writeAuditLog({
+    actorEmployeeId: session.id,
+    action: "sales.test_orders_deleted",
+    targetType: "store",
+    targetId: storeId,
+    metadata: {
+      startDate,
+      endDate,
+      salesOrderIds: targetSalesOrderIds,
+      customerOrderIds,
+      affectedMemberIds,
+      deletedSalesOrderCount: deletedSalesRows.length,
+      deletedCustomerOrderCount
+    },
+    request
+  });
 
   return Response.json({
     ok: true,

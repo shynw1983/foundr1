@@ -2555,6 +2555,69 @@ export async function reverseLoyaltyForRefundedOrderItem(input: {
   return getMemberProfile(item.memberId);
 }
 
+export async function reconcileMemberAccountFromLoyaltyLedger(memberId: string) {
+  await sql`
+    insert into member_accounts (member_id)
+    values (${memberId})
+    on conflict (member_id) do nothing
+  `;
+  await sql`
+    with member_ledger as (
+      select
+        coalesce(sum(points), 0)::int as point_balance,
+        greatest(
+          0,
+          coalesce(sum(
+            case
+              when movement_type in ('earn', 'refund_reversal', 'item_refund_reversal') then points
+              else 0
+            end
+          ), 0)
+        )::int as lifetime_points_earned,
+        greatest(
+          0,
+          coalesce(sum(
+            case
+              when movement_type = 'earn' then eligible_amount
+              when movement_type in ('refund_reversal', 'item_refund_reversal') then -eligible_amount
+              else 0
+            end
+          ), 0)
+        )::int as lifetime_spend_amount
+      from loyalty_point_ledger
+      where member_id::text = ${memberId}
+    ),
+    effective_orders as (
+      select
+        count(distinct earn.order_id)::int as lifetime_visit_count,
+        max(earn.created_at) as last_purchase_at
+      from loyalty_point_ledger earn
+      where earn.member_id::text = ${memberId}
+        and earn.movement_type = 'earn'
+        and earn.order_id is not null
+        and not exists (
+          select 1
+          from loyalty_point_ledger reversal
+          where reversal.member_id = earn.member_id
+            and reversal.order_id = earn.order_id
+            and reversal.movement_type = 'refund_reversal'
+        )
+    )
+    update member_accounts
+    set
+      point_balance = greatest(0, member_ledger.point_balance),
+      lifetime_points_earned = member_ledger.lifetime_points_earned,
+      lifetime_spend_amount = member_ledger.lifetime_spend_amount,
+      lifetime_visit_count = effective_orders.lifetime_visit_count,
+      last_purchase_at = effective_orders.last_purchase_at,
+      updated_at = now()
+    from member_ledger, effective_orders
+    where member_accounts.member_id::text = ${memberId}
+  `;
+  await refreshMemberTier(memberId);
+  return getMemberProfile(memberId);
+}
+
 function coalesceSizeKey(sizeKey: string, sizeLabel: string) {
   const normalized = normalizeText(sizeKey || sizeLabel).toLowerCase();
   if (normalized === "small" || normalized.startsWith("s")) return "s";
