@@ -18,6 +18,7 @@ import {
   MenuSquare,
   MessageSquare,
   MessageSquareWarning,
+  PackageSearch,
   PackageCheck,
   ReceiptText,
   QrCode,
@@ -51,7 +52,7 @@ const orderModulePaths = new Set([
   "/os/product-comparisons"
 ]);
 const analyticsModulePaths = new Set(["/os/analytics", "/os/analytics/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"]);
-const storeOperationsModulePaths = new Set(["/os/procedures", "/os/field-notes", "/os/reports", "/os/feedback"]);
+const storeOperationsModulePaths = new Set(["/os/inventory", "/os/procedures", "/os/field-notes", "/os/reports", "/os/feedback"]);
 const posModulePaths = new Set(["/os/pos", "/os/pos/reconciliation", "/os/pos/table-order", "/os/menus", "/os/brand-sites", "/os/loyalty"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/requests", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff"]);
 const settingsModulePaths = new Set(["/os/products", "/os/stores", "/os/settings", "/os/system-usage"]);
@@ -70,6 +71,7 @@ export const canonicalNavItems: OsNavItem[] = [
   { label: "経費設定", href: "/os/analytics/expenses", icon: Boxes },
   { label: "月次損益", href: "/os/analytics/profit", icon: LineChart },
   { label: "現場記録", href: "/os/field-notes", icon: Lightbulb },
+  { label: "在庫確認", href: "/os/inventory", icon: PackageSearch },
   { label: "連絡・報告", href: "/os/reports", icon: MessageSquareWarning },
   { label: "フィードバック", href: "/os/feedback", icon: MessageSquareWarning },
   { label: "発注先管理", href: "/os/suppliers", icon: Truck },
@@ -133,6 +135,7 @@ export const navModules: OsNavModule[] = [
     label: "店舗運営",
     icon: ClipboardCheck,
     paths: [
+      { href: "/os/inventory" },
       { href: "/os/procedures" },
       { href: "/os/field-notes" },
       { href: "/os/reports" },
@@ -194,7 +197,8 @@ export const navModules: OsNavModule[] = [
 
 function getModuleNavPaths(pathname: string) {
   if (
-    pathname === "/os/procedures" || pathname.startsWith("/os/procedures/")
+    pathname === "/os/inventory" || pathname.startsWith("/os/inventory/")
+    || pathname === "/os/procedures" || pathname.startsWith("/os/procedures/")
     || pathname === "/os/field-notes"
     || pathname === "/os/reports"
     || pathname === "/os/feedback"

@@ -1411,6 +1411,58 @@ alter table products add column if not exists import_tax_cost_jpy numeric(12, 2)
 alter table products add column if not exists import_other_cost_jpy numeric(12, 2) not null default 0;
 alter table products drop constraint if exists products_name_key;
 
+create table if not exists inventory_locations (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  name text not null,
+  location_type text not null default 'freezer',
+  sort_order integer not null default 0,
+  status text not null default 'active',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (store_id, name)
+);
+
+create table if not exists inventory_items (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  product_id uuid not null references products(id) on delete cascade,
+  location_id uuid not null references inventory_locations(id) on delete cascade,
+  count_unit text not null default '袋',
+  safety_stock numeric(12, 2) not null default 1,
+  current_quantity numeric(12, 2),
+  exception_code text not null default '',
+  exception_note text not null default '',
+  last_counted_at timestamptz,
+  last_counted_by uuid references employees(id) on delete set null,
+  status text not null default 'active',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (store_id, product_id, location_id)
+);
+
+create table if not exists inventory_checks (
+  id uuid primary key default gen_random_uuid(),
+  inventory_item_id uuid not null references inventory_items(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  product_id uuid not null references products(id) on delete cascade,
+  quantity numeric(12, 2),
+  record_type text not null default 'count',
+  exception_code text not null default '',
+  note text not null default '',
+  recorded_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_inventory_locations_store
+  on inventory_locations(store_id, status, sort_order, name);
+create index if not exists idx_inventory_items_store_location
+  on inventory_items(store_id, location_id, status);
+create index if not exists idx_inventory_items_last_counted
+  on inventory_items(store_id, last_counted_at);
+create index if not exists idx_inventory_checks_item_created
+  on inventory_checks(inventory_item_id, created_at desc);
+
 create table if not exists product_brand_usages (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references products(id) on delete cascade,

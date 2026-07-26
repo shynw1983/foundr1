@@ -88,6 +88,15 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     navPaths: ["/os/menus", "/os/brand-sites", "/os/loyalty"]
   },
   {
+    key: "module.inventory",
+    label: "在庫確認",
+    description: "店舗ごとの粗い在庫確認、保管場所、安全在庫、異常記録を表示します。",
+    category: "モジュール",
+    defaultRoles: ["owner", "manager", "store_owner", "store_manager", "store_terminal"],
+    lockedRoles: ["owner"],
+    navPaths: ["/os/inventory"]
+  },
+  {
     key: "module.procedures",
     label: "手順書管理",
     description: "店舗運営の手順書管理を表示します。",
