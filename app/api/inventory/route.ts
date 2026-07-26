@@ -46,6 +46,7 @@ export async function GET(request: Request) {
       select
         id::text as id,
         name,
+        coalesce(equipment_brand, '') as "equipmentBrand",
         coalesce(nullif(equipment_name, ''), name) as "equipmentName",
         coalesce(position_name, '') as "positionName",
         location_type as "locationType"
@@ -133,6 +134,7 @@ export async function POST(request: Request) {
     itemId?: string;
     productId?: string;
     locationId?: string;
+    equipmentBrand?: string;
     equipmentName?: string;
     positionName?: string;
     locationType?: string;
@@ -151,10 +153,12 @@ export async function POST(request: Request) {
 
   if (action === "save_location") {
     const locationId = String(body.locationId ?? "").trim();
+    const equipmentBrand = String(body.equipmentBrand ?? "").trim();
     const equipmentName = String(body.equipmentName ?? "").trim();
     const positionName = String(body.positionName ?? "").trim();
     const locationType = normalizeLocationType(body.locationType);
-    const name = `${equipmentName} / ${positionName}`;
+    const equipmentLabel = [equipmentBrand, equipmentName].filter(Boolean).join(" ");
+    const name = `${equipmentLabel} / ${positionName}`;
 
     if (!equipmentName || !positionName) {
       return Response.json({ error: "設備・収納名と区画・位置を入力してください。" }, { status: 400 });
@@ -178,6 +182,7 @@ export async function POST(request: Request) {
         update inventory_locations
         set
           name = ${name},
+          equipment_brand = ${equipmentBrand},
           equipment_name = ${equipmentName},
           position_name = ${positionName},
           location_type = ${locationType},
@@ -190,12 +195,13 @@ export async function POST(request: Request) {
     } else {
       await sql`
         insert into inventory_locations (
-          store_id, name, equipment_name, position_name, location_type, updated_at
+          store_id, name, equipment_brand, equipment_name, position_name, location_type, updated_at
         ) values (
-          ${storeId}::uuid, ${name}, ${equipmentName}, ${positionName}, ${locationType}, now()
+          ${storeId}::uuid, ${name}, ${equipmentBrand}, ${equipmentName}, ${positionName}, ${locationType}, now()
         )
         on conflict (store_id, name)
         do update set
+          equipment_brand = excluded.equipment_brand,
           equipment_name = excluded.equipment_name,
           position_name = excluded.position_name,
           location_type = excluded.location_type,

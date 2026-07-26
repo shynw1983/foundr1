@@ -29,6 +29,7 @@ type StoreOption = { id: string; name: string };
 type LocationOption = {
   id: string;
   name: string;
+  equipmentBrand: string;
   equipmentName: string;
   positionName: string;
   locationType: string;
@@ -110,6 +111,7 @@ const locationTypeLabels: Record<string, string> = {
 };
 const emptyLocationDraft = {
   id: "",
+  equipmentBrand: "",
   equipmentName: "",
   positionName: "",
   locationType: "freezer"
@@ -245,6 +247,7 @@ export default function InventoryPage() {
       await postInventory({
         action: "save_location",
         locationId: locationDraft.id,
+        equipmentBrand: locationDraft.equipmentBrand,
         equipmentName: locationDraft.equipmentName,
         positionName: locationDraft.positionName,
         locationType: locationDraft.locationType
@@ -381,11 +384,19 @@ export default function InventoryPage() {
               </div>
               <form className="inventory-location-form" onSubmit={saveLocation}>
                 <label>
-                  <span>設備・収納名</span>
+                  <span>設備ブランド</span>
+                  <input
+                    value={locationDraft.equipmentBrand}
+                    onChange={(event) => setLocationDraft((current) => ({ ...current, equipmentBrand: event.target.value }))}
+                    placeholder="例：HOSHIZAKI（ブランドなしは空欄）"
+                  />
+                </label>
+                <label>
+                  <span>設備名・収納名</span>
                   <input
                     value={locationDraft.equipmentName}
                     onChange={(event) => setLocationDraft((current) => ({ ...current, equipmentName: event.target.value }))}
-                    placeholder="例：HOSHIZAKI 立式冷凍冷蔵庫"
+                    placeholder="例：立式冷凍冷蔵庫、吊戸棚"
                     required
                   />
                 </label>
@@ -425,6 +436,7 @@ export default function InventoryPage() {
                 {data.locations.map((location) => (
                   <article key={location.id}>
                     <div>
+                      {location.equipmentBrand ? <span className="inventory-equipment-brand">{location.equipmentBrand}</span> : null}
                       <strong>{location.equipmentName}</strong>
                       <span>{location.positionName}</span>
                     </div>
@@ -436,6 +448,7 @@ export default function InventoryPage() {
                         type="button"
                         onClick={() => setLocationDraft({
                           id: location.id,
+                          equipmentBrand: location.equipmentBrand,
                           equipmentName: location.equipmentName,
                           positionName: location.positionName,
                           locationType: location.locationType
@@ -484,7 +497,7 @@ export default function InventoryPage() {
                     <option value="">保管場所を選択</option>
                     {data.locations.map((location) => (
                       <option value={location.id} key={location.id}>
-                        {location.equipmentName}｜{location.positionName}（{locationTypeLabels[location.locationType] ?? "その他"}）
+                        {[location.equipmentBrand, location.equipmentName].filter(Boolean).join(" ")}｜{location.positionName}（{locationTypeLabels[location.locationType] ?? "その他"}）
                       </option>
                     ))}
                   </select>
