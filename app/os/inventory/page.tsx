@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  Archive,
   Boxes,
   CheckCircle2,
   ClipboardList,
@@ -10,7 +11,9 @@ import {
   PackageCheck,
   PackagePlus,
   PackageSearch,
+  Pencil,
   Search,
+  Settings2,
   Store,
   Truck,
   UserCog
@@ -23,7 +26,13 @@ import { OsNavList, type OsNavItem } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 
 type StoreOption = { id: string; name: string };
-type LocationOption = { id: string; name: string; locationType: string };
+type LocationOption = {
+  id: string;
+  name: string;
+  equipmentName: string;
+  positionName: string;
+  locationType: string;
+};
 type ProductOption = { id: string; name: string; category: string; unit: string; storageType: string };
 type InventoryItem = {
   id: string;
@@ -93,6 +102,18 @@ const exceptionLabels: Record<string, string> = {
   damaged: "破損",
   quality: "品質異常"
 };
+const locationTypeLabels: Record<string, string> = {
+  freezer: "冷凍",
+  refrigerator: "冷蔵",
+  ambient: "常温",
+  other: "その他"
+};
+const emptyLocationDraft = {
+  id: "",
+  equipmentName: "",
+  positionName: "",
+  locationType: "freezer"
+};
 
 export default function InventoryPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
@@ -109,6 +130,8 @@ export default function InventoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState("");
   const [showSetup, setShowSetup] = useState(false);
+  const [showLocationSettings, setShowLocationSettings] = useState(false);
+  const [locationDraft, setLocationDraft] = useState(emptyLocationDraft);
 
   useEffect(() => {
     void loadInventory();
@@ -201,7 +224,6 @@ export default function InventoryPage() {
         action: "configure",
         productId: formData.get("productId"),
         locationId: formData.get("locationId"),
-        locationName: formData.get("locationName"),
         countUnit: formData.get("countUnit"),
         safetyStock: formData.get("safetyStock")
       }, "在庫確認の商品を追加しました。");
@@ -210,6 +232,46 @@ export default function InventoryPage() {
       await loadInventory(storeId);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "商品を追加できませんでした。");
+    } finally {
+      setIsSaving("");
+    }
+  }
+
+  async function saveLocation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!storeId || isSaving) return;
+    setIsSaving("location");
+    try {
+      await postInventory({
+        action: "save_location",
+        locationId: locationDraft.id,
+        equipmentName: locationDraft.equipmentName,
+        positionName: locationDraft.positionName,
+        locationType: locationDraft.locationType
+      }, locationDraft.id ? "保管場所を更新しました。" : "保管場所を追加しました。");
+      setLocationDraft(emptyLocationDraft);
+      await loadInventory(storeId);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "保管場所を保存できませんでした。");
+    } finally {
+      setIsSaving("");
+    }
+  }
+
+  async function archiveLocation(location: LocationOption) {
+    if (isSaving) return;
+    if (!window.confirm(`「${location.name}」を停止しますか？`)) return;
+    setIsSaving(`location-${location.id}`);
+    try {
+      await postInventory({
+        action: "archive_location",
+        locationId: location.id
+      }, "保管場所を停止しました。");
+      if (locationDraft.id === location.id) setLocationDraft(emptyLocationDraft);
+      if (locationFilter === location.id) setLocationFilter("all");
+      await loadInventory(storeId);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "保管場所を停止できませんでした。");
     } finally {
       setIsSaving("");
     }
@@ -262,13 +324,28 @@ export default function InventoryPage() {
                   const nextStoreId = event.target.value;
                   setStoreId(nextStoreId);
                   setLocationFilter("all");
+                  setLocationDraft(emptyLocationDraft);
                   void loadInventory(nextStoreId);
                 }}
               >
                 {data.stores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
               </select>
             </label>
-            <button className="primary-button" type="button" onClick={() => setShowSetup((current) => !current)}>
+            <button className="secondary-button" type="button" onClick={() => setShowLocationSettings((current) => !current)}>
+              <Settings2 size={17} />
+              保管場所設定
+            </button>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => {
+                if (data.locations.length === 0) {
+                  setShowLocationSettings(true);
+                  return;
+                }
+                setShowSetup((current) => !current);
+              }}
+            >
               <PackagePlus size={17} />
               商品を追加
             </button>
@@ -294,12 +371,101 @@ export default function InventoryPage() {
             </article>
           </section>
 
+          {showLocationSettings ? (
+            <section className="panel inventory-location-settings">
+              <div className="panel-title">
+                <div>
+                  <h3>店舗の保管場所設定</h3>
+                  <p>設備・収納と、その中の区画や位置を先に登録します。</p>
+                </div>
+              </div>
+              <form className="inventory-location-form" onSubmit={saveLocation}>
+                <label>
+                  <span>設備・収納名</span>
+                  <input
+                    value={locationDraft.equipmentName}
+                    onChange={(event) => setLocationDraft((current) => ({ ...current, equipmentName: event.target.value }))}
+                    placeholder="例：HOSHIZAKI 立式冷凍冷蔵庫"
+                    required
+                  />
+                </label>
+                <label>
+                  <span>区画・位置</span>
+                  <input
+                    value={locationDraft.positionName}
+                    onChange={(event) => setLocationDraft((current) => ({ ...current, positionName: event.target.value }))}
+                    placeholder="例：冷蔵1、冷凍2、1左"
+                    required
+                  />
+                </label>
+                <label>
+                  <span>保管区分</span>
+                  <select
+                    value={locationDraft.locationType}
+                    onChange={(event) => setLocationDraft((current) => ({ ...current, locationType: event.target.value }))}
+                  >
+                    {Object.entries(locationTypeLabels).map(([value, label]) => (
+                      <option value={value} key={value}>{label}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="inventory-location-form-actions">
+                  {locationDraft.id ? (
+                    <button className="secondary-button" type="button" onClick={() => setLocationDraft(emptyLocationDraft)}>
+                      キャンセル
+                    </button>
+                  ) : null}
+                  <button className="primary-button" type="submit" disabled={isSaving === "location"}>
+                    {isSaving === "location" ? "保存中..." : locationDraft.id ? "変更を保存" : "場所を追加"}
+                  </button>
+                </div>
+              </form>
+              <div className="inventory-location-list">
+                {data.locations.length === 0 ? <p>この店舗には保管場所がまだありません。</p> : null}
+                {data.locations.map((location) => (
+                  <article key={location.id}>
+                    <div>
+                      <strong>{location.equipmentName}</strong>
+                      <span>{location.positionName}</span>
+                    </div>
+                    <span className={`inventory-location-type is-${location.locationType}`}>
+                      {locationTypeLabels[location.locationType] ?? "その他"}
+                    </span>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setLocationDraft({
+                          id: location.id,
+                          equipmentName: location.equipmentName,
+                          positionName: location.positionName,
+                          locationType: location.locationType
+                        })}
+                      >
+                        <Pencil size={14} />
+                        編集
+                      </button>
+                      <button
+                        className="is-danger"
+                        type="button"
+                        disabled={isSaving === `location-${location.id}`}
+                        onClick={() => void archiveLocation(location)}
+                      >
+                        <Archive size={14} />
+                        停止
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {showSetup ? (
             <form className="panel inventory-setup" onSubmit={addInventoryItem}>
               <div className="panel-title">
                 <div>
                   <h3>在庫確認に商品を追加</h3>
-                  <p>商品、冷凍庫などの保管場所、数える単位、安全在庫だけを設定します。</p>
+                  <p>商品、保存済みの保管場所、数える単位、安全在庫を設定します。</p>
                 </div>
               </div>
               <div className="inventory-setup-grid">
@@ -313,15 +479,15 @@ export default function InventoryPage() {
                   </select>
                 </label>
                 <label>
-                  <span>既存の保管場所</span>
-                  <select name="locationId" defaultValue="">
-                    <option value="">新しい場所を入力</option>
-                    {data.locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+                  <span>保管場所</span>
+                  <select name="locationId" defaultValue="" required>
+                    <option value="">保管場所を選択</option>
+                    {data.locations.map((location) => (
+                      <option value={location.id} key={location.id}>
+                        {location.equipmentName}｜{location.positionName}（{locationTypeLabels[location.locationType] ?? "その他"}）
+                      </option>
+                    ))}
                   </select>
-                </label>
-                <label>
-                  <span>新しい保管場所</span>
-                  <input name="locationName" placeholder="例：冷凍庫A 上段" />
                 </label>
                 <label>
                   <span>数える単位</span>

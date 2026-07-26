@@ -43,7 +43,12 @@ export async function GET(request: Request) {
 
   const [locations, items, products, recentChecks] = await Promise.all([
     sql`
-      select id::text as id, name, location_type as "locationType"
+      select
+        id::text as id,
+        name,
+        coalesce(nullif(equipment_name, ''), name) as "equipmentName",
+        coalesce(position_name, '') as "positionName",
+        location_type as "locationType"
       from inventory_locations
       where store_id = ${storeId}::uuid and status = 'active'
       order by sort_order, name
@@ -128,7 +133,9 @@ export async function POST(request: Request) {
     itemId?: string;
     productId?: string;
     locationId?: string;
-    locationName?: string;
+    equipmentName?: string;
+    positionName?: string;
+    locationType?: string;
     countUnit?: string;
     safetyStock?: number | string;
     quantity?: number | string;
@@ -142,27 +149,93 @@ export async function POST(request: Request) {
     return Response.json({ error: "この店舗を操作する権限がありません。" }, { status: 403 });
   }
 
+  if (action === "save_location") {
+    const locationId = String(body.locationId ?? "").trim();
+    const equipmentName = String(body.equipmentName ?? "").trim();
+    const positionName = String(body.positionName ?? "").trim();
+    const locationType = normalizeLocationType(body.locationType);
+    const name = `${equipmentName} / ${positionName}`;
+
+    if (!equipmentName || !positionName) {
+      return Response.json({ error: "設備・収納名と区画・位置を入力してください。" }, { status: 400 });
+    }
+
+    const duplicateRows = await sql`
+      select id
+      from inventory_locations
+      where store_id = ${storeId}::uuid
+        and name = ${name}
+        and ${locationId} <> ''
+        and id::text <> ${locationId}
+      limit 1
+    `;
+    if (duplicateRows[0]) {
+      return Response.json({ error: "同じ保管場所がすでに登録されています。" }, { status: 409 });
+    }
+
+    if (locationId) {
+      const rows = await sql`
+        update inventory_locations
+        set
+          name = ${name},
+          equipment_name = ${equipmentName},
+          position_name = ${positionName},
+          location_type = ${locationType},
+          status = 'active',
+          updated_at = now()
+        where id = ${locationId}::uuid and store_id = ${storeId}::uuid
+        returning id::text as id
+      `;
+      if (!rows[0]) return Response.json({ error: "保管場所が見つかりません。" }, { status: 404 });
+    } else {
+      await sql`
+        insert into inventory_locations (
+          store_id, name, equipment_name, position_name, location_type, updated_at
+        ) values (
+          ${storeId}::uuid, ${name}, ${equipmentName}, ${positionName}, ${locationType}, now()
+        )
+        on conflict (store_id, name)
+        do update set
+          equipment_name = excluded.equipment_name,
+          position_name = excluded.position_name,
+          location_type = excluded.location_type,
+          status = 'active',
+          updated_at = now()
+      `;
+    }
+    return Response.json({ ok: true });
+  }
+
+  if (action === "archive_location") {
+    const locationId = String(body.locationId ?? "").trim();
+    if (!locationId) return Response.json({ error: "保管場所が見つかりません。" }, { status: 404 });
+
+    const rows = await sql`
+      update inventory_locations
+      set status = 'inactive', updated_at = now()
+      where id = ${locationId}::uuid
+        and store_id = ${storeId}::uuid
+        and not exists (
+          select 1
+          from inventory_items
+          where inventory_items.location_id = inventory_locations.id
+            and inventory_items.status = 'active'
+        )
+      returning id::text as id
+    `;
+    if (!rows[0]) {
+      return Response.json({ error: "使用中の商品がある保管場所は停止できません。" }, { status: 409 });
+    }
+    return Response.json({ ok: true });
+  }
+
   if (action === "configure") {
     const productId = String(body.productId ?? "").trim();
-    let locationId = String(body.locationId ?? "").trim();
-    const locationName = String(body.locationName ?? "").trim();
+    const locationId = String(body.locationId ?? "").trim();
     const safetyStock = normalizeNonNegativeNumber(body.safetyStock, 1);
 
     if (!productId) return Response.json({ error: "商品を選択してください。" }, { status: 400 });
-    if (!locationId && !locationName) {
-      return Response.json({ error: "保管場所を選択または入力してください。" }, { status: 400 });
-    }
-
-    if (!locationId) {
-      const locationRows = await sql`
-        insert into inventory_locations (store_id, name, updated_at)
-        values (${storeId}::uuid, ${locationName}, now())
-        on conflict (store_id, name)
-        do update set status = 'active', updated_at = now()
-        returning id::text as id
-      `;
-      locationId = String(locationRows[0]?.id ?? "");
-    }
+    if (!locationId) return Response.json({ error: "保存済みの保管場所を選択してください。" }, { status: 400 });
 
     const [productRows, locationRows] = await Promise.all([
       sql`select id, unit from products where id = ${productId}::uuid limit 1`,
@@ -277,4 +350,9 @@ function normalizeNonNegativeNumber(value: unknown, fallback: number) {
   const normalized = Number(value);
   if (!Number.isFinite(normalized) || normalized < 0) return fallback;
   return Math.round(normalized * 100) / 100;
+}
+
+function normalizeLocationType(value: unknown) {
+  const normalized = String(value ?? "");
+  return ["freezer", "refrigerator", "ambient", "other"].includes(normalized) ? normalized : "other";
 }

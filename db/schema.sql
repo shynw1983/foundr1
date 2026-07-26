@@ -1415,6 +1415,8 @@ create table if not exists inventory_locations (
   id uuid primary key default gen_random_uuid(),
   store_id uuid not null references stores(id) on delete cascade,
   name text not null,
+  equipment_name text not null default '',
+  position_name text not null default '',
   location_type text not null default 'freezer',
   sort_order integer not null default 0,
   status text not null default 'active',
@@ -1422,6 +1424,9 @@ create table if not exists inventory_locations (
   updated_at timestamptz not null default now(),
   unique (store_id, name)
 );
+
+alter table inventory_locations add column if not exists equipment_name text not null default '';
+alter table inventory_locations add column if not exists position_name text not null default '';
 
 create table if not exists inventory_items (
   id uuid primary key default gen_random_uuid(),
