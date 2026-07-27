@@ -15,11 +15,22 @@ public class UberNotificationListenerService extends NotificationListenerService
         if (!looksLikeUber(packageName)) return;
         Notification notification = sbn.getNotification();
         if (notification == null || notification.extras == null) return;
+        String title = stringExtra(notification, Notification.EXTRA_TITLE);
+        String text = stringExtra(notification, Notification.EXTRA_TEXT);
+        String bigText = stringExtra(notification, Notification.EXTRA_BIG_TEXT);
+        UberRecoveryState.requestFromNotification(
+            this,
+            sbn.getKey(),
+            title,
+            text,
+            bigText,
+            notification
+        );
         try {
             JSONObject payload = new JSONObject();
-            payload.put("title", stringExtra(notification, Notification.EXTRA_TITLE));
-            payload.put("text", stringExtra(notification, Notification.EXTRA_TEXT));
-            payload.put("bigText", stringExtra(notification, Notification.EXTRA_BIG_TEXT));
+            payload.put("title", title);
+            payload.put("text", text);
+            payload.put("bigText", bigText);
             payload.put("subText", stringExtra(notification, Notification.EXTRA_SUB_TEXT));
             payload.put("postTime", sbn.getPostTime());
             BridgeUploader.upload(this, "notification", packageName, payload);

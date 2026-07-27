@@ -26,11 +26,16 @@ public class UberAccessibilityService extends AccessibilityService {
     private final Map<String, JSONObject> accumulatedNodes = new LinkedHashMap<>();
     private String lastUploadedText = "";
     private long lastUploadedAt = 0L;
+    private boolean finishingRecovery = false;
+    private final Runnable recoveryRunnable = this::recoverNewOrder;
     private final Runnable uploadRunnable = () -> {
         String text = pendingText.trim();
         if (text.length() < 8) return;
         long now = System.currentTimeMillis();
-        if (text.equals(lastUploadedText) && now - lastUploadedAt < 30000) return;
+        if (text.equals(lastUploadedText) && now - lastUploadedAt < 30000) {
+            handler.postDelayed(this::scrollOrderDetailsForward, 700);
+            return;
+        }
         lastUploadedText = text;
         lastUploadedAt = now;
         try {
@@ -54,9 +59,24 @@ public class UberAccessibilityService extends AccessibilityService {
         StringBuilder builder = new StringBuilder();
         JSONArray nodes = new JSONArray();
         collectNodes(root, "0", builder, nodes, new HashSet<>());
+        boolean containsDetails = containsOrderDetails(nodes);
+        boolean containsOverview = containsOrderOverview(nodes);
+        if (!containsDetails) {
+            if (containsAutoAcceptBanner(nodes)) {
+                UberRecoveryState.requestFromAutoAcceptBanner(this);
+            }
+            root.recycle();
+            if (UberRecoveryState.isPending(this)) {
+                scheduleRecovery(containsOverview ? 700L : 1200L);
+            }
+            return;
+        }
         root.recycle();
-        if (!containsOrderDetails(nodes)) return;
         String orderKey = extractOrderKey(nodes);
+        if (UberRecoveryState.isPending(this)) {
+            UberRecoveryState.markDetailsOpened(this, orderKey);
+            handler.removeCallbacks(recoveryRunnable);
+        }
         if (!orderKey.isEmpty() && !orderKey.equals(activeOrderKey)) {
             activeOrderKey = orderKey;
             scrollSteps = 0;
@@ -138,6 +158,31 @@ public class UberAccessibilityService extends AccessibilityService {
         return false;
     }
 
+    private boolean containsOrderOverview(JSONArray nodes) {
+        return containsNodeId(nodes, "/ub__ueo_orders_header_title");
+    }
+
+    private boolean containsAutoAcceptBanner(JSONArray nodes) {
+        for (int index = 0; index < nodes.length(); index += 1) {
+            JSONObject node = nodes.optJSONObject(index);
+            if (node == null) continue;
+            if (!node.optString("viewId").endsWith("/snackbar_text")) continue;
+            String text = node.optString("text");
+            if (text.contains("注文を自動で受け付けました") || text.contains("订单已自动接受")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsNodeId(JSONArray nodes, String suffix) {
+        for (int index = 0; index < nodes.length(); index += 1) {
+            JSONObject node = nodes.optJSONObject(index);
+            if (node != null && node.optString("viewId").endsWith(suffix)) return true;
+        }
+        return false;
+    }
+
     private String extractOrderKey(JSONArray nodes) {
         for (int index = 0; index < nodes.length(); index += 1) {
             JSONObject node = nodes.optJSONObject(index);
@@ -168,7 +213,10 @@ public class UberAccessibilityService extends AccessibilityService {
     }
 
     private void scrollOrderDetailsForward() {
-        if (scrollSteps >= 12) return;
+        if (scrollSteps >= 12) {
+            finishAutomaticRecovery();
+            return;
+        }
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
         AccessibilityNodeInfo scrollView = findLeftOrderScrollView(root);
@@ -178,7 +226,143 @@ public class UberAccessibilityService extends AccessibilityService {
             scrollView.recycle();
         }
         root.recycle();
-        if (scrolled) scrollSteps += 1;
+        if (scrolled) {
+            scrollSteps += 1;
+        } else {
+            finishAutomaticRecovery();
+        }
+    }
+
+    private void scheduleRecovery(long delayMs) {
+        handler.removeCallbacks(recoveryRunnable);
+        handler.postDelayed(recoveryRunnable, delayMs);
+    }
+
+    private void recoverNewOrder() {
+        if (!UberRecoveryState.isPending(this)) return;
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) {
+            scheduleRecovery(1500L);
+            return;
+        }
+        String packageName = value(root.getPackageName());
+        if (!looksLikeUber(packageName)) {
+            root.recycle();
+            scheduleRecovery(1500L);
+            return;
+        }
+        if (hasViewId(root, "ub__ueo_order_details_header_title")) {
+            String orderCode = findTextForViewId(root, "ub__ueo_order_details_header_title");
+            root.recycle();
+            UberRecoveryState.markDetailsOpened(this, extractOrderCode(orderCode));
+            return;
+        }
+        if (hasViewId(root, "ub__ueo_orders_header_title")) {
+            AccessibilityNodeInfo orderCard = findActiveOrderCard(root, false);
+            root.recycle();
+            if (orderCard != null) {
+                boolean clicked = orderCard.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                orderCard.recycle();
+                if (clicked) {
+                    scheduleRecovery(2500L);
+                    return;
+                }
+            }
+            scheduleRecovery(1500L);
+            return;
+        }
+        root.recycle();
+        if (UberRecoveryState.mayNavigateBack(this)) {
+            performGlobalAction(GLOBAL_ACTION_BACK);
+            scheduleRecovery(1500L);
+        }
+    }
+
+    private boolean hasViewId(AccessibilityNodeInfo node, String suffix) {
+        if (node == null) return false;
+        String viewId = value(node.getViewIdResourceName());
+        if (viewId.endsWith("/" + suffix)) return true;
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            boolean match = hasViewId(child, suffix);
+            child.recycle();
+            if (match) return true;
+        }
+        return false;
+    }
+
+    private AccessibilityNodeInfo findActiveOrderCard(AccessibilityNodeInfo node, boolean insideActiveOrders) {
+        if (node == null) return null;
+        String viewId = value(node.getViewIdResourceName());
+        boolean inside = insideActiveOrders || viewId.endsWith("/ub_ueo_active_order_land_container");
+        if (inside && node.isClickable()) {
+            String orderCode = findOrderCode(node);
+            if (!orderCode.isEmpty() && !UberRecoveryState.wasHandled(this, orderCode)) {
+                return AccessibilityNodeInfo.obtain(node);
+            }
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findActiveOrderCard(child, inside);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private String findOrderCode(AccessibilityNodeInfo node) {
+        if (node == null) return "";
+        String viewId = value(node.getViewIdResourceName());
+        String text = value(node.getText());
+        if (viewId.endsWith("/ub__orders_item_subtitle_text")) {
+            String code = extractOrderCode(text);
+            if (!code.isEmpty()) return code;
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            String match = findOrderCode(child);
+            child.recycle();
+            if (!match.isEmpty()) return match;
+        }
+        return "";
+    }
+
+    private String findTextForViewId(AccessibilityNodeInfo node, String suffix) {
+        if (node == null) return "";
+        String viewId = value(node.getViewIdResourceName());
+        if (viewId.endsWith("/" + suffix)) return value(node.getText());
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            String match = findTextForViewId(child, suffix);
+            child.recycle();
+            if (!match.isEmpty()) return match;
+        }
+        return "";
+    }
+
+    private String extractOrderCode(String value) {
+        String normalized = value == null ? "" : value.toUpperCase();
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+            .compile("\\b([A-Z0-9]{5,12})\\b")
+            .matcher(normalized);
+        String candidate = "";
+        while (matcher.find()) candidate = matcher.group(1);
+        return candidate;
+    }
+
+    private void finishAutomaticRecovery() {
+        if (finishingRecovery || !UberRecoveryState.wasOpenedAutomatically(this)) return;
+        finishingRecovery = true;
+        handler.postDelayed(() -> {
+            boolean moreOrders = UberRecoveryState.finishCurrentOrder(this);
+            performGlobalAction(GLOBAL_ACTION_BACK);
+            finishingRecovery = false;
+            if (moreOrders) scheduleRecovery(1800L);
+        }, 1800L);
     }
 
     private AccessibilityNodeInfo findLeftOrderScrollView(AccessibilityNodeInfo node) {

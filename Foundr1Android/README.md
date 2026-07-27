@@ -66,7 +66,7 @@ The `bridge` variant runs independently on the Android tablet after initial setu
 6. Save, then enable notification access and the Foundr1 Bridge accessibility service.
 7. Exclude Foundr1 Bridge and Uber Eats Orders from battery optimization.
 
-The bridge never presses Uber accept, deny, ready, or cancellation actions. It reads the order-detail accessibility tree, scrolls the detail area to collect off-screen modifiers, and sends the structured snapshot. Failed order uploads are retained locally and retried when connectivity returns.
+The bridge never presses Uber accept, deny, ready, or cancellation actions. A new-order notification opens Uber Eats Orders, and the accessibility service returns to the order overview, opens each unread active-order card, scrolls its detail area to collect off-screen modifiers, uploads the structured snapshot, and returns to the overview. Multiple simultaneous orders are processed one at a time and tracked by order number so the same active card is not reopened during the recovery batch. Failed order uploads are retained locally and retried when connectivity returns.
 
 Foundr1 OS deduplicates bridge orders by store, local order date, and Uber order number. Only recent order-detail screens are imported, so browsing older order history does not create operational orders.
 
