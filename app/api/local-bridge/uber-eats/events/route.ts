@@ -5,7 +5,7 @@ import { ensureProductionTasksForOrder } from "../../../../../lib/order-producti
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import {
   parseUberBridgeSnapshot,
-  type UberBridgeItem,
+  toUberBridgeOperationalItem,
   type UberBridgeNode
 } from "../../../../../lib/uber-bridge";
 
@@ -63,33 +63,6 @@ function dateParts(date: Date) {
     hour12: false
   }).format(date);
   return { pickupDate, pickupTime };
-}
-
-function sourceLabel(value: string) {
-  return value.split(/[｜|]/)[0]?.trim() || value.trim();
-}
-
-function modifierLabel(group: string, name: string) {
-  const normalizedGroup = sourceLabel(group);
-  const normalizedName = sourceLabel(name);
-  if (/辛さ/.test(normalizedGroup)) return `辛さ：${normalizedName}`;
-  if (/痺れ|しびれ/.test(normalizedGroup)) return `痺れ：${normalizedName}`;
-  if (/味変/.test(normalizedGroup)) return `味変：${normalizedName}`;
-  return normalizedName;
-}
-
-function itemPayload(item: UberBridgeItem) {
-  const labels = item.modifiers.map((modifier) => modifierLabel(modifier.group, modifier.name));
-  const isMaamaa = /マーラータン|麻辣[烫湯燙]/.test(item.name)
-    || item.modifiers.some((modifier) => /辛さ|痺れ|薬膳|麺/.test(modifier.group));
-  return {
-    itemName: sourceLabel(item.name),
-    quantity: Math.max(1, Math.round(item.quantity)),
-    amount: Math.max(0, Math.round(item.lineTotal)),
-    sizeKey: isMaamaa ? "maamaa_buildable" : "",
-    optionLabel: labels.join(", "),
-    toppingLabels: labels
-  };
 }
 
 async function resolveStoreBrand(storeId: string, parsedItemNames: string[]) {
@@ -244,7 +217,7 @@ async function upsertOperationalOrder(input: {
       order by sort_order, created_at
     `;
     for (let index = 0; index < parsed.items.length; index += 1) {
-      const item = itemPayload(parsed.items[index]);
+      const item = toUberBridgeOperationalItem(parsed.items[index]);
       const existingItemId = existingItems[index]?.id ? String(existingItems[index].id) : "";
       if (existingItemId) {
         await sql`

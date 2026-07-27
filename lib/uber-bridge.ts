@@ -9,6 +9,7 @@ export type UberBridgeNode = {
 export type UberBridgeModifier = {
   group: string;
   name: string;
+  quantity: number;
   price: number;
 };
 
@@ -29,6 +30,15 @@ export type ParsedUberBridgeOrder = {
   items: UberBridgeItem[];
   total: number;
   completeness: number;
+};
+
+export type UberBridgeOperationalItem = {
+  itemName: string;
+  quantity: number;
+  amount: number;
+  sizeKey: string;
+  optionLabel: string;
+  toppingLabels: string[];
 };
 
 function clean(value: unknown) {
@@ -69,6 +79,40 @@ function getOrderStatus(texts: string[]): ParsedUberBridgeOrder["status"] {
   return "new";
 }
 
+function sourceLabel(value: string) {
+  return value.split(/[｜|]/)[0]?.trim() || value.trim();
+}
+
+function modifierLabel(group: string, name: string) {
+  const normalizedGroup = sourceLabel(group);
+  const normalizedName = sourceLabel(name);
+  if (/辛さ/.test(normalizedGroup)) return `辛さ：${normalizedName}`;
+  if (/痺れ|しびれ/.test(normalizedGroup)) return `痺れ：${normalizedName}`;
+  if (/味変/.test(normalizedGroup)) return `味変：${normalizedName}`;
+  return normalizedName;
+}
+
+export function toUberBridgeOperationalItem(item: UberBridgeItem): UberBridgeOperationalItem {
+  const compactLabels = item.modifiers.map((modifier) => {
+    const label = modifierLabel(modifier.group, modifier.name);
+    return modifier.quantity > 1 ? `${label} x${modifier.quantity}` : label;
+  });
+  const toppingLabels = item.modifiers.flatMap((modifier) => {
+    const label = modifierLabel(modifier.group, modifier.name);
+    return Array.from({ length: Math.max(1, Math.round(modifier.quantity)) }, () => label);
+  });
+  const isMaamaa = /マーラータン|麻辣[烫湯燙]/.test(item.name)
+    || item.modifiers.some((modifier) => /辛さ|痺れ|薬膳|麺/.test(modifier.group));
+  return {
+    itemName: sourceLabel(item.name),
+    quantity: Math.max(1, Math.round(item.quantity)),
+    amount: Math.max(0, Math.round(item.lineTotal)),
+    sizeKey: isMaamaa ? "maamaa_buildable" : "",
+    optionLabel: compactLabels.join(", "),
+    toppingLabels
+  };
+}
+
 function findOrderIdentity(nodes: Array<UberBridgeNode & { id: string; value: string }>) {
   const explicit = nodes.find((node) => (
     node.id === "ub__ueo_order_history_order_item_order_id"
@@ -107,6 +151,7 @@ export function parseUberBridgeSnapshot(
   let pendingQuantity = 1;
   let currentItem: UberBridgeItem | null = null;
   let currentModifierGroup = "";
+  let pendingModifierQuantity = 1;
   let lastModifier: UberBridgeModifier | null = null;
 
   for (const node of nodes) {
@@ -125,6 +170,7 @@ export function parseUberBridgeSnapshot(
       };
       pendingQuantity = 1;
       currentModifierGroup = "";
+      pendingModifierQuantity = 1;
       lastModifier = null;
       items.push(currentItem);
       continue;
@@ -136,11 +182,22 @@ export function parseUberBridgeSnapshot(
     }
     if (node.id === "ub__ueo_modifier_item_name") {
       currentModifierGroup = node.value;
+      pendingModifierQuantity = 1;
       lastModifier = null;
       continue;
     }
+    if (node.id === "ub__ueo_modifier_option_item_quantity") {
+      pendingModifierQuantity = parseQuantity(node.value);
+      continue;
+    }
     if (node.id === "ub__ueo_modifier_option_item_name") {
-      lastModifier = { group: currentModifierGroup, name: node.value, price: 0 };
+      lastModifier = {
+        group: currentModifierGroup,
+        name: node.value,
+        quantity: pendingModifierQuantity,
+        price: 0
+      };
+      pendingModifierQuantity = 1;
       currentItem.modifiers.push(lastModifier);
       continue;
     }
@@ -151,7 +208,10 @@ export function parseUberBridgeSnapshot(
   }
 
   for (const item of items) {
-    item.optionTotal = item.modifiers.reduce((sum, modifier) => sum + modifier.price, 0);
+    item.optionTotal = item.modifiers.reduce(
+      (sum, modifier) => sum + (modifier.price * modifier.quantity),
+      0
+    );
     item.lineTotal = Math.round(item.quantity * (item.unitPrice + item.optionTotal));
   }
 
@@ -162,7 +222,10 @@ export function parseUberBridgeSnapshot(
   ));
   const derivedTotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
   const total = parseMoney(totalNode?.value) || derivedTotal;
-  const modifierCount = items.reduce((sum, item) => sum + item.modifiers.length, 0);
+  const modifierCount = items.reduce(
+    (sum, item) => sum + item.modifiers.reduce((count, modifier) => count + modifier.quantity, 0),
+    0
+  );
   const pricedModifierCount = items.reduce(
     (sum, item) => sum + item.modifiers.filter((modifier) => modifier.price !== 0).length,
     0

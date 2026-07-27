@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseUberBridgeSnapshot } from "./uber-bridge.ts";
+import { parseUberBridgeSnapshot, toUberBridgeOperationalItem } from "./uber-bridge.ts";
 
 test("parses an Uber order detail accessibility snapshot", () => {
   const parsed = parseUberBridgeSnapshot([
@@ -30,9 +30,42 @@ test("parses an Uber order detail accessibility snapshot", () => {
   assert.equal(parsed.items[0].optionTotal, 266);
   assert.equal(parsed.items[0].lineTotal, 2146);
   assert.deepEqual(parsed.items[0].modifiers, [
-    { group: "辛さを選ぶ", name: "中辛", price: 50 },
-    { group: "麺を選ぶ", name: "トウモロコシ麺", price: 216 }
+    { group: "辛さを選ぶ", name: "中辛", quantity: 1, price: 50 },
+    { group: "麺を選ぶ", name: "トウモロコシ麺", quantity: 1, price: 216 }
   ]);
+});
+
+test("parses repeated Uber modifier quantities and their extended price", () => {
+  const parsed = parseUberBridgeSnapshot([
+    { viewId: "com.uber.restaurants:id/ub__ueo_order_details_header_title", text: "田中, 小. • E495A" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_handed_off_delivery_subtitle_text", text: "2026年7月28日 01:00" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_quantity", text: "1 ×" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_name", text: "豚肉マーラータン" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_price", text: "￥1,880" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_modifier_item_name", text: "辛さレベルをお選びください" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "普通辛🔥｜普通辣" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥0" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_modifier_item_name", text: "追加トッピング" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_quantity", text: "2 ×" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "ブンモジャ1本｜粉耗子" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥226 ￥452" }
+  ], new Date("2026-07-28T01:01:00+09:00"));
+
+  assert.ok(parsed);
+  assert.equal(parsed.items[0].optionTotal, 452);
+  assert.equal(parsed.items[0].lineTotal, 2332);
+  assert.deepEqual(parsed.items[0].modifiers, [
+    { group: "辛さレベルをお選びください", name: "普通辛🔥｜普通辣", quantity: 1, price: 0 },
+    { group: "追加トッピング", name: "ブンモジャ1本｜粉耗子", quantity: 2, price: 226 }
+  ]);
+  assert.deepEqual(toUberBridgeOperationalItem(parsed.items[0]), {
+    itemName: "豚肉マーラータン",
+    quantity: 1,
+    amount: 2332,
+    sizeKey: "maamaa_buildable",
+    optionLabel: "辛さ：普通辛🔥, ブンモジャ1本 x2",
+    toppingLabels: ["辛さ：普通辛🔥", "ブンモジャ1本", "ブンモジャ1本"]
+  });
 });
 
 test("requires a stable Uber order number", () => {

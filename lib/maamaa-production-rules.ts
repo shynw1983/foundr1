@@ -192,6 +192,29 @@ export const maamaaSeasoningRules: MaamaaSeasoningRule[] = [
   { name: "味変", lines: ["発酵豆腐タレ 6g", "サーチャージャン 7g", "薬膳スパイス追加: 朝天麻辣鍋底醤 5g、五香粉 4ふり", "にんにくマシマシ 12g", "香酢: タレビンに香酢25g、じゃがりんたん酢5g"] },
 ];
 
+export function formatMaamaaSeasoningSelection(
+  label: string,
+  rules = maamaaSeasoningRules
+) {
+  const normalized = String(label ?? "").trim();
+  const optionName = normalized.replace(/^(辛さ|痺れ|味変)[:：]\s*/, "");
+  const normalizedOptionName = normalize(optionName);
+  const rule = rules.find((seasoningRule) => (
+    normalizedOptionName === normalize(seasoningRule.name)
+    || normalizedOptionName.startsWith(normalize(seasoningRule.name))
+  ));
+  if (rule) {
+    if (/^辛さ[:：]/.test(normalized)) return `辛さ：${rule.name}（${rule.lines.join(" / ")}）`;
+    if (/^痺れ[:：]/.test(normalized)) return `痺れ：${rule.name}（${rule.lines.join(" / ")}）`;
+    if (/^味変[:：]/.test(normalized)) return `味変：${rule.name}（${rule.lines.join(" / ")}）`;
+    return `${rule.name}（${rule.lines.join(" / ")}）`;
+  }
+  if (/^痺れ[:：]/.test(normalized)) return `${normalized}（要確認）`;
+  if (/^味変[:：]/.test(normalized)) return `${normalized}（要確認）`;
+  if (normalized.includes("薬膳スパイス")) return `${normalized}（要確認）`;
+  return "";
+}
+
 const standardMeatSetBase = [
   "黒キクラゲ5g",
   "板春雨50g",
