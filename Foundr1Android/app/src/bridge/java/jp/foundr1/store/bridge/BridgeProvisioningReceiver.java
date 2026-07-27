@@ -15,10 +15,10 @@ public class BridgeProvisioningReceiver extends BroadcastReceiver {
 
         SharedPreferences.Editor editor = BridgeConfig.prefs(context).edit();
         putIfPresent(editor, BridgeConfig.KEY_ENDPOINT, intent.getStringExtra("endpoint"));
-        putIfPresent(editor, BridgeConfig.KEY_TOKEN, intent.getStringExtra("token"));
+        putIfPresent(editor, BridgeConfig.KEY_TOKEN, intent.getStringExtra("bridgeToken"));
         putIfPresent(editor, BridgeConfig.KEY_STORE_ID, intent.getStringExtra("storeId"));
         putIfPresent(editor, BridgeConfig.KEY_DEVICE_NAME, intent.getStringExtra("deviceName"));
-        editor.apply();
+        editor.commit();
 
         Intent serviceIntent = new Intent(context, BridgeForegroundService.class);
         if (Build.VERSION.SDK_INT >= 26) {
