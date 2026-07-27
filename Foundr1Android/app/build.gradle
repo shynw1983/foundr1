@@ -5,6 +5,18 @@ plugins {
 
 def foundr1VersionCode = (System.getenv("FOUNDR1_ANDROID_VERSION_CODE") ?: "1").toInteger()
 def foundr1VersionName = System.getenv("FOUNDR1_ANDROID_VERSION_NAME") ?: "0.1.0"
+def releaseSigningPropertiesFile = System.getenv("FOUNDR1_ANDROID_SIGNING_PROPERTIES")
+    ? file(System.getenv("FOUNDR1_ANDROID_SIGNING_PROPERTIES"))
+    : file("${System.getProperty("user.home")}/.foundr1/android/release.properties")
+def releaseSigningProperties = new Properties()
+def hasReleaseSigning = releaseSigningPropertiesFile.exists()
+if (hasReleaseSigning) {
+    releaseSigningPropertiesFile.withInputStream { releaseSigningProperties.load(it) }
+}
+def releaseBuildRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
+if (releaseBuildRequested && !hasReleaseSigning) {
+    throw new GradleException("Release signing properties not found: ${releaseSigningPropertiesFile}")
+}
 
 android {
     namespace "jp.foundr1.store"
@@ -15,6 +27,23 @@ android {
         targetSdk 35
         versionCode foundr1VersionCode
         versionName foundr1VersionName
+    }
+
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseSigningProperties.getProperty("storeFile"))
+                storePassword releaseSigningProperties.getProperty("storePassword")
+                keyAlias releaseSigningProperties.getProperty("keyAlias")
+                keyPassword releaseSigningProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+        }
     }
 
     flavorDimensions "surface"

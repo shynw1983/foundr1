@@ -7,7 +7,8 @@ const appConfigs = {
   store: {
     title: "Foundr1 STORE",
     packageName: "jp.foundr1.store",
-    legacyFileName: "foundr1-store-latest.apk"
+    legacyFileName: "foundr1-store-latest.apk",
+    buildType: "release"
   },
   os: {
     title: "Foundr1 OS",
@@ -38,8 +39,9 @@ if (!flavor || !appConfigs[flavor]) {
 
 const repoRoot = process.cwd();
 const androidRoot = join(repoRoot, "Foundr1Android");
-const gradleTask = `assemble${flavor[0].toUpperCase()}${flavor.slice(1)}Debug`;
-const outputDir = join(androidRoot, "app", "build", "outputs", "apk", flavor, "debug");
+const buildType = appConfigs[flavor].buildType ?? "debug";
+const gradleTask = `assemble${flavor[0].toUpperCase()}${flavor.slice(1)}${buildType[0].toUpperCase()}${buildType.slice(1)}`;
+const outputDir = join(androidRoot, "app", "build", "outputs", "apk", flavor, buildType);
 const metadataPath = join(outputDir, "output-metadata.json");
 const downloadsDir = join(repoRoot, "public", "downloads");
 const appDownloadDir = join(downloadsDir, flavor);
@@ -129,7 +131,7 @@ const version = {
   versionName: resolvedVersionName,
   versionCode: Number(element.versionCode ?? nextVersionCode),
   releaseLabel: `${dateKey.year}.${dateKey.month}.${dateKey.day}.${nextVersionCode}`,
-  buildType: "debug",
+  buildType,
   fileName: targetFileName,
   downloadPath: `/downloads/${flavor}/${targetFileName}`,
   latestDownloadPath: `/downloads/${flavor}/latest.apk`,
