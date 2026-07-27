@@ -89,6 +89,10 @@ public class UberAccessibilityService extends AccessibilityService {
             return;
         }
         root.recycle();
+        captureOrderDetails(packageName, builder, nodes);
+    }
+
+    private void captureOrderDetails(String packageName, StringBuilder builder, JSONArray nodes) {
         String orderKey = extractOrderKey(nodes);
         if (UberRecoveryState.isPending(this)) {
             UberRecoveryState.markDetailsOpened(this, extractOrderCode(orderKey));
@@ -299,9 +303,11 @@ public class UberAccessibilityService extends AccessibilityService {
             return;
         }
         if (hasViewId(root, "ub__ueo_order_details_header_title")) {
-            String orderCode = findTextForViewId(root, "ub__ueo_order_details_header_title");
+            StringBuilder builder = new StringBuilder();
+            JSONArray nodes = new JSONArray();
+            collectNodes(root, "0", builder, nodes, new HashSet<>());
             root.recycle();
-            UberRecoveryState.markDetailsOpened(this, extractOrderCode(orderCode));
+            captureOrderDetails(packageName, builder, nodes);
             return;
         }
         if (hasViewId(root, "ub__ueo_orders_header_title")) {
@@ -313,6 +319,7 @@ public class UberAccessibilityService extends AccessibilityService {
                 boolean clicked = orderCard.performAction(AccessibilityNodeInfo.ACTION_CLICK);
                 orderCard.recycle();
                 if (clicked) {
+                    UberRecoveryState.markDetailsOpened(this, orderCode);
                     uploadRecoveryStatus("order_card_clicked", orderCode);
                     scheduleRecovery(2500L);
                     return;
