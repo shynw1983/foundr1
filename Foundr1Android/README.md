@@ -1,11 +1,12 @@
 # Foundr1 Android Shells
 
-This Android project builds four WebView shell apps from the same native code:
+This Android project builds four WebView shell apps and one local integration bridge from the same native code:
 
 - `store`: `Foundr1 Store`, opens `https://www.foundr1.jp/store`
 - `os`: `Foundr1 OS`, opens `https://www.foundr1.jp/os`
 - `member`: `Foundr1 Member`, opens `https://www.foundr1.jp/member`
 - `staff`: `Foundr1 Staff`, opens `https://www.foundr1.jp/staff`
+- `bridge`: `Foundr1 Bridge`, listens to Uber Eats Orders on the same tablet and uploads structured order snapshots to Foundr1 OS
 
 All variants expose this JavaScript bridge to the web app:
 
@@ -38,6 +39,7 @@ Supported device types:
    - `osDebug`
    - `memberDebug`
    - `staffDebug`
+   - `bridgeDebug`
 
 6. Click Run.
 
@@ -48,7 +50,25 @@ Command-line builds:
 ./gradlew assembleOsDebug
 ./gradlew assembleMemberDebug
 ./gradlew assembleStaffDebug
+./gradlew assembleBridgeDebug
 ```
+
+## Foundr1 Bridge for Uber Eats
+
+The `bridge` variant runs independently on the Android tablet after initial setup. A computer and USB connection are not required during normal operation.
+
+1. Install `app/build/outputs/apk/bridge/debug/app-bridge-debug.apk` or a signed release build.
+2. Open `Foundr1 Bridge`.
+3. Keep the default endpoint:
+   `https://www.foundr1.jp/api/local-bridge/uber-eats/events`
+4. Enter the server-side `LOCAL_BRIDGE_TOKEN`.
+5. Enter the Foundr1 OS store UUID and a recognizable device name.
+6. Save, then enable notification access and the Foundr1 Bridge accessibility service.
+7. Exclude Foundr1 Bridge and Uber Eats Orders from battery optimization.
+
+The bridge never presses Uber accept, deny, ready, or cancellation actions. It reads the order-detail accessibility tree, scrolls the detail area to collect off-screen modifiers, and sends the structured snapshot. Failed order uploads are retained locally and retried when connectivity returns.
+
+Foundr1 OS deduplicates bridge orders by store, local order date, and Uber order number. Only recent order-detail screens are imported, so browsing older order history does not create operational orders.
 
 ## Test Printer
 

@@ -16,7 +16,8 @@
     "apk:store": "node scripts/publish-android-apk.mjs store",
     "apk:os": "node scripts/publish-android-apk.mjs os",
     "apk:member": "node scripts/publish-android-apk.mjs member",
-    "apk:staff": "node scripts/publish-android-apk.mjs staff"
+    "apk:staff": "node scripts/publish-android-apk.mjs staff",
+    "apk:bridge": "node scripts/publish-android-apk.mjs bridge"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

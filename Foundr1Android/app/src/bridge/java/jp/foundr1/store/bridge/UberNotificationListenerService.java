@@ -7,6 +7,8 @@ import android.service.notification.StatusBarNotification;
 import org.json.JSONObject;
 
 public class UberNotificationListenerService extends NotificationListenerService {
+    private static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
+
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         String packageName = sbn == null ? "" : sbn.getPackageName();
@@ -31,7 +33,6 @@ public class UberNotificationListenerService extends NotificationListenerService
     }
 
     private boolean looksLikeUber(String packageName) {
-        String value = packageName == null ? "" : packageName.toLowerCase();
-        return value.contains("uber");
+        return UBER_ORDERS_PACKAGE.equals(packageName);
     }
 }

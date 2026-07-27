@@ -2284,6 +2284,7 @@ create table if not exists store_customer_orders (
   brand_id uuid references brands(id) on delete set null,
   store_id uuid references stores(id) on delete set null,
   order_source text not null default 'nanacha_web',
+  source_external_id text,
   offline_client_order_id text,
   offline_created_at timestamptz,
   pickup_code text not null,
@@ -2330,6 +2331,7 @@ alter table store_customer_orders add column if not exists preparing_at timestam
 alter table store_customer_orders add column if not exists ready_at timestamptz;
 alter table store_customer_orders add column if not exists completed_at timestamptz;
 alter table store_customer_orders add column if not exists cancelled_at timestamptz;
+alter table store_customer_orders add column if not exists source_external_id text;
 alter table store_customer_orders add column if not exists offline_client_order_id text;
 alter table store_customer_orders add column if not exists offline_created_at timestamptz;
 alter table store_customer_orders add column if not exists payment_provider text not null default 'square';
@@ -3823,6 +3825,9 @@ create unique index if not exists idx_store_customer_orders_offline_client_order
   where offline_client_order_id is not null;
 create index if not exists idx_store_customer_orders_pickup on store_customer_orders(pickup_code, pickup_date);
 create index if not exists idx_store_customer_orders_square_order on store_customer_orders(square_order_id);
+create unique index if not exists idx_store_customer_orders_source_external
+  on store_customer_orders(order_source, source_external_id)
+  where source_external_id is not null;
 create index if not exists idx_store_customer_orders_payment_account on store_customer_orders(payment_account_id, created_at desc);
 create index if not exists idx_store_customer_orders_payment_session on store_customer_orders(payment_provider, payment_session_id);
 create index if not exists idx_store_customer_orders_payment_id on store_customer_orders(payment_provider, payment_id);
@@ -3874,11 +3879,25 @@ create table if not exists local_bridge_events (
   created_at timestamptz not null default now()
 );
 
+create table if not exists local_bridge_devices (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  platform text not null default 'uber_eats',
+  device_name text not null,
+  token_hash text not null unique,
+  is_enabled boolean not null default true,
+  last_seen_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_local_bridge_events_platform_created
   on local_bridge_events(platform, created_at desc);
 
 create index if not exists idx_local_bridge_events_store_created
   on local_bridge_events(store_external_id, created_at desc);
+create index if not exists idx_local_bridge_devices_store
+  on local_bridge_devices(store_id, platform, is_enabled);
 create index if not exists idx_sales_import_rows_batch
   on sales_import_rows(batch_id, row_index);
 create index if not exists idx_procedure_books_menu_catalog_item on procedure_books(menu_catalog_item_id);

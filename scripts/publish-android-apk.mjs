@@ -24,6 +24,11 @@ const appConfigs = {
     title: "Foundr1 STAFF",
     packageName: "jp.foundr1.staff",
     legacyFileName: "foundr1-staff-latest.apk"
+  },
+  bridge: {
+    title: "Foundr1 Bridge",
+    packageName: "jp.foundr1.bridge",
+    legacyFileName: "foundr1-bridge-latest.apk"
   }
 };
 

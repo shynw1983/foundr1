@@ -7,6 +7,7 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
       brand_id,
       store_id,
       order_source,
+      source_external_id,
       pickup_code,
       status,
       payment_status,
@@ -39,9 +40,11 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
 
   const orderedAt = order.created_at ?? new Date();
   const isPosOrder = order.order_source === "store_pos";
+  const isDeliveryOrder = ["uber_eats", "rocket_now", "demae_can", "wolt"].includes(order.order_source);
   const salesOrderRows = await sql`
     insert into sales_orders (
       source_order_id,
+      source_external_id,
       brand_id,
       store_id,
       channel,
@@ -67,9 +70,10 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
     )
     values (
       ${order.id},
+      ${order.source_external_id || null},
       ${order.brand_id},
       ${order.store_id},
-      ${isPosOrder ? "in_store" : "web_reservation"},
+      ${isPosOrder ? "in_store" : isDeliveryOrder ? "delivery" : "web_reservation"},
       ${isPosOrder ? "pos" : order.order_source || "nanacha_web"},
       ${order.pickup_code},
       ${order.pickup_code},
@@ -104,6 +108,8 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
     do update set
       brand_id = excluded.brand_id,
       store_id = excluded.store_id,
+      source_external_id = excluded.source_external_id,
+      channel = excluded.channel,
       source_platform = excluded.source_platform,
       order_no = excluded.order_no,
       pickup_code = excluded.pickup_code,
