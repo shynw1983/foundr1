@@ -1,7 +1,12 @@
 package jp.foundr1.store.bridge;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
@@ -27,7 +32,19 @@ public class UberAccessibilityService extends AccessibilityService {
     private String lastUploadedText = "";
     private long lastUploadedAt = 0L;
     private boolean finishingRecovery = false;
+    private boolean recoveryReceiverRegistered = false;
     private final Runnable recoveryRunnable = this::recoverNewOrder;
+    private final BroadcastReceiver recoveryReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (
+                intent != null
+                && UberRecoveryState.ACTION_RECOVERY_REQUESTED.equals(intent.getAction())
+            ) {
+                scheduleRecovery(250L);
+            }
+        }
+    };
     private final Runnable uploadRunnable = () -> {
         String text = pendingText.trim();
         if (text.length() < 8) return;
@@ -74,7 +91,7 @@ public class UberAccessibilityService extends AccessibilityService {
         root.recycle();
         String orderKey = extractOrderKey(nodes);
         if (UberRecoveryState.isPending(this)) {
-            UberRecoveryState.markDetailsOpened(this, orderKey);
+            UberRecoveryState.markDetailsOpened(this, extractOrderCode(orderKey));
             handler.removeCallbacks(recoveryRunnable);
         }
         if (!orderKey.isEmpty() && !orderKey.equals(activeOrderKey)) {
@@ -93,6 +110,35 @@ public class UberAccessibilityService extends AccessibilityService {
 
     @Override
     public void onInterrupt() {
+    }
+
+    @Override
+    protected void onServiceConnected() {
+        super.onServiceConnected();
+        if (!recoveryReceiverRegistered) {
+            IntentFilter filter = new IntentFilter(UberRecoveryState.ACTION_RECOVERY_REQUESTED);
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(recoveryReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                registerReceiver(recoveryReceiver, filter);
+            }
+            recoveryReceiverRegistered = true;
+        }
+        if (UberRecoveryState.isPending(this)) scheduleRecovery(250L);
+    }
+
+    @Override
+    public void onDestroy() {
+        handler.removeCallbacks(recoveryRunnable);
+        handler.removeCallbacks(uploadRunnable);
+        if (recoveryReceiverRegistered) {
+            try {
+                unregisterReceiver(recoveryReceiver);
+            } catch (Exception ignored) {
+            }
+            recoveryReceiverRegistered = false;
+        }
+        super.onDestroy();
     }
 
     private void collectNodes(
@@ -248,6 +294,7 @@ public class UberAccessibilityService extends AccessibilityService {
         String packageName = value(root.getPackageName());
         if (!looksLikeUber(packageName)) {
             root.recycle();
+            UberRecoveryState.launchUber(this);
             scheduleRecovery(1500L);
             return;
         }
@@ -261,12 +308,19 @@ public class UberAccessibilityService extends AccessibilityService {
             AccessibilityNodeInfo orderCard = findActiveOrderCard(root, false);
             root.recycle();
             if (orderCard != null) {
+                UberRecoveryState.noteOrderCardFound(this);
+                String orderCode = findOrderCode(orderCard);
                 boolean clicked = orderCard.performAction(AccessibilityNodeInfo.ACTION_CLICK);
                 orderCard.recycle();
                 if (clicked) {
+                    uploadRecoveryStatus("order_card_clicked", orderCode);
                     scheduleRecovery(2500L);
                     return;
                 }
+            }
+            if (UberRecoveryState.shouldStopAfterEmptyOverview(this)) {
+                uploadRecoveryStatus("no_unread_card_found", "");
+                return;
             }
             scheduleRecovery(1500L);
             return;
@@ -363,6 +417,16 @@ public class UberAccessibilityService extends AccessibilityService {
             finishingRecovery = false;
             if (moreOrders) scheduleRecovery(1800L);
         }, 1800L);
+    }
+
+    private void uploadRecoveryStatus(String stage, String orderCode) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("stage", stage);
+            payload.put("orderCode", orderCode == null ? "" : orderCode);
+            BridgeUploader.upload(this, "recovery", UBER_ORDERS_PACKAGE, payload);
+        } catch (Exception ignored) {
+        }
     }
 
     private AccessibilityNodeInfo findLeftOrderScrollView(AccessibilityNodeInfo node) {

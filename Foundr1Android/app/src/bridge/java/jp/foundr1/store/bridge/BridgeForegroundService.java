@@ -27,6 +27,15 @@ public class BridgeForegroundService extends Service {
             handler.postDelayed(this, 60000);
         }
     };
+    private final Runnable recoveryWatchdog = new Runnable() {
+        @Override
+        public void run() {
+            if (UberRecoveryState.isPending(BridgeForegroundService.this)) {
+                UberRecoveryState.sendRecoverySignal(BridgeForegroundService.this);
+            }
+            handler.postDelayed(this, 2000);
+        }
+    };
 
     @Override
     public void onCreate() {
@@ -34,6 +43,7 @@ public class BridgeForegroundService extends Service {
         createChannel();
         startForeground(NOTIFICATION_ID, buildNotification());
         handler.post(heartbeat);
+        handler.post(recoveryWatchdog);
     }
 
     @Override
@@ -44,6 +54,7 @@ public class BridgeForegroundService extends Service {
     @Override
     public void onDestroy() {
         handler.removeCallbacks(heartbeat);
+        handler.removeCallbacks(recoveryWatchdog);
         super.onDestroy();
     }
 

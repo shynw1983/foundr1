@@ -13,6 +13,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class UberRecoveryState {
+    static final String ACTION_RECOVERY_REQUESTED = "jp.foundr1.bridge.UBER_RECOVERY_REQUESTED";
     private static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
     private static final String PREFS = "foundr1_uber_recovery";
     private static final String KEY_PENDING_UNTIL = "pending_until";
@@ -23,11 +24,16 @@ final class UberRecoveryState {
     private static final String KEY_LAST_UI_TRIGGER_AT = "last_ui_trigger_at";
     private static final String KEY_OPENED_AUTOMATICALLY = "opened_automatically";
     private static final String KEY_BACK_ATTEMPTS = "back_attempts";
+    private static final String KEY_EMPTY_SCANS = "empty_scans";
     private static final String KEY_HANDLED_ORDER_CODES = "handled_order_codes";
+    private static final String KEY_HANDLED_WINDOW_STARTED_AT = "handled_window_started_at";
     private static final long RECOVERY_WINDOW_MS = 3 * 60 * 1000L;
+    private static final long HANDLED_WINDOW_MS = 12 * 60 * 60 * 1000L;
     private static final long UI_TRIGGER_COOLDOWN_MS = 30 * 1000L;
     private static final long NOTIFICATION_BANNER_DEDUP_MS = 15 * 1000L;
     private static final int MAX_PENDING_ORDERS = 50;
+    private static final int MAX_HANDLED_ORDER_CODES = 200;
+    private static final int MAX_EMPTY_SCANS = 20;
     private static final Pattern ORDER_COUNT = Pattern.compile(
         "(\\d+)\\s*(?:件|个|個|(?:new\\s+)?orders?)",
         Pattern.CASE_INSENSITIVE
@@ -73,14 +79,14 @@ final class UberRecoveryState {
             .putInt(KEY_REMAINING, Math.min(MAX_PENDING_ORDERS, Math.max(1, existing + newlyReportedOrders)))
             .putString(KEY_LAST_NOTIFICATION, notificationKey == null ? "" : notificationKey)
             .putInt(KEY_LAST_NOTIFICATION_COUNT, count)
-            .putInt(KEY_BACK_ATTEMPTS, 0);
+            .putInt(KEY_BACK_ATTEMPTS, 0)
+            .putInt(KEY_EMPTY_SCANS, 0);
         if (!alreadyPending) {
-            editor
-                .putBoolean(KEY_OPENED_AUTOMATICALLY, false)
-                .remove(KEY_HANDLED_ORDER_CODES);
+            editor.putBoolean(KEY_OPENED_AUTOMATICALLY, false);
         }
         editor.apply();
         openUber(context, notification);
+        sendRecoverySignal(context);
     }
 
     static void requestFromAutoAcceptBanner(Context context) {
@@ -98,13 +104,13 @@ final class UberRecoveryState {
                 KEY_REMAINING,
                 Math.min(MAX_PENDING_ORDERS, Math.max(1, existing + (duplicatesNotification ? 0 : 1)))
             )
-            .putInt(KEY_BACK_ATTEMPTS, 0);
+            .putInt(KEY_BACK_ATTEMPTS, 0)
+            .putInt(KEY_EMPTY_SCANS, 0);
         if (!alreadyPending) {
-            editor
-                .putBoolean(KEY_OPENED_AUTOMATICALLY, false)
-                .remove(KEY_HANDLED_ORDER_CODES);
+            editor.putBoolean(KEY_OPENED_AUTOMATICALLY, false);
         }
         editor.apply();
+        sendRecoverySignal(context);
     }
 
     static boolean isPending(Context context) {
@@ -118,24 +124,39 @@ final class UberRecoveryState {
 
     static void markDetailsOpened(Context context, String orderCode) {
         SharedPreferences preferences = preferences(context);
-        Set<String> handled = new HashSet<>(
-            preferences.getStringSet(KEY_HANDLED_ORDER_CODES, new HashSet<>())
-        );
+        Set<String> handled = handledCodes(context);
         if (orderCode != null && !orderCode.trim().isEmpty()) {
+            if (handled.size() >= MAX_HANDLED_ORDER_CODES) handled.clear();
             handled.add(orderCode.trim().toUpperCase(Locale.ROOT));
         }
         preferences.edit()
             .putBoolean(KEY_OPENED_AUTOMATICALLY, true)
             .putInt(KEY_BACK_ATTEMPTS, 0)
+            .putInt(KEY_EMPTY_SCANS, 0)
             .putStringSet(KEY_HANDLED_ORDER_CODES, handled)
             .apply();
     }
 
     static boolean wasHandled(Context context, String orderCode) {
         if (orderCode == null || orderCode.trim().isEmpty()) return false;
-        Set<String> handled = preferences(context)
-            .getStringSet(KEY_HANDLED_ORDER_CODES, new HashSet<>());
+        Set<String> handled = handledCodes(context);
         return handled.contains(orderCode.trim().toUpperCase(Locale.ROOT));
+    }
+
+    static void noteOrderCardFound(Context context) {
+        preferences(context).edit().putInt(KEY_EMPTY_SCANS, 0).apply();
+    }
+
+    static boolean shouldStopAfterEmptyOverview(Context context) {
+        if (!isPending(context)) return true;
+        SharedPreferences preferences = preferences(context);
+        int scans = preferences.getInt(KEY_EMPTY_SCANS, 0) + 1;
+        if (scans >= MAX_EMPTY_SCANS) {
+            clear(context);
+            return true;
+        }
+        preferences.edit().putInt(KEY_EMPTY_SCANS, scans).apply();
+        return false;
     }
 
     static boolean wasOpenedAutomatically(Context context) {
@@ -154,17 +175,30 @@ final class UberRecoveryState {
     static boolean finishCurrentOrder(Context context) {
         SharedPreferences preferences = preferences(context);
         int remaining = Math.max(0, preferences.getInt(KEY_REMAINING, 1) - 1);
-        if (remaining == 0) {
-            clear(context);
-            return false;
-        }
         preferences.edit()
             .putLong(KEY_PENDING_UNTIL, System.currentTimeMillis() + RECOVERY_WINDOW_MS)
-            .putInt(KEY_REMAINING, remaining)
+            .putInt(KEY_REMAINING, Math.max(1, remaining))
             .putBoolean(KEY_OPENED_AUTOMATICALLY, false)
             .putInt(KEY_BACK_ATTEMPTS, 0)
+            .putInt(KEY_EMPTY_SCANS, 0)
             .apply();
         return true;
+    }
+
+    static void sendRecoverySignal(Context context) {
+        Intent intent = new Intent(ACTION_RECOVERY_REQUESTED);
+        intent.setPackage(context.getPackageName());
+        context.sendBroadcast(intent);
+    }
+
+    static void launchUber(Context context) {
+        Intent launchIntent = context.getPackageManager().getLaunchIntentForPackage(UBER_ORDERS_PACKAGE);
+        if (launchIntent == null) return;
+        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        try {
+            context.startActivity(launchIntent);
+        } catch (Exception ignored) {
+        }
     }
 
     private static int extractOrderCount(String value) {
@@ -186,17 +220,27 @@ final class UberRecoveryState {
             } catch (PendingIntent.CanceledException ignored) {
             }
         }
-        Intent launchIntent = context.getPackageManager().getLaunchIntentForPackage(UBER_ORDERS_PACKAGE);
-        if (launchIntent == null) return;
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        try {
-            context.startActivity(launchIntent);
-        } catch (Exception ignored) {
-        }
+        launchUber(context);
     }
 
     private static SharedPreferences preferences(Context context) {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    private static Set<String> handledCodes(Context context) {
+        SharedPreferences preferences = preferences(context);
+        long now = System.currentTimeMillis();
+        long startedAt = preferences.getLong(KEY_HANDLED_WINDOW_STARTED_AT, 0L);
+        if (startedAt == 0L || now - startedAt >= HANDLED_WINDOW_MS) {
+            preferences.edit()
+                .putLong(KEY_HANDLED_WINDOW_STARTED_AT, now)
+                .remove(KEY_HANDLED_ORDER_CODES)
+                .apply();
+            return new HashSet<>();
+        }
+        return new HashSet<>(
+            preferences.getStringSet(KEY_HANDLED_ORDER_CODES, new HashSet<>())
+        );
     }
 
     private static void clear(Context context) {
@@ -205,6 +249,7 @@ final class UberRecoveryState {
             .remove(KEY_REMAINING)
             .remove(KEY_OPENED_AUTOMATICALLY)
             .remove(KEY_BACK_ATTEMPTS)
+            .remove(KEY_EMPTY_SCANS)
             .apply();
     }
 }
