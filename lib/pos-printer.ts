@@ -90,6 +90,24 @@ export type PosKitchenTicketTemplateSettings = {
   showTimestamp: boolean;
   showAmounts: boolean;
   largeText: boolean;
+  customMessage: string;
+  blockOrder: PosKitchenTicketBlock[];
+  blockStyles: Record<PosKitchenTicketBlock, PosKitchenTicketBlockStyle>;
+};
+
+export type PosKitchenTicketBlock = "title" | "store" | "pickup" | "orderType" | "items" | "note" | "message" | "timestamp";
+
+export type PosKitchenTicketBlockStyle = {
+  textSize: "small" | "standard" | "large" | "xlarge";
+  alignment: "left" | "center";
+  bold: boolean;
+  separatorBefore: boolean;
+};
+
+export type PosKitchenTicketTemplateVariant = {
+  brandId: string;
+  brandName: string;
+  template: PosKitchenTicketTemplateSettings;
 };
 
 export type PosPrinterSettings = PosPrinterConnection & {
@@ -104,6 +122,7 @@ export type PosPrinterSettings = PosPrinterConnection & {
   receiptTemplate: PosReceiptTemplateSettings;
   receiptTemplateVariants: PosReceiptTemplateVariant[];
   kitchenTicketTemplate: PosKitchenTicketTemplateSettings;
+  kitchenTicketTemplateVariants: PosKitchenTicketTemplateVariant[];
 };
 
 export type PosPhysicalCustomerDisplayPayload = {
@@ -242,7 +261,19 @@ export const defaultPosKitchenTicketTemplateSettings: PosKitchenTicketTemplateSe
   showNote: true,
   showTimestamp: true,
   showAmounts: false,
-  largeText: true
+  largeText: true,
+  customMessage: "",
+  blockOrder: ["title", "store", "pickup", "orderType", "items", "note", "message", "timestamp"],
+  blockStyles: {
+    title: { textSize: "xlarge", alignment: "center", bold: true, separatorBefore: false },
+    store: { textSize: "standard", alignment: "center", bold: false, separatorBefore: false },
+    pickup: { textSize: "xlarge", alignment: "left", bold: true, separatorBefore: true },
+    orderType: { textSize: "standard", alignment: "left", bold: false, separatorBefore: false },
+    items: { textSize: "standard", alignment: "left", bold: false, separatorBefore: true },
+    note: { textSize: "small", alignment: "left", bold: false, separatorBefore: true },
+    message: { textSize: "standard", alignment: "left", bold: false, separatorBefore: true },
+    timestamp: { textSize: "standard", alignment: "left", bold: false, separatorBefore: true }
+  }
 };
 
 export const defaultPosPhysicalCustomerDisplaySettings: PosPhysicalCustomerDisplaySettings = {
@@ -270,7 +301,8 @@ export const defaultPosPrinterSettings: PosPrinterSettings = {
   customerDisplay: defaultPosPhysicalCustomerDisplaySettings,
   receiptTemplate: defaultPosReceiptTemplateSettings,
   receiptTemplateVariants: [],
-  kitchenTicketTemplate: defaultPosKitchenTicketTemplateSettings
+  kitchenTicketTemplate: defaultPosKitchenTicketTemplateSettings,
+  kitchenTicketTemplateVariants: []
 };
 
 export function normalizePosPrinterConnection(value: unknown, fallback: PosPrinterConnection = defaultPosPrinterConnection): PosPrinterConnection {
@@ -362,6 +394,26 @@ export function normalizePosKitchenTicketTemplateSettings(value: unknown): PosKi
     const value = String(next ?? "").trim();
     return (value || fallback).slice(0, max);
   };
+  const validBlocks: PosKitchenTicketBlock[] = ["title", "store", "pickup", "orderType", "items", "note", "message", "timestamp"];
+  const suppliedBlocks = Array.isArray(source.blockOrder)
+    ? source.blockOrder.filter((item): item is PosKitchenTicketBlock => validBlocks.includes(item as PosKitchenTicketBlock))
+    : [];
+  const blockOrder = [...new Set([...suppliedBlocks, ...validBlocks])];
+  const sourceStyles: Partial<Record<PosKitchenTicketBlock, Partial<PosKitchenTicketBlockStyle>>> =
+    source.blockStyles && typeof source.blockStyles === "object" ? source.blockStyles : {};
+  const blockStyles = Object.fromEntries(validBlocks.map((block) => {
+    const fallback = defaultPosKitchenTicketTemplateSettings.blockStyles[block];
+    const raw = sourceStyles[block] && typeof sourceStyles[block] === "object" ? sourceStyles[block] : {};
+    const textSize = ["small", "standard", "large", "xlarge"].includes(String(raw.textSize))
+      ? raw.textSize as PosKitchenTicketBlockStyle["textSize"]
+      : fallback.textSize;
+    return [block, {
+      textSize,
+      alignment: raw.alignment === "center" ? "center" : raw.alignment === "left" ? "left" : fallback.alignment,
+      bold: typeof raw.bold === "boolean" ? raw.bold : fallback.bold,
+      separatorBefore: typeof raw.separatorBefore === "boolean" ? raw.separatorBefore : fallback.separatorBefore
+    }];
+  })) as Record<PosKitchenTicketBlock, PosKitchenTicketBlockStyle>;
   return {
     showTitle: source.showTitle !== false,
     title: text(source.title, defaultPosKitchenTicketTemplateSettings.title),
@@ -373,7 +425,10 @@ export function normalizePosKitchenTicketTemplateSettings(value: unknown): PosKi
     showNote: source.showNote !== false,
     showTimestamp: source.showTimestamp !== false,
     showAmounts: source.showAmounts === true,
-    largeText: source.largeText !== false
+    largeText: source.largeText !== false,
+    customMessage: String(source.customMessage ?? "").trim().slice(0, 240),
+    blockOrder,
+    blockStyles
   };
 }
 
@@ -384,6 +439,7 @@ export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings 
   const kitchenPrinter = normalizePosPrinterConnection(source.kitchenPrinter, legacyPrinter);
   const brandKitchenPrinters = Array.isArray(source.brandKitchenPrinters) ? source.brandKitchenPrinters : [];
   const receiptTemplateVariants = Array.isArray(source.receiptTemplateVariants) ? source.receiptTemplateVariants : [];
+  const kitchenTicketTemplateVariants = Array.isArray(source.kitchenTicketTemplateVariants) ? source.kitchenTicketTemplateVariants : [];
   const kitchenCopies = Math.round(Number(source.kitchenCopies ?? defaultPosPrinterSettings.kitchenCopies));
   const displayText = (value: unknown, fallback: string) => {
     const normalized = String(value ?? "").replace(/[\r\n]+/g, " ").trim();
@@ -422,6 +478,16 @@ export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings 
       }];
     }).filter((variant, index, variants) => variants.findIndex((item) => item.brandId === variant.brandId && item.documentType === variant.documentType) === index).slice(0, 60),
     kitchenTicketTemplate: normalizePosKitchenTicketTemplateSettings(source.kitchenTicketTemplate),
+    kitchenTicketTemplateVariants: kitchenTicketTemplateVariants.flatMap((item) => {
+      const record = item && typeof item === "object" && !Array.isArray(item) ? item as Partial<PosKitchenTicketTemplateVariant> : {};
+      const brandId = String(record.brandId ?? "").trim().slice(0, 80);
+      if (!brandId) return [];
+      return [{
+        brandId,
+        brandName: String(record.brandName ?? "").trim().slice(0, 120),
+        template: normalizePosKitchenTicketTemplateSettings(record.template)
+      }];
+    }).filter((variant, index, variants) => variants.findIndex((item) => item.brandId === variant.brandId) === index).slice(0, 30),
     brandKitchenPrinters: brandKitchenPrinters.flatMap((item) => {
       const record = item && typeof item === "object" && !Array.isArray(item) ? item as Partial<PosBrandKitchenPrinterSetting> : {};
       const brandId = String(record.brandId || "").trim();
@@ -440,6 +506,12 @@ export function resolvePosReceiptTemplate(settings: PosPrinterSettings, brandId:
   return settings.receiptTemplateVariants.find((item) => item.brandId === normalizedBrandId && item.documentType === documentType)?.template
     ?? settings.receiptTemplateVariants.find((item) => !item.brandId && item.documentType === documentType)?.template
     ?? settings.receiptTemplate;
+}
+
+export function resolvePosKitchenTicketTemplate(settings: PosPrinterSettings, brandId?: string | null) {
+  const normalizedBrandId = String(brandId ?? "").trim();
+  return settings.kitchenTicketTemplateVariants.find((item) => item.brandId === normalizedBrandId)?.template
+    ?? settings.kitchenTicketTemplate;
 }
 
 export function getReceiptPrinter(settings: PosPrinterSettings) {
@@ -504,6 +576,43 @@ export function createTestPrintPayload(printer: PosPrinterConnection, storeName:
           "中文: 厨房打印 / 收据 / 合计"
         ]
       }]
+    }
+  };
+}
+
+export function createKitchenTestPrintPayload(
+  printer: PosPrinterConnection,
+  storeName: string,
+  template: PosKitchenTicketTemplateSettings
+): PosPrintPayload {
+  return {
+    version: 1,
+    jobType: "kitchen",
+    printer,
+    storeName,
+    printedAt: new Date().toISOString(),
+    kitchenTicketTemplate: template,
+    order: {
+      pickupCode: "F1-1234",
+      orderType: "web",
+      paymentMethod: "kitchen",
+      paymentLabel: "厨房",
+      note: "ストロー不要",
+      subtotalAmount: 1028,
+      discountAmount: 0,
+      couponDiscountAmount: 0,
+      taxAmount: 0,
+      taxRate: 0,
+      totalAmount: 1028,
+      items: [
+        {
+          name: "チョコミントタピオカフラッペ",
+          quantity: 1,
+          amount: 650,
+          options: ["サイズ：R レギュラー 500ml", "温度：ICE", "甘さ：ふつう", "氷：なし"]
+        },
+        { name: "国産米トッポッキ", quantity: 1, amount: 378, options: [] }
+      ]
     }
   };
 }

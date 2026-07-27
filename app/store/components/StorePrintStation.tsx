@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getKitchenPrinterForBrand, printWithAndroidBridge, type PosPrintPayload, type PosPrinterSettings } from "../../../lib/pos-printer";
+import { getKitchenPrinterForBrand, hasPosPrinterDestination, printWithAndroidBridge, resolvePosKitchenTicketTemplate, type PosPrintPayload, type PosPrinterSettings } from "../../../lib/pos-printer";
 import { getStoredStoreSelection } from "./store-selection";
 
 type PrintJob = {
@@ -49,14 +49,14 @@ function splitKitchenItems(summary: string) {
 
 function createKitchenPayload(job: PrintJob, settings: PosPrinterSettings): PosPrintPayload | null {
   const printer = getKitchenPrinterForBrand(settings, job.brandId || null);
-  if (!settings.enabled || !settings.kitchenEnabled || !printer.host) return null;
+  if (!settings.enabled || !settings.kitchenEnabled || !hasPosPrinterDestination(printer)) return null;
   return {
     version: 1,
     jobType: "kitchen",
     printer,
     storeName: `${job.storeName || "Foundr1 STORE"} / ${job.brandName || job.productionAreaLabel || "厨房"}`,
     printedAt: new Date().toISOString(),
-    kitchenTicketTemplate: settings.kitchenTicketTemplate,
+    kitchenTicketTemplate: resolvePosKitchenTicketTemplate(settings, job.brandId || null),
     order: {
       pickupCode: job.pickupCode,
       orderType: job.orderType || "web",

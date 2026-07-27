@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  ArrowDown,
+  ArrowUp,
   Boxes,
   ClipboardList,
   ExternalLink,
@@ -11,6 +13,7 @@ import {
   MonitorSmartphone,
   PackageCheck,
   Printer,
+  RotateCcw,
   Search,
   Store,
   Trash2,
@@ -25,13 +28,17 @@ import { useUnsavedChangesGuard } from "../../../../components/UnsavedChangesGua
 import { normalizeIntegerInput } from "../../../../lib/number-input";
 import { storeTerminalNameOptions, storeTerminalWorkstations } from "../../../../lib/store-terminal-names";
 import {
+  createKitchenTestPrintPayload,
   createTestPrintPayload,
   defaultPosKitchenTicketTemplateSettings,
   defaultPosPrinterSettings,
   getKitchenPrinterForBrand,
   getReceiptPrinter,
   printWithAndroidBridge,
+  resolvePosKitchenTicketTemplate,
   resolvePosReceiptTemplate,
+  type PosKitchenTicketBlock,
+  type PosKitchenTicketBlockStyle,
   type PosKitchenTicketTemplateSettings,
   type PosPrinterConnection,
   type PosPrinterSettings,
@@ -183,6 +190,7 @@ export default function StoreDeviceSettingsPage() {
   const [testPrinterTarget, setTestPrinterTarget] = useState("kitchen");
   const [receiptPreviewMode, setReceiptPreviewMode] = useState<"receipt" | "invoice">("receipt");
   const [receiptPreviewBrandId, setReceiptPreviewBrandId] = useState("");
+  const [kitchenTemplateBrandId, setKitchenTemplateBrandId] = useState("");
   const [testPrinting, setTestPrinting] = useState(false);
   const [uploadingMediaType, setUploadingMediaType] = useState<"" | "image" | "video">("");
   const [terminalAccounts, setTerminalAccounts] = useState<StoreTerminalAccount[]>([]);
@@ -371,12 +379,67 @@ export default function StoreDeviceSettingsPage() {
       ...current,
       printerSettings: {
         ...current.printerSettings,
-        kitchenTicketTemplate: {
-          ...(current.printerSettings.kitchenTicketTemplate ?? defaultPosKitchenTicketTemplateSettings),
-          ...patch
-        }
+        ...(kitchenTemplateBrandId
+          ? {
+            kitchenTicketTemplateVariants: [
+              ...current.printerSettings.kitchenTicketTemplateVariants.filter((item) => item.brandId !== kitchenTemplateBrandId),
+              {
+                brandId: kitchenTemplateBrandId,
+                brandName: current.posBrandSettings.find((brand) => brand.brandId === kitchenTemplateBrandId)?.brandName ?? "",
+                template: {
+                  ...resolvePosKitchenTicketTemplate(current.printerSettings, kitchenTemplateBrandId),
+                  ...patch
+                }
+              }
+            ]
+          }
+          : {
+            kitchenTicketTemplate: {
+              ...(current.printerSettings.kitchenTicketTemplate ?? defaultPosKitchenTicketTemplateSettings),
+              ...patch
+            }
+          })
       }
     }));
+  }
+
+  function removeKitchenTemplateOverride() {
+    if (!kitchenTemplateBrandId) return;
+    setSettings((current) => ({
+      ...current,
+      printerSettings: {
+        ...current.printerSettings,
+        kitchenTicketTemplateVariants: current.printerSettings.kitchenTicketTemplateVariants.filter((item) => item.brandId !== kitchenTemplateBrandId)
+      }
+    }));
+  }
+
+  function resetKitchenTemplate() {
+    updateKitchenTicketTemplate({
+      ...defaultPosKitchenTicketTemplateSettings,
+      blockStyles: structuredClone(defaultPosKitchenTicketTemplateSettings.blockStyles),
+      blockOrder: [...defaultPosKitchenTicketTemplateSettings.blockOrder]
+    });
+  }
+
+  function moveKitchenBlock(block: PosKitchenTicketBlock, direction: -1 | 1) {
+    const template = resolvePosKitchenTicketTemplate(settings.printerSettings, kitchenTemplateBrandId);
+    const index = template.blockOrder.indexOf(block);
+    const targetIndex = index + direction;
+    if (index < 0 || targetIndex < 0 || targetIndex >= template.blockOrder.length) return;
+    const blockOrder = [...template.blockOrder];
+    [blockOrder[index], blockOrder[targetIndex]] = [blockOrder[targetIndex], blockOrder[index]];
+    updateKitchenTicketTemplate({ blockOrder });
+  }
+
+  function updateKitchenBlockStyle(block: PosKitchenTicketBlock, patch: Partial<PosKitchenTicketBlockStyle>) {
+    const template = resolvePosKitchenTicketTemplate(settings.printerSettings, kitchenTemplateBrandId);
+    updateKitchenTicketTemplate({
+      blockStyles: {
+        ...template.blockStyles,
+        [block]: { ...template.blockStyles[block], ...patch }
+      }
+    });
   }
 
   async function saveSettings(options: { quiet?: boolean } = {}) {
@@ -446,7 +509,16 @@ export default function StoreDeviceSettingsPage() {
       setTestPrinting(false);
       return;
     }
-    const result = await printWithAndroidBridge(createTestPrintPayload(printer, settings.storeName || "Foundr1 OS"));
+    const testBrandId = testPrinterTarget.startsWith("brand:") ? testPrinterTarget.slice("brand:".length) : "";
+    const testBrandName = settings.posBrandSettings.find((brand) => brand.brandId === testBrandId)?.brandName;
+    const payload = testPrinterTarget === "receipt"
+      ? createTestPrintPayload(printer, settings.storeName || "Foundr1 OS")
+      : createKitchenTestPrintPayload(
+        printer,
+        `${settings.storeName || "Foundr1 OS"} / ${testBrandName || "厨房"}`,
+        resolvePosKitchenTicketTemplate(settings.printerSettings, testBrandId)
+      );
+    const result = await printWithAndroidBridge(payload);
     setMessage(result.ok ? "プリンター設定を保存し、テスト印刷を送信しました。" : result.error || "テスト印刷に失敗しました。");
     setTestPrinting(false);
   }
@@ -521,6 +593,10 @@ export default function StoreDeviceSettingsPage() {
   }, []);
 
   const receiptPrinter = getReceiptPrinter(settings.printerSettings);
+  const activeKitchenTemplate = resolvePosKitchenTicketTemplate(settings.printerSettings, kitchenTemplateBrandId);
+  const activeKitchenBrand = settings.posBrandSettings.find((brand) => brand.brandId === kitchenTemplateBrandId);
+  const hasKitchenTemplateOverride = Boolean(kitchenTemplateBrandId && settings.printerSettings.kitchenTicketTemplateVariants.some((item) => item.brandId === kitchenTemplateBrandId));
+  const activeKitchenPrinter = getKitchenPrinterForBrand(settings.printerSettings, kitchenTemplateBrandId);
 
   return (
     <main className="shell">
@@ -858,9 +934,23 @@ export default function StoreDeviceSettingsPage() {
             />
           </div>
           <div className="pos-admin-printer-card">
-            <div>
-              <strong>厨房伝票テンプレート</strong>
-              <p>Web 予約と POS から厨房へ出す内部伝票の表示内容を設定します。お客様向けレシートとは別管理です。</p>
+            <div className="store-device-receipt-preview-heading">
+              <div>
+                <strong>厨房伝票テンプレート</strong>
+                <p>区画を並べ替え、文字・罫線・ブランド別表示を実際の用紙幅で確認できます。</p>
+              </div>
+              <div className="store-device-receipt-preview-controls">
+                <select value={kitchenTemplateBrandId} onChange={(event) => setKitchenTemplateBrandId(event.target.value)}>
+                  <option value="">店舗共通</option>
+                  {settings.posBrandSettings.map((brand) => <option value={brand.brandId} key={brand.brandId}>{brand.brandName}</option>)}
+                </select>
+                {hasKitchenTemplateOverride ? (
+                  <button className="secondary-button" type="button" onClick={removeKitchenTemplateOverride} disabled={!canManage}>共通設定を使用</button>
+                ) : null}
+                <button className="secondary-button" type="button" onClick={resetKitchenTemplate} disabled={!canManage}>
+                  <RotateCcw size={14} />初期設定
+                </button>
+              </div>
             </div>
             <div className="pos-admin-receipt-template-workspace store-kitchen-ticket-template-workspace">
               <div className="pos-admin-receipt-template-editor">
@@ -877,51 +967,38 @@ export default function StoreDeviceSettingsPage() {
                   </label>
                   <label>
                     <span>タイトル</span>
-                    <input value={settings.printerSettings.kitchenTicketTemplate.title} onChange={(event) => updateKitchenTicketTemplate({ title: event.target.value })} disabled={!canManage} />
+                    <input value={activeKitchenTemplate.title} onChange={(event) => updateKitchenTicketTemplate({ title: event.target.value })} disabled={!canManage} />
                   </label>
                   <label className="pos-admin-discount-check">
-                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.largeText} onChange={(event) => updateKitchenTicketTemplate({ largeText: event.target.checked })} disabled={!canManage} />
+                    <input type="checkbox" checked={activeKitchenTemplate.largeText} onChange={(event) => updateKitchenTicketTemplate({ largeText: event.target.checked })} disabled={!canManage} />
                     <span>大きめの文字で印刷</span>
                   </label>
                   <label className="pos-admin-discount-check">
-                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showTitle} onChange={(event) => updateKitchenTicketTemplate({ showTitle: event.target.checked })} disabled={!canManage} />
-                    <span>タイトルを表示</span>
-                  </label>
-                  <label className="pos-admin-discount-check">
-                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showStoreName} onChange={(event) => updateKitchenTicketTemplate({ showStoreName: event.target.checked })} disabled={!canManage} />
-                    <span>店舗名・ブランド名を表示</span>
-                  </label>
-                  <label className="pos-admin-discount-check">
-                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showPickupCode} onChange={(event) => updateKitchenTicketTemplate({ showPickupCode: event.target.checked })} disabled={!canManage} />
-                    <span>受取番号を表示</span>
-                  </label>
-                  <label className="pos-admin-discount-check">
-                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showOrderType} onChange={(event) => updateKitchenTicketTemplate({ showOrderType: event.target.checked })} disabled={!canManage} />
-                    <span>注文区分を表示</span>
-                  </label>
-                  <label className="pos-admin-discount-check">
-                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showItems} onChange={(event) => updateKitchenTicketTemplate({ showItems: event.target.checked })} disabled={!canManage} />
-                    <span>商品を表示</span>
-                  </label>
-                  <label className="pos-admin-discount-check">
-                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showOptions} onChange={(event) => updateKitchenTicketTemplate({ showOptions: event.target.checked })} disabled={!canManage} />
+                    <input type="checkbox" checked={activeKitchenTemplate.showOptions} onChange={(event) => updateKitchenTicketTemplate({ showOptions: event.target.checked })} disabled={!canManage} />
                     <span>サイズ・甘さ・氷などを表示</span>
                   </label>
                   <label className="pos-admin-discount-check">
-                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showNote} onChange={(event) => updateKitchenTicketTemplate({ showNote: event.target.checked })} disabled={!canManage} />
-                    <span>備考を表示</span>
-                  </label>
-                  <label className="pos-admin-discount-check">
-                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showTimestamp} onChange={(event) => updateKitchenTicketTemplate({ showTimestamp: event.target.checked })} disabled={!canManage} />
-                    <span>印刷日時を表示</span>
-                  </label>
-                  <label className="pos-admin-discount-check">
-                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showAmounts} onChange={(event) => updateKitchenTicketTemplate({ showAmounts: event.target.checked })} disabled={!canManage} />
+                    <input type="checkbox" checked={activeKitchenTemplate.showAmounts} onChange={(event) => updateKitchenTicketTemplate({ showAmounts: event.target.checked })} disabled={!canManage} />
                     <span>金額を表示</span>
                   </label>
                 </div>
+                <label className="store-kitchen-message-field">
+                  <span>固定メッセージ</span>
+                  <textarea value={activeKitchenTemplate.customMessage} onChange={(event) => updateKitchenTicketTemplate({ customMessage: event.target.value })} placeholder="例：アレルギー・受取時間を必ず確認" disabled={!canManage} />
+                </label>
+                <KitchenBlockEditor
+                  template={activeKitchenTemplate}
+                  disabled={!canManage}
+                  onMove={moveKitchenBlock}
+                  onTemplateChange={updateKitchenTicketTemplate}
+                  onStyleChange={updateKitchenBlockStyle}
+                />
               </div>
-              <KitchenTicketPreview storeName={settings.storeName || "店舗名"} template={settings.printerSettings.kitchenTicketTemplate} />
+              <KitchenTicketPreview
+                storeName={`${settings.storeName || "店舗名"} / ${activeKitchenBrand?.brandName || "ドリンク"}`}
+                paperWidth={activeKitchenPrinter.paperWidth}
+                template={activeKitchenTemplate}
+              />
             </div>
           </div>
         </section>
@@ -931,60 +1008,155 @@ export default function StoreDeviceSettingsPage() {
   );
 }
 
+const kitchenBlockLabels: Record<PosKitchenTicketBlock, string> = {
+  title: "タイトル",
+  store: "店舗・ブランド",
+  pickup: "受取番号",
+  orderType: "注文区分",
+  items: "商品・オプション",
+  note: "備考",
+  message: "固定メッセージ",
+  timestamp: "印刷日時"
+};
+
+function isKitchenBlockVisible(template: PosKitchenTicketTemplateSettings, block: PosKitchenTicketBlock) {
+  if (block === "title") return template.showTitle;
+  if (block === "store") return template.showStoreName;
+  if (block === "pickup") return template.showPickupCode;
+  if (block === "orderType") return template.showOrderType;
+  if (block === "items") return template.showItems;
+  if (block === "note") return template.showNote;
+  if (block === "message") return Boolean(template.customMessage);
+  return template.showTimestamp;
+}
+
+function KitchenBlockEditor({
+  template,
+  disabled,
+  onMove,
+  onTemplateChange,
+  onStyleChange
+}: {
+  template: PosKitchenTicketTemplateSettings;
+  disabled: boolean;
+  onMove: (block: PosKitchenTicketBlock, direction: -1 | 1) => void;
+  onTemplateChange: (patch: Partial<PosKitchenTicketTemplateSettings>) => void;
+  onStyleChange: (block: PosKitchenTicketBlock, patch: Partial<PosKitchenTicketBlockStyle>) => void;
+}) {
+  function toggleBlock(block: PosKitchenTicketBlock, checked: boolean) {
+    if (block === "title") onTemplateChange({ showTitle: checked });
+    else if (block === "store") onTemplateChange({ showStoreName: checked });
+    else if (block === "pickup") onTemplateChange({ showPickupCode: checked });
+    else if (block === "orderType") onTemplateChange({ showOrderType: checked });
+    else if (block === "items") onTemplateChange({ showItems: checked });
+    else if (block === "note") onTemplateChange({ showNote: checked });
+    else if (block === "timestamp") onTemplateChange({ showTimestamp: checked });
+  }
+
+  return (
+    <div className="store-kitchen-block-editor">
+      <div className="store-kitchen-block-editor-heading">
+        <strong>表示区画と順序</strong>
+        <span>矢印で並べ替え、区画ごとに印刷スタイルを指定</span>
+      </div>
+      {template.blockOrder.map((block, index) => {
+        const style = template.blockStyles[block];
+        const isMessage = block === "message";
+        return (
+          <div className="store-kitchen-block-row" key={block}>
+            <div className="store-kitchen-block-main">
+              <label className="pos-admin-discount-check">
+                <input
+                  type="checkbox"
+                  checked={isMessage ? Boolean(template.customMessage) : isKitchenBlockVisible(template, block)}
+                  onChange={(event) => {
+                    if (isMessage && !event.target.checked) onTemplateChange({ customMessage: "" });
+                    else if (isMessage) onTemplateChange({ customMessage: "厨房確認事項" });
+                    else toggleBlock(block, event.target.checked);
+                  }}
+                  disabled={disabled}
+                />
+                <strong>{kitchenBlockLabels[block]}</strong>
+              </label>
+              <div className="store-kitchen-block-move">
+                <button className="icon-button" type="button" aria-label={`${kitchenBlockLabels[block]}を上へ`} onClick={() => onMove(block, -1)} disabled={disabled || index === 0}><ArrowUp size={14} /></button>
+                <button className="icon-button" type="button" aria-label={`${kitchenBlockLabels[block]}を下へ`} onClick={() => onMove(block, 1)} disabled={disabled || index === template.blockOrder.length - 1}><ArrowDown size={14} /></button>
+              </div>
+            </div>
+            <div className="store-kitchen-block-controls">
+              <label>
+                <span>文字</span>
+                <select value={style.textSize} onChange={(event) => onStyleChange(block, { textSize: event.target.value as PosKitchenTicketBlockStyle["textSize"] })} disabled={disabled}>
+                  <option value="small">小</option>
+                  <option value="standard">標準</option>
+                  <option value="large">大</option>
+                  <option value="xlarge">特大</option>
+                </select>
+              </label>
+              <label>
+                <span>配置</span>
+                <select value={style.alignment} onChange={(event) => onStyleChange(block, { alignment: event.target.value as PosKitchenTicketBlockStyle["alignment"] })} disabled={disabled}>
+                  <option value="left">左</option>
+                  <option value="center">中央</option>
+                </select>
+              </label>
+              <label className="pos-admin-discount-check is-compact">
+                <input type="checkbox" checked={style.bold} onChange={(event) => onStyleChange(block, { bold: event.target.checked })} disabled={disabled} />
+                <span>太字</span>
+              </label>
+              <label className="pos-admin-discount-check is-compact">
+                <input type="checkbox" checked={style.separatorBefore} onChange={(event) => onStyleChange(block, { separatorBefore: event.target.checked })} disabled={disabled} />
+                <span>上罫線</span>
+              </label>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function KitchenTicketPreview({
   storeName,
+  paperWidth,
   template
 }: {
   storeName: string;
+  paperWidth: PosPrinterConnection["paperWidth"];
   template: PosKitchenTicketTemplateSettings;
 }) {
+  function renderBlock(block: PosKitchenTicketBlock) {
+    const style = template.blockStyles[block];
+    const className = `store-kitchen-preview-block is-${style.textSize} is-${style.alignment}${style.bold ? " is-bold" : ""}`;
+    let content = null;
+    if (block === "title" && template.showTitle) content = <p>{template.title || defaultPosKitchenTicketTemplateSettings.title}</p>;
+    else if (block === "store" && template.showStoreName) content = <p>{storeName}</p>;
+    else if (block === "pickup" && template.showPickupCode) content = <p>No. F1-1234</p>;
+    else if (block === "orderType" && template.showOrderType) content = <p>Web予約 / 厨房</p>;
+    else if (block === "items" && template.showItems) {
+      content = (
+        <>
+          <div className="pos-admin-receipt-paper-line"><span>チョコミントタピオカフラッペ x1</span>{template.showAmounts ? <span>¥650</span> : <span />}</div>
+          {template.showOptions ? <><p className="is-sub">　サイズ：R レギュラー 500ml</p><p className="is-sub">　温度：ICE</p><p className="is-sub">　甘さ：ふつう</p><p className="is-sub">　氷：なし</p></> : null}
+          <div className="pos-admin-receipt-paper-line"><span>国産米トッポッキ x1</span>{template.showAmounts ? <span>¥378</span> : <span />}</div>
+          {template.showAmounts ? <><div className="pos-admin-receipt-paper-rule" /><div className="pos-admin-receipt-paper-line is-total"><span>合計</span><span>¥1,028</span></div></> : null}
+        </>
+      );
+    } else if (block === "note" && template.showNote) content = <p>備考: ストロー不要</p>;
+    else if (block === "message" && template.customMessage) content = <>{template.customMessage.split(/\n+/).map((line) => <p key={line}>{line}</p>)}</>;
+    else if (block === "timestamp" && template.showTimestamp) content = <p>2026-07-27 12:34:56</p>;
+    if (!content) return null;
+    return <div className={className} key={block}>{style.separatorBefore ? <div className="pos-admin-receipt-paper-rule" /> : null}{content}</div>;
+  }
+
   return (
     <aside className="pos-admin-receipt-preview-panel" aria-label="厨房伝票プレビュー">
       <div className="pos-admin-receipt-preview-heading">
         <strong>厨房伝票プレビュー</strong>
-        <span>{template.largeText ? "大きめ" : "通常"}</span>
+        <span>{paperWidth}・{template.largeText ? "大きめ" : "通常"}</span>
       </div>
-      <div className="pos-admin-receipt-paper store-kitchen-ticket-preview">
-        {template.showTitle ? <h5>{template.title || defaultPosKitchenTicketTemplateSettings.title}</h5> : null}
-        {template.showStoreName ? <p>{storeName} / ドリンク</p> : null}
-        <div className="pos-admin-receipt-paper-rule" />
-        {template.showPickupCode ? <div className="pos-admin-receipt-paper-line is-strong"><span>No. F1-1234</span><span /></div> : null}
-        {template.showOrderType ? <p>持ち帰り / 厨房</p> : null}
-        {template.showItems ? (
-          <>
-            <div className="pos-admin-receipt-paper-rule" />
-            <div className="pos-admin-receipt-paper-line">
-              <span>チョコミントタピオカフラッペ x1</span>
-              {template.showAmounts ? <span>¥650</span> : <span />}
-            </div>
-            {template.showOptions ? (
-              <>
-                <p className="is-sub">  サイズ：R レギュラー 500ml</p>
-                <p className="is-sub">  温度：ICE</p>
-                <p className="is-sub">  甘さ：ふつう</p>
-                <p className="is-sub">  氷：なし</p>
-              </>
-            ) : null}
-            <div className="pos-admin-receipt-paper-line">
-              <span>国産米トッポッキ x1</span>
-              {template.showAmounts ? <span>¥378</span> : <span />}
-            </div>
-          </>
-        ) : null}
-        {template.showAmounts ? (
-          <>
-            <div className="pos-admin-receipt-paper-rule" />
-            <div className="pos-admin-receipt-paper-line is-total"><span>合計</span><span>¥1,028</span></div>
-          </>
-        ) : null}
-        {template.showNote ? (
-          <>
-            <div className="pos-admin-receipt-paper-rule" />
-            <p>備考: ストロー不要</p>
-          </>
-        ) : null}
-        <div className="pos-admin-receipt-paper-rule" />
-        {template.showTimestamp ? <p>2026-06-15 12:34:56</p> : null}
+      <div className={`pos-admin-receipt-paper store-kitchen-ticket-preview is-${paperWidth.replace("mm", "")}`}>
+        {template.blockOrder.map(renderBlock)}
       </div>
     </aside>
   );

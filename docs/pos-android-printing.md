@@ -56,8 +56,18 @@ The web app currently sends:
 
 The payload version is `1`. Keep Android parsing tolerant of unknown fields so POS templates can evolve. Android should rasterize `test`, `receipt`, and `kitchen` jobs through the same bitmap path so CJK output is consistent across OS test prints, POS receipts, and kitchen tickets.
 
+Kitchen jobs also include `kitchenTicketTemplate`. Its block editor uses:
+
+- `blockOrder`: `title`, `store`, `pickup`, `orderType`, `items`, `note`, `message`, and `timestamp`.
+- `blockStyles`: per-block `textSize`, `alignment`, `bold`, and `separatorBefore`.
+- `customMessage`: optional fixed kitchen instruction.
+- Existing `show*`, `showAmounts`, `showOptions`, and `largeText` flags remain supported.
+
+Templates can be overridden per brand through `kitchenTicketTemplateVariants`. Both POS checkout and the Web reservation print station must resolve the brand template before calling the native bridge.
+
 ## Current Web Entry Points
 
-- `/os/pos`: save receipt, default kitchen, and brand kitchen printer settings; send test prints to the selected destination.
+- `/os/stores/devices`: save printer destinations, visually edit default or brand-specific kitchen tickets, preview 58/80mm output, and send a template-aware test print.
+- `/os/pos`: save receipt template and POS settings.
 - `/store/pos`: after checkout, send receipt print jobs and brand-grouped kitchen print jobs when enabled.
 - Kitchen ticket copies are configured per store (1-5). The web app sends one bridge print call per copy for both POS and Web reservation kitchen tickets.

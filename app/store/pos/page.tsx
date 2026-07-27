@@ -6,7 +6,7 @@ import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useStat
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { addOfflinePosOrder, getOfflinePosSnapshot, listOfflinePosOrders, removeOfflinePosOrder, saveOfflinePosSnapshot, updateOfflinePosOrderError, type OfflinePosOrder } from "../../../lib/offline-pos";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
-import { createAutoStarBluetoothPrinter, createPhysicalCustomerDisplayPayload, defaultPosPrinterSettings, displayWithAndroidBridge, getKitchenPrinterForBrand, getReceiptPrinter, hasPosPrinterDestination, normalizePosPrinterSettings, printWithAndroidBridge, resolvePosReceiptTemplate, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
+import { createAutoStarBluetoothPrinter, createPhysicalCustomerDisplayPayload, defaultPosPrinterSettings, displayWithAndroidBridge, getKitchenPrinterForBrand, getReceiptPrinter, hasPosPrinterDestination, normalizePosPrinterSettings, printWithAndroidBridge, resolvePosKitchenTicketTemplate, resolvePosReceiptTemplate, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
 import { ModalHistoryScope } from "../../os/components/useModalHistory";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
@@ -1524,7 +1524,7 @@ export default function StorePosPage() {
     };
   }
 
-  function createKitchenPrintPayload(body: Record<string, unknown>, cartItems: PosCartItem[], printer: PosPrinterConnection, brandName: string): PosPrintPayload {
+  function createKitchenPrintPayload(body: Record<string, unknown>, cartItems: PosCartItem[], printer: PosPrinterConnection, brandName: string, brandId?: string): PosPrintPayload {
     const kitchenTotal = cartItems.reduce((sum, item) => sum + getLineUnitPrice(item) * item.quantity, 0);
     return {
       version: 1,
@@ -1533,7 +1533,7 @@ export default function StorePosPage() {
       storeName: `${stores.find((store) => store.id === selectedStoreId)?.name ?? "Foundr1 OS"} / ${brandName}`,
       printedAt: new Date().toISOString(),
       receiptTemplate: absolutizeReceiptTemplateMedia(posSettings.printerSettings.receiptTemplate),
-      kitchenTicketTemplate: posSettings.printerSettings.kitchenTicketTemplate,
+      kitchenTicketTemplate: resolvePosKitchenTicketTemplate(posSettings.printerSettings, brandId),
       order: {
         pickupCode: String(body.pickupCode || ""),
         orderType,
@@ -1579,7 +1579,7 @@ export default function StorePosPage() {
     for (const [brandId, group] of Object.entries(brandGroups)) {
       const printer = getKitchenPrinterForBrand(printerSettings, brandId === "default" ? null : brandId);
       if (!isPrintablePrinter(printer)) continue;
-      const payload = createKitchenPrintPayload(body, group.items, printer, group.brandName);
+      const payload = createKitchenPrintPayload(body, group.items, printer, group.brandName, brandId === "default" ? undefined : brandId);
       for (let copy = 1; copy <= printerSettings.kitchenCopies; copy += 1) {
         const result = await printWithAndroidBridge(payload);
         if (result.ok) {
