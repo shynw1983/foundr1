@@ -31,6 +31,7 @@ Simplified Chinese (`zh`) and Traditional Chinese (`zh-Hant`) are separate custo
 
 Menu records that can appear to customers must carry translated display names:
 
+- `menu_catalog_items.promotion_prefix_display_names`
 - `menu_catalog_items.display_names`
 - `menu_catalog_items.description_display_names`
 - `menu_option_groups.display_names`
@@ -48,6 +49,8 @@ Public APIs should expose `displayNames` next to the Japanese/source `name` or `
 ```ts
 type PublicMenuItem = {
   id: string;
+  promotionPrefix: string;
+  promotionPrefixDisplayNames: DisplayNames;
   name: string;
   displayNames: DisplayNames;
   description: string;

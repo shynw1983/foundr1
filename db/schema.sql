@@ -2061,6 +2061,8 @@ create table if not exists menu_catalog_items (
   menu_source_id uuid references menu_sources(id) on delete set null,
   external_id text,
   item_kind text not null default 'fixed_product',
+  promotion_prefix text not null default '',
+  promotion_prefix_display_names jsonb not null default '{}'::jsonb,
   name text not null,
   display_names jsonb not null default '{}'::jsonb,
   category text,
@@ -2112,7 +2114,19 @@ create table if not exists menu_options (
   unique (option_group_id, option_key)
 );
 
+create table if not exists menu_catalog_item_option_groups (
+  menu_catalog_item_id uuid not null references menu_catalog_items(id) on delete cascade,
+  option_group_id uuid not null references menu_option_groups(id) on delete cascade,
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (menu_catalog_item_id, option_group_id)
+);
+
 alter table menu_catalog_items add column if not exists display_names jsonb not null default '{}'::jsonb;
+alter table menu_catalog_items add column if not exists promotion_prefix text not null default '';
+alter table menu_catalog_items add column if not exists promotion_prefix_display_names jsonb not null default '{}'::jsonb;
 alter table menu_catalog_items add column if not exists description_display_names jsonb not null default '{}'::jsonb;
 alter table menu_option_groups add column if not exists display_names jsonb not null default '{}'::jsonb;
 alter table menu_option_groups add column if not exists applicable_categories text[] not null default '{}';
@@ -3799,6 +3813,10 @@ create unique index if not exists idx_menu_categories_external_id_unique_scope
 create index if not exists idx_menu_catalog_items_brand_store on menu_catalog_items(brand_id, store_id, is_active);
 create index if not exists idx_menu_option_groups_item on menu_option_groups(menu_catalog_item_id, sort_order);
 create index if not exists idx_menu_options_group on menu_options(option_group_id, sort_order);
+create index if not exists idx_menu_catalog_item_option_groups_item
+  on menu_catalog_item_option_groups(menu_catalog_item_id, sort_order);
+create index if not exists idx_menu_catalog_item_option_groups_group
+  on menu_catalog_item_option_groups(option_group_id, menu_catalog_item_id);
 create index if not exists idx_menu_store_settings_brand_store on menu_store_settings(brand_id, store_id);
 create index if not exists idx_menu_option_store_settings_brand_store on menu_option_store_settings(brand_id, store_id);
 create index if not exists idx_menu_external_platforms_brand_store on menu_external_platforms(brand_id, store_id, is_active);

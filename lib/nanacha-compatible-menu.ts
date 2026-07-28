@@ -12,6 +12,8 @@ export type NanachaPricedOption = {
 export type NanachaDrink = {
   id: string;
   menuCatalogItemId: string;
+  promotionPrefix: string;
+  promotionPrefixDisplayNames?: Record<string, string>;
   name: string;
   displayNames?: Record<string, string>;
   category: string;
@@ -62,6 +64,8 @@ export type NanachaCompatibleMenu = {
 type MenuItemRow = {
   id: string;
   externalId: string;
+  promotionPrefix: string;
+  promotionPrefixDisplayNames?: Record<string, string>;
   name: string;
   displayNames?: Record<string, string>;
   category: string;
@@ -162,6 +166,8 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
       select
         menu_catalog_items.id::text,
         coalesce(menu_catalog_items.external_id, '') as "externalId",
+        coalesce(menu_catalog_items.promotion_prefix, '') as "promotionPrefix",
+        coalesce(menu_catalog_items.promotion_prefix_display_names, '{}'::jsonb) as "promotionPrefixDisplayNames",
         menu_catalog_items.name,
         coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
         coalesce(menu_catalog_items.category, '') as category,
@@ -280,6 +286,8 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
       const drink = {
         id: item.externalId || item.id,
         menuCatalogItemId: item.id,
+        promotionPrefix: item.promotionPrefix,
+        promotionPrefixDisplayNames: item.promotionPrefixDisplayNames,
         name: item.name,
         displayNames: item.displayNames,
         category: publicCategoryId,

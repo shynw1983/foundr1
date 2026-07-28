@@ -142,7 +142,7 @@ async function makeUniqueOptionKey(input: {
 }
 
 async function readMenuAdminData() {
-  const [brands, stores, sources, categories, items, groups, options, storeSettings] = await Promise.all([
+  const [brands, stores, sources, categories, items, groups, options, storeSettings, itemOptionGroups] = await Promise.all([
     sql`
       select id::text, name
       from brands
@@ -197,6 +197,8 @@ async function readMenuAdminData() {
         coalesce(menu_catalog_items.menu_source_id::text, '') as "menuSourceId",
         coalesce(menu_catalog_items.external_id, '') as "externalId",
         menu_catalog_items.item_kind as "itemKind",
+        coalesce(menu_catalog_items.promotion_prefix, '') as "promotionPrefix",
+        coalesce(menu_catalog_items.promotion_prefix_display_names, '{}'::jsonb) as "promotionPrefixDisplayNames",
         menu_catalog_items.name,
         coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
         coalesce(menu_catalog_items.category, '') as category,
@@ -264,6 +266,15 @@ async function readMenuAdminData() {
         updated_at as "updatedAt"
       from menu_store_settings
       order by updated_at desc
+    `,
+    sql`
+      select
+        menu_catalog_item_id::text as "menuCatalogItemId",
+        option_group_id::text as "optionGroupId",
+        sort_order as "sortOrder",
+        is_active as "isActive"
+      from menu_catalog_item_option_groups
+      order by menu_catalog_item_id, sort_order, option_group_id
     `
   ]);
 
@@ -315,7 +326,7 @@ async function readMenuAdminData() {
     `
   ]);
 
-  return { brands, stores, sources, categories, items, groups, options, storeSettings, externalPlatforms, syncTasks };
+  return { brands, stores, sources, categories, items, groups, options, storeSettings, itemOptionGroups, externalPlatforms, syncTasks };
 }
 
 export async function GET() {
@@ -957,6 +968,7 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
   const name = String(body.name ?? "").trim();
   if (!brandId || !name) throw new Error("ブランドとメニュー名を入力してください。");
   const variableSchema = JSON.stringify(parseJsonObject(body.variableSchema));
+  const promotionPrefixDisplayNames = JSON.stringify(normalizeDisplayNames(body.promotionPrefixDisplayNames));
   const displayNames = JSON.stringify(normalizeDisplayNames(body.displayNames));
   const descriptionDisplayNames = JSON.stringify(normalizeDisplayNames(body.descriptionDisplayNames));
   const previousRows = id
@@ -978,6 +990,8 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
           menu_source_id = ${cleanOptionalId(body.menuSourceId)},
           external_id = ${String(body.externalId ?? "").trim()},
           item_kind = ${String(body.itemKind ?? "fixed_product").trim() || "fixed_product"},
+          promotion_prefix = ${String(body.promotionPrefix ?? "").trim()},
+          promotion_prefix_display_names = ${promotionPrefixDisplayNames}::jsonb,
           name = ${name},
           display_names = ${displayNames}::jsonb,
           category = ${String(body.category ?? "").trim()},
@@ -999,6 +1013,8 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
           menu_source_id,
           external_id,
           item_kind,
+          promotion_prefix,
+          promotion_prefix_display_names,
           name,
           display_names,
           category,
@@ -1017,6 +1033,8 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
           ${cleanOptionalId(body.menuSourceId)},
           ${String(body.externalId ?? "").trim()},
           ${String(body.itemKind ?? "fixed_product").trim() || "fixed_product"},
+          ${String(body.promotionPrefix ?? "").trim()},
+          ${promotionPrefixDisplayNames}::jsonb,
           ${name},
           ${displayNames}::jsonb,
           ${String(body.category ?? "").trim()},

@@ -32,6 +32,12 @@ type MenuOptionGroup = {
   options: MenuOption[];
 };
 
+type MenuItemOptionGroup = {
+  menuCatalogItemId: string;
+  optionGroupId: string;
+  sortOrder: number;
+};
+
 function normalizeSearchValue(value: string | null) {
   return String(value ?? "").trim();
 }
@@ -116,6 +122,8 @@ export async function GET(request: Request) {
       coalesce(menu_catalog_items.store_id::text, '') as "storeId",
       coalesce(menu_catalog_items.external_id, '') as "externalId",
       menu_catalog_items.item_kind as "itemKind",
+      coalesce(menu_catalog_items.promotion_prefix, '') as "promotionPrefix",
+      coalesce(menu_catalog_items.promotion_prefix_display_names, '{}'::jsonb) as "promotionPrefixDisplayNames",
       menu_catalog_items.name,
       coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
       coalesce(menu_catalog_items.category, '') as category,
@@ -176,6 +184,22 @@ export async function GET(request: Request) {
       `
     : [];
   const settingsByItemId = new Map(storeSettings.map((setting) => [String(setting.menuCatalogItemId), setting]));
+  const itemOptionGroups = await sql`
+    select
+      menu_catalog_item_id::text as "menuCatalogItemId",
+      option_group_id::text as "optionGroupId",
+      sort_order as "sortOrder"
+    from menu_catalog_item_option_groups
+    where is_active = true
+      and menu_catalog_item_id = any(${Array.from(itemIds)}::uuid[])
+    order by menu_catalog_item_id, sort_order, option_group_id
+  `;
+  const itemOptionGroupsByItemId = new Map<string, MenuItemOptionGroup[]>();
+  for (const link of itemOptionGroups as MenuItemOptionGroup[]) {
+    const links = itemOptionGroupsByItemId.get(link.menuCatalogItemId) ?? [];
+    links.push(link);
+    itemOptionGroupsByItemId.set(link.menuCatalogItemId, links);
+  }
   const groups = (await sql`
     select
       id::text,
@@ -317,6 +341,19 @@ export async function GET(request: Request) {
     optionGroups: allGroups,
     items: items.map((item) => {
       const setting = settingsByItemId.get(item.id);
+      const explicitLinks = itemOptionGroupsByItemId.get(String(item.id)) ?? [];
+      const explicitOrder = new Map(explicitLinks.map((link) => [link.optionGroupId, link.sortOrder]));
+      const itemGroups = (explicitLinks.length
+        ? allGroups.filter((group) => explicitOrder.has(group.id))
+        : allGroups.filter((group) => (
+            (!group.menuCatalogItemId || group.menuCatalogItemId === item.id)
+            && (group.menuCatalogItemId || !group.applicableCategories.length || group.applicableCategories.includes(String(item.category || "未分類")))
+          )))
+        .sort((left, right) => (
+          (explicitOrder.get(left.id) ?? left.sortOrder) - (explicitOrder.get(right.id) ?? right.sortOrder)
+          || left.sortOrder - right.sortOrder
+          || left.name.localeCompare(right.name, "ja")
+        ));
       return {
         ...item,
         basePrice: setting?.priceOverride ?? item.basePrice,
@@ -336,11 +373,7 @@ export async function GET(request: Request) {
           isAvailable: true,
           statusNote: ""
         },
-        optionGroups: allGroups
-          .filter((group) => (
-            (!group.menuCatalogItemId || group.menuCatalogItemId === item.id)
-            && (group.menuCatalogItemId || !group.applicableCategories.length || group.applicableCategories.includes(String(item.category || "未分類")))
-          ))
+        optionGroups: itemGroups
           .map((group) => ({
             ...group,
             options: group.options.filter((option) => (

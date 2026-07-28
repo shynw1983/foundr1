@@ -72,6 +72,8 @@ type MenuItem = {
   menuSourceId: string;
   externalId: string;
   itemKind: string;
+  promotionPrefix: string;
+  promotionPrefixDisplayNames?: Record<string, string>;
   name: string;
   displayNames?: Record<string, string>;
   category: string;
@@ -114,6 +116,13 @@ type MenuOption = {
   isActive: boolean;
 };
 
+type MenuItemOptionGroup = {
+  menuCatalogItemId: string;
+  optionGroupId: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
 type MenuExternalPlatform = {
   id: string;
   brandId: string;
@@ -151,6 +160,7 @@ type MenuAdminData = {
   items: MenuItem[];
   groups: MenuGroup[];
   options: MenuOption[];
+  itemOptionGroups: MenuItemOptionGroup[];
   externalPlatforms: MenuExternalPlatform[];
   syncTasks: MenuSyncTask[];
 };
@@ -197,6 +207,8 @@ const emptyItem: MenuItem = {
   menuSourceId: "",
   externalId: "",
   itemKind: "fixed_product",
+  promotionPrefix: "",
+  promotionPrefixDisplayNames: {},
   name: "",
   displayNames: {},
   category: "",
@@ -274,6 +286,7 @@ const customerMenuLanguageOptions = [
 ];
 
 const choiceSettingsCategory = "__choice_settings__";
+const uberImportDraftCategory = "__uber_import_drafts__";
 
 const schemaRuleKeys: Record<string, string> = {
   size: "allowedSizes",
@@ -436,6 +449,27 @@ function updateDescriptionDisplayName<T extends { descriptionDisplayNames?: Reco
   };
 }
 
+function updatePromotionPrefixDisplayName<T extends { promotionPrefixDisplayNames?: Record<string, string> }>(draft: T, language: string, value: string): T {
+  return {
+    ...draft,
+    promotionPrefixDisplayNames: {
+      ...(draft.promotionPrefixDisplayNames ?? {}),
+      [language]: value
+    }
+  };
+}
+
+function isUberImportDraft(item: MenuItem) {
+  const externalRefs = item.variableSchema?.externalRefs;
+  const uberEats = externalRefs && typeof externalRefs === "object" && !Array.isArray(externalRefs)
+    ? (externalRefs as Record<string, unknown>).uberEats
+    : null;
+  const uberItemId = uberEats && typeof uberEats === "object" && !Array.isArray(uberEats)
+    ? String((uberEats as Record<string, unknown>).itemId ?? "").trim()
+    : "";
+  return !item.isActive && Boolean(uberItemId);
+}
+
 export default function MenuAdminPage() {
   const [data, setData] = useState<MenuAdminData>({
     brands: [],
@@ -445,6 +479,7 @@ export default function MenuAdminPage() {
     items: [],
     groups: [],
     options: [],
+    itemOptionGroups: [],
     externalPlatforms: [],
     syncTasks: []
   });
@@ -525,11 +560,14 @@ export default function MenuAdminPage() {
   const categoryCounts = useMemo(() => getCategoryCounts(filteredItems, data.categories, activeBrandId), [activeBrandId, data.categories, filteredItems]);
   const currentCategory = activeCategory;
   const isChoiceSettingsView = currentCategory === choiceSettingsCategory;
+  const isUberImportDraftView = currentCategory === uberImportDraftCategory;
+  const uberImportDraftItems = useMemo(() => filteredItems.filter(isUberImportDraft), [filteredItems]);
   const categoryItems = useMemo(() => filteredItems.filter((item) => {
     if (isChoiceSettingsView) return false;
+    if (isUberImportDraftView) return isUberImportDraft(item);
     if (currentCategory === null) return true;
     return (item.category || "未分類") === currentCategory;
-  }), [currentCategory, filteredItems, isChoiceSettingsView]);
+  }), [currentCategory, filteredItems, isChoiceSettingsView, isUberImportDraftView]);
 
   const selectedSource = data.sources.find((source) => source.id === itemDraft.menuSourceId);
   const publicMenuUrl = buildPublicMenuUrl(activeBrandId);
@@ -542,11 +580,22 @@ export default function MenuAdminPage() {
   const pendingSyncTasks = brandSyncTasks.filter((task) => task.status === "pending");
   const completedSyncTasks = brandSyncTasks.filter((task) => task.status === "completed").slice(0, 8);
 
-  const visibleGroups = useMemo(() => data.groups.filter((group) => {
-    if (!activeBrandId || group.brandId !== activeBrandId) return false;
-    if (group.menuCatalogItemId) return group.menuCatalogItemId === itemDraft.id;
-    return !group.applicableCategories.length || group.applicableCategories.includes(itemDraft.category || "未分類");
-  }), [activeBrandId, data.groups, itemDraft.category, itemDraft.id]);
+  const visibleGroups = useMemo(() => {
+    const explicitLinks = data.itemOptionGroups
+      .filter((link) => link.isActive && link.menuCatalogItemId === itemDraft.id)
+      .sort((left, right) => left.sortOrder - right.sortOrder);
+    if (explicitLinks.length) {
+      const groupById = new Map(data.groups.map((group) => [group.id, group]));
+      return explicitLinks
+        .map((link) => groupById.get(link.optionGroupId))
+        .filter((group): group is MenuGroup => Boolean(group && group.brandId === activeBrandId));
+    }
+    return data.groups.filter((group) => {
+      if (!activeBrandId || group.brandId !== activeBrandId) return false;
+      if (group.menuCatalogItemId) return group.menuCatalogItemId === itemDraft.id;
+      return !group.applicableCategories.length || group.applicableCategories.includes(itemDraft.category || "未分類");
+    });
+  }, [activeBrandId, data.groups, data.itemOptionGroups, itemDraft.category, itemDraft.id]);
   const brandGroups = useMemo(() => data.groups.filter((group) => {
     if (!activeBrandId || group.brandId !== activeBrandId) return false;
     if (!group.menuCatalogItemId) return true;
@@ -585,7 +634,7 @@ export default function MenuAdminPage() {
 
   function selectItem(item: MenuItem) {
     setSelectedItemId(item.id);
-    setActiveCategory(item.category || "未分類");
+    setActiveCategory(currentCategory === uberImportDraftCategory ? uberImportDraftCategory : item.category || "未分類");
     setItemDraft(cloneItem(item));
     setDetailMode("item");
     setCategoryDraft(emptyCategory);
@@ -600,7 +649,11 @@ export default function MenuAdminPage() {
       ...emptyItem,
       brandId: activeBrandId,
       storeId: "",
-      category: categoryForNewItem === "未分類" || categoryForNewItem === choiceSettingsCategory ? "" : categoryForNewItem
+      category: categoryForNewItem === "未分類"
+        || categoryForNewItem === choiceSettingsCategory
+        || categoryForNewItem === uberImportDraftCategory
+        ? ""
+        : categoryForNewItem
     };
     setSelectedItemId("");
     setActiveCategory(null);
@@ -1102,6 +1155,18 @@ export default function MenuAdminPage() {
     if (group) editGroup(group);
   }
 
+  function openUberImportDrafts() {
+    const nextItem = uberImportDraftItems[0];
+    setActiveCategory(uberImportDraftCategory);
+    setSelectedItemId(nextItem?.id ?? "");
+    setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId: activeBrandId, storeId: "" });
+    setDetailMode("item");
+    setCategoryDraft(emptyCategory);
+    setGroupDraft({ ...emptyGroup, brandId: activeBrandId, menuCatalogItemId: nextItem?.id ?? "" });
+    setOptionDraft(emptyOption);
+    setActiveOptionGroupId("");
+  }
+
   function editGroupFromRule(group: MenuGroup) {
     openChoiceSettings(group);
     setMessage("選択グループを編集できます。");
@@ -1319,6 +1384,17 @@ export default function MenuAdminPage() {
               <span>すべて</span>
               <strong>{filteredItems.length}</strong>
             </button>
+            <button
+              className={isUberImportDraftView ? "menu-category-button is-active is-import-draft" : "menu-category-button is-import-draft"}
+              type="button"
+              onClick={openUberImportDrafts}
+            >
+              <span>
+                Uber取り込み草稿
+                <small>未公開</small>
+              </span>
+              <strong>{uberImportDraftItems.length}</strong>
+            </button>
             {categoryCounts.map((category) => (
               <button
                 className={currentCategory === category.name ? "menu-category-button is-active" : "menu-category-button"}
@@ -1352,14 +1428,16 @@ export default function MenuAdminPage() {
           <aside className="menu-item-panel">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">{isChoiceSettingsView ? "Choice Groups" : "Items"}</p>
-                <h3>{isChoiceSettingsView ? "選択グループ" : "商品"}</h3>
+                <p className="eyebrow">{isChoiceSettingsView ? "Choice Groups" : isUberImportDraftView ? "Uber Import" : "Items"}</p>
+                <h3>{isChoiceSettingsView ? "選択グループ" : isUberImportDraftView ? "Uber取り込み草稿" : "商品"}</h3>
               </div>
               {isChoiceSettingsView ? (
                 <button className="secondary-button" type="button" onClick={startCommonGroup}>
                   <Plus size={16} />
                   共通追加
                 </button>
+              ) : isUberImportDraftView ? (
+                <span className="menu-draft-count">未公開 {uberImportDraftItems.length}件</span>
               ) : (
                 <button className="secondary-button" type="button" onClick={startNewItem}>
                   <Plus size={16} />
@@ -1393,17 +1471,23 @@ export default function MenuAdminPage() {
                     <button
                       className={selectedItemId === item.id ? "menu-item-button is-active" : "menu-item-button"}
                       type="button"
-                      draggable
+                      draggable={!isUberImportDraftView}
                       onDragStart={() => setDraggingItemId(item.id)}
                       onDragOver={(event) => event.preventDefault()}
-                      onDrop={() => reorderItems(item.id)}
+                      onDrop={() => {
+                        if (!isUberImportDraftView) reorderItems(item.id);
+                      }}
                       onDragEnd={() => setDraggingItemId("")}
                       onClick={() => selectItem(item)}
                       key={item.id}
                       title="ドラッグして商品順を変更"
                     >
+                      {item.promotionPrefix ? <small className="menu-item-promotion-prefix">{item.promotionPrefix}</small> : null}
                       <strong>{item.name}</strong>
-                      <span>{item.category || "未分類"} / {item.basePrice == null ? "価格未設定" : `${item.basePrice.toLocaleString()}円`}</span>
+                      <span>
+                        {item.category || "未分類"} / {item.basePrice == null ? "価格未設定" : `${item.basePrice.toLocaleString()}円`}
+                        {!item.isActive ? " / 未公開" : ""}
+                      </span>
                     </button>
                   ))}
                   {!categoryItems.length ? <p className="empty-state">{loading ? "読み込み中..." : "商品がありません。"}</p> : null}
@@ -1782,6 +1866,15 @@ export default function MenuAdminPage() {
 
             <div className="menu-edit-card">
               <div className="menu-form-grid">
+                <label className="menu-prefix-field">
+                  <span>販促プレフィックス</span>
+                  <input
+                    value={itemDraft.promotionPrefix}
+                    onChange={(event) => setItemDraft({ ...itemDraft, promotionPrefix: event.target.value })}
+                    placeholder="例: Limited Summer Edition / 累計2万杯超え"
+                  />
+                  <small>商品名の上に別表示します。括弧は表示側で付けるため入力不要です。</small>
+                </label>
                 <label>
                   <span>商品名</span>
                   <input value={itemDraft.name} onChange={(event) => setItemDraft({ ...itemDraft, name: event.target.value })} placeholder="商品名" />
@@ -1802,6 +1895,24 @@ export default function MenuAdminPage() {
 	                  <span>公開中</span>
 	                </label>
 	              </div>
+              <div className="menu-translation-panel">
+                <div>
+                  <strong>販促プレフィックスの多言語表示</strong>
+                  <span>未入力の言語は English、最後に原文プレフィックスへフォールバックします。</span>
+                </div>
+                <div className="menu-translation-grid">
+                  {customerMenuLanguageOptions.map((language) => (
+                    <label key={language.value}>
+                      <span>{language.label}</span>
+                      <input
+                        value={itemDraft.promotionPrefixDisplayNames?.[language.value] ?? ""}
+                        onChange={(event) => setItemDraft(updatePromotionPrefixDisplayName(itemDraft, language.value, event.target.value))}
+                        placeholder={itemDraft.promotionPrefix || "販促プレフィックス"}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
               <div className="menu-translation-panel">
                 <div>
                   <strong>客表示・会員・ブランドサイト用表示名</strong>
