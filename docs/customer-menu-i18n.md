@@ -36,6 +36,7 @@ Menu records that can appear to customers must carry translated display names:
 - `menu_catalog_items.description_display_names`
 - `menu_option_groups.display_names`
 - `menu_options.display_names`
+- 商品级 Uber 等复杂定制菜单は `items[].customizationGroups` を正本として表示する。`items[].optionGroups` は旧 nanacha 予約 UI の移行期間中のみ互換出力として残す。
 - Coupon, reward, discount, and exchange-ticket customer labels should use the same pattern when they have stable IDs.
 
 Use this shape:

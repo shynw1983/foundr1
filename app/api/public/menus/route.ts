@@ -343,7 +343,7 @@ export async function GET(request: Request) {
       const setting = settingsByItemId.get(item.id);
       const explicitLinks = itemOptionGroupsByItemId.get(String(item.id)) ?? [];
       const explicitOrder = new Map(explicitLinks.map((link) => [link.optionGroupId, link.sortOrder]));
-      const itemGroups = (explicitLinks.length
+      const customizationGroups = (explicitLinks.length
         ? allGroups.filter((group) => explicitOrder.has(group.id))
         : allGroups.filter((group) => (
             (!group.menuCatalogItemId || group.menuCatalogItemId === item.id)
@@ -354,6 +354,11 @@ export async function GET(request: Request) {
           || left.sortOrder - right.sortOrder
           || left.name.localeCompare(right.name, "ja")
         ));
+      const legacyOptionGroups = allGroups.filter((group) => (
+        group.ruleJson?.source !== "uber_eats"
+        && (!group.menuCatalogItemId || group.menuCatalogItemId === item.id)
+        && (group.menuCatalogItemId || !group.applicableCategories.length || group.applicableCategories.includes(String(item.category || "未分類")))
+      ));
       return {
         ...item,
         basePrice: setting?.priceOverride ?? item.basePrice,
@@ -373,7 +378,17 @@ export async function GET(request: Request) {
           isAvailable: true,
           statusNote: ""
         },
-        optionGroups: itemGroups
+        usesStructuredCustomizations: explicitLinks.length > 0,
+        customizationGroups: customizationGroups
+          .map((group) => ({
+            ...group,
+            options: group.options.filter((option) => (
+              !option.applicableCategories.length || option.applicableCategories.includes(String(item.category || "未分類"))
+            ))
+          })),
+        // Temporary compatibility for the current nanacha reservation UI.
+        // New customer UIs must render customizationGroups.
+        optionGroups: (explicitLinks.length ? legacyOptionGroups : customizationGroups)
           .map((group) => ({
             ...group,
             options: group.options.filter((option) => (
