@@ -66,6 +66,18 @@ function displayNamesFor(value, dictionaries) {
   );
 }
 
+function cleanNanachaDescription(value) {
+  return String(value ?? "")
+    .replace(
+      /\s*※?\s*This item does not contain tapioca\.\s*You can choose from the customize menu\.\s*/gi,
+      "\n"
+    )
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 async function loadNanachaImageUrls() {
   try {
     const files = await readdir(nanachaImageDir);
@@ -487,7 +499,7 @@ async function importNanacha() {
 
   for (const drink of menu.drinks) {
     const category = categoriesById.get(drink.category);
-    const description = drink.description ?? category?.note ?? "";
+    const description = cleanNanachaDescription(drink.description ?? category?.note ?? "");
     await upsertItem({
       brandId: brand.id,
       sourceId,
