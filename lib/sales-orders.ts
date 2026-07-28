@@ -147,6 +147,7 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
       store_customer_order_items.option_label,
       store_customer_order_items.topping_keys,
       store_customer_order_items.topping_labels,
+      coalesce(store_customer_order_items.customizations, '[]'::jsonb) as customizations,
       coalesce(store_customer_order_items.quantity, 1) as quantity,
       store_customer_order_items.measured_quantity::float as measured_quantity,
       coalesce(store_customer_order_items.measured_unit, '') as measured_unit,
@@ -195,7 +196,8 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
           sweetness: item.sweetness,
           ice: item.ice,
           option: { key: item.option_key, label: item.option_label },
-          toppings: { keys: item.topping_keys ?? [], labels: item.topping_labels ?? [] }
+          toppings: { keys: item.topping_keys ?? [], labels: item.topping_labels ?? [] },
+          customizations: item.customizations ?? []
         })},
         ${item.sort_order ?? 0}
       )

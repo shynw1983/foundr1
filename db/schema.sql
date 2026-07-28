@@ -3024,6 +3024,7 @@ create table if not exists store_customer_order_items (
   option_label text not null default '',
   topping_keys text[] not null default '{}',
   topping_labels text[] not null default '{}',
+  customizations jsonb not null default '[]'::jsonb,
   quantity integer not null default 1,
   measured_quantity numeric(12, 3),
   measured_unit text not null default '',
@@ -3046,6 +3047,7 @@ create table if not exists store_customer_order_items (
 );
 
 alter table store_customer_order_items add column if not exists quantity integer not null default 1;
+alter table store_customer_order_items add column if not exists customizations jsonb not null default '[]'::jsonb;
 alter table store_customer_order_items add column if not exists measured_quantity numeric(12, 3);
 alter table store_customer_order_items add column if not exists measured_unit text not null default '';
 alter table store_customer_order_items add column if not exists measured_unit_price numeric(12, 3);

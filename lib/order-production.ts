@@ -108,6 +108,10 @@ function buildProductionItemLines(row: {
   ice: string;
   optionLabel: string;
   toppingLabels: string[] | null;
+  customizations: Array<{
+    groupName?: string;
+    optionLabels?: string[];
+  }> | null;
   measuredQuantity: number | null;
   measuredUnit: string;
 }) {
@@ -115,6 +119,20 @@ function buildProductionItemLines(row: {
   const isMaamaaBuildable = row.sizeKey === "maamaa_buildable";
   if (isMaamaaBuildable) {
     return buildMaamaaProductionItemLines(row);
+  }
+  const customizations = Array.isArray(row.customizations) ? row.customizations : [];
+  if (customizations.length) {
+    const details = customizations
+      .map((customization) => {
+        const groupName = normalizeText(customization.groupName);
+        const labels = countLabels(Array.isArray(customization.optionLabels) ? customization.optionLabels : []);
+        return groupName && labels.length ? `${groupName}：${labels.join("、")}` : "";
+      })
+      .filter(Boolean);
+    return [
+      `${row.itemName} x${row.quantity}`,
+      ...uniqueTextParts(details).map((detail) => `・${detail}`)
+    ];
   }
   const toppingLabelSet = new Set(toppingLabels.map((label) => normalizeText(label)).filter(Boolean));
   const optionParts = row.optionLabel
@@ -198,6 +216,7 @@ export async function ensureProductionTasksForOrder(orderId: string) {
       coalesce(store_customer_order_items.ice, '') as ice,
       coalesce(store_customer_order_items.option_label, '') as "optionLabel",
       store_customer_order_items.topping_labels as "toppingLabels",
+      coalesce(store_customer_order_items.customizations, '[]'::jsonb) as customizations,
       store_customer_order_items.measured_quantity::float as "measuredQuantity",
       coalesce(store_customer_order_items.measured_unit, '') as "measuredUnit"
     from store_customer_order_items
@@ -221,6 +240,7 @@ export async function ensureProductionTasksForOrder(orderId: string) {
     ice: string;
     optionLabel: string;
     toppingLabels: string[] | null;
+    customizations: Array<{ groupName?: string; optionLabels?: string[] }> | null;
     measuredQuantity: number | null;
     measuredUnit: string;
   }>) {

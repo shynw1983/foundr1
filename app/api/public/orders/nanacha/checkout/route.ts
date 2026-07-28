@@ -1,7 +1,11 @@
 import { randomUUID } from "crypto";
 import { createCustomerOrder, createPickupCode, updateCustomerOrder } from "../../../../../../lib/customer-orders";
 import { calculateCouponDiscount, getUsableMemberCoupon, resolveMemberForOrder } from "../../../../../../lib/loyalty";
-import { getNanachaCompatibleMenu, type NanachaPricedOption } from "../../../../../../lib/nanacha-compatible-menu";
+import {
+  getNanachaCompatibleMenu,
+  type NanachaCustomizationGroup,
+  type NanachaPricedOption
+} from "../../../../../../lib/nanacha-compatible-menu";
 import { isPickupWithinBusinessHours } from "../../../../../../lib/store-business-hours";
 import { getTemporaryClosureForPickup } from "../../../../../../lib/store-temporary-closures";
 
@@ -43,6 +47,71 @@ function filterAllowedValues(items: string[], drink: Record<string, unknown>, fi
 function filterAllowedOptions(items: NanachaPricedOption[], drink: Record<string, unknown>) {
   const allowed = allowedSet(drink, "allowedOptions");
   return items.filter((item) => item.id === "none" || !allowed || allowed.has(item.id));
+}
+
+type ValidatedCustomization = {
+  groupId: string;
+  groupKey: string;
+  groupName: string;
+  selectionType: string;
+  optionIds: string[];
+  optionKeys: string[];
+  optionLabels: string[];
+  price: number;
+};
+
+function validateStructuredCustomizations(rawValue: unknown, groups: NanachaCustomizationGroup[]) {
+  const requested = Array.isArray(rawValue) ? rawValue : [];
+  const requestedByGroupId = new Map<string, string[]>();
+  for (const entry of requested) {
+    if (!entry || typeof entry !== "object") return null;
+    const raw = entry as Record<string, unknown>;
+    const groupId = String(raw.groupId || "");
+    if (!groupId || requestedByGroupId.has(groupId)) return null;
+    requestedByGroupId.set(groupId, Array.isArray(raw.optionIds) ? raw.optionIds.map(String) : []);
+  }
+  if (Array.from(requestedByGroupId.keys()).some((groupId) => !groups.some((group) => group.id === groupId))) {
+    return null;
+  }
+
+  const validated: ValidatedCustomization[] = [];
+  for (const group of groups) {
+    const optionIds = requestedByGroupId.get(group.id) ?? [];
+    const maximum = group.maxSelections > 0
+      ? group.maxSelections
+      : group.selectionType === "single"
+        ? 1
+        : Number.POSITIVE_INFINITY;
+    if (optionIds.length < group.minSelections || optionIds.length > maximum) return null;
+    if (group.selectionType === "single" && optionIds.length > 1) return null;
+    if (!group.allowRepeat && new Set(optionIds).size !== optionIds.length) return null;
+
+    const counts = new Map<string, number>();
+    for (const optionId of optionIds) {
+      counts.set(optionId, (counts.get(optionId) ?? 0) + 1);
+    }
+    if (
+      group.perOptionMax > 0 &&
+      Array.from(counts.values()).some((count) => count > group.perOptionMax)
+    ) {
+      return null;
+    }
+
+    const selectedOptions = optionIds.map((optionId) => group.options.find((option) => option.id === optionId));
+    if (selectedOptions.some((option) => !option)) return null;
+    if (!selectedOptions.length) continue;
+    validated.push({
+      groupId: group.id,
+      groupKey: group.groupKey || group.externalId || group.id,
+      groupName: group.label,
+      selectionType: group.selectionType,
+      optionIds,
+      optionKeys: selectedOptions.map((option) => option?.optionKey || option?.externalId || option?.id || ""),
+      optionLabels: selectedOptions.map((option) => option?.label || ""),
+      price: selectedOptions.reduce((sum, option) => sum + (option?.price ?? 0), 0)
+    });
+  }
+  return validated;
 }
 
 function compareDateTime(dateA: string, timeA: string, dateB: string, timeB: string) {
@@ -135,7 +204,8 @@ export async function POST(request: Request) {
       ice: String(rawItem.ice || ""),
       size: String(rawItem.size || ""),
       option: String(rawItem.option || ""),
-      toppings: Array.isArray(rawItem.toppings) ? rawItem.toppings.map(String) : []
+      toppings: Array.isArray(rawItem.toppings) ? rawItem.toppings.map(String) : [],
+      customizations: rawItem.customizations
     };
     const menuDrink = menu.drinks.find((drinkItem) => (
       drinkItem.name === item.drink &&
@@ -143,6 +213,43 @@ export async function POST(request: Request) {
       drinkItem.isAvailable !== false
     ));
     if (!menuDrink) return Response.json({ error: "Unknown drink" }, { status: 400 });
+
+    const structuredGroups = menuDrink.usesStructuredCustomizations
+      ? menuDrink.customizationGroups ?? []
+      : [];
+    if (structuredGroups.length) {
+      const customizations = validateStructuredCustomizations(item.customizations, structuredGroups);
+      if (!customizations) return Response.json({ error: "Invalid customization" }, { status: 400 });
+      const amount = menuDrink.price + customizations.reduce((sum, customization) => sum + customization.price, 0);
+      if (amount <= 0) return Response.json({ error: "Invalid amount" }, { status: 400 });
+      const groupByName = new Map(customizations.map((customization) => [customization.groupName, customization]));
+      const size = groupByName.get("サイズ");
+      const temperature = groupByName.get("温度");
+      const sweetness = groupByName.get("甘さ");
+      const otherGroups = customizations.filter((customization) => (
+        !["サイズ", "温度", "甘さ"].includes(customization.groupName)
+      ));
+      validatedItems.push({
+        drink: menuDrink,
+        size: {
+          id: size?.optionKeys[0] || size?.optionIds[0] || "",
+          label: size?.optionLabels[0] || "",
+          price: size?.price || 0
+        },
+        temperature: temperature?.optionLabels[0] || "",
+        sweetness: sweetness?.optionLabels[0] || "",
+        ice: "",
+        option: {
+          id: otherGroups.flatMap((group) => group.optionKeys).join(","),
+          label: otherGroups.map((group) => `${group.groupName}：${group.optionLabels.join("、")}`).join(", "),
+          price: otherGroups.reduce((sum, group) => sum + group.price, 0)
+        },
+        toppings: [] as NanachaPricedOption[],
+        customizations,
+        amount
+      });
+      continue;
+    }
 
     const availableSizes = filterAllowedIds(menu.sizes, menuDrink, "allowedSizes");
     const availableSweetness = filterAllowedValues(menu.sweetness, menuDrink, "allowedSweetness");
@@ -171,6 +278,7 @@ export async function POST(request: Request) {
       ice: item.ice,
       option,
       toppings: toppings as NanachaPricedOption[],
+      customizations: [] as ValidatedCustomization[],
       amount
     });
   }
@@ -193,6 +301,21 @@ export async function POST(request: Request) {
 
   const subtotalAmount = validatedItems.reduce((sum, item) => sum + item.amount, 0);
   const itemSummaries = validatedItems.map((item, index) => {
+    if (item.customizations.length) {
+      const customizationLabel = item.customizations
+        .map((customization) => `${customization.groupName}：${customization.optionLabels.join("、")}`)
+        .join(" / ");
+      return {
+        name: item.drink.name,
+        orderName: `${item.drink.name} / ${customizationLabel}`,
+        description: `${index + 1}. ${item.drink.name} / ${customizationLabel}`,
+        sizeLabel: item.size.label,
+        sweetnessLabel: item.sweetness ? `甘さ: ${item.sweetness}` : "",
+        iceLabel: "",
+        optionLabel: customizationLabel,
+        toppingLabel: ""
+      };
+    }
     const toppingLabel = item.toppings.length ? item.toppings.map((topping) => topping.label).join(", ") : "トッピングなし";
     const optionLabel = item.option.id === "none" ? "オプションなし" : item.option.label;
     const sweetnessLabel = formatSweetnessLabel(item.sweetness);
@@ -278,6 +401,15 @@ export async function POST(request: Request) {
       optionLabel: item.option.label,
       toppingKeys: item.toppings.map((topping) => topping.id),
       toppingLabels: item.toppings.map((topping) => topping.label),
+      customizations: item.customizations.map((customization) => ({
+        groupId: customization.groupId,
+        groupKey: customization.groupKey,
+        groupName: customization.groupName,
+        selectionType: customization.selectionType,
+        optionIds: customization.optionIds,
+        optionKeys: customization.optionKeys,
+        optionLabels: customization.optionLabels
+      })),
       amount: item.amount
     }))
   });

@@ -9,6 +9,23 @@ export type NanachaPricedOption = {
   price: number;
 };
 
+export type NanachaCustomizationGroup = {
+  id: string;
+  externalId: string;
+  groupKey: string;
+  label: string;
+  displayNames?: Record<string, string>;
+  selectionType: "single" | "multiple";
+  minSelections: number;
+  maxSelections: number;
+  allowRepeat: boolean;
+  perOptionMax: number;
+  options: Array<NanachaPricedOption & {
+    externalId: string;
+    optionKey: string;
+  }>;
+};
+
 export type NanachaDrink = {
   id: string;
   menuCatalogItemId: string;
@@ -29,6 +46,8 @@ export type NanachaDrink = {
   allowedIce?: string[];
   allowedOptions?: string[];
   allowedToppings?: string[];
+  usesStructuredCustomizations?: boolean;
+  customizationGroups?: NanachaCustomizationGroup[];
   isAvailable: boolean;
   websiteEnabled: boolean;
 };
@@ -86,10 +105,13 @@ type StoreSettingRow = {
 
 type MenuGroupRow = {
   id: string;
+  externalId: string;
   groupKey: string;
   name: string;
   displayNames?: Record<string, string>;
+  selectionType: string;
   ruleJson: Record<string, unknown>;
+  sortOrder: number;
 };
 
 type MenuCategoryRow = {
@@ -103,11 +125,20 @@ type MenuCategoryRow = {
 };
 
 type MenuOptionRow = {
+  id: string;
   optionGroupId: string;
+  externalId: string;
   optionKey: string;
   name: string;
   displayNames?: Record<string, string>;
   priceDelta: number | null;
+  sortOrder: number;
+};
+
+type MenuItemOptionGroupRow = {
+  menuCatalogItemId: string;
+  optionGroupId: string;
+  sortOrder: number;
 };
 
 function asStringArray(value: unknown) {
@@ -133,6 +164,29 @@ function optionObjects(options: MenuOptionRow[]) {
     displayNames: option.displayNames,
     price: option.priceDelta ?? 0
   }));
+}
+
+function customizationGroupObject(group: MenuGroupRow, options: MenuOptionRow[]): NanachaCustomizationGroup {
+  return {
+    id: group.id,
+    externalId: group.externalId,
+    groupKey: group.groupKey,
+    label: group.name,
+    displayNames: group.displayNames,
+    selectionType: group.selectionType === "multiple" ? "multiple" : "single",
+    minSelections: Math.max(0, Number(group.ruleJson?.minSelections) || 0),
+    maxSelections: Math.max(0, Number(group.ruleJson?.maxSelections) || 0),
+    allowRepeat: group.ruleJson?.allowRepeat === true,
+    perOptionMax: Math.max(0, Number(group.ruleJson?.perOptionMax) || 0),
+    options: options.map((option) => ({
+      id: option.id,
+      externalId: option.externalId,
+      optionKey: option.optionKey,
+      label: option.name,
+      displayNames: option.displayNames,
+      price: option.priceDelta ?? 0
+    }))
+  };
 }
 
 function publicUrl(value: unknown, requestUrl: string) {
@@ -161,7 +215,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
   const brand = await getNanachaBrand();
   if (!brand) throw new Error("nanacha brand not found");
 
-  const [items, categories, groups, options, stores] = await Promise.all([
+  const [items, categories, groups, options, stores, itemOptionGroups] = await Promise.all([
     sql`
       select
         menu_catalog_items.id::text,
@@ -203,9 +257,11 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
     sql`
       select
         id::text,
+        coalesce(external_id, '') as "externalId",
         group_key as "groupKey",
         name,
         coalesce(display_names, '{}'::jsonb) as "displayNames",
+        selection_type as "selectionType",
         rule_json as "ruleJson",
         sort_order as "sortOrder"
       from menu_option_groups
@@ -216,7 +272,9 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
     `,
     sql`
       select
+        id::text,
         option_group_id::text as "optionGroupId",
+        coalesce(external_id, '') as "externalId",
         option_key as "optionKey",
         name,
         coalesce(display_names, '{}'::jsonb) as "displayNames",
@@ -239,8 +297,30 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
       where store_brands.brand_id = ${brand.id}
         and stores.status = 'active'
       order by stores.name
+    `,
+    sql`
+      select
+        menu_catalog_item_option_groups.menu_catalog_item_id::text as "menuCatalogItemId",
+        menu_catalog_item_option_groups.option_group_id::text as "optionGroupId",
+        menu_catalog_item_option_groups.sort_order as "sortOrder"
+      from menu_catalog_item_option_groups
+      join menu_catalog_items
+        on menu_catalog_items.id = menu_catalog_item_option_groups.menu_catalog_item_id
+      where menu_catalog_items.brand_id = ${brand.id}
+        and menu_catalog_item_option_groups.is_active = true
+      order by
+        menu_catalog_item_option_groups.menu_catalog_item_id,
+        menu_catalog_item_option_groups.sort_order,
+        menu_catalog_item_option_groups.option_group_id
     `
-  ]) as [MenuItemRow[], MenuCategoryRow[], MenuGroupRow[], MenuOptionRow[], Array<{ id: string; name: string; externalId: string; customerDisplayNames?: unknown }>];
+  ]) as [
+    MenuItemRow[],
+    MenuCategoryRow[],
+    MenuGroupRow[],
+    MenuOptionRow[],
+    Array<{ id: string; name: string; externalId: string; customerDisplayNames?: unknown }>,
+    MenuItemOptionGroupRow[]
+  ];
 
   const optionsByGroup = new Map<string, MenuOptionRow[]>();
   for (const option of options) {
@@ -250,6 +330,13 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
   }
 
   const groupByKey = new Map(groups.map((group) => [group.groupKey, group]));
+  const groupById = new Map(groups.map((group) => [group.id, group]));
+  const itemOptionGroupsByItemId = new Map<string, MenuItemOptionGroupRow[]>();
+  for (const link of itemOptionGroups) {
+    const links = itemOptionGroupsByItemId.get(link.menuCatalogItemId) ?? [];
+    links.push(link);
+    itemOptionGroupsByItemId.set(link.menuCatalogItemId, links);
+  }
   const groupOptions = (key: string) => optionsByGroup.get(groupByKey.get(key)?.id ?? "") ?? [];
 
   const sizes = optionObjects(groupOptions("size"));
@@ -303,6 +390,13 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         allowedIce: maybeLimitedArray(schema.allowedIce, ice),
         allowedOptions: maybeLimitedArray(schema.allowedOptions, optionIds, ["none"]),
         allowedToppings: maybeLimitedArray(schema.allowedToppings, toppingIds),
+        usesStructuredCustomizations: (itemOptionGroupsByItemId.get(item.id)?.length ?? 0) > 0,
+        customizationGroups: (itemOptionGroupsByItemId.get(item.id) ?? [])
+          .map((link) => {
+            const group = groupById.get(link.optionGroupId);
+            return group ? customizationGroupObject(group, optionsByGroup.get(group.id) ?? []) : null;
+          })
+          .filter((group): group is NanachaCustomizationGroup => Boolean(group?.options.length)),
         isAvailable: true,
         websiteEnabled: true
       };
@@ -390,10 +484,19 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
 
   const drinksWithStoreSettings = drinks.map((drink) => {
     const setting = settingsByItemId.get(drink.menuCatalogItemId);
-    if (!setting) return drink;
-    return {
+    const normalizedDrink = {
       ...drink,
-      price: setting.priceOverride ?? drink.price,
+      customizationGroups: drink.customizationGroups
+        ?.map((group) => ({
+          ...group,
+          options: group.options.filter((option) => !unavailableOptionKeys.has(option.optionKey))
+        }))
+        .filter((group) => group.options.length)
+    };
+    if (!setting) return normalizedDrink;
+    return {
+      ...normalizedDrink,
+      price: setting.priceOverride ?? normalizedDrink.price,
       isAvailable: setting.isAvailable,
       websiteEnabled: setting.websiteEnabled
     };

@@ -70,6 +70,15 @@ export type CustomerOrderItemInput = {
   optionLabel: string;
   toppingKeys: string[];
   toppingLabels: string[];
+  customizations?: Array<{
+    groupId: string;
+    groupKey: string;
+    groupName: string;
+    selectionType: string;
+    optionIds: string[];
+    optionKeys: string[];
+    optionLabels: string[];
+  }>;
   amount: number;
 };
 
@@ -245,6 +254,7 @@ export async function createCustomerOrder(input: {
         option_label,
         topping_keys,
         topping_labels,
+        customizations,
         amount,
         sort_order
       )
@@ -261,6 +271,7 @@ export async function createCustomerOrder(input: {
         ${item.optionLabel},
         ${item.toppingKeys},
         ${item.toppingLabels},
+        ${JSON.stringify(item.customizations ?? [])},
         ${item.amount},
         ${index}
       )
