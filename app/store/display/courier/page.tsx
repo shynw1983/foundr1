@@ -6,10 +6,10 @@ import { getStoredStoreSelection, setStoredStoreSelection } from "../../componen
 import { useDisplayMode } from "../../components/useDisplayMode";
 import { useVisibleRefresh } from "../../components/useVisibleRefresh";
 
-type CourierOrder = {
+type PickupOrder = {
   id: string;
   pickupCode: string;
-  orderSource: "uber_eats" | "demae_can" | "rocket_now";
+  orderSource: "uber_eats" | "demae_can" | "rocket_now" | "maamaa_web" | "nanacha_web";
   status: "new" | "preparing" | "ready";
   estimatedPrepMinutes: number;
   estimatedReadyAt: string;
@@ -26,13 +26,15 @@ type BrandLogo = {
   logoUrl: string;
 };
 
-const platformLabels: Record<CourierOrder["orderSource"], string> = {
+const platformLabels: Record<PickupOrder["orderSource"], string> = {
   uber_eats: "Uber Eats",
   demae_can: "出前館",
-  rocket_now: "Rocket Now"
+  rocket_now: "Rocket Now",
+  maamaa_web: "まぁ麻 Web予約",
+  nanacha_web: "nanacha Web予約"
 };
 
-function countdownLabel(order: CourierOrder, now: number) {
+function countdownLabel(order: PickupOrder, now: number) {
   const target = new Date(order.estimatedReadyAt).getTime();
   if (!order.estimatedReadyAt || Number.isNaN(target)) return "制作中";
   const remainingMs = target - now;
@@ -40,7 +42,7 @@ function countdownLabel(order: CourierOrder, now: number) {
   return `あと ${Math.max(1, Math.ceil(remainingMs / 60000))}分`;
 }
 
-function OrderCard({ order, now, ready = false }: { order: CourierOrder; now: number; ready?: boolean }) {
+function OrderCard({ order, now, ready = false }: { order: PickupOrder; now: number; ready?: boolean }) {
   return (
     <article className={`store-courier-order platform-${order.orderSource}${ready ? " is-ready" : ""}`}>
       <strong>{order.pickupCode}</strong>
@@ -52,10 +54,10 @@ function OrderCard({ order, now, ready = false }: { order: CourierOrder; now: nu
   );
 }
 
-export default function StoreCourierDisplayPage() {
+export default function StorePickupStatusDisplayPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
-  const [orders, setOrders] = useState<CourierOrder[]>([]);
+  const [orders, setOrders] = useState<PickupOrder[]>([]);
   const [brandLogos, setBrandLogos] = useState<BrandLogo[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
@@ -184,7 +186,7 @@ export default function StoreCourierDisplayPage() {
       />
       {menuOpen ? (
         <div className="store-display-menu">
-          <strong>配達員表示</strong>
+          <strong>Pick Up 画面</strong>
           {stores.length > 1 ? (
             <label className="store-context-selector is-store is-compact">
               <span>表示店舗</span>
@@ -231,7 +233,7 @@ export default function StoreCourierDisplayPage() {
             <span className="store-courier-brand-mark">F1</span>
           )}
           <div>
-            <h1>お受け取り状況</h1>
+            <h1>Pick Up 状況</h1>
             <p>注文番号をご確認ください</p>
           </div>
         </div>

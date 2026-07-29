@@ -1,11 +1,14 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
 import { refreshActiveProductionTasksForStore } from "../../../../../lib/order-production";
+import { scheduledOrderReminderLeadMinutes } from "../../../../../lib/store-order-alert-timing";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
 
 const deliverySources = ["uber_eats", "demae_can", "rocket_now"];
+const webReservationSources = ["maamaa_web", "nanacha_web"];
+const pickupSources = [...deliverySources, ...webReservationSources];
 
 function getBrandLogoUrl(brandName: string) {
   const normalizedName = brandName.trim().toLowerCase();
@@ -51,10 +54,33 @@ export async function GET(request: Request) {
       ) production on true
       where store_customer_orders.store_id::text = ${storeFilter}
         and store_customer_orders.payment_status = 'paid'
-        and store_customer_orders.order_source = any(${deliverySources})
+        and store_customer_orders.order_source = any(${pickupSources})
         and store_customer_orders.status not in ('completed', 'cancelled', 'refund_pending')
-        and coalesce(store_customer_orders.customer_summary ->> 'orderType', 'unknown') <> 'takeout'
-        and store_customer_orders.created_at > now() - interval '1 day'
+        and (
+          (
+            store_customer_orders.order_source = any(${deliverySources})
+            and store_customer_orders.created_at > now() - interval '1 day'
+          )
+          or (
+            store_customer_orders.order_source = any(${webReservationSources})
+            and store_customer_orders.pickup_date >= (now() at time zone 'Asia/Tokyo')::date - 1
+          )
+        )
+        and (
+          not (store_customer_orders.order_source = any(${webReservationSources}))
+          or (
+            (
+              (store_customer_orders.pickup_date::text || ' ' || store_customer_orders.pickup_time)::timestamp
+              at time zone 'Asia/Tokyo'
+            ) <= now() + (${scheduledOrderReminderLeadMinutes} * interval '1 minute')
+          )
+          or exists (
+            select 1
+            from order_production_tasks active_production
+            where active_production.order_id = store_customer_orders.id
+              and active_production.status in ('preparing', 'ready')
+          )
+        )
       order by
         case coalesce(production.status, 'new') when 'ready' then 0 when 'preparing' then 1 else 2 end,
         store_customer_orders.created_at asc

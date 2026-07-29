@@ -65,7 +65,7 @@ const tabs = [
 const displayTabs = [
   { label: "キッチン", href: "/store/display/kitchen", icon: ChefHat },
   { label: "受取表示", href: "/store/display/pickup", icon: Monitor },
-  { label: "配達員表示", href: "/store/display/courier", icon: Monitor },
+  { label: "Pick Up表示", href: "/store/display/courier", icon: Monitor },
   { label: "POS客席表示", href: "/store/pos/customer-display", icon: Monitor }
 ];
 

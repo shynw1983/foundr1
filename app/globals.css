@@ -15177,6 +15177,7 @@ body :where(
   --courier-uber: #06c167;
   --courier-demae: #da3734;
   --courier-rocket: #00479f;
+  --pickup-web: #185c46;
   display: grid;
   align-content: start;
   gap: 18px;
@@ -15336,6 +15337,11 @@ body :where(
 
 .store-courier-order.platform-rocket_now {
   --platform-color: var(--courier-rocket);
+}
+
+.store-courier-order.platform-maamaa_web,
+.store-courier-order.platform-nanacha_web {
+  --platform-color: var(--pickup-web);
 }
 
 .store-courier-order > strong {
