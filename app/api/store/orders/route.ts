@@ -1,7 +1,11 @@
 import { canAccessStore, requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { findCustomerOrderById } from "../../../../lib/customer-orders";
-import { ensureProductionTasksForOrder, refreshActiveProductionTasksForStore } from "../../../../lib/order-production";
+import {
+  ensureOrderProductionEstimate,
+  ensureProductionTasksForOrder,
+  refreshActiveProductionTasksForStore
+} from "../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
 import { canChangeOrderStatus, getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
@@ -286,6 +290,7 @@ export async function PATCH(request: Request) {
         where order_id::text = ${rows[0].id as string}
           and status <> 'ready'
       `;
+      if (status === "preparing") await ensureOrderProductionEstimate(rows[0].id as string);
     }
     await syncWebReservationToSalesOrder(rows[0].id as string);
     await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(rows[0].id as string));

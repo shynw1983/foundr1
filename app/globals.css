@@ -15117,6 +15117,224 @@ body :where(
   font-weight: 850;
 }
 
+.store-courier-display {
+  --courier-uber: #06c167;
+  --courier-demae: #da3734;
+  --courier-rocket: #00479f;
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-height: 100dvh;
+  padding: 20px;
+  background: #f7f8f8;
+  color: var(--ink);
+}
+
+.store-courier-header,
+.store-courier-header > div,
+.store-courier-section-head,
+.store-courier-order > div,
+.store-courier-live {
+  display: flex;
+  align-items: center;
+}
+
+.store-courier-header {
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+}
+
+.store-courier-header > div {
+  gap: 12px;
+}
+
+.store-courier-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: var(--green);
+  color: white;
+  font-weight: 600;
+}
+
+.store-courier-header h1,
+.store-courier-header p,
+.store-courier-section-head h2,
+.store-courier-section-head p,
+.store-courier-order > div,
+.store-courier-empty {
+  margin: 0;
+}
+
+.store-courier-header h1 {
+  font-size: clamp(28px, 4vw, 48px);
+  font-weight: 600;
+  line-height: 1.05;
+}
+
+.store-courier-header p,
+.store-courier-section-head p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.store-courier-live {
+  gap: 8px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.store-courier-live i {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--green);
+}
+
+.store-courier-ready {
+  display: grid;
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 18px;
+}
+
+.store-courier-section-head {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.store-courier-section-head h2 {
+  font-size: clamp(24px, 3vw, 36px);
+  font-weight: 600;
+}
+
+.store-courier-section-head > strong {
+  font-weight: 600;
+}
+
+.store-courier-ready-grid,
+.store-courier-work-grid,
+.store-courier-order-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.store-courier-ready-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.store-courier-work-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.store-courier-work-grid > section {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.store-courier-order-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.store-courier-order {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-left: 9px solid var(--platform-color);
+  border-radius: 10px;
+  padding: 14px;
+  background: white;
+}
+
+.store-courier-order.platform-uber_eats {
+  --platform-color: var(--courier-uber);
+}
+
+.store-courier-order.platform-demae_can {
+  --platform-color: var(--courier-demae);
+}
+
+.store-courier-order.platform-rocket_now {
+  --platform-color: var(--courier-rocket);
+}
+
+.store-courier-order > strong {
+  display: block;
+  color: var(--ink);
+  font-size: clamp(34px, 5vw, 64px);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.store-courier-order > div {
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.store-courier-order span,
+.store-courier-order b {
+  font-weight: 500;
+}
+
+.store-courier-order.is-ready {
+  border: 0;
+  background: var(--platform-color);
+  color: white;
+}
+
+.store-courier-order.is-ready.platform-uber_eats {
+  color: #07110b;
+}
+
+.store-courier-order.is-ready > strong {
+  color: currentColor;
+  font-size: clamp(46px, 7vw, 84px);
+  text-align: center;
+}
+
+.store-courier-order.is-ready > div {
+  justify-content: center;
+  border-color: currentColor;
+  opacity: 0.9;
+}
+
+.store-courier-empty {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+@media (max-width: 780px) {
+  .store-courier-ready-grid,
+  .store-courier-work-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .store-courier-display {
+    padding: 14px;
+  }
+
+  .store-courier-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .store-courier-order-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .pos-admin-page {
   --pos-admin-section-gap: 18px;
   display: grid;

@@ -2334,6 +2334,8 @@ create table if not exists store_customer_orders (
   toppings text not null default '',
   paid_at timestamptz,
   preparing_at timestamptz,
+  estimated_prep_minutes integer,
+  estimated_ready_at timestamptz,
   ready_at timestamptz,
   completed_at timestamptz,
   cancelled_at timestamptz,
@@ -2342,6 +2344,8 @@ create table if not exists store_customer_orders (
 );
 
 alter table store_customer_orders add column if not exists preparing_at timestamptz;
+alter table store_customer_orders add column if not exists estimated_prep_minutes integer;
+alter table store_customer_orders add column if not exists estimated_ready_at timestamptz;
 alter table store_customer_orders add column if not exists ready_at timestamptz;
 alter table store_customer_orders add column if not exists completed_at timestamptz;
 alter table store_customer_orders add column if not exists cancelled_at timestamptz;

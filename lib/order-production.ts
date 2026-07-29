@@ -4,6 +4,7 @@ import {
   formatMaamaaProductionRule,
   formatMaamaaSeasoningSelection
 } from "./maamaa-production-rules";
+import { calculateProductionEstimateMinutes } from "./production-estimate";
 import { syncWebReservationToSalesOrder } from "./sales-orders";
 import { syncDiningSessionFromProduction } from "./store-dining-sessions";
 
@@ -322,8 +323,47 @@ export async function syncOrderStatusFromProductionTasks(orderId: string) {
     where id::text = ${orderId}
     returning id::text
   `;
-  if (rows[0]?.id) await syncWebReservationToSalesOrder(rows[0].id as string);
+  if (rows[0]?.id) {
+    if (nextStatus === "preparing") await ensureOrderProductionEstimate(rows[0].id as string);
+    await syncWebReservationToSalesOrder(rows[0].id as string);
+  }
   return rows[0]?.id as string | undefined;
+}
+
+export async function ensureOrderProductionEstimate(orderId: string) {
+  const orderRows = await sql`
+    select
+      coalesce(store_customer_orders.estimated_ready_at::text, '') as "estimatedReadyAt",
+      coalesce(store_customer_orders.preparing_at::text, '') as "preparingAt",
+      greatest(
+        1,
+        coalesce(
+          nullif(sum(coalesce(store_customer_order_items.quantity, 1)) filter (
+            where store_customer_order_items.size_key = 'maamaa_buildable'
+          ), 0),
+          sum(coalesce(store_customer_order_items.quantity, 1)),
+          1
+        )
+      )::int as "bowlCount"
+    from store_customer_orders
+    left join store_customer_order_items on store_customer_order_items.order_id = store_customer_orders.id
+    where store_customer_orders.id::text = ${orderId}
+    group by store_customer_orders.id
+    limit 1
+  `;
+  const order = orderRows[0] as { estimatedReadyAt: string; preparingAt: string; bowlCount: number } | undefined;
+  if (!order || order.estimatedReadyAt || !order.preparingAt) return order?.estimatedReadyAt ?? "";
+  const minutes = calculateProductionEstimateMinutes(Number(order.bowlCount));
+  const rows = await sql`
+    update store_customer_orders
+    set
+      estimated_prep_minutes = coalesce(estimated_prep_minutes, ${minutes}),
+      estimated_ready_at = coalesce(estimated_ready_at, preparing_at + make_interval(mins => ${minutes})),
+      updated_at = now()
+    where id::text = ${orderId}
+    returning coalesce(estimated_ready_at::text, '') as "estimatedReadyAt"
+  `;
+  return String(rows[0]?.estimatedReadyAt ?? "");
 }
 
 export async function setProductionTaskStatus(taskId: string, status: ProductionTaskStatus, employeeId?: string) {

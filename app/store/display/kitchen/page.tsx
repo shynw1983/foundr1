@@ -13,6 +13,9 @@ type KitchenTask = {
   status: string;
   printStatus: string;
   itemSummary: string;
+  startedAt: string;
+  estimatedPrepMinutes: number;
+  estimatedReadyAt: string;
   pickupCode: string;
   tableLabel: string;
   orderSource: string;
@@ -52,6 +55,14 @@ function splitQuantityLabel(text: string) {
   return { label: match[1], quantity: match[2].trim() };
 }
 
+function getCountdownLabel(estimatedReadyAt: string, now: number) {
+  const target = new Date(estimatedReadyAt).getTime();
+  if (!estimatedReadyAt || Number.isNaN(target)) return "";
+  const remainingMs = target - now;
+  if (remainingMs <= 0) return "まもなく完成";
+  return `あと${Math.max(1, Math.ceil(remainingMs / 60000))}分`;
+}
+
 export default function StoreKitchenPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
@@ -64,12 +75,18 @@ export default function StoreKitchenPage() {
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [menuOpen, setMenuOpen] = useState(false);
   const [checkedLineKeys, setCheckedLineKeys] = useState<Set<string>>(() => new Set());
+  const [now, setNow] = useState(() => Date.now());
   const selectedStoreIdRef = useRef(selectedStoreId);
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   useEffect(() => {
     selectedStoreIdRef.current = selectedStoreId;
   }, [selectedStoreId]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   async function load(storeId = selectedStoreIdRef.current, area = selectedArea) {
     const params = new URLSearchParams();
@@ -282,7 +299,12 @@ export default function StoreKitchenPage() {
               <article className={`store-kitchen-task is-${task.status}`} key={task.id}>
                 <div className="store-kitchen-task-head">
                   <strong>{task.pickupCode}</strong>
-                  <span>{task.productionAreaLabel} / {statusLabels[task.status]}</span>
+                  <span>
+                    {task.productionAreaLabel} / {statusLabels[task.status]}
+                    {task.status === "preparing" && task.estimatedReadyAt
+                      ? ` / ${getCountdownLabel(task.estimatedReadyAt, now)}`
+                      : ""}
+                  </span>
                 </div>
                 <p>{(orderTypeLabels[task.orderType] ?? task.orderType) || "受け取り"}{task.tableLabel ? ` / 座席 ${task.tableLabel}` : ""} / {task.createdTime}</p>
                 <div className="store-kitchen-items">
