@@ -85,6 +85,7 @@ export default function StoreKitchenPage() {
   const selectedStoreIdRef = useRef(selectedStoreId);
   const serverOffsetRef = useRef(0);
   const loadSequenceRef = useRef(0);
+  const autoStartingTaskIdsRef = useRef<Set<string>>(new Set());
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   useEffect(() => {
@@ -140,7 +141,8 @@ export default function StoreKitchenPage() {
     void load();
   });
 
-  function toggleLineCheck(key: string) {
+  function toggleLineCheck(task: KitchenTask, key: string, isIngredient: boolean) {
+    const wasChecked = checkedLineKeys.has(key);
     setCheckedLineKeys((current) => {
       const next = new Set(current);
       if (next.has(key)) {
@@ -149,6 +151,16 @@ export default function StoreKitchenPage() {
         next.add(key);
       }
       return next;
+    });
+    if (
+      wasChecked
+      || !isIngredient
+      || task.status !== "new"
+      || autoStartingTaskIdsRef.current.has(task.id)
+    ) return;
+    autoStartingTaskIdsRef.current.add(task.id);
+    void updateTask(task, "preparing").finally(() => {
+      autoStartingTaskIdsRef.current.delete(task.id);
     });
   }
 
@@ -438,7 +450,7 @@ export default function StoreKitchenPage() {
                         key={lineKey}
                         type="button"
                         aria-pressed={checkedLineKeys.has(lineKey)}
-                        onClick={() => toggleLineCheck(lineKey)}
+                        onClick={() => toggleLineCheck(task, lineKey, line.isModifier)}
                       >
                         <span>{quantityParts.label}</span>
                         {quantityParts.quantity ? <b>{quantityParts.quantity}</b> : null}
