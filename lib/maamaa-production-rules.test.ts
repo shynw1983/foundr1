@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  findMaamaaProductionRule,
+  formatMaamaaProductionRule,
   formatMaamaaSeasoningSelection,
   localizeMaamaaProductionSummary
 } from "./maamaa-production-rules.ts";
@@ -19,6 +21,15 @@ test("matches Uber seasoning labels that include decorative emoji or suffixes", 
     formatMaamaaSeasoningSelection("薬膳スパイスあり【超おすすめ🏮】"),
     "薬膳スパイスあり（メニュー掲載。標準投入か追加扱いか要確認）"
   );
+});
+
+test("shows repeated kitchen ingredients as their total physical quantity", () => {
+  const quailEgg = findMaamaaProductionRule("うずらの卵1個");
+  const sausage = findMaamaaProductionRule("ウインナー1個");
+  assert.ok(quailEgg);
+  assert.ok(sausage);
+  assert.match(formatMaamaaProductionRule(quailEgg, 2), /うずらの卵 2個/);
+  assert.match(formatMaamaaProductionRule(sausage, 2), /ウインナー 2個/);
 });
 
 test("localizes kitchen summaries with the Chinese labels preserved from Uber", () => {

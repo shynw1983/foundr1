@@ -48,9 +48,19 @@ function splitLines(value: string) {
 }
 
 function splitQuantityLabel(text: string) {
-  const match = text.match(/^(.*?)( x\d+)(（.*）)?$/);
-  if (!match) return { label: text, quantity: "" };
-  return { label: `${match[1]}${match[3] ?? ""}`, quantity: match[2].trim() };
+  const multiplierMatch = text.match(/^(.*?)( x\d+)(（.*）)?$/);
+  if (multiplierMatch) {
+    return {
+      label: `${multiplierMatch[1]}${multiplierMatch[3] ?? ""}`,
+      quantity: multiplierMatch[2].trim()
+    };
+  }
+  const unitMatch = text.match(/^(.*?)(\s+(?:\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?(?:個くらい|個|本|枚|匹|粒|袋|パック|セット|ショット|kg|g|ml|L|个左右|个|根|只|片|袋|克)))(（.*）)?$/);
+  if (!unitMatch) return { label: text, quantity: "" };
+  return {
+    label: `${unitMatch[1]}${unitMatch[3] ?? ""}`,
+    quantity: unitMatch[2].trim()
+  };
 }
 
 function getCountdownLabel(estimatedReadyAt: string, now: number, language: "ja" | "zh") {
