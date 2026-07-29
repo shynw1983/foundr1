@@ -500,6 +500,9 @@ public class Foundr1PrinterBridge {
         JSONObject template = payload.optJSONObject("receiptTemplate");
         boolean isKitchen = "kitchen".equals(payload.optString("jobType", ""));
         JSONObject kitchenTemplate = payload.optJSONObject("kitchenTicketTemplate");
+        boolean chineseKitchen = isKitchen
+            && kitchenTemplate != null
+            && "zh".equals(kitchenTemplate.optString("language", "ja"));
         boolean largeKitchenText = isKitchen && kitchenBool(kitchenTemplate, "largeText", true);
         Paint normal = textPaint(largeKitchenText ? 28 : 24, false);
         Paint small = textPaint(largeKitchenText ? 24 : 21, false);
@@ -525,17 +528,28 @@ public class Foundr1PrinterBridge {
                         addSeparator(lines, contentWidth, normal);
                     }
                     if ("title".equals(block)) {
-                        addKitchenText(lines, kitchenText(kitchenTemplate, "title", "厨房伝票"), blockPaint, style, contentWidth);
+                        addKitchenText(lines, kitchenText(kitchenTemplate, "title", chineseKitchen ? "厨房单" : "厨房伝票"), blockPaint, style, contentWidth);
                     } else if ("store".equals(block)) {
                         addKitchenText(lines, payload.optString("storeName", "Foundr1 OS"), blockPaint, style, contentWidth);
                     } else if ("pickup".equals(block)) {
                         addKitchenText(lines, "No. " + order.optString("pickupCode", ""), blockPaint, style, contentWidth);
                     } else if ("orderType".equals(block)) {
-                        addKitchenText(lines, joinReceiptMeta(formatOrderTypeLabel(order.optString("orderType", "")), formatPaymentLabel(order)), blockPaint, style, contentWidth);
+                        addKitchenText(
+                            lines,
+                            joinReceiptMeta(
+                                chineseKitchen
+                                    ? formatChineseKitchenOrderTypeLabel(order.optString("orderType", ""))
+                                    : formatOrderTypeLabel(order.optString("orderType", "")),
+                                chineseKitchen ? "厨房" : formatPaymentLabel(order)
+                            ),
+                            blockPaint,
+                            style,
+                            contentWidth
+                        );
                     } else if ("items".equals(block)) {
-                        addKitchenItems(lines, order, kitchenTemplate, style, blockPaint, largeKitchenText, contentWidth);
+                        addKitchenItems(lines, order, kitchenTemplate, style, blockPaint, largeKitchenText, chineseKitchen, contentWidth);
                     } else if ("note".equals(block)) {
-                        addKitchenText(lines, "備考: " + order.optString("note", "").trim(), blockPaint, style, contentWidth);
+                        addKitchenText(lines, (chineseKitchen ? "备注：" : "備考: ") + order.optString("note", "").trim(), blockPaint, style, contentWidth);
                     } else if ("message".equals(block)) {
                         addKitchenText(lines, kitchenText(kitchenTemplate, "customMessage", ""), blockPaint, style, contentWidth);
                     } else if ("timestamp".equals(block)) {
@@ -609,7 +623,7 @@ public class Foundr1PrinterBridge {
         else addText(lines, text, paint, contentWidth);
     }
 
-    private void addKitchenItems(List<RasterLine> lines, JSONObject order, JSONObject template, JSONObject style, Paint itemPaint, boolean largeText, int contentWidth) {
+    private void addKitchenItems(List<RasterLine> lines, JSONObject order, JSONObject template, JSONObject style, Paint itemPaint, boolean largeText, boolean chineseKitchen, int contentWidth) {
         JSONArray items = order.optJSONArray("items");
         if (items != null) {
             for (int i = 0; i < items.length(); i += 1) {
@@ -634,8 +648,16 @@ public class Foundr1PrinterBridge {
         }
         if (kitchenBool(template, "showAmounts", false)) {
             addSeparator(lines, contentWidth, itemPaint);
-            addPair(lines, "合計", yen(order.optInt("totalAmount", 0)), kitchenBlockPaint(style, largeText, false), contentWidth);
+            addPair(lines, chineseKitchen ? "合计" : "合計", yen(order.optInt("totalAmount", 0)), kitchenBlockPaint(style, largeText, false), contentWidth);
         }
+    }
+
+    private String formatChineseKitchenOrderTypeLabel(String value) {
+        if ("eat_in".equals(value)) return "堂食";
+        if ("takeout".equals(value) || "pickup".equals(value)) return "自提";
+        if ("delivery".equals(value)) return "外送";
+        if ("web".equals(value) || "scheduled".equals(value)) return "Web预约";
+        return value == null || value.trim().isEmpty() ? "取餐" : value;
     }
 
     private void addReceiptTemplateBlocks(List<RasterLine> output, JSONObject payload, JSONObject order, JSONObject template, String paperWidth, int contentWidth, Paint normal, Paint small, Paint bold) {

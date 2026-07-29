@@ -2,7 +2,8 @@ import { sql } from "./db";
 import {
   findMaamaaProductionRule,
   formatMaamaaProductionRule,
-  formatMaamaaSeasoningSelection
+  formatMaamaaSeasoningSelection,
+  localizeMaamaaProductionSummary
 } from "./maamaa-production-rules";
 import { calculateProductionEstimateMinutes } from "./production-estimate";
 import { syncWebReservationToSalesOrder } from "./sales-orders";
@@ -13,6 +14,8 @@ type ProductionTaskStatus = "new" | "preparing" | "ready";
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
+
+export { localizeMaamaaProductionSummary };
 
 function getProductionArea(brandName: string) {
   const normalized = brandName.toLowerCase();

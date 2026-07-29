@@ -22,6 +22,7 @@ type KitchenTask = {
   orderType: string;
   note: string;
   createdTime: string;
+  kitchenLanguage: "ja" | "zh";
 };
 
 type StoreOption = {
@@ -29,17 +30,14 @@ type StoreOption = {
   name: string;
 };
 
-const statusLabels: Record<string, string> = {
-  new: "制作待ち",
-  preparing: "制作中",
-  ready: "完成"
+const statusLabels: Record<"ja" | "zh", Record<string, string>> = {
+  ja: { new: "制作待ち", preparing: "制作中", ready: "完成" },
+  zh: { new: "待制作", preparing: "制作中", ready: "已完成" }
 };
 
-const orderTypeLabels: Record<string, string> = {
-  eat_in: "店内",
-  takeout: "持ち帰り",
-  delivery: "配達",
-  unknown: "受取方法未判定"
+const orderTypeLabels: Record<"ja" | "zh", Record<string, string>> = {
+  ja: { eat_in: "店内", takeout: "持ち帰り", delivery: "配達", unknown: "受取方法未判定" },
+  zh: { eat_in: "堂食", takeout: "自提", delivery: "外送", unknown: "取餐方式未确认" }
 };
 
 function splitLines(value: string) {
@@ -55,12 +53,13 @@ function splitQuantityLabel(text: string) {
   return { label: match[1], quantity: match[2].trim() };
 }
 
-function getCountdownLabel(estimatedReadyAt: string, now: number) {
+function getCountdownLabel(estimatedReadyAt: string, now: number, language: "ja" | "zh") {
   const target = new Date(estimatedReadyAt).getTime();
   if (!estimatedReadyAt || Number.isNaN(target)) return "";
   const remainingMs = target - now;
-  if (remainingMs <= 0) return "まもなく完成";
-  return `あと${Math.max(1, Math.ceil(remainingMs / 60000))}分`;
+  if (remainingMs <= 0) return language === "zh" ? "即将完成" : "まもなく完成";
+  const minutes = Math.max(1, Math.ceil(remainingMs / 60000));
+  return language === "zh" ? `还剩${minutes}分钟` : `あと${minutes}分`;
 }
 
 export default function StoreKitchenPage() {
@@ -68,6 +67,7 @@ export default function StoreKitchenPage() {
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [tasks, setTasks] = useState<KitchenTask[]>([]);
   const [areas, setAreas] = useState<Array<{ value: string; label: string }>>([]);
+  const [displayLanguage, setDisplayLanguage] = useState<"ja" | "zh">("ja");
   const [selectedArea, setSelectedArea] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
@@ -106,6 +106,7 @@ export default function StoreKitchenPage() {
     if (nextStoreId) setStoredStoreSelection(nextStoreId);
     setTasks(body.tasks ?? []);
     setAreas(body.areas ?? []);
+    setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
     setCheckedLineKeys((current) => {
       const validKeys = new Set<string>();
       for (const task of (body.tasks ?? []) as KitchenTask[]) {
@@ -144,6 +145,7 @@ export default function StoreKitchenPage() {
       const body = await response.json();
       setTasks(body.tasks ?? []);
       setAreas(body.areas ?? areas);
+      setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
     } else {
       await load();
     }
@@ -161,6 +163,7 @@ export default function StoreKitchenPage() {
       const body = await response.json();
       setTasks(body.tasks ?? []);
       setAreas(body.areas ?? areas);
+      setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
     } else {
       await load();
     }
@@ -246,6 +249,7 @@ export default function StoreKitchenPage() {
 
   const visibleTasks = useMemo(() => tasks.filter((task) => task.status !== "ready"), [tasks]);
   const readyTasks = useMemo(() => tasks.filter((task) => task.status === "ready"), [tasks]);
+  const isChinese = displayLanguage === "zh";
 
   return (
     <main className="store-kitchen-display store-kitchen-page">
@@ -260,10 +264,10 @@ export default function StoreKitchenPage() {
       />
       {menuOpen ? (
         <div className="store-display-menu">
-          <strong>キッチン</strong>
+          <strong>{isChinese ? "厨房" : "キッチン"}</strong>
           {stores.length > 1 ? (
             <label className="store-context-selector is-store is-compact">
-              <span>表示店舗</span>
+              <span>{isChinese ? "显示门店" : "表示店舗"}</span>
               <select value={selectedStoreId} onChange={(event) => {
                 const storeId = event.target.value;
                 setSelectedStoreId(storeId);
@@ -276,12 +280,12 @@ export default function StoreKitchenPage() {
             </label>
           ) : null}
           <select value={selectedArea} onChange={(event) => setSelectedArea(event.target.value)} aria-label="制作区">
-            <option value="">全部</option>
-            {areas.map((area) => <option key={area.value} value={area.value}>{area.label}</option>)}
+            <option value="">{isChinese ? "全部" : "全部"}</option>
+            {areas.map((area) => <option key={area.value} value={area.value}>{isChinese && area.label === "調理" ? "烹饪" : area.label}</option>)}
           </select>
-          <button className="secondary-button" type="button" onClick={() => void load()}>{loading ? "読み込み中" : "更新"}</button>
+          <button className="secondary-button" type="button" onClick={() => void load()}>{loading ? (isChinese ? "加载中" : "読み込み中") : (isChinese ? "刷新" : "更新")}</button>
           <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
-            全画面・常時点灯 ON
+            {isChinese ? "全屏・保持亮屏 ON" : "全画面・常時点灯 ON"}
           </button>
           <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
           <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
@@ -293,20 +297,20 @@ export default function StoreKitchenPage() {
 
       <section className="store-kitchen-board">
         <div>
-          <h2>制作待ち / 制作中</h2>
+          <h2>{isChinese ? "待制作 / 制作中" : "制作待ち / 制作中"}</h2>
           <div className="store-kitchen-task-grid">
             {visibleTasks.map((task) => (
               <article className={`store-kitchen-task is-${task.status}`} key={task.id}>
                 <div className="store-kitchen-task-head">
                   <strong>{task.pickupCode}</strong>
                   <span>
-                    {task.productionAreaLabel} / {statusLabels[task.status]}
+                    {task.kitchenLanguage === "zh" && task.productionAreaLabel === "調理" ? "烹饪" : task.productionAreaLabel} / {statusLabels[task.kitchenLanguage][task.status]}
                     {task.status === "preparing" && task.estimatedReadyAt
-                      ? ` / ${getCountdownLabel(task.estimatedReadyAt, now)}`
+                      ? ` / ${getCountdownLabel(task.estimatedReadyAt, now, task.kitchenLanguage)}`
                       : ""}
                   </span>
                 </div>
-                <p>{(orderTypeLabels[task.orderType] ?? task.orderType) || "受け取り"}{task.tableLabel ? ` / 座席 ${task.tableLabel}` : ""} / {task.createdTime}</p>
+                <p>{(orderTypeLabels[task.kitchenLanguage][task.orderType] ?? task.orderType) || (task.kitchenLanguage === "zh" ? "取餐" : "受け取り")}{task.tableLabel ? ` / ${task.kitchenLanguage === "zh" ? "座位" : "座席"} ${task.tableLabel}` : ""} / {task.createdTime}</p>
                 <div className="store-kitchen-items">
                   {splitLines(task.itemSummary).map((line, index) => {
                     const lineKey = `${task.id}:${index}`;
@@ -332,29 +336,29 @@ export default function StoreKitchenPage() {
                 {task.note ? <p className="store-kitchen-note">{task.note}</p> : null}
                 <div className="store-kitchen-actions">
                   {task.status === "new" ? (
-                    <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "preparing")}>制作開始</button>
+                    <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "preparing")}>{task.kitchenLanguage === "zh" ? "开始制作" : "制作開始"}</button>
                   ) : null}
-                  <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "ready")}>{task.orderType === "eat_in" ? "提供完了" : "完成"}</button>
+                  <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "ready")}>{task.kitchenLanguage === "zh" ? (task.orderType === "eat_in" ? "出餐完成" : "完成") : (task.orderType === "eat_in" ? "提供完了" : "完成")}</button>
                 </div>
               </article>
             ))}
-            {!visibleTasks.length ? <p className="store-kitchen-empty">制作待ちの制作タスクはありません。</p> : null}
+            {!visibleTasks.length ? <p className="store-kitchen-empty">{isChinese ? "当前没有待制作任务。" : "制作待ちの制作タスクはありません。"}</p> : null}
           </div>
         </div>
 
         <aside>
-          <h2>完成</h2>
+          <h2>{isChinese ? "已完成" : "完成"}</h2>
           <div className="store-kitchen-ready-list">
             {readyTasks.map((task, taskIndex) => (
               <div key={task.id}>
                 <strong>{task.pickupCode}</strong>
                 <span>{task.productionAreaLabel}</span>
                 {readyTasks.findIndex((candidate) => candidate.orderId === task.orderId) === taskIndex && tasks.every((candidate) => candidate.orderId !== task.orderId || candidate.status === "ready") ? (
-                  <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => void completeHandoff(task)}>受渡完了</button>
+                  <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => void completeHandoff(task)}>{task.kitchenLanguage === "zh" ? "交付完成" : "受渡完了"}</button>
                 ) : null}
               </div>
             ))}
-            {!readyTasks.length ? <p>完成待ちです。</p> : null}
+            {!readyTasks.length ? <p>{isChinese ? "暂无已完成订单。" : "完成待ちです。"}</p> : null}
           </div>
         </aside>
       </section>

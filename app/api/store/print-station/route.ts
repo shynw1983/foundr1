@@ -1,7 +1,7 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
-import { refreshActiveProductionTasksForStore } from "../../../../lib/order-production";
-import { normalizePosPrinterSettings } from "../../../../lib/pos-printer";
+import { localizeMaamaaProductionSummary, refreshActiveProductionTasksForStore } from "../../../../lib/order-production";
+import { normalizePosPrinterSettings, resolvePosKitchenTicketTemplate } from "../../../../lib/pos-printer";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 import { scheduledOrderReminderLeadMinutes } from "../../../../lib/store-order-alert-timing";
 
@@ -40,6 +40,7 @@ export async function GET(request: Request) {
       store_customer_orders.pickup_code as "pickupCode",
       coalesce(store_customer_orders.customer_summary ->> 'orderType', '') as "orderType",
       coalesce(store_customer_orders.customer_summary ->> 'note', '') as note,
+      store_customer_orders.customer_summary as "customerSummary",
       coalesce(stores.name, 'Foundr1 STORE') as "storeName",
       to_char(store_customer_orders.created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime"
     from order_production_tasks
@@ -70,11 +71,29 @@ export async function GET(request: Request) {
     where store_id::text = ${selectedStoreId}
     limit 1
   `;
+  const printerSettings = normalizePosPrinterSettings(settingsRows[0]?.printerSettings);
+  const jobs = rows.map((rawRow) => {
+    const row = rawRow as Record<string, unknown>;
+    const brandId = normalizeText(row.brandId);
+    const brandName = normalizeText(row.brandName);
+    const language = /maamaa|まぁ麻|麻辣/i.test(brandName)
+      ? resolvePosKitchenTicketTemplate(printerSettings, brandId || null).language
+      : "ja";
+    const { customerSummary, ...job } = row;
+    return {
+      ...job,
+      itemSummary: localizeMaamaaProductionSummary(
+        normalizeText(row.itemSummary),
+        customerSummary,
+        language
+      )
+    };
+  });
 
   return Response.json({
     selectedStoreId,
-    printerSettings: normalizePosPrinterSettings(settingsRows[0]?.printerSettings),
-    jobs: rows
+    printerSettings,
+    jobs
   }, { headers: { "Cache-Control": "no-store" } });
 }
 

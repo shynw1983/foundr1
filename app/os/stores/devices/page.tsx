@@ -956,6 +956,25 @@ export default function StoreDeviceSettingsPage() {
               <div className="pos-admin-receipt-template-editor">
                 <div className="pos-admin-printer-grid">
                   <label>
+                    <span>厨房表示言語</span>
+                    <select
+                      value={activeKitchenTemplate.language}
+                      onChange={(event) => {
+                        const language = event.target.value as PosKitchenTicketTemplateSettings["language"];
+                        updateKitchenTicketTemplate({
+                          language,
+                          ...(activeKitchenTemplate.title === defaultPosKitchenTicketTemplateSettings.title || activeKitchenTemplate.title === "厨房单"
+                            ? { title: language === "zh" ? "厨房单" : defaultPosKitchenTicketTemplateSettings.title }
+                            : {})
+                        });
+                      }}
+                      disabled={!canManage}
+                    >
+                      <option value="ja">日本語</option>
+                      <option value="zh">中文</option>
+                    </select>
+                  </label>
+                  <label>
                     <span>印刷枚数</span>
                     <select
                       value={settings.printerSettings.kitchenCopies}
@@ -1125,24 +1144,25 @@ function KitchenTicketPreview({
   paperWidth: PosPrinterConnection["paperWidth"];
   template: PosKitchenTicketTemplateSettings;
 }) {
+  const isChinese = template.language === "zh";
   function renderBlock(block: PosKitchenTicketBlock) {
     const style = template.blockStyles[block];
     const className = `store-kitchen-preview-block is-${style.textSize} is-${style.alignment}${style.bold ? " is-bold" : ""}`;
     let content = null;
-    if (block === "title" && template.showTitle) content = <p>{template.title || defaultPosKitchenTicketTemplateSettings.title}</p>;
+    if (block === "title" && template.showTitle) content = <p>{template.title || (isChinese ? "厨房单" : defaultPosKitchenTicketTemplateSettings.title)}</p>;
     else if (block === "store" && template.showStoreName) content = <p>{storeName}</p>;
     else if (block === "pickup" && template.showPickupCode) content = <p>No. F1-1234</p>;
-    else if (block === "orderType" && template.showOrderType) content = <p>Web予約 / 厨房</p>;
+    else if (block === "orderType" && template.showOrderType) content = <p>{isChinese ? "外送 / 厨房" : "Web予約 / 厨房"}</p>;
     else if (block === "items" && template.showItems) {
       content = (
         <>
-          <div className="pos-admin-receipt-paper-line"><span>チョコミントタピオカフラッペ x1</span>{template.showAmounts ? <span>¥650</span> : <span />}</div>
-          {template.showOptions ? <><p className="is-sub">　サイズ：R レギュラー 500ml</p><p className="is-sub">　温度：ICE</p><p className="is-sub">　甘さ：ふつう</p><p className="is-sub">　氷：なし</p></> : null}
-          <div className="pos-admin-receipt-paper-line"><span>国産米トッポッキ x1</span>{template.showAmounts ? <span>¥378</span> : <span />}</div>
-          {template.showAmounts ? <><div className="pos-admin-receipt-paper-rule" /><div className="pos-admin-receipt-paper-line is-total"><span>合計</span><span>¥1,028</span></div></> : null}
+          <div className="pos-admin-receipt-paper-line"><span>{isChinese ? "鲜味麻辣烫汤底" : "チョコミントタピオカフラッペ"} x1</span>{template.showAmounts ? <span>¥650</span> : <span />}</div>
+          {template.showOptions ? (isChinese ? <><p className="is-sub">　辣度：普通辣</p><p className="is-sub">　麻度：微微麻</p><p className="is-sub">　配料：宽粉 50g</p></> : <><p className="is-sub">　サイズ：R レギュラー 500ml</p><p className="is-sub">　温度：ICE</p><p className="is-sub">　甘さ：ふつう</p><p className="is-sub">　氷：なし</p></>) : null}
+          <div className="pos-admin-receipt-paper-line"><span>{isChinese ? "香肠" : "国産米トッポッキ"} x1</span>{template.showAmounts ? <span>¥378</span> : <span />}</div>
+          {template.showAmounts ? <><div className="pos-admin-receipt-paper-rule" /><div className="pos-admin-receipt-paper-line is-total"><span>{isChinese ? "合计" : "合計"}</span><span>¥1,028</span></div></> : null}
         </>
       );
-    } else if (block === "note" && template.showNote) content = <p>備考: ストロー不要</p>;
+    } else if (block === "note" && template.showNote) content = <p>{isChinese ? "备注：顾客备注" : "備考: ストロー不要"}</p>;
     else if (block === "message" && template.customMessage) content = <>{template.customMessage.split(/\n+/).map((line) => <p key={line}>{line}</p>)}</>;
     else if (block === "timestamp" && template.showTimestamp) content = <p>2026-07-27 12:34:56</p>;
     if (!content) return null;

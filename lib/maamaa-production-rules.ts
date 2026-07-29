@@ -491,6 +491,22 @@ const maamaaZhExactText: Record<string, string> = {
 };
 
 const maamaaZhPhraseReplacements: Array<[string, string]> = [
+  ["最低", "至少"],
+  ["分加熱", "分钟加热"],
+  ["加熱不要", "无需加热"],
+  ["要加熱", "需要加热"],
+  ["容器に入れる", "放入容器"],
+  ["具材：", "配料："],
+  ["麺：", "面类："],
+  ["辛さ：", "辣度："],
+  ["痺れ：", "麻度："],
+  ["味変：", "调味："],
+  ["要確認", "需确认"],
+  ["個くらい", "个左右"],
+  ["個", "个"],
+  ["本", "根"],
+  ["枚", "片"],
+  ["匹", "只"],
   ["メニュー掲載。厨房分量/処理は要確認。", "菜单已上架。厨房分量/处理方式需确认。"],
   ["メニュー掲載。厨房提供ルールは要確認。", "菜单已上架。厨房出品规则需确认。"],
   ["メニュー掲載。標準投入か追加扱いか要確認", "菜单已上架。需确认是标准加入还是追加项"],
@@ -579,13 +595,82 @@ const maamaaZhPhraseReplacements: Array<[string, string]> = [
   ["ヶ", "个"]
 ];
 
+const maamaaZhPhraseReplacementsByLength: Array<[string, string]> = [
+  ...Object.entries(maamaaZhExactText),
+  ...maamaaZhPhraseReplacements
+]
+  .filter(([from, to]) => from !== to)
+  .sort(([left], [right]) => right.length - left.length);
+
 export function translateMaamaaReferenceText(value: string | undefined, language: MaamaaReferenceLanguage) {
   if (!value || language === "ja") return value ?? "";
   let translated = maamaaZhExactText[value] ?? value;
-  for (const [from, to] of maamaaZhPhraseReplacements) {
+  for (const [from, to] of maamaaZhPhraseReplacementsByLength) {
     translated = translated.replaceAll(from, to);
   }
   return translated;
+}
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asArray(value: unknown) {
+  return Array.isArray(value) ? value : [];
+}
+
+function multilingualParts(value: unknown) {
+  return String(value ?? "").split(/[｜|]/).map((part) => part.trim()).filter(Boolean);
+}
+
+function uberBridgeLabelTranslations(customerSummary: unknown) {
+  const translations = new Map<string, string>();
+  function addTranslation(label: unknown, aliases: string[] = []) {
+    const parts = multilingualParts(label);
+    if (!parts[0] || !parts[1] || parts[0] === parts[1]) return;
+    translations.set(parts[0], parts[1]);
+    for (const alias of aliases.filter(Boolean)) translations.set(alias, parts[1]);
+  }
+  const bridge = asRecord(asRecord(customerSummary).bridge);
+  for (const rawItem of asArray(bridge.items)) {
+    const item = asRecord(rawItem);
+    const itemParts = multilingualParts(item.name);
+    const itemRule = itemParts[0] ? findMaamaaProductionRule(itemParts[0]) : undefined;
+    addTranslation(item.name, itemRule ? [itemRule.kitchenName] : []);
+    for (const rawModifier of asArray(item.modifiers)) {
+      const modifier = asRecord(rawModifier);
+      const modifierParts = multilingualParts(modifier.name);
+      const productionRule = modifierParts[0] ? findMaamaaProductionRule(modifierParts[0]) : undefined;
+      const seasoningSummary = modifierParts[0] ? formatMaamaaSeasoningSelection(modifierParts[0]) : "";
+      const seasoningName = seasoningSummary
+        .replace(/^(辛さ|痺れ|味変)[:：]\s*/, "")
+        .replace(/（.*$/, "")
+        .trim();
+      addTranslation(modifier.group);
+      addTranslation(modifier.name, [
+        productionRule?.kitchenName ?? "",
+        seasoningName
+      ]);
+    }
+  }
+  return Array.from(translations.entries()).sort((left, right) => right[0].length - left[0].length);
+}
+
+export function localizeMaamaaProductionSummary(
+  itemSummary: string,
+  customerSummary: unknown,
+  language: MaamaaReferenceLanguage
+) {
+  if (language !== "zh") return itemSummary;
+  const translations = uberBridgeLabelTranslations(customerSummary);
+  return String(itemSummary ?? "")
+    .split("\n")
+    .map((line) => {
+      let localized = line;
+      for (const [japanese, chinese] of translations) localized = localized.replaceAll(japanese, chinese);
+      return translateMaamaaReferenceText(localized, "zh");
+    })
+    .join("\n");
 }
 
 function cloneMaamaaSettings(settings: MaamaaProductionReferenceSettings): MaamaaProductionReferenceSettings {

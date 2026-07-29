@@ -1,8 +1,9 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
-import { refreshActiveProductionTasksForStore, setProductionTaskStatus } from "../../../../../lib/order-production";
+import { localizeMaamaaProductionSummary, refreshActiveProductionTasksForStore, setProductionTaskStatus } from "../../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
+import { normalizePosPrinterSettings, resolvePosKitchenTicketTemplate } from "../../../../../lib/pos-printer";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -12,10 +13,12 @@ function normalizeText(value: unknown) {
 }
 
 async function getKitchenTasks(storeId: string, area = "") {
-  const rows = await sql`
+  const [rows, areas, settingsRows] = await Promise.all([sql`
     select
       order_production_tasks.id::text,
       order_production_tasks.order_id::text as "orderId",
+      coalesce(order_production_tasks.brand_id::text, '') as "brandId",
+      coalesce(brands.name, order_production_tasks.production_area_label, '') as "brandName",
       order_production_tasks.production_area as "productionArea",
       order_production_tasks.production_area_label as "productionAreaLabel",
       order_production_tasks.status,
@@ -30,11 +33,13 @@ async function getKitchenTasks(storeId: string, area = "") {
       store_customer_orders.payment_status as "paymentStatus",
       coalesce(store_customer_orders.customer_summary ->> 'orderType', '') as "orderType",
       coalesce(store_customer_orders.customer_summary ->> 'note', '') as note,
+      store_customer_orders.customer_summary as "customerSummary",
       store_customer_orders.created_at::text as "createdAt",
       to_char(store_customer_orders.created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime"
     from order_production_tasks
     join store_customer_orders on store_customer_orders.id = order_production_tasks.order_id
     left join store_tables on store_tables.id = store_customer_orders.store_table_id
+    left join brands on brands.id = order_production_tasks.brand_id
     where order_production_tasks.store_id::text = ${storeId}
       and store_customer_orders.payment_status = 'paid'
       and store_customer_orders.status not in ('completed', 'cancelled', 'refund_pending')
@@ -44,15 +49,47 @@ async function getKitchenTasks(storeId: string, area = "") {
       case order_production_tasks.status when 'preparing' then 0 when 'new' then 1 else 2 end,
       store_customer_orders.created_at asc
     limit 120
-  `;
-  const areas = await sql`
+  `, sql`
     select distinct production_area as value, production_area_label as label
     from order_production_tasks
     where store_id::text = ${storeId}
       and created_at > now() - interval '14 days'
     order by production_area_label
-  `;
-  return { tasks: rows, areas };
+  `, sql`
+    select coalesce(printer_settings, '{}'::jsonb) as "printerSettings"
+    from pos_store_settings
+    where store_id::text = ${storeId}
+    limit 1
+  `]);
+  const printerSettings = normalizePosPrinterSettings(settingsRows[0]?.printerSettings);
+  const tasks = rows.map((rawRow) => {
+    const row = rawRow as Record<string, unknown>;
+    const brandId = normalizeText(row.brandId);
+    const brandName = normalizeText(row.brandName);
+    const kitchenLanguage = /maamaa|まぁ麻|麻辣/i.test(brandName)
+      ? resolvePosKitchenTicketTemplate(printerSettings, brandId || null).language
+      : "ja";
+    const { customerSummary, ...task } = row;
+    return {
+      ...task,
+      kitchenLanguage,
+      itemSummary: localizeMaamaaProductionSummary(
+        normalizeText(row.itemSummary),
+        customerSummary,
+        kitchenLanguage
+      )
+    };
+  });
+  const taskLanguages = new Set(tasks.map((task) => task.kitchenLanguage));
+  const configuredMaamaaLanguage = printerSettings.kitchenTicketTemplateVariants
+    .find((variant) => /maamaa|まぁ麻|麻辣/i.test(variant.brandName))?.template.language;
+  return {
+    tasks,
+    areas,
+    displayLanguage: taskLanguages.size === 1
+      ? (taskLanguages.has("zh") ? "zh" : "ja")
+      : (tasks.length === 0 && configuredMaamaaLanguage === "zh" ? "zh" : "ja")
+  };
 }
 
 export async function GET(request: Request) {
@@ -66,8 +103,8 @@ export async function GET(request: Request) {
 
   await refreshActiveProductionTasksForStore(storeFilter);
 
-  const { tasks, areas } = await getKitchenTasks(storeFilter, normalizeText(params.get("area")));
-  return Response.json({ access, selectedStoreId: storeFilter, tasks, areas }, { headers: { "Cache-Control": "no-store" } });
+  const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(params.get("area")));
+  return Response.json({ access, selectedStoreId: storeFilter, tasks, areas, displayLanguage }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function PATCH(request: Request) {
@@ -93,8 +130,8 @@ export async function PATCH(request: Request) {
     `;
     if (!completedRows[0]) return Response.json({ error: "受け渡し可能な注文が見つかりません。" }, { status: 409 });
     await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(requestedOrderId));
-    const { tasks, areas } = await getKitchenTasks(storeFilter, normalizeText(body.area));
-    return Response.json({ ok: true, tasks, areas });
+    const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(body.area));
+    return Response.json({ ok: true, tasks, areas, displayLanguage });
   }
   if (!taskId || !["new", "preparing", "ready"].includes(status)) return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
 
@@ -108,6 +145,6 @@ export async function PATCH(request: Request) {
   if (!taskRows[0]) return Response.json({ error: "制作タスクが見つかりません。" }, { status: 404 });
   const orderId = await setProductionTaskStatus(taskId, status as "new" | "preparing" | "ready", session.id);
   if (orderId) await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(orderId));
-  const { tasks, areas } = await getKitchenTasks(storeFilter, normalizeText(body.area));
-  return Response.json({ ok: true, tasks, areas });
+  const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(body.area));
+  return Response.json({ ok: true, tasks, areas, displayLanguage });
 }

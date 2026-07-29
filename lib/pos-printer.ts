@@ -79,6 +79,7 @@ export type PosReceiptTemplateVariant = {
 };
 
 export type PosKitchenTicketTemplateSettings = {
+  language: "ja" | "zh";
   showTitle: boolean;
   title: string;
   showStoreName: boolean;
@@ -251,6 +252,7 @@ export const defaultPosReceiptTemplateSettings: PosReceiptTemplateSettings = {
 };
 
 export const defaultPosKitchenTicketTemplateSettings: PosKitchenTicketTemplateSettings = {
+  language: "ja",
   showTitle: true,
   title: "厨房伝票",
   showStoreName: true,
@@ -415,6 +417,7 @@ export function normalizePosKitchenTicketTemplateSettings(value: unknown): PosKi
     }];
   })) as Record<PosKitchenTicketBlock, PosKitchenTicketBlockStyle>;
   return {
+    language: source.language === "zh" ? "zh" : "ja",
     showTitle: source.showTitle !== false,
     title: text(source.title, defaultPosKitchenTicketTemplateSettings.title),
     showStoreName: source.showStoreName !== false,
