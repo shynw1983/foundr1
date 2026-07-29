@@ -18,9 +18,10 @@ public class UberNotificationListenerService extends NotificationListenerService
         String title = stringExtra(notification, Notification.EXTRA_TITLE);
         String text = stringExtra(notification, Notification.EXTRA_TEXT);
         String bigText = stringExtra(notification, Notification.EXTRA_BIG_TEXT);
-        UberRecoveryState.requestFromNotification(
+        int recoveryRequestedOrders = UberRecoveryState.requestFromNotification(
             this,
             sbn.getKey(),
+            sbn.getPostTime(),
             title,
             text,
             bigText,
@@ -33,6 +34,7 @@ public class UberNotificationListenerService extends NotificationListenerService
             payload.put("bigText", bigText);
             payload.put("subText", stringExtra(notification, Notification.EXTRA_SUB_TEXT));
             payload.put("postTime", sbn.getPostTime());
+            payload.put("recoveryRequestedOrders", recoveryRequestedOrders);
             BridgeUploader.upload(this, "notification", packageName, payload);
         } catch (Exception ignored) {
         }

@@ -21,6 +21,7 @@ final class UberRecoveryState {
     private static final String KEY_LAST_NOTIFICATION = "last_notification";
     private static final String KEY_LAST_NOTIFICATION_COUNT = "last_notification_count";
     private static final String KEY_LAST_NOTIFICATION_AT = "last_notification_at";
+    private static final String KEY_LAST_NOTIFICATION_POSTED_AT = "last_notification_posted_at";
     private static final String KEY_LAST_UI_TRIGGER_AT = "last_ui_trigger_at";
     private static final String KEY_OPENED_AUTOMATICALLY = "opened_automatically";
     private static final String KEY_BACK_ATTEMPTS = "back_attempts";
@@ -52,29 +53,42 @@ final class UberRecoveryState {
             || combined.contains("new order");
     }
 
-    static void requestFromNotification(
+    static int requestFromNotification(
         Context context,
         String notificationKey,
+        long notificationPostedAt,
         String title,
         String text,
         String bigText,
         Notification notification
     ) {
-        if (!isNewOrderNotification(title, text, bigText)) return;
+        if (!isNewOrderNotification(title, text, bigText)) return 0;
         SharedPreferences preferences = preferences(context);
+        long now = System.currentTimeMillis();
         String previousKey = preferences.getString(KEY_LAST_NOTIFICATION, "");
         int count = extractOrderCount(title + "\n" + text + "\n" + bigText);
         boolean sameNotification = notificationKey != null && notificationKey.equals(previousKey);
-        int previousCount = sameNotification
-            ? preferences.getInt(KEY_LAST_NOTIFICATION_COUNT, 0)
-            : 0;
-        int newlyReportedOrders = sameNotification ? Math.max(0, count - previousCount) : count;
-        if (newlyReportedOrders == 0) return;
+        int previousCount = preferences.getInt(KEY_LAST_NOTIFICATION_COUNT, 0);
+        long previousPostedAt = preferences.getLong(KEY_LAST_NOTIFICATION_POSTED_AT, 0L);
+        long previousReceivedAt = preferences.getLong(KEY_LAST_NOTIFICATION_AT, 0L);
+        boolean exactRepeatedPost = sameNotification
+            && notificationPostedAt > 0L
+            && notificationPostedAt == previousPostedAt;
+        boolean recentCountIncrease = sameNotification
+            && now - previousReceivedAt < NOTIFICATION_BANNER_DEDUP_MS
+            && count > previousCount;
+        int newlyReportedOrders = exactRepeatedPost
+            ? Math.max(0, count - previousCount)
+            : recentCountIncrease
+                ? count - previousCount
+                : count;
+        if (newlyReportedOrders == 0) return 0;
         boolean alreadyPending = isPending(context);
         int existing = alreadyPending ? preferences.getInt(KEY_REMAINING, 0) : 0;
         SharedPreferences.Editor editor = preferences.edit()
-            .putLong(KEY_PENDING_UNTIL, System.currentTimeMillis() + RECOVERY_WINDOW_MS)
-            .putLong(KEY_LAST_NOTIFICATION_AT, System.currentTimeMillis())
+            .putLong(KEY_PENDING_UNTIL, now + RECOVERY_WINDOW_MS)
+            .putLong(KEY_LAST_NOTIFICATION_AT, now)
+            .putLong(KEY_LAST_NOTIFICATION_POSTED_AT, notificationPostedAt)
             .putInt(KEY_REMAINING, Math.min(MAX_PENDING_ORDERS, Math.max(1, existing + newlyReportedOrders)))
             .putString(KEY_LAST_NOTIFICATION, notificationKey == null ? "" : notificationKey)
             .putInt(KEY_LAST_NOTIFICATION_COUNT, count)
@@ -86,6 +100,7 @@ final class UberRecoveryState {
         editor.apply();
         openUber(context, notification);
         sendRecoverySignal(context);
+        return newlyReportedOrders;
     }
 
     static void requestFromAutoAcceptBanner(Context context) {
@@ -177,14 +192,18 @@ final class UberRecoveryState {
     static boolean finishCurrentOrder(Context context) {
         SharedPreferences preferences = preferences(context);
         int remaining = Math.max(0, preferences.getInt(KEY_REMAINING, 1) - 1);
+        if (remaining == 0) {
+            clear(context);
+            return false;
+        }
         preferences.edit()
             .putLong(KEY_PENDING_UNTIL, System.currentTimeMillis() + RECOVERY_WINDOW_MS)
-            .putInt(KEY_REMAINING, Math.max(1, remaining))
+            .putInt(KEY_REMAINING, remaining)
             .putBoolean(KEY_OPENED_AUTOMATICALLY, false)
             .putInt(KEY_BACK_ATTEMPTS, 0)
             .putInt(KEY_EMPTY_SCANS, 0)
             .apply();
-        return true;
+        return remaining > 0;
     }
 
     static void sendRecoverySignal(Context context) {

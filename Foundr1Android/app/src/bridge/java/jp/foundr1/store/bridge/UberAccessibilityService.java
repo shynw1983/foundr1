@@ -94,11 +94,10 @@ public class UberAccessibilityService extends AccessibilityService {
             if (UberRecoveryState.isPending(this)) scheduleRecovery(250L);
             return;
         }
+        String orderCode = extractOrderCode(extractOrderKey(nodes));
         if (!UberRecoveryState.isPending(this)) {
-            UberRecoveryState.requestFromActiveOrderDetails(
-                this,
-                extractOrderCode(extractOrderKey(nodes))
-            );
+            if (UberRecoveryState.wasHandled(this, orderCode)) return;
+            UberRecoveryState.requestFromActiveOrderDetails(this, orderCode);
         }
         captureOrderDetails(packageName, builder, nodes);
     }
