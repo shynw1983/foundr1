@@ -52,6 +52,13 @@ export async function GET(request: Request) {
       and store_customer_orders.status in ('new', 'preparing', 'ready')
       and order_production_tasks.status in ('new', 'preparing')
       and (
+        store_customer_orders.created_at > now() - interval '12 hours'
+        or (
+          store_customer_orders.order_source = 'maamaa_web'
+          and coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') = 'scheduled'
+        )
+      )
+      and (
         store_customer_orders.order_source <> 'maamaa_web'
         or coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') <> 'scheduled'
         or ((store_customer_orders.pickup_date::text || ' ' || store_customer_orders.pickup_time)::timestamp at time zone 'Asia/Tokyo')
@@ -63,7 +70,7 @@ export async function GET(request: Request) {
         or (order_production_tasks.print_status = 'printing' and order_production_tasks.updated_at < now() - interval '5 minutes')
       )
     order by store_customer_orders.created_at asc, order_production_tasks.created_at asc
-    limit 8
+    limit 1
   `;
   const settingsRows = await sql`
     select coalesce(printer_settings, '{}'::jsonb) as "printerSettings"

@@ -27,6 +27,10 @@ function hasAndroidPrinterBridge() {
   return typeof window !== "undefined" && Boolean(window.Foundr1Printer?.print);
 }
 
+function waitForPrinterBuffer(milliseconds: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
 function splitKitchenItems(summary: string) {
   const items: NonNullable<PosPrintPayload["order"]>["items"] = [];
   const lines = String(summary || "").split(/\n+/).map((line) => line.trim()).filter(Boolean);
@@ -123,9 +127,11 @@ export function StorePrintStation() {
             setStatus(`厨房印刷中 ${job.pickupCode}（${copy}/${copies}枚）`);
             result = await printWithAndroidBridge(payload);
             if (!result.ok) break;
+            if (copy < copies) await waitForPrinterBuffer(3000);
           }
           await updatePrintStatus(body.selectedStoreId, job.taskId, result.ok ? "printed" : "failed");
           setStatus(result.ok ? `厨房印刷済み ${job.pickupCode}（${copies}枚）` : `厨房印刷失敗 ${job.pickupCode}`);
+          if (result.ok) await waitForPrinterBuffer(3000);
         }
       } catch {
         setStatus("厨房印刷の確認に失敗しました。");
