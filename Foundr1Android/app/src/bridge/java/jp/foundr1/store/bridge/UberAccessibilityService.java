@@ -9,6 +9,7 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
@@ -33,7 +34,11 @@ public class UberAccessibilityService extends AccessibilityService {
     private long lastUploadedAt = 0L;
     private boolean finishingRecovery = false;
     private boolean recoveryReceiverRegistered = false;
-    private final Runnable recoveryRunnable = this::recoverNewOrder;
+    private long recoveryScheduledAt = 0L;
+    private final Runnable recoveryRunnable = () -> {
+        recoveryScheduledAt = 0L;
+        recoverNewOrder();
+    };
     private final BroadcastReceiver recoveryReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -144,6 +149,7 @@ public class UberAccessibilityService extends AccessibilityService {
     @Override
     public void onDestroy() {
         handler.removeCallbacks(recoveryRunnable);
+        recoveryScheduledAt = 0L;
         handler.removeCallbacks(uploadRunnable);
         if (recoveryReceiverRegistered) {
             try {
@@ -319,7 +325,10 @@ public class UberAccessibilityService extends AccessibilityService {
     }
 
     private void scheduleRecovery(long delayMs) {
+        long nextRunAt = SystemClock.uptimeMillis() + Math.max(0L, delayMs);
+        if (recoveryScheduledAt > 0L && recoveryScheduledAt <= nextRunAt) return;
         handler.removeCallbacks(recoveryRunnable);
+        recoveryScheduledAt = nextRunAt;
         handler.postDelayed(recoveryRunnable, delayMs);
     }
 
