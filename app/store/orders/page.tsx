@@ -806,7 +806,7 @@ export default function StoreOrdersPage() {
   };
 
   return (
-    <main className="store-workbench-shell">
+    <main className="store-workbench-shell store-orders-page">
       <header className="store-workbench-topbar">
         <a className="brand-block" href="/store" aria-label="Foundr1 店舗">
           <div className="brand-mark">F1</div>

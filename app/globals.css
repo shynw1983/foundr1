@@ -10631,6 +10631,34 @@ body :where(
   min-width: 0;
 }
 
+@media (min-width: 901px) {
+  .store-orders-page {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .store-orders-page .store-orders-layout {
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  .store-orders-page .store-orders-list {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .store-orders-page .store-order-detail {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
 .store-orders-toolbar,
 .store-order-detail-head,
 .store-order-total,
