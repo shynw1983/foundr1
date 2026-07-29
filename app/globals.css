@@ -14950,7 +14950,7 @@ body :where(
 
 .store-kitchen-items {
   display: grid;
-  gap: 5px;
+  gap: 8px;
 }
 
 .store-kitchen-item-line {
@@ -14958,7 +14958,7 @@ body :where(
   align-items: center;
   justify-content: flex-start;
   gap: 10px;
-  min-height: 50px;
+  min-height: 62px;
   min-width: 0;
   border: 0;
   background: transparent;
@@ -15019,10 +15019,10 @@ body :where(
 
 .store-kitchen-item-modifier {
   border-radius: 6px;
-  padding: 7px 9px;
+  padding: 12px 14px;
   background: rgba(255, 255, 255, 0.7);
-  font-size: 18px;
-  line-height: 1.25;
+  font-size: clamp(20px, 2vw, 24px);
+  line-height: 1.2;
 }
 
 .store-kitchen-note {

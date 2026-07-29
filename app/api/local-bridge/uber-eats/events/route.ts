@@ -1,7 +1,9 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
+import { findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
 import { ensureProductionTasksForOrder } from "../../../../../lib/order-production";
+import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import {
   parseUberBridgeSnapshot,
@@ -139,6 +141,10 @@ async function upsertOperationalOrder(input: {
   const nextOrderType = parsed.orderType !== "unknown"
     ? parsed.orderType
     : String(existing?.orderType ?? "") || "unknown";
+  const shouldPublishOrderEvent = !existing
+    || shouldReplaceItems
+    || nextStatus !== String(existing.status ?? "")
+    || nextOrderType !== String(existing.orderType ?? "");
   const summary = {
     customer: { name: parsed.customerName },
     orderType: nextOrderType,
@@ -270,6 +276,12 @@ async function upsertOperationalOrder(input: {
 
   await syncWebReservationToSalesOrder(orderId);
   await ensureProductionTasksForOrder(orderId);
+  if (shouldPublishOrderEvent) {
+    await publishCustomerOrderEvent(
+      existing ? "order.updated" : "order.created",
+      await findCustomerOrderById(orderId)
+    ).catch(() => undefined);
+  }
   return {
     status: shouldReplaceItems ? "imported" : "duplicate",
     orderId,

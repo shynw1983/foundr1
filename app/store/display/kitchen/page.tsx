@@ -79,6 +79,7 @@ export default function StoreKitchenPage() {
   const [now, setNow] = useState(() => Date.now());
   const selectedStoreIdRef = useRef(selectedStoreId);
   const serverOffsetRef = useRef(0);
+  const loadSequenceRef = useRef(0);
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   useEffect(() => {
@@ -98,16 +99,18 @@ export default function StoreKitchenPage() {
   }
 
   async function load(storeId = selectedStoreIdRef.current, area = selectedArea) {
+    const loadSequence = ++loadSequenceRef.current;
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
     if (area) params.set("area", area);
     params.set("ts", String(Date.now()));
     const response = await fetch(`/api/store/display/kitchen?${params.toString()}`, { cache: "no-store" });
     if (!response.ok) {
-      setLoading(false);
+      if (loadSequence === loadSequenceRef.current) setLoading(false);
       return;
     }
     const body = await response.json();
+    if (loadSequence !== loadSequenceRef.current) return;
     syncServerTime(body.serverNow);
     const nextStoreId = String(body.selectedStoreId || storeId || "");
     setStores(body.access?.stores ?? []);
