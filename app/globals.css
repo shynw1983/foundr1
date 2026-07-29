@@ -14906,11 +14906,11 @@ body :where(
 .store-kitchen-task {
   display: grid;
   align-content: start;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   border: 2px solid var(--line);
   border-radius: 8px;
-  padding: 14px;
+  padding: 16px;
   background: #f8fafc;
 }
 
@@ -14921,14 +14921,22 @@ body :where(
 
 .store-kitchen-task-head {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
 }
 
 .store-kitchen-task-head strong {
   color: var(--ink);
-  font-size: 28px;
+  font-size: clamp(46px, 5vw, 68px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
   line-height: 1;
+}
+
+.store-kitchen-task-head span {
+  flex: 0 0 auto;
+  padding-top: 5px;
 }
 
 .store-kitchen-task-head span,
@@ -14950,7 +14958,7 @@ body :where(
   align-items: center;
   justify-content: flex-start;
   gap: 10px;
-  min-height: 42px;
+  min-height: 50px;
   min-width: 0;
   border: 0;
   background: transparent;
@@ -14973,7 +14981,7 @@ body :where(
   padding: 5px 10px;
   background: #dc2626;
   color: white;
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 850;
   line-height: 1;
 }
@@ -14995,11 +15003,12 @@ body :where(
 }
 
 .store-kitchen-item-name {
-  margin-top: 6px;
+  margin-top: 8px;
   border-top: 1px solid var(--line);
-  padding-top: 10px;
-  font-size: 21px;
-  line-height: 1.25;
+  padding-top: 12px;
+  font-size: clamp(26px, 2.4vw, 34px);
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .store-kitchen-item-name:first-child {
@@ -15075,11 +15084,17 @@ body :where(
 .store-kitchen-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 12px;
 }
 
 .store-kitchen-actions button {
-  min-height: 48px;
+  min-height: 68px;
+  border-width: 2px;
+  padding: 12px 14px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.15;
+  touch-action: manipulation;
 }
 
 .store-kitchen-actions .store-kitchen-reprint-button {
@@ -15104,7 +15119,16 @@ body :where(
 }
 
 .store-kitchen-ready-list strong {
-  font-size: 20px;
+  font-size: 30px;
+  letter-spacing: 0.04em;
+}
+
+.store-kitchen-ready-list button {
+  min-height: 52px;
+  padding: 10px 14px;
+  font-size: 16px;
+  font-weight: 650;
+  touch-action: manipulation;
 }
 
 .store-kitchen-empty {
