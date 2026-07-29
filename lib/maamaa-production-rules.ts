@@ -840,16 +840,8 @@ export function findMaamaaProductionRule(label: string, rules = maamaaProduction
   });
 }
 
-function scaleProductionQuantity(quantity: string, count: number) {
-  if (count <= 1) return quantity;
-  if (!/\d/.test(quantity)) return `${quantity} x${count}`;
-  return quantity.replace(/\d+(?:\.\d+)?/g, (value) => (
-    (Number(value) * count).toLocaleString("ja-JP", { maximumFractionDigits: 3 })
-  ));
-}
-
 export function formatMaamaaProductionRule(rule: MaamaaProductionRule, count = 1) {
-  const quantity = rule.quantity ? scaleProductionQuantity(rule.quantity, count) : count > 1 ? `x${count}` : "";
+  const quantity = rule.quantity ? `${rule.quantity}${count > 1 ? ` x${count}` : ""}` : count > 1 ? `x${count}` : "";
   const parts = [rule.kitchenName, quantity].filter(Boolean);
   const cookType = rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil");
   const details = [

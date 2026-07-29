@@ -23,13 +23,13 @@ test("matches Uber seasoning labels that include decorative emoji or suffixes", 
   );
 });
 
-test("shows repeated kitchen ingredients as their total physical quantity", () => {
+test("shows repeated kitchen ingredients as the customer's selected count", () => {
   const quailEgg = findMaamaaProductionRule("うずらの卵1個");
   const sausage = findMaamaaProductionRule("ウインナー1個");
   assert.ok(quailEgg);
   assert.ok(sausage);
-  assert.match(formatMaamaaProductionRule(quailEgg, 2), /うずらの卵 2個/);
-  assert.match(formatMaamaaProductionRule(sausage, 2), /ウインナー 2個/);
+  assert.match(formatMaamaaProductionRule(quailEgg, 2), /うずらの卵 1個 x2/);
+  assert.match(formatMaamaaProductionRule(sausage, 2), /ウインナー 1個 x2/);
 });
 
 test("localizes kitchen summaries with the Chinese labels preserved from Uber", () => {

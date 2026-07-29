@@ -55,12 +55,7 @@ function splitQuantityLabel(text: string) {
       quantity: multiplierMatch[2].trim()
     };
   }
-  const unitMatch = text.match(/^(.*?)(\s+(?:\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?(?:個くらい|個|本|枚|匹|粒|袋|パック|セット|ショット|kg|g|ml|L|个左右|个|根|只|片|袋|克)))(（.*）)?$/);
-  if (!unitMatch) return { label: text, quantity: "" };
-  return {
-    label: `${unitMatch[1]}${unitMatch[3] ?? ""}`,
-    quantity: unitMatch[2].trim()
-  };
+  return { label: text, quantity: "" };
 }
 
 function getCountdownLabel(estimatedReadyAt: string, now: number, language: "ja" | "zh") {

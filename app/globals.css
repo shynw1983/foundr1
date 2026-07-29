@@ -14978,12 +14978,14 @@ body :where(
 .store-kitchen-item-line b {
   flex: 0 0 auto;
   border-radius: 999px;
-  padding: 5px 10px;
+  min-width: 54px;
+  padding: 8px 12px;
   background: #dc2626;
   color: white;
-  font-size: 20px;
+  font-size: 26px;
   font-weight: 850;
   line-height: 1;
+  text-align: center;
 }
 
 .store-kitchen-item-line.is-checked {
