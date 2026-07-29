@@ -5,10 +5,13 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.TextUtils;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
@@ -26,12 +29,21 @@ public class BridgeActivity extends Activity {
     private EditText tokenInput;
     private EditText storeIdInput;
     private EditText deviceNameInput;
+    private TextView accessibilityStatus;
+    private Button accessibilityButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         buildLayout();
         requestNotificationPermissionIfNeeded();
+        startBridgeService();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        updateAccessibilityStatus();
         startBridgeService();
     }
 
@@ -55,6 +67,24 @@ public class BridgeActivity extends Activity {
         help.setPadding(0, 0, 0, dp(16));
         layout.addView(help);
 
+        accessibilityStatus = new TextView(this);
+        accessibilityStatus.setTextSize(18);
+        accessibilityStatus.setTextColor(Color.WHITE);
+        accessibilityStatus.setPadding(dp(16), dp(16), dp(16), dp(16));
+        accessibilityStatus.setOnClickListener(
+            view -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        );
+        layout.addView(accessibilityStatus, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+
+        accessibilityButton = addButton(
+            layout,
+            "ユーザー補助設定を開く",
+            view -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        );
+
         endpointInput = addInput(layout, "Endpoint URL", BridgeConfig.endpoint(this));
         tokenInput = addInput(layout, "Bridge token", BridgeConfig.token(this));
         storeIdInput = addInput(layout, "Store ID（任意）", BridgeConfig.storeId(this));
@@ -67,10 +97,10 @@ public class BridgeActivity extends Activity {
         });
         addButton(layout, "テスト送信", view -> sendTestEvent());
         addButton(layout, "通知アクセスを開く", view -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
-        addButton(layout, "ユーザー補助設定を開く", view -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         addButton(layout, "電池最適化の除外を開く", view -> openBatterySettings());
 
         setContentView(scrollView);
+        updateAccessibilityStatus();
     }
 
     private EditText addInput(LinearLayout layout, String label, String value) {
@@ -90,7 +120,7 @@ public class BridgeActivity extends Activity {
         return editText;
     }
 
-    private void addButton(LinearLayout layout, String label, android.view.View.OnClickListener listener) {
+    private Button addButton(LinearLayout layout, String label, android.view.View.OnClickListener listener) {
         Button button = new Button(this);
         button.setText(label);
         button.setAllCaps(false);
@@ -101,6 +131,53 @@ public class BridgeActivity extends Activity {
         );
         params.topMargin = dp(10);
         layout.addView(button, params);
+        return button;
+    }
+
+    private void updateAccessibilityStatus() {
+        if (accessibilityStatus == null || accessibilityButton == null) return;
+        boolean enabled = isAccessibilityServiceEnabled();
+        if (enabled) {
+            getWindow().setStatusBarColor(Color.rgb(24, 112, 74));
+            getWindow().setNavigationBarColor(Color.rgb(24, 112, 74));
+            accessibilityStatus.setText("✓ ユーザー補助：有効\nUber注文を読み取れます");
+            accessibilityStatus.setBackgroundColor(Color.rgb(24, 112, 74));
+            accessibilityButton.setVisibility(View.GONE);
+        } else {
+            getWindow().setStatusBarColor(Color.rgb(190, 24, 45));
+            getWindow().setNavigationBarColor(Color.rgb(190, 24, 45));
+            accessibilityStatus.setText(
+                "⚠ ユーザー補助が停止しています\n"
+                + "Uber注文を読み取れません。APK更新後は再度有効にしてください。"
+            );
+            accessibilityStatus.setBackgroundColor(Color.rgb(190, 24, 45));
+            accessibilityButton.setVisibility(View.VISIBLE);
+            accessibilityButton.setText("今すぐユーザー補助を有効にする");
+            accessibilityButton.setTextColor(Color.WHITE);
+            accessibilityButton.setBackgroundColor(Color.rgb(190, 24, 45));
+        }
+    }
+
+    private boolean isAccessibilityServiceEnabled() {
+        if (
+            Settings.Secure.getInt(
+                getContentResolver(),
+                Settings.Secure.ACCESSIBILITY_ENABLED,
+                0
+            ) != 1
+        ) return false;
+        String enabledServices = Settings.Secure.getString(
+            getContentResolver(),
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        );
+        if (TextUtils.isEmpty(enabledServices)) return false;
+        String expected = getPackageName() + "/" + UberAccessibilityService.class.getName();
+        TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter(':');
+        splitter.setString(enabledServices);
+        while (splitter.hasNext()) {
+            if (expected.equalsIgnoreCase(splitter.next())) return true;
+        }
+        return false;
     }
 
     private void saveConfig() {
