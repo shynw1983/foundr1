@@ -405,7 +405,10 @@ export async function setProductionTaskStatus(taskId: string, status: Production
         when ${nextStatus} <> 'ready' then null
         else ready_at
       end,
-      completed_by = case when ${nextStatus} = 'ready' then ${employeeId || null} else null end,
+      completed_by = case
+        when ${nextStatus} = 'ready' then ${employeeId || null}::uuid
+        else null::uuid
+      end,
       updated_at = now()
     where id::text = ${taskId}
     returning order_id::text as "orderId"
