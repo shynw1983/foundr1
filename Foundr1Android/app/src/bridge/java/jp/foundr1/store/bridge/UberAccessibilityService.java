@@ -273,9 +273,12 @@ public class UberAccessibilityService extends AccessibilityService {
         for (int index = 0; index < nodes.length(); index += 1) {
             JSONObject node = nodes.optJSONObject(index);
             if (node == null) continue;
-            String signature = node.optString("viewId")
-                + "\n" + node.optString("text")
-                + "\n" + node.optString("contentDescription");
+            String path = node.optString("path");
+            String signature = path.isEmpty()
+                ? node.optString("viewId")
+                    + "\n" + node.optString("text")
+                    + "\n" + node.optString("contentDescription")
+                : path + "\n" + node.optString("viewId");
             accumulatedNodes.put(signature, node);
         }
     }

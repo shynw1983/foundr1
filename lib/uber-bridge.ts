@@ -42,6 +42,12 @@ export type UberBridgeOperationalItem = {
   toppingLabels: string[];
 };
 
+type NormalizedUberBridgeNode = UberBridgeNode & {
+  id: string;
+  value: string;
+  path: string;
+};
+
 function clean(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
@@ -81,7 +87,7 @@ function getOrderStatus(texts: string[]): ParsedUberBridgeOrder["status"] {
 }
 
 function getOrderType(
-  nodes: Array<UberBridgeNode & { id: string; value: string }>
+  nodes: NormalizedUberBridgeNode[]
 ): ParsedUberBridgeOrder["orderType"] {
   const operationalNodes = nodes.filter((node) => (
     !node.id.includes("cart_item")
@@ -152,14 +158,102 @@ function findCustomerName(nodes: Array<UberBridgeNode & { id: string; value: str
   return clean(header.split(/[•·]/)[0]);
 }
 
+function parentPath(path: string) {
+  const separator = path.lastIndexOf(".");
+  return separator >= 0 ? path.slice(0, separator) : "";
+}
+
+function siblingIndex(path: string) {
+  const value = Number(path.slice(path.lastIndexOf(".") + 1));
+  return Number.isInteger(value) ? value : -1;
+}
+
+function parsePathBasedItems(nodes: NormalizedUberBridgeNode[]) {
+  const itemNameNodes = nodes.filter((node) => (
+    node.id === "ub__ueo_cart_item_name"
+    && node.path
+  ));
+  if (!itemNameNodes.length) return [];
+  return itemNameNodes.map((itemNode) => {
+    const itemPath = parentPath(itemNode.path);
+    const modifierPrefix = `${itemPath}.3.`;
+    const modifierNodes = nodes.filter((node) => node.path.startsWith(modifierPrefix));
+    const groupNodes = modifierNodes.filter((node) => node.id === "ub__ueo_modifier_item_name");
+    const modifiers = modifierNodes
+      .filter((node) => node.id === "ub__ueo_modifier_option_item_name")
+      .map((optionNode) => {
+        const optionPath = parentPath(optionNode.path);
+        const optionIndex = siblingIndex(optionPath);
+        const group = groupNodes
+          .filter((node) => siblingIndex(parentPath(node.path)) < optionIndex)
+          .sort((left, right) => (
+            siblingIndex(parentPath(right.path)) - siblingIndex(parentPath(left.path))
+          ))[0];
+        const quantityNode = modifierNodes.find((node) => (
+          node.id === "ub__ueo_modifier_option_item_quantity"
+          && node.path === `${optionPath}.1`
+        ));
+        const priceNode = modifierNodes.find((node) => (
+          node.id === "ub__ueo_modifier_option_item_price"
+          && node.path === `${optionPath}.2`
+        ));
+        return {
+          group: group?.value ?? "",
+          name: optionNode.value,
+          quantity: parseQuantity(quantityNode?.value),
+          price: parseMoney(priceNode?.value)
+        };
+      });
+    const quantityNode = nodes.find((node) => (
+      node.id === "ub__ueo_cart_item_quantity"
+      && node.path === `${itemPath}.0`
+    ));
+    const priceNode = nodes.find((node) => (
+      node.id === "ub__ueo_cart_item_price"
+      && node.path === `${itemPath}.2`
+    ));
+    const quantity = parseQuantity(quantityNode?.value);
+    const unitPrice = parseMoney(priceNode?.value);
+    const optionTotal = modifiers.reduce(
+      (sum, modifier) => sum + (modifier.price * modifier.quantity),
+      0
+    );
+    return {
+      name: itemNode.value,
+      quantity,
+      unitPrice,
+      optionTotal,
+      lineTotal: Math.round(quantity * (unitPrice + optionTotal)),
+      modifiers
+    };
+  });
+}
+
+function findDisplayedTotal(nodes: NormalizedUberBridgeNode[]) {
+  const totalLabelIndex = nodes.findLastIndex((node) => (
+    /^(?:合計|总计|總計|total|합계)$/i.test(node.value)
+  ));
+  if (totalLabelIndex >= 0) {
+    const followingTotal = nodes.slice(totalLabelIndex + 1).find((node) => (
+      !node.id.includes("cart_item")
+      && !node.id.includes("modifier")
+      && /^[￥¥]\s*[\d,，]+$/.test(node.value)
+    ));
+    const parsed = parseMoney(followingTotal?.value);
+    if (parsed > 0) return parsed;
+  }
+  return 0;
+}
+
 export function parseUberBridgeSnapshot(
   rawNodes: UberBridgeNode[],
   capturedAt: Date
 ): ParsedUberBridgeOrder | null {
-  const normalizedNodes = rawNodes.map((node) => ({
+  const normalizedNodes: NormalizedUberBridgeNode[] = rawNodes.map((node) => ({
     ...node,
     id: idSuffix(node.viewId),
-    value: clean(node.text || node.contentDescription)
+    value: clean(node.text || node.contentDescription),
+    path: clean(node.path)
   }));
   const nodes = normalizedNodes.filter((node) => node.value);
   const orderNo = findOrderIdentity(nodes);
@@ -170,7 +264,7 @@ export function parseUberBridgeSnapshot(
   const orderedAt = nodes
     .map((node) => parseJapaneseDate(node.value))
     .find((value): value is Date => Boolean(value)) ?? capturedAt;
-  const items: UberBridgeItem[] = [];
+  let items: UberBridgeItem[] = [];
   let pendingQuantity = 1;
   let currentItem: UberBridgeItem | null = null;
   let currentModifierGroup = "";
@@ -230,6 +324,9 @@ export function parseUberBridgeSnapshot(
     }
   }
 
+  const pathBasedItems = parsePathBasedItems(normalizedNodes);
+  if (pathBasedItems.length) items = pathBasedItems;
+
   for (const item of items) {
     item.optionTotal = item.modifiers.reduce(
       (sum, modifier) => sum + (modifier.price * modifier.quantity),
@@ -244,7 +341,7 @@ export function parseUberBridgeSnapshot(
     && !node.id.includes("item")
   ));
   const derivedTotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
-  const total = parseMoney(totalNode?.value) || derivedTotal;
+  const total = parseMoney(totalNode?.value) || findDisplayedTotal(normalizedNodes) || derivedTotal;
   const modifierCount = items.reduce(
     (sum, item) => sum + item.modifiers.reduce((count, modifier) => count + modifier.quantity, 0),
     0

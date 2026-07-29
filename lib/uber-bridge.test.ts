@@ -54,7 +54,7 @@ test("parses repeated Uber modifier quantities and their extended price", () => 
   ], new Date("2026-07-28T01:01:00+09:00"));
 
   assert.ok(parsed);
-  assert.equal(parsed.orderType, "unknown");
+  assert.equal(parsed.orderType, "delivery");
   assert.equal(parsed.items[0].optionTotal, 452);
   assert.equal(parsed.items[0].lineTotal, 2332);
   assert.deepEqual(parsed.items[0].modifiers, [
@@ -69,6 +69,48 @@ test("parses repeated Uber modifier quantities and their extended price", () => 
     optionLabel: "辛さ：普通辛🔥, ブンモジャ1本 x2",
     toppingLabels: ["辛さ：普通辛🔥", "ブンモジャ1本", "ブンモジャ1本"]
   });
+});
+
+test("keeps equal-priced Uber modifiers separate by node path and reads the displayed total", () => {
+  const itemPath = "0.0.0.0.7.0";
+  const modifierPath = `${itemPath}.3`;
+  const parsed = parseUberBridgeSnapshot([
+    { path: "0.0.0.0.1", viewId: "com.uber.restaurants:id/ub__ueo_order_details_header_title", text: "河野, ぱ. • CB3E7" },
+    { path: `${itemPath}.0`, viewId: "com.uber.restaurants:id/ub__ueo_cart_item_quantity", text: "1 ×" },
+    { path: `${itemPath}.1`, viewId: "com.uber.restaurants:id/ub__ueo_cart_item_name", text: "豚肉マーラータン" },
+    { path: `${itemPath}.2`, viewId: "com.uber.restaurants:id/ub__ueo_cart_item_price", text: "￥1,880" },
+    { path: `${modifierPath}.0.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_item_name", text: "追加トッピング" },
+    { path: `${modifierPath}.2.2`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥176" },
+    { path: `${modifierPath}.1.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "さつまいも麺" },
+    { path: `${modifierPath}.1.2`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥176" },
+    { path: `${modifierPath}.2.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "山クラゲ" },
+    { path: `${modifierPath}.3.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "牛筋麺" },
+    { path: `${modifierPath}.3.2`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥276" },
+    { path: `${modifierPath}.4.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "生腐竹" },
+    { path: `${modifierPath}.4.2`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥276" },
+    { path: `${modifierPath}.5.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "彩虹巻" },
+    { path: `${modifierPath}.5.2`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥216" },
+    { path: `${modifierPath}.6.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "小籠包" },
+    { path: `${modifierPath}.6.2`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥216" },
+    { path: `${modifierPath}.7.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "結びゆば" },
+    { path: `${modifierPath}.7.2`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥149" },
+    { path: `${modifierPath}.8.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "白きくらげ" },
+    { path: `${modifierPath}.8.2`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥326" },
+    { path: `${modifierPath}.9.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "油あげ" },
+    { path: `${modifierPath}.9.2`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥100" },
+    { path: `${modifierPath}.10.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "ブンモジャ" },
+    { path: `${modifierPath}.10.2`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥226" },
+    { path: "0.0.0.0.9", text: "合計" },
+    { path: "0.0.0.0.11", text: "￥4,017" }
+  ], new Date("2026-07-28T19:05:00+09:00"));
+
+  assert.ok(parsed);
+  assert.deepEqual(parsed.items[0].modifiers.map((modifier) => modifier.price), [
+    176, 176, 276, 276, 216, 216, 149, 326, 100, 226
+  ]);
+  assert.equal(parsed.items[0].optionTotal, 2137);
+  assert.equal(parsed.items[0].lineTotal, 4017);
+  assert.equal(parsed.total, 4017);
 });
 
 test("requires a stable Uber order number", () => {
