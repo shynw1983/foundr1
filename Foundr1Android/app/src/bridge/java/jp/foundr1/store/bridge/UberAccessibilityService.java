@@ -46,6 +46,7 @@ public class UberAccessibilityService extends AccessibilityService {
         }
     };
     private final Runnable uploadRunnable = () -> {
+        if (!UberRecoveryState.wasOpenedAutomatically(this)) return;
         String text = pendingText.trim();
         if (text.length() < 8) return;
         long now = System.currentTimeMillis();
@@ -89,6 +90,13 @@ public class UberAccessibilityService extends AccessibilityService {
             return;
         }
         root.recycle();
+        if (
+            !UberRecoveryState.isPending(this)
+            || !containsActiveOrderAction(nodes)
+        ) {
+            if (UberRecoveryState.isPending(this)) scheduleRecovery(250L);
+            return;
+        }
         captureOrderDetails(packageName, builder, nodes);
     }
 
@@ -174,6 +182,8 @@ public class UberAccessibilityService extends AccessibilityService {
                 item.put("className", value(node.getClassName()));
                 item.put("path", path);
                 item.put("bounds", bounds.flattenToString());
+                item.put("enabled", node.isEnabled());
+                item.put("clickable", node.isClickable());
                 nodes.put(item);
             }
         } catch (Exception ignored) {
@@ -210,6 +220,20 @@ public class UberAccessibilityService extends AccessibilityService {
 
     private boolean containsOrderOverview(JSONArray nodes) {
         return containsNodeId(nodes, "/ub__ueo_orders_header_title");
+    }
+
+    private boolean containsActiveOrderAction(JSONArray nodes) {
+        for (int index = 0; index < nodes.length(); index += 1) {
+            JSONObject node = nodes.optJSONObject(index);
+            if (node == null) continue;
+            String viewId = node.optString("viewId");
+            if (!viewId.endsWith("/ub__order_details_action_secondary_button")) continue;
+            if (!node.optBoolean("enabled", false)) continue;
+            if (isActiveOrderActionText(
+                node.optString("text") + "\n" + node.optString("contentDescription")
+            )) return true;
+        }
+        return false;
     }
 
     private boolean containsAutoAcceptBanner(JSONArray nodes) {
@@ -263,12 +287,18 @@ public class UberAccessibilityService extends AccessibilityService {
     }
 
     private void scrollOrderDetailsForward() {
+        if (!UberRecoveryState.wasOpenedAutomatically(this)) return;
         if (scrollSteps >= 12) {
             finishAutomaticRecovery();
             return;
         }
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
+        if (!hasActiveOrderAction(root)) {
+            root.recycle();
+            scheduleRecovery(250L);
+            return;
+        }
         AccessibilityNodeInfo scrollView = findLeftOrderScrollView(root);
         boolean scrolled = false;
         if (scrollView != null) {
@@ -307,7 +337,12 @@ public class UberAccessibilityService extends AccessibilityService {
             JSONArray nodes = new JSONArray();
             collectNodes(root, "0", builder, nodes, new HashSet<>());
             root.recycle();
-            captureOrderDetails(packageName, builder, nodes);
+            if (containsActiveOrderAction(nodes)) {
+                captureOrderDetails(packageName, builder, nodes);
+            } else if (UberRecoveryState.mayNavigateBack(this)) {
+                performGlobalAction(GLOBAL_ACTION_BACK);
+                scheduleRecovery(1000L);
+            }
             return;
         }
         if (hasViewId(root, "ub__ueo_orders_header_title")) {
@@ -351,6 +386,40 @@ public class UberAccessibilityService extends AccessibilityService {
             if (match) return true;
         }
         return false;
+    }
+
+    private boolean hasActiveOrderAction(AccessibilityNodeInfo node) {
+        if (node == null) return false;
+        String viewId = value(node.getViewIdResourceName());
+        if (
+            viewId.endsWith("/ub__order_details_action_secondary_button")
+            && node.isEnabled()
+            && isActiveOrderActionText(value(node.getText()) + "\n" + value(node.getContentDescription()))
+        ) return true;
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            boolean match = hasActiveOrderAction(child);
+            child.recycle();
+            if (match) return true;
+        }
+        return false;
+    }
+
+    private boolean isActiveOrderActionText(String value) {
+        String normalized = value == null ? "" : value.trim().toLowerCase();
+        return normalized.contains("準備完了")
+            || normalized.contains("准备完成")
+            || normalized.contains("準備完成")
+            || normalized.contains("准备好")
+            || normalized.contains("注文を受け付け")
+            || normalized.contains("接受订单")
+            || normalized.contains("接受訂單")
+            || normalized.contains("accept order")
+            || normalized.contains("mark ready")
+            || normalized.contains("ready for pickup")
+            || normalized.contains("준비 완료")
+            || normalized.contains("주문 수락");
     }
 
     private AccessibilityNodeInfo findActiveOrderCard(AccessibilityNodeInfo node, boolean insideActiveOrders) {
