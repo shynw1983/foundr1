@@ -1,5 +1,6 @@
 import { sql } from "./db";
 import { resolveCustomerStoreDisplayName } from "./customer-display-names";
+import { mergeDuplicateToppingGroups } from "./menu-customization-groups";
 import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "./store-staff-presence";
 
 export type NanachaPricedOption = {
@@ -391,12 +392,14 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         allowedOptions: maybeLimitedArray(schema.allowedOptions, optionIds, ["none"]),
         allowedToppings: maybeLimitedArray(schema.allowedToppings, toppingIds),
         usesStructuredCustomizations: (itemOptionGroupsByItemId.get(item.id)?.length ?? 0) > 0,
-        customizationGroups: (itemOptionGroupsByItemId.get(item.id) ?? [])
-          .map((link) => {
-            const group = groupById.get(link.optionGroupId);
-            return group ? customizationGroupObject(group, optionsByGroup.get(group.id) ?? []) : null;
-          })
-          .filter((group): group is NanachaCustomizationGroup => Boolean(group?.options.length)),
+        customizationGroups: mergeDuplicateToppingGroups(
+          (itemOptionGroupsByItemId.get(item.id) ?? [])
+            .map((link) => {
+              const group = groupById.get(link.optionGroupId);
+              return group ? customizationGroupObject(group, optionsByGroup.get(group.id) ?? []) : null;
+            })
+            .filter((group): group is NanachaCustomizationGroup => Boolean(group?.options.length))
+        ),
         isAvailable: true,
         websiteEnabled: true
       };

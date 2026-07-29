@@ -1,5 +1,6 @@
 import { sql } from "../../../../lib/db";
 import { resolveCustomerStoreDisplayName } from "../../../../lib/customer-display-names";
+import { mergeDuplicateToppingGroups } from "../../../../lib/menu-customization-groups";
 import { publicMenuCacheHeaders } from "../../../../lib/public-cache";
 import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "../../../../lib/store-staff-presence";
 import { getStoreReservationWindowsForDate } from "../../../../lib/store-reservation-windows";
@@ -353,7 +354,14 @@ export async function GET(request: Request) {
           (explicitOrder.get(left.id) ?? left.sortOrder) - (explicitOrder.get(right.id) ?? right.sortOrder)
           || left.sortOrder - right.sortOrder
           || left.name.localeCompare(right.name, "ja")
-        ));
+        ))
+        .map((group) => ({
+          ...group,
+          options: group.options.filter((option) => (
+            !option.applicableCategories.length || option.applicableCategories.includes(String(item.category || "未分類"))
+          ))
+        }));
+      const customerCustomizationGroups = mergeDuplicateToppingGroups(customizationGroups);
       const legacyOptionGroups = allGroups.filter((group) => (
         group.ruleJson?.source !== "uber_eats"
         && (!group.menuCatalogItemId || group.menuCatalogItemId === item.id)
@@ -379,13 +387,7 @@ export async function GET(request: Request) {
           statusNote: ""
         },
         usesStructuredCustomizations: explicitLinks.length > 0,
-        customizationGroups: customizationGroups
-          .map((group) => ({
-            ...group,
-            options: group.options.filter((option) => (
-              !option.applicableCategories.length || option.applicableCategories.includes(String(item.category || "未分類"))
-            ))
-          })),
+        customizationGroups: customerCustomizationGroups,
         // Temporary compatibility for the current nanacha reservation UI.
         // New customer UIs must render customizationGroups.
         optionGroups: (explicitLinks.length ? legacyOptionGroups : customizationGroups)
