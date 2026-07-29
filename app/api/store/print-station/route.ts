@@ -52,7 +52,7 @@ export async function GET(request: Request) {
       and store_customer_orders.status in ('new', 'preparing', 'ready')
       and order_production_tasks.status in ('new', 'preparing')
       and (
-        store_customer_orders.created_at > now() - interval '12 hours'
+        store_customer_orders.created_at > now() - interval '6 hours'
         or (
           store_customer_orders.order_source = 'maamaa_web'
           and coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') = 'scheduled'
