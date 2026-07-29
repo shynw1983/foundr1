@@ -104,14 +104,28 @@ export async function GET(request: Request) {
   await refreshActiveProductionTasksForStore(storeFilter);
 
   const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(params.get("area")));
-  return Response.json({ access, selectedStoreId: storeFilter, tasks, areas, displayLanguage }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({
+    access,
+    selectedStoreId: storeFilter,
+    tasks,
+    areas,
+    displayLanguage,
+    serverNow: new Date().toISOString()
+  }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function PATCH(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json().catch(() => ({})) as { storeId?: string; taskId?: string; orderId?: string; status?: string; area?: string };
+  const body = await request.json().catch(() => ({})) as {
+    storeId?: string;
+    taskId?: string;
+    orderId?: string;
+    status?: string;
+    area?: string;
+    addMinutes?: number;
+  };
   const access = await getStoreOrderAccess(session);
   const storeFilter = getScopedStoreFilter(access, body.storeId) ?? access.stores[0]?.id ?? "";
   if (storeFilter === "__forbidden__" || !storeFilter) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -119,6 +133,31 @@ export async function PATCH(request: Request) {
   const taskId = normalizeText(body.taskId);
   const requestedOrderId = normalizeText(body.orderId);
   const status = normalizeText(body.status);
+  const addMinutes = Number(body.addMinutes ?? 0);
+  if (requestedOrderId && [5, 10, 15].includes(addMinutes)) {
+    const extendedRows = await sql`
+      update store_customer_orders
+      set
+        estimated_prep_minutes = greatest(0, coalesce(estimated_prep_minutes, 0)) + ${addMinutes},
+        estimated_ready_at = greatest(coalesce(estimated_ready_at, now()), now()) + make_interval(mins => ${addMinutes}),
+        updated_at = now()
+      where id::text = ${requestedOrderId}
+        and store_id::text = ${storeFilter}
+        and payment_status = 'paid'
+        and status in ('new', 'preparing', 'ready')
+      returning id::text
+    `;
+    if (!extendedRows[0]) return Response.json({ error: "加算できる注文が見つかりません。" }, { status: 409 });
+    await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(requestedOrderId));
+    const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(body.area));
+    return Response.json({
+      ok: true,
+      tasks,
+      areas,
+      displayLanguage,
+      serverNow: new Date().toISOString()
+    });
+  }
   if (status === "completed" && requestedOrderId) {
     const completedRows = await sql`
       update store_customer_orders
@@ -131,7 +170,7 @@ export async function PATCH(request: Request) {
     if (!completedRows[0]) return Response.json({ error: "受け渡し可能な注文が見つかりません。" }, { status: 409 });
     await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(requestedOrderId));
     const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(body.area));
-    return Response.json({ ok: true, tasks, areas, displayLanguage });
+    return Response.json({ ok: true, tasks, areas, displayLanguage, serverNow: new Date().toISOString() });
   }
   if (!taskId || !["new", "preparing", "ready"].includes(status)) return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
 
@@ -146,5 +185,5 @@ export async function PATCH(request: Request) {
   const orderId = await setProductionTaskStatus(taskId, status as "new" | "preparing" | "ready", session.id);
   if (orderId) await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(orderId));
   const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(body.area));
-  return Response.json({ ok: true, tasks, areas, displayLanguage });
+  return Response.json({ ok: true, tasks, areas, displayLanguage, serverNow: new Date().toISOString() });
 }

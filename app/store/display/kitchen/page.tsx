@@ -78,6 +78,7 @@ export default function StoreKitchenPage() {
   const [checkedLineKeys, setCheckedLineKeys] = useState<Set<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
   const selectedStoreIdRef = useRef(selectedStoreId);
+  const serverOffsetRef = useRef(0);
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   useEffect(() => {
@@ -85,9 +86,16 @@ export default function StoreKitchenPage() {
   }, [selectedStoreId]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    const timer = window.setInterval(() => setNow(Date.now() + serverOffsetRef.current), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  function syncServerTime(serverNow: unknown) {
+    const timestamp = new Date(String(serverNow ?? "")).getTime();
+    if (!Number.isFinite(timestamp)) return;
+    serverOffsetRef.current = timestamp - Date.now();
+    setNow(timestamp);
+  }
 
   async function load(storeId = selectedStoreIdRef.current, area = selectedArea) {
     const params = new URLSearchParams();
@@ -100,6 +108,7 @@ export default function StoreKitchenPage() {
       return;
     }
     const body = await response.json();
+    syncServerTime(body.serverNow);
     const nextStoreId = String(body.selectedStoreId || storeId || "");
     setStores(body.access?.stores ?? []);
     setSelectedStoreId(nextStoreId);
@@ -144,6 +153,7 @@ export default function StoreKitchenPage() {
     });
     if (response.ok) {
       const body = await response.json();
+      syncServerTime(body.serverNow);
       setTasks(body.tasks ?? []);
       setAreas(body.areas ?? areas);
       setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
@@ -162,6 +172,31 @@ export default function StoreKitchenPage() {
     });
     if (response.ok) {
       const body = await response.json();
+      syncServerTime(body.serverNow);
+      setTasks(body.tasks ?? []);
+      setAreas(body.areas ?? areas);
+      setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
+    } else {
+      await load();
+    }
+    setSavingId("");
+  }
+
+  async function extendPreparation(task: KitchenTask, minutes: 5 | 10 | 15) {
+    setSavingId(task.id);
+    const response = await fetch("/api/store/display/kitchen", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        storeId: selectedStoreId,
+        orderId: task.orderId,
+        addMinutes: minutes,
+        area: selectedArea
+      })
+    });
+    if (response.ok) {
+      const body = await response.json();
+      syncServerTime(body.serverNow);
       setTasks(body.tasks ?? []);
       setAreas(body.areas ?? areas);
       setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
@@ -336,12 +371,36 @@ export default function StoreKitchenPage() {
                   <strong>{task.pickupCode}</strong>
                   <span>
                     {task.kitchenLanguage === "zh" && task.productionAreaLabel === "調理" ? "烹饪" : task.productionAreaLabel} / {statusLabels[task.kitchenLanguage][task.status]}
-                    {task.status === "preparing" && task.estimatedReadyAt
-                      ? ` / ${getCountdownLabel(task.estimatedReadyAt, now, task.kitchenLanguage)}`
-                      : ""}
                   </span>
                 </div>
                 <p>{(orderTypeLabels[task.kitchenLanguage][task.orderType] ?? task.orderType) || (task.kitchenLanguage === "zh" ? "取餐" : "受け取り")}{task.tableLabel ? ` / ${task.kitchenLanguage === "zh" ? "座位" : "座席"} ${task.tableLabel}` : ""} / {task.createdTime}</p>
+                <div className={`store-kitchen-timing is-${task.status}`}>
+                  <strong>
+                    {task.status === "preparing"
+                      ? (getCountdownLabel(task.estimatedReadyAt, now, task.kitchenLanguage) || (task.kitchenLanguage === "zh" ? "制作中" : "制作中"))
+                      : task.status === "ready"
+                        ? (task.kitchenLanguage === "zh" ? "已完成" : "完成")
+                        : (task.kitchenLanguage === "zh"
+                          ? `开始后 ${task.estimatedPrepMinutes || 10} 分钟`
+                          : `開始後 ${task.estimatedPrepMinutes || 10}分`)}
+                  </strong>
+                  {task.status === "preparing" ? (
+                    <div className="store-kitchen-delay-actions" aria-label={task.kitchenLanguage === "zh" ? "快速加时" : "調理時間を延長"}>
+                      <span>{task.kitchenLanguage === "zh" ? "快速加时" : "時間追加"}</span>
+                      {([5, 10, 15] as const).map((minutes) => (
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          key={minutes}
+                          disabled={savingId === task.id}
+                          onClick={() => void extendPreparation(task, minutes)}
+                        >
+                          +{minutes}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
                 <div className="store-kitchen-items">
                   {splitLines(task.itemSummary).map((line, index) => {
                     const lineKey = `${task.id}:${index}`;

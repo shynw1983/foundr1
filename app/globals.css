@@ -15022,6 +15022,56 @@ body :where(
   background: #fff7ed;
 }
 
+.store-kitchen-timing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #eef6f1;
+}
+
+.store-kitchen-timing > strong {
+  color: var(--green);
+  font-size: 22px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.store-kitchen-timing.is-new {
+  background: #f1f5f9;
+}
+
+.store-kitchen-timing.is-new > strong {
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.store-kitchen-timing.is-ready {
+  background: #e8f5ee;
+}
+
+.store-kitchen-delay-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.store-kitchen-delay-actions span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.store-kitchen-delay-actions button {
+  min-width: 48px;
+  min-height: 38px;
+  padding: 6px 10px;
+}
+
 .store-kitchen-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -36241,6 +36291,15 @@ body :where(
 
   .store-kitchen-actions {
     grid-template-columns: 1fr;
+  }
+
+  .store-kitchen-timing {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .store-kitchen-delay-actions {
+    justify-content: flex-start;
   }
 
   .pos-admin-actions a {
