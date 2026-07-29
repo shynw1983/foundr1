@@ -48,9 +48,9 @@ function splitLines(value: string) {
 }
 
 function splitQuantityLabel(text: string) {
-  const match = text.match(/^(.*?)( x\d+)$/);
+  const match = text.match(/^(.*?)( x\d+)(（.*）)?$/);
   if (!match) return { label: text, quantity: "" };
-  return { label: match[1], quantity: match[2].trim() };
+  return { label: `${match[1]}${match[3] ?? ""}`, quantity: match[2].trim() };
 }
 
 function getCountdownLabel(estimatedReadyAt: string, now: number, language: "ja" | "zh") {

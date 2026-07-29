@@ -71,6 +71,29 @@ test("parses repeated Uber modifier quantities and their extended price", () => 
   });
 });
 
+test("parses modifier quantity when Uber shifts the name after the quantity node", () => {
+  const itemPath = "0.0.0.0.7.0";
+  const modifierPath = `${itemPath}.3`;
+  const parsed = parseUberBridgeSnapshot([
+    { path: "0.0.0.0.1", viewId: "com.uber.restaurants:id/ub__ueo_order_details_header_title", text: "顧客 • 75AE6" },
+    { path: `${itemPath}.0`, viewId: "com.uber.restaurants:id/ub__ueo_cart_item_quantity", text: "1 ×" },
+    { path: `${itemPath}.1`, viewId: "com.uber.restaurants:id/ub__ueo_cart_item_name", text: "旨味マーラータンスープ" },
+    { path: `${itemPath}.2`, viewId: "com.uber.restaurants:id/ub__ueo_cart_item_price", text: "￥415" },
+    { path: `${modifierPath}.8.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_item_name", text: "ベーシックトッピング" },
+    { path: `${modifierPath}.9.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_quantity", text: "2 ×" },
+    { path: `${modifierPath}.9.1`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "うずらの卵1個｜鹌鹑蛋" },
+    { path: `${modifierPath}.9.2`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥120 ￥240" }
+  ], new Date("2026-07-30T01:58:00+09:00"));
+
+  assert.ok(parsed);
+  assert.equal(parsed.items[0].modifiers[0].quantity, 2);
+  assert.equal(parsed.items[0].optionTotal, 240);
+  assert.deepEqual(toUberBridgeOperationalItem(parsed.items[0]).toppingLabels, [
+    "うずらの卵1個",
+    "うずらの卵1個"
+  ]);
+});
+
 test("does not treat the active-order mark-ready button as a completed order", () => {
   const parsed = parseUberBridgeSnapshot([
     { viewId: "com.uber.restaurants:id/ub__ueo_order_details_header_title", text: "安藤, 総. • 83033" },

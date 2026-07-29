@@ -205,11 +205,11 @@ function parsePathBasedItems(nodes: NormalizedUberBridgeNode[]) {
           ))[0];
         const quantityNode = modifierNodes.find((node) => (
           node.id === "ub__ueo_modifier_option_item_quantity"
-          && node.path === `${optionPath}.1`
+          && parentPath(node.path) === optionPath
         ));
         const priceNode = modifierNodes.find((node) => (
           node.id === "ub__ueo_modifier_option_item_price"
-          && node.path === `${optionPath}.2`
+          && parentPath(node.path) === optionPath
         ));
         return {
           group: group?.value ?? "",
