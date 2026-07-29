@@ -197,7 +197,7 @@ export default function StoreKitchenPage() {
     setSavingId("");
   }
 
-  async function extendPreparation(task: KitchenTask, minutes: 5 | 10 | 15) {
+  async function adjustPreparationTime(task: KitchenTask, minutes: -5 | 5 | 10 | 15) {
     setSavingId(task.id);
     const response = await fetch("/api/store/display/kitchen", {
       method: "PATCH",
@@ -400,17 +400,17 @@ export default function StoreKitchenPage() {
                           : `開始後 ${task.estimatedPrepMinutes || 10}分`)}
                   </strong>
                   {task.status === "preparing" ? (
-                    <div className="store-kitchen-delay-actions" aria-label={task.kitchenLanguage === "zh" ? "快速加时" : "調理時間を延長"}>
-                      <span>{task.kitchenLanguage === "zh" ? "快速加时" : "時間追加"}</span>
-                      {([5, 10, 15] as const).map((minutes) => (
+                    <div className="store-kitchen-delay-actions" aria-label={task.kitchenLanguage === "zh" ? "调整制作时间" : "調理時間を調整"}>
+                      <span>{task.kitchenLanguage === "zh" ? "时间调整" : "時間調整"}</span>
+                      {([-5, 5, 10, 15] as const).map((minutes) => (
                         <button
                           className="secondary-button"
                           type="button"
                           key={minutes}
                           disabled={savingId === task.id}
-                          onClick={() => void extendPreparation(task, minutes)}
+                          onClick={() => void adjustPreparationTime(task, minutes)}
                         >
-                          +{minutes}
+                          {minutes > 0 ? `+${minutes}` : minutes}
                         </button>
                       ))}
                     </div>

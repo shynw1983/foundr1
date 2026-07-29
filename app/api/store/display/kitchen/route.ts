@@ -134,12 +134,21 @@ export async function PATCH(request: Request) {
   const requestedOrderId = normalizeText(body.orderId);
   const status = normalizeText(body.status);
   const addMinutes = Number(body.addMinutes ?? 0);
-  if (requestedOrderId && [5, 10, 15].includes(addMinutes)) {
+  if (requestedOrderId && [-5, 5, 10, 15].includes(addMinutes)) {
     const extendedRows = await sql`
       update store_customer_orders
       set
-        estimated_prep_minutes = greatest(0, coalesce(estimated_prep_minutes, 0)) + ${addMinutes},
-        estimated_ready_at = greatest(coalesce(estimated_ready_at, now()), now()) + make_interval(mins => ${addMinutes}),
+        estimated_prep_minutes = greatest(1, coalesce(nullif(estimated_prep_minutes, 0), 10) + ${addMinutes}),
+        estimated_ready_at = case
+          when ${addMinutes} < 0 then greatest(
+            now(),
+            coalesce(
+              estimated_ready_at,
+              now() + make_interval(mins => coalesce(nullif(estimated_prep_minutes, 0), 10))
+            ) + make_interval(mins => ${addMinutes})
+          )
+          else greatest(coalesce(estimated_ready_at, now()), now()) + make_interval(mins => ${addMinutes})
+        end,
         updated_at = now()
       where id::text = ${requestedOrderId}
         and store_id::text = ${storeFilter}
@@ -147,7 +156,7 @@ export async function PATCH(request: Request) {
         and status in ('new', 'preparing', 'ready')
       returning id::text
     `;
-    if (!extendedRows[0]) return Response.json({ error: "加算できる注文が見つかりません。" }, { status: 409 });
+    if (!extendedRows[0]) return Response.json({ error: "時間を調整できる注文が見つかりません。" }, { status: 409 });
     await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(requestedOrderId));
     const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(body.area));
     return Response.json({
