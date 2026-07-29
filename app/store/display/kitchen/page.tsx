@@ -35,7 +35,8 @@ const statusLabels: Record<string, string> = {
 const orderTypeLabels: Record<string, string> = {
   eat_in: "店内",
   takeout: "持ち帰り",
-  delivery: "外送"
+  delivery: "配達",
+  unknown: "受取方法未判定"
 };
 
 function splitLines(value: string) {

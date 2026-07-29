@@ -122,6 +122,7 @@ async function upsertOperationalOrder(input: {
     select
       id::text,
       status,
+      coalesce(customer_summary ->> 'orderType', '') as "orderType",
       coalesce((customer_summary #>> '{bridge,completeness}')::int, 0) as completeness
     from store_customer_orders
     where order_source = 'uber_eats'
@@ -135,9 +136,12 @@ async function upsertOperationalOrder(input: {
     && ["preparing", "ready"].includes(String(existing.status))
       ? String(existing.status)
       : parsed.status;
+  const nextOrderType = parsed.orderType !== "unknown"
+    ? parsed.orderType
+    : String(existing?.orderType ?? "") || "unknown";
   const summary = {
     customer: { name: parsed.customerName },
-    orderType: "delivery",
+    orderType: nextOrderType,
     sourcePlatform: "uber_eats",
     sourceOrderNo: parsed.orderNo,
     bridge: {
@@ -199,7 +203,12 @@ async function upsertOperationalOrder(input: {
       amount = case when ${shouldReplaceItems} then excluded.amount else store_customer_orders.amount end,
       customer_summary = case
         when ${shouldReplaceItems} then store_customer_orders.customer_summary || excluded.customer_summary
-        else store_customer_orders.customer_summary
+        else jsonb_set(
+          store_customer_orders.customer_summary,
+          '{orderType}',
+          to_jsonb(${nextOrderType}::text),
+          true
+        )
       end,
       completed_at = coalesce(excluded.completed_at, store_customer_orders.completed_at),
       cancelled_at = coalesce(excluded.cancelled_at, store_customer_orders.cancelled_at),

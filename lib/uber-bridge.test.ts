@@ -7,6 +7,7 @@ test("parses an Uber order detail accessibility snapshot", () => {
   const parsed = parseUberBridgeSnapshot([
     { viewId: "com.uber.restaurants:id/ub__ueo_order_details_header_title", text: "上 哲. • 8577F" },
     { viewId: "com.uber.restaurants:id/ub__ueo_handed_off_delivery_subtitle_text", text: "2026年7月27日 21:49" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_details_courier_status", text: "" },
     { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_quantity", text: "1 × " },
     { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_name", text: "牛肉マーラータン" },
     { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_price", text: "￥1,880" },
@@ -24,6 +25,7 @@ test("parses an Uber order detail accessibility snapshot", () => {
   assert.equal(parsed.customerName, "上 哲.");
   assert.equal(parsed.orderedAt.toISOString(), "2026-07-27T12:49:00.000Z");
   assert.equal(parsed.status, "completed");
+  assert.equal(parsed.orderType, "delivery");
   assert.equal(parsed.items.length, 1);
   assert.equal(parsed.items[0].quantity, 1);
   assert.equal(parsed.items[0].unitPrice, 1880);
@@ -52,6 +54,7 @@ test("parses repeated Uber modifier quantities and their extended price", () => 
   ], new Date("2026-07-28T01:01:00+09:00"));
 
   assert.ok(parsed);
+  assert.equal(parsed.orderType, "unknown");
   assert.equal(parsed.items[0].optionTotal, 452);
   assert.equal(parsed.items[0].lineTotal, 2332);
   assert.deepEqual(parsed.items[0].modifiers, [
@@ -72,4 +75,17 @@ test("requires a stable Uber order number", () => {
   assert.equal(parseUberBridgeSnapshot([
     { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_name", text: "商品" }
   ], new Date()), null);
+});
+
+test("parses an Uber customer pickup order", () => {
+  const parsed = parseUberBridgeSnapshot([
+    { viewId: "com.uber.restaurants:id/ub__ueo_order_details_header_title", text: "佐藤, 花. • P1CK9" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_customer_pickup_status_text", text: "お客様が店頭で受け取ります" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_quantity", text: "1 ×" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_name", text: "牛肉マーラータン" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_price", text: "￥1,880" }
+  ], new Date("2026-07-29T15:00:00+09:00"));
+
+  assert.ok(parsed);
+  assert.equal(parsed.orderType, "takeout");
 });

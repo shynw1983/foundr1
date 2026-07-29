@@ -123,7 +123,8 @@ const sourceLabels: Record<string, string> = {
   store_pos: "POS",
   nanacha_web: "Web",
   maamaa_web: "Web",
-  table_qr: "テーブルQR"
+  table_qr: "テーブルQR",
+  uber_eats: "Uber"
 };
 
 const checkoutRequestLabels: Record<string, string> = {
@@ -135,7 +136,8 @@ const checkoutRequestLabels: Record<string, string> = {
 const orderTypeLabels: Record<string, string> = {
   eat_in: "店内",
   takeout: "持ち帰り",
-  delivery: "外送"
+  delivery: "配達",
+  unknown: "受取方法未判定"
 };
 
 const nextActions: Record<string, Array<{ status: string; label: string }>> = {

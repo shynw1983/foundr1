@@ -27,6 +27,7 @@ export type ParsedUberBridgeOrder = {
   customerName: string;
   orderedAt: Date;
   status: "new" | "preparing" | "ready" | "completed" | "cancelled";
+  orderType: "delivery" | "takeout" | "unknown";
   items: UberBridgeItem[];
   total: number;
   completeness: number;
@@ -77,6 +78,26 @@ function getOrderStatus(texts: string[]): ParsedUberBridgeOrder["status"] {
   if (/準備完了|受け渡し待ち/.test(joined)) return "ready";
   if (/調理中|準備中/.test(joined)) return "preparing";
   return "new";
+}
+
+function getOrderType(
+  nodes: Array<UberBridgeNode & { id: string; value: string }>
+): ParsedUberBridgeOrder["orderType"] {
+  const operationalNodes = nodes.filter((node) => (
+    !node.id.includes("cart_item")
+    && !node.id.includes("modifier")
+  ));
+  const ids = operationalNodes.map((node) => node.id.toLowerCase()).join("\n");
+  const texts = operationalNodes.map((node) => node.value).join("\n").toLowerCase();
+  if (
+    /(?:self|customer)[_-]?pickup|take[_-]?out/.test(ids)
+    || /お持ち帰り|持ち帰り注文|店頭(?:で)?受け取り|注文者.{0,8}受け取り|お客様.{0,8}受け取り|自提|自取|customer\s+pick-?up|self\s+pick-?up|pick-?up\s+order|포장\s*주문|고객\s*픽업/.test(texts)
+  ) return "takeout";
+  if (
+    /handed_off_delivery|details_courier|courier_arrival|courier_rating/.test(ids)
+    || /配達中|配達予定|配送中|配送予定|配達パートナー|delivery\s+(?:person|partner|courier)|배달\s*(?:중|예정)/.test(texts)
+  ) return "delivery";
+  return "unknown";
 }
 
 function sourceLabel(value: string) {
@@ -135,15 +156,17 @@ export function parseUberBridgeSnapshot(
   rawNodes: UberBridgeNode[],
   capturedAt: Date
 ): ParsedUberBridgeOrder | null {
-  const nodes = rawNodes.map((node) => ({
+  const normalizedNodes = rawNodes.map((node) => ({
     ...node,
     id: idSuffix(node.viewId),
     value: clean(node.text || node.contentDescription)
-  })).filter((node) => node.value);
+  }));
+  const nodes = normalizedNodes.filter((node) => node.value);
   const orderNo = findOrderIdentity(nodes);
   if (!orderNo) return null;
 
   const allTexts = nodes.map((node) => node.value);
+  const orderType = getOrderType(normalizedNodes);
   const orderedAt = nodes
     .map((node) => parseJapaneseDate(node.value))
     .find((value): value is Date => Boolean(value)) ?? capturedAt;
@@ -236,8 +259,13 @@ export function parseUberBridgeSnapshot(
     customerName: findCustomerName(nodes),
     orderedAt,
     status: getOrderStatus(allTexts),
+    orderType,
     items,
     total,
-    completeness: (items.length * 100) + (modifierCount * 10) + pricedModifierCount + (total > 0 ? 5 : 0)
+    completeness: (items.length * 100)
+      + (modifierCount * 10)
+      + pricedModifierCount
+      + (total > 0 ? 5 : 0)
+      + (orderType !== "unknown" ? 2 : 0)
   };
 }
