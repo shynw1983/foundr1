@@ -90,12 +90,15 @@ public class UberAccessibilityService extends AccessibilityService {
             return;
         }
         root.recycle();
-        if (
-            !UberRecoveryState.isPending(this)
-            || !containsActiveOrderAction(nodes)
-        ) {
+        if (!containsActiveOrderAction(nodes)) {
             if (UberRecoveryState.isPending(this)) scheduleRecovery(250L);
             return;
+        }
+        if (!UberRecoveryState.isPending(this)) {
+            UberRecoveryState.requestFromActiveOrderDetails(
+                this,
+                extractOrderCode(extractOrderKey(nodes))
+            );
         }
         captureOrderDetails(packageName, builder, nodes);
     }

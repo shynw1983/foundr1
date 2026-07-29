@@ -33,7 +33,6 @@ final class UberRecoveryState {
     private static final long NOTIFICATION_BANNER_DEDUP_MS = 15 * 1000L;
     private static final int MAX_PENDING_ORDERS = 50;
     private static final int MAX_HANDLED_ORDER_CODES = 200;
-    private static final int MAX_EMPTY_SCANS = 20;
     private static final Pattern ORDER_COUNT = Pattern.compile(
         "(\\d+)\\s*(?:件|个|個|(?:new\\s+)?orders?)",
         Pattern.CASE_INSENSITIVE
@@ -113,6 +112,17 @@ final class UberRecoveryState {
         sendRecoverySignal(context);
     }
 
+    static void requestFromActiveOrderDetails(Context context, String orderCode) {
+        preferences(context).edit()
+            .putLong(KEY_PENDING_UNTIL, System.currentTimeMillis() + RECOVERY_WINDOW_MS)
+            .putInt(KEY_REMAINING, 1)
+            .putBoolean(KEY_OPENED_AUTOMATICALLY, true)
+            .putInt(KEY_BACK_ATTEMPTS, 0)
+            .putInt(KEY_EMPTY_SCANS, 0)
+            .apply();
+        markDetailsOpened(context, orderCode);
+    }
+
     static boolean isPending(Context context) {
         SharedPreferences preferences = preferences(context);
         if (preferences.getLong(KEY_PENDING_UNTIL, 0L) >= System.currentTimeMillis()) {
@@ -148,15 +158,7 @@ final class UberRecoveryState {
     }
 
     static boolean shouldStopAfterEmptyOverview(Context context) {
-        if (!isPending(context)) return true;
-        SharedPreferences preferences = preferences(context);
-        int scans = preferences.getInt(KEY_EMPTY_SCANS, 0) + 1;
-        if (scans >= MAX_EMPTY_SCANS) {
-            clear(context);
-            return true;
-        }
-        preferences.edit().putInt(KEY_EMPTY_SCANS, scans).apply();
-        return false;
+        return !isPending(context);
     }
 
     static boolean wasOpenedAutomatically(Context context) {

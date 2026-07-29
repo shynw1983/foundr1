@@ -71,6 +71,20 @@ test("parses repeated Uber modifier quantities and their extended price", () => 
   });
 });
 
+test("does not treat the active-order mark-ready button as a completed order", () => {
+  const parsed = parseUberBridgeSnapshot([
+    { viewId: "com.uber.restaurants:id/ub__ueo_order_details_header_title", text: "安藤, 総. • 83033" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_details_preparing_preptime_text", text: "あと 7 分で準備完了" },
+    { viewId: "com.uber.restaurants:id/ub__order_details_action_secondary_button", text: "準備完了" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_quantity", text: "1 ×" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_name", text: "旨味マーラータンスープ" },
+    { viewId: "com.uber.restaurants:id/ub__ueo_cart_item_price", text: "￥415" }
+  ], new Date("2026-07-29T16:24:00+09:00"));
+
+  assert.ok(parsed);
+  assert.equal(parsed.status, "preparing");
+});
+
 test("keeps equal-priced Uber modifiers separate by node path and reads the displayed total", () => {
   const itemPath = "0.0.0.0.7.0";
   const modifierPath = `${itemPath}.3`;

@@ -77,10 +77,24 @@ function parseJapaneseDate(value: unknown) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function getOrderStatus(texts: string[]): ParsedUberBridgeOrder["status"] {
-  const joined = texts.join("\n");
+function getOrderStatus(
+  nodes: Array<UberBridgeNode & { id: string; value: string }>
+): ParsedUberBridgeOrder["status"] {
+  const operationalNodes = nodes.filter((node) => (
+    !node.id.includes("cart_item")
+    && !node.id.includes("modifier")
+  ));
+  const ids = operationalNodes.map((node) => node.id).join("\n");
+  const joined = operationalNodes.map((node) => node.value).join("\n");
   if (/キャンセル|取消/.test(joined)) return "cancelled";
-  if (/完了|配達済み|受け渡し済み/.test(joined)) return "completed";
+  if (
+    /handed_off_delivery|courier_rating/.test(ids)
+    || /配達済み|受け渡し済み|(^|\n)完了($|\n)/.test(joined)
+  ) return "completed";
+  if (
+    /details_preparing/.test(ids)
+    || /あと\s*\d+\s*分で準備完了/.test(joined)
+  ) return "preparing";
   if (/準備完了|受け渡し待ち/.test(joined)) return "ready";
   if (/調理中|準備中/.test(joined)) return "preparing";
   return "new";
@@ -355,7 +369,7 @@ export function parseUberBridgeSnapshot(
     orderNo,
     customerName: findCustomerName(nodes),
     orderedAt,
-    status: getOrderStatus(allTexts),
+    status: getOrderStatus(nodes),
     orderType,
     items,
     total,
