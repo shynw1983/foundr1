@@ -1,10 +1,12 @@
 package jp.foundr1.store.bridge;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.GestureDescription;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
@@ -88,6 +90,7 @@ public class UberAccessibilityService extends AccessibilityService {
             if (containsAutoAcceptBanner(nodes)) {
                 UberRecoveryState.requestFromAutoAcceptBanner(this);
             }
+            if (containsOverview) ensureActiveOrderRecovery(root);
             root.recycle();
             if (UberRecoveryState.isPending(this)) {
                 scheduleRecovery(containsOverview ? 700L : 1200L);
@@ -365,10 +368,9 @@ public class UberAccessibilityService extends AccessibilityService {
             if (orderCard != null) {
                 UberRecoveryState.noteOrderCardFound(this);
                 String orderCode = findOrderCode(orderCard);
-                boolean clicked = orderCard.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                boolean clicked = clickOrderCard(orderCard);
                 orderCard.recycle();
                 if (clicked) {
-                    UberRecoveryState.markDetailsOpened(this, orderCode);
                     uploadRecoveryStatus("order_card_clicked", orderCode);
                     scheduleRecovery(2500L);
                     return;
@@ -386,6 +388,28 @@ public class UberAccessibilityService extends AccessibilityService {
             performGlobalAction(GLOBAL_ACTION_BACK);
             scheduleRecovery(1500L);
         }
+    }
+
+    private void ensureActiveOrderRecovery(AccessibilityNodeInfo root) {
+        AccessibilityNodeInfo orderCard = findActiveOrderCard(root, false);
+        if (orderCard == null) return;
+        String orderCode = findOrderCode(orderCard);
+        orderCard.recycle();
+        if (orderCode.isEmpty() || UberRecoveryState.wasHandled(this, orderCode)) return;
+        UberRecoveryState.requestFromActiveOrderOverview(this, orderCode);
+    }
+
+    private boolean clickOrderCard(AccessibilityNodeInfo orderCard) {
+        if (orderCard.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true;
+        Rect bounds = new Rect();
+        orderCard.getBoundsInScreen(bounds);
+        if (bounds.isEmpty()) return false;
+        Path path = new Path();
+        path.moveTo(bounds.exactCenterX(), bounds.exactCenterY());
+        GestureDescription gesture = new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path, 0L, 80L))
+            .build();
+        return dispatchGesture(gesture, null, null);
     }
 
     private boolean hasViewId(AccessibilityNodeInfo node, String suffix) {

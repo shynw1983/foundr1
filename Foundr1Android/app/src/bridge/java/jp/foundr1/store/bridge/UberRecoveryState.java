@@ -138,6 +138,20 @@ final class UberRecoveryState {
         markDetailsOpened(context, orderCode);
     }
 
+    static void requestFromActiveOrderOverview(Context context, String orderCode) {
+        if (orderCode == null || orderCode.trim().isEmpty() || wasHandled(context, orderCode)) return;
+        SharedPreferences preferences = preferences(context);
+        if (isPending(context)) return;
+        preferences.edit()
+            .putLong(KEY_PENDING_UNTIL, System.currentTimeMillis() + RECOVERY_WINDOW_MS)
+            .putInt(KEY_REMAINING, 1)
+            .putBoolean(KEY_OPENED_AUTOMATICALLY, false)
+            .putInt(KEY_BACK_ATTEMPTS, 0)
+            .putInt(KEY_EMPTY_SCANS, 0)
+            .apply();
+        sendRecoverySignal(context);
+    }
+
     static boolean isPending(Context context) {
         SharedPreferences preferences = preferences(context);
         if (preferences.getLong(KEY_PENDING_UNTIL, 0L) >= System.currentTimeMillis()) {
