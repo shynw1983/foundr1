@@ -320,8 +320,28 @@ export async function syncOrderStatusFromProductionTasks(orderId: string) {
     update store_customer_orders
     set
       status = case when status in ('cancelled', 'completed', 'refund_pending') then status else ${nextStatus} end,
-      preparing_at = case when ${nextStatus} in ('preparing', 'ready') and preparing_at is null then now() else preparing_at end,
-      ready_at = case when ${nextStatus} = 'ready' and ready_at is null then now() else ready_at end,
+      preparing_at = case
+        when status in ('cancelled', 'completed', 'refund_pending') then preparing_at
+        when ${nextStatus} = 'new' then null
+        when ${nextStatus} in ('preparing', 'ready') and preparing_at is null then now()
+        else preparing_at
+      end,
+      ready_at = case
+        when status in ('cancelled', 'completed', 'refund_pending') then ready_at
+        when ${nextStatus} = 'ready' and ready_at is null then now()
+        when ${nextStatus} <> 'ready' then null
+        else ready_at
+      end,
+      estimated_prep_minutes = case
+        when status in ('cancelled', 'completed', 'refund_pending') then estimated_prep_minutes
+        when ${nextStatus} = 'new' then null
+        else estimated_prep_minutes
+      end,
+      estimated_ready_at = case
+        when status in ('cancelled', 'completed', 'refund_pending') then estimated_ready_at
+        when ${nextStatus} = 'new' then null
+        else estimated_ready_at
+      end,
       updated_at = now()
     where id::text = ${orderId}
     returning id::text
@@ -375,9 +395,17 @@ export async function setProductionTaskStatus(taskId: string, status: Production
     update order_production_tasks
     set
       status = ${nextStatus},
-      started_at = case when ${nextStatus} in ('preparing', 'ready') and started_at is null then now() else started_at end,
-      ready_at = case when ${nextStatus} = 'ready' and ready_at is null then now() else ready_at end,
-      completed_by = case when ${nextStatus} = 'ready' then ${employeeId || null} else completed_by end,
+      started_at = case
+        when ${nextStatus} = 'new' then null
+        when ${nextStatus} in ('preparing', 'ready') and started_at is null then now()
+        else started_at
+      end,
+      ready_at = case
+        when ${nextStatus} = 'ready' and ready_at is null then now()
+        when ${nextStatus} <> 'ready' then null
+        else ready_at
+      end,
+      completed_by = case when ${nextStatus} = 'ready' then ${employeeId || null} else null end,
       updated_at = now()
     where id::text = ${taskId}
     returning order_id::text as "orderId"

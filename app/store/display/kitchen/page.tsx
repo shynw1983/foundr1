@@ -144,7 +144,7 @@ export default function StoreKitchenPage() {
     });
   }
 
-  async function updateTask(task: KitchenTask, status: "preparing" | "ready") {
+  async function updateTask(task: KitchenTask, status: "new" | "preparing" | "ready") {
     setSavingId(task.id);
     const response = await fetch("/api/store/display/kitchen", {
       method: "PATCH",
@@ -161,6 +161,21 @@ export default function StoreKitchenPage() {
       await load();
     }
     setSavingId("");
+  }
+
+  async function rollbackTask(task: KitchenTask, status: "new" | "preparing") {
+    const language = task.kitchenLanguage;
+    const confirmed = window.confirm(
+      status === "new"
+        ? (language === "zh"
+          ? `将订单 ${task.pickupCode} 返回“待制作”并重置倒计时吗？`
+          : `注文 ${task.pickupCode} を「制作待ち」に戻し、カウントダウンをリセットしますか？`)
+        : (language === "zh"
+          ? `将订单 ${task.pickupCode} 返回“制作中”吗？`
+          : `注文 ${task.pickupCode} を「制作中」に戻しますか？`)
+    );
+    if (!confirmed) return;
+    await updateTask(task, status);
   }
 
   async function completeHandoff(task: KitchenTask) {
@@ -433,6 +448,11 @@ export default function StoreKitchenPage() {
                   {task.status === "new" ? (
                     <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "preparing")}>{task.kitchenLanguage === "zh" ? "开始制作" : "制作開始"}</button>
                   ) : null}
+                  {task.status === "preparing" ? (
+                    <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => void rollbackTask(task, "new")}>
+                      {task.kitchenLanguage === "zh" ? "撤销开始" : "開始を取り消す"}
+                    </button>
+                  ) : null}
                   <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "ready")}>{task.kitchenLanguage === "zh" ? (task.orderType === "eat_in" ? "出餐完成" : "完成") : (task.orderType === "eat_in" ? "提供完了" : "完成")}</button>
                 </div>
               </article>
@@ -452,6 +472,9 @@ export default function StoreKitchenPage() {
                   {reprintQueuedId === task.id
                     ? (task.kitchenLanguage === "zh" ? "已排队" : "予約済み")
                     : (task.kitchenLanguage === "zh" ? "补打一张" : "再印刷")}
+                </button>
+                <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => void rollbackTask(task, "preparing")}>
+                  {task.kitchenLanguage === "zh" ? "返回制作中" : "制作中に戻す"}
                 </button>
                 {readyTasks.findIndex((candidate) => candidate.orderId === task.orderId) === taskIndex && tasks.every((candidate) => candidate.orderId !== task.orderId || candidate.status === "ready") ? (
                   <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => void completeHandoff(task)}>{task.kitchenLanguage === "zh" ? "交付完成" : "受渡完了"}</button>
