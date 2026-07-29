@@ -1390,7 +1390,7 @@ export default function MenuAdminPage() {
               onClick={openUberImportDrafts}
             >
               <span>
-                Uber取り込み草稿
+                Uber取り込み下書き
                 <small>未公開</small>
               </span>
               <strong>{uberImportDraftItems.length}</strong>
@@ -1429,7 +1429,7 @@ export default function MenuAdminPage() {
             <div className="section-heading">
               <div>
                 <p className="eyebrow">{isChoiceSettingsView ? "Choice Groups" : isUberImportDraftView ? "Uber Import" : "Items"}</p>
-                <h3>{isChoiceSettingsView ? "選択グループ" : isUberImportDraftView ? "Uber取り込み草稿" : "商品"}</h3>
+                <h3>{isChoiceSettingsView ? "選択グループ" : isUberImportDraftView ? "Uber取り込み下書き" : "商品"}</h3>
               </div>
               {isChoiceSettingsView ? (
                 <button className="secondary-button" type="button" onClick={startCommonGroup}>
