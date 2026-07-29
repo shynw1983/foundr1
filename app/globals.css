@@ -15153,12 +15153,30 @@ body :where(
 .store-courier-brand-mark {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
+  width: 58px;
+  height: 58px;
   border-radius: 999px;
   background: var(--green);
   color: white;
   font-weight: 600;
+}
+
+.store-courier-brand-logos {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.store-courier-brand-logos.is-multiple {
+  gap: 6px;
+}
+
+.store-courier-brand-logo {
+  display: block;
+  width: 58px;
+  height: 58px;
+  border-radius: 999px;
+  object-fit: contain;
 }
 
 .store-courier-header h1,

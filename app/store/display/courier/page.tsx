@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
@@ -18,6 +19,11 @@ type CourierOrder = {
 type StoreOption = {
   id: string;
   name: string;
+};
+
+type BrandLogo = {
+  name: string;
+  logoUrl: string;
 };
 
 const platformLabels: Record<CourierOrder["orderSource"], string> = {
@@ -50,6 +56,7 @@ export default function StoreCourierDisplayPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [orders, setOrders] = useState<CourierOrder[]>([]);
+  const [brandLogos, setBrandLogos] = useState<BrandLogo[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
@@ -85,6 +92,7 @@ export default function StoreCourierDisplayPage() {
     selectedStoreIdRef.current = nextStoreId;
     if (nextStoreId) setStoredStoreSelection(nextStoreId);
     setOrders(body.orders ?? []);
+    setBrandLogos(body.brandLogos ?? []);
     setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", {
       hour: "2-digit",
       minute: "2-digit"
@@ -205,7 +213,23 @@ export default function StoreCourierDisplayPage() {
 
       <header className="store-courier-header">
         <div>
-          <span className="store-courier-brand-mark">F1</span>
+          {brandLogos.length ? (
+            <span className={`store-courier-brand-logos${brandLogos.length > 1 ? " is-multiple" : ""}`}>
+              {brandLogos.map((brand) => (
+                <Image
+                  key={`${brand.name}-${brand.logoUrl}`}
+                  className="store-courier-brand-logo"
+                  src={brand.logoUrl}
+                  alt={`${brand.name} ロゴ`}
+                  width={58}
+                  height={58}
+                  priority
+                />
+              ))}
+            </span>
+          ) : (
+            <span className="store-courier-brand-mark">F1</span>
+          )}
           <div>
             <h1>お受け取り状況</h1>
             <p>注文番号をご確認ください</p>
