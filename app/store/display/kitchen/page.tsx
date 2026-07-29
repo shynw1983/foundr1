@@ -71,6 +71,7 @@ export default function StoreKitchenPage() {
   const [selectedArea, setSelectedArea] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
+  const [reprintQueuedId, setReprintQueuedId] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -166,6 +167,36 @@ export default function StoreKitchenPage() {
       setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
     } else {
       await load();
+    }
+    setSavingId("");
+  }
+
+  async function requestReprint(task: KitchenTask) {
+    const language = task.kitchenLanguage;
+    if (!window.confirm(language === "zh"
+      ? `补打订单 ${task.pickupCode} 的厨房单吗？`
+      : `注文 ${task.pickupCode} の厨房伝票を再印刷しますか？`)) return;
+    setSavingId(task.id);
+    const response = await fetch("/api/store/print-station", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        storeId: selectedStoreId,
+        taskId: task.id,
+        printStatus: "reprint_pending"
+      })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok && body.ok) {
+      setTasks((current) => current.map((item) => (
+        item.id === task.id ? { ...item, printStatus: "reprint_pending" } : item
+      )));
+      setReprintQueuedId(task.id);
+      window.setTimeout(() => setReprintQueuedId((current) => current === task.id ? "" : current), 4000);
+    } else {
+      window.alert(language === "zh"
+        ? "无法加入补打队列。请确认该订单当前没有正在打印。"
+        : "再印刷を予約できませんでした。現在印刷中でないか確認してください。");
     }
     setSavingId("");
   }
@@ -335,6 +366,11 @@ export default function StoreKitchenPage() {
                 </div>
                 {task.note ? <p className="store-kitchen-note">{task.note}</p> : null}
                 <div className="store-kitchen-actions">
+                  <button className="secondary-button store-kitchen-reprint-button" type="button" disabled={savingId === task.id} onClick={() => void requestReprint(task)}>
+                    {reprintQueuedId === task.id
+                      ? (task.kitchenLanguage === "zh" ? "已加入补打队列" : "再印刷を予約しました")
+                      : (task.kitchenLanguage === "zh" ? "补打一张" : "再印刷")}
+                  </button>
                   {task.status === "new" ? (
                     <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "preparing")}>{task.kitchenLanguage === "zh" ? "开始制作" : "制作開始"}</button>
                   ) : null}
@@ -353,6 +389,11 @@ export default function StoreKitchenPage() {
               <div key={task.id}>
                 <strong>{task.pickupCode}</strong>
                 <span>{task.productionAreaLabel}</span>
+                <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => void requestReprint(task)}>
+                  {reprintQueuedId === task.id
+                    ? (task.kitchenLanguage === "zh" ? "已排队" : "予約済み")
+                    : (task.kitchenLanguage === "zh" ? "补打一张" : "再印刷")}
+                </button>
                 {readyTasks.findIndex((candidate) => candidate.orderId === task.orderId) === taskIndex && tasks.every((candidate) => candidate.orderId !== task.orderId || candidate.status === "ready") ? (
                   <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => void completeHandoff(task)}>{task.kitchenLanguage === "zh" ? "交付完成" : "受渡完了"}</button>
                 ) : null}

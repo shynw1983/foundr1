@@ -15032,6 +15032,10 @@ body :where(
   min-height: 48px;
 }
 
+.store-kitchen-actions .store-kitchen-reprint-button {
+  grid-column: 1 / -1;
+}
+
 .store-kitchen-ready-list {
   display: grid;
   gap: 8px;
@@ -15039,6 +15043,8 @@ body :where(
 
 .store-kitchen-ready-list div {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   border: 1px solid var(--line);

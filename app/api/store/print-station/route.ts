@@ -49,27 +49,36 @@ export async function GET(request: Request) {
     left join brands on brands.id = order_production_tasks.brand_id
     where order_production_tasks.store_id::text = ${selectedStoreId}
       and store_customer_orders.payment_status = 'paid'
-      and store_customer_orders.status in ('new', 'preparing', 'ready')
-      and order_production_tasks.status in ('new', 'preparing')
+      and store_customer_orders.status not in ('cancelled', 'refund_pending')
       and (
-        store_customer_orders.created_at > now() - interval '6 hours'
+        order_production_tasks.print_status = 'reprint_pending'
         or (
-          store_customer_orders.order_source = 'maamaa_web'
-          and coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') = 'scheduled'
+          store_customer_orders.status in ('new', 'preparing', 'ready')
+          and order_production_tasks.status in ('new', 'preparing')
+          and (
+            store_customer_orders.created_at > now() - interval '6 hours'
+            or (
+              store_customer_orders.order_source = 'maamaa_web'
+              and coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') = 'scheduled'
+            )
+          )
+          and (
+            store_customer_orders.order_source <> 'maamaa_web'
+            or coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') <> 'scheduled'
+            or ((store_customer_orders.pickup_date::text || ' ' || store_customer_orders.pickup_time)::timestamp at time zone 'Asia/Tokyo')
+              <= now() + (${scheduledOrderReminderLeadMinutes} * interval '1 minute')
+          )
+          and (
+            order_production_tasks.print_status = 'pending'
+            or (order_production_tasks.print_status = 'failed' and order_production_tasks.updated_at < now() - interval '2 minutes')
+            or (order_production_tasks.print_status = 'printing' and order_production_tasks.updated_at < now() - interval '5 minutes')
+          )
         )
       )
-      and (
-        store_customer_orders.order_source <> 'maamaa_web'
-        or coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') <> 'scheduled'
-        or ((store_customer_orders.pickup_date::text || ' ' || store_customer_orders.pickup_time)::timestamp at time zone 'Asia/Tokyo')
-          <= now() + (${scheduledOrderReminderLeadMinutes} * interval '1 minute')
-      )
-      and (
-        order_production_tasks.print_status = 'pending'
-        or (order_production_tasks.print_status = 'failed' and order_production_tasks.updated_at < now() - interval '2 minutes')
-        or (order_production_tasks.print_status = 'printing' and order_production_tasks.updated_at < now() - interval '5 minutes')
-      )
-    order by store_customer_orders.created_at asc, order_production_tasks.created_at asc
+    order by
+      case when order_production_tasks.print_status = 'reprint_pending' then 0 else 1 end,
+      store_customer_orders.created_at asc,
+      order_production_tasks.created_at asc
     limit 1
   `;
   const settingsRows = await sql`
@@ -115,18 +124,37 @@ export async function PATCH(request: Request) {
 
   const taskId = normalizeText(body.taskId);
   const printStatus = normalizeText(body.printStatus);
-  if (!taskId || !["printing", "printed", "failed"].includes(printStatus)) {
+  if (!taskId || !["reprint_pending", "printing", "printed", "failed"].includes(printStatus)) {
     return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
   }
 
-  const rows = printStatus === "printing"
+  const rows = printStatus === "reprint_pending"
+    ? await sql`
+      update order_production_tasks
+      set print_status = 'reprint_pending', updated_at = now()
+      where id::text = ${taskId}
+        and store_id::text = ${storeId}
+        and (
+          print_status <> 'printing'
+          or updated_at < now() - interval '2 minutes'
+        )
+        and exists (
+          select 1
+          from store_customer_orders
+          where store_customer_orders.id = order_production_tasks.order_id
+            and store_customer_orders.payment_status = 'paid'
+            and store_customer_orders.status not in ('cancelled', 'refund_pending')
+        )
+      returning id::text
+    `
+    : printStatus === "printing"
     ? await sql`
       update order_production_tasks
       set print_status = 'printing', updated_at = now()
       where id::text = ${taskId}
         and store_id::text = ${storeId}
         and (
-          print_status in ('pending', 'failed')
+          print_status in ('pending', 'failed', 'reprint_pending')
           or (print_status = 'printing' and updated_at < now() - interval '5 minutes')
         )
       returning id::text
