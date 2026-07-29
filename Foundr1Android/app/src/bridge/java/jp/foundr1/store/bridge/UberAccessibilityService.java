@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
@@ -20,10 +21,12 @@ import org.json.JSONObject;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class UberAccessibilityService extends AccessibilityService {
+    private static final String TAG = "Foundr1BridgeRecovery";
     private static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String pendingPackageName = "";
@@ -37,6 +40,9 @@ public class UberAccessibilityService extends AccessibilityService {
     private boolean finishingRecovery = false;
     private boolean recoveryReceiverRegistered = false;
     private long recoveryScheduledAt = 0L;
+    private String lastOrderClickAttemptCode = "";
+    private long lastOrderClickAttemptAt = 0L;
+    private long lastOverviewDiagnosticAt = 0L;
     private final Runnable recoveryRunnable = () -> {
         recoveryScheduledAt = 0L;
         recoverNewOrder();
@@ -92,8 +98,10 @@ public class UberAccessibilityService extends AccessibilityService {
             }
             if (containsOverview) ensureActiveOrderRecovery(root);
             root.recycle();
-            if (UberRecoveryState.isPending(this)) {
-                scheduleRecovery(containsOverview ? 700L : 1200L);
+            if (containsOverview) {
+                scheduleRecovery(UberRecoveryState.isPending(this) ? 700L : 1000L);
+            } else if (UberRecoveryState.isPending(this)) {
+                scheduleRecovery(1200L);
             }
             return;
         }
@@ -112,6 +120,8 @@ public class UberAccessibilityService extends AccessibilityService {
 
     private void captureOrderDetails(String packageName, StringBuilder builder, JSONArray nodes) {
         String orderKey = extractOrderKey(nodes);
+        lastOrderClickAttemptCode = "";
+        lastOrderClickAttemptAt = 0L;
         if (UberRecoveryState.isPending(this)) {
             UberRecoveryState.markDetailsOpened(this, extractOrderCode(orderKey));
             handler.removeCallbacks(recoveryRunnable);
@@ -336,17 +346,27 @@ public class UberAccessibilityService extends AccessibilityService {
     }
 
     private void recoverNewOrder() {
-        if (!UberRecoveryState.isPending(this)) return;
+        boolean pending = UberRecoveryState.isPending(this);
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) {
-            scheduleRecovery(1500L);
+            if (pending) scheduleRecovery(1500L);
             return;
         }
         String packageName = value(root.getPackageName());
         if (!looksLikeUber(packageName)) {
             root.recycle();
-            UberRecoveryState.launchUber(this);
-            scheduleRecovery(1500L);
+            if (pending) {
+                UberRecoveryState.launchUber(this);
+                scheduleRecovery(1500L);
+            }
+            return;
+        }
+        if (!pending) {
+            if (hasViewId(root, "ub__ueo_orders_header_title")) {
+                ensureActiveOrderRecovery(root);
+            }
+            root.recycle();
+            if (UberRecoveryState.isPending(this)) scheduleRecovery(2500L);
             return;
         }
         if (hasViewId(root, "ub__ueo_order_details_header_title")) {
@@ -391,12 +411,83 @@ public class UberAccessibilityService extends AccessibilityService {
     }
 
     private void ensureActiveOrderRecovery(AccessibilityNodeInfo root) {
-        AccessibilityNodeInfo orderCard = findActiveOrderCard(root, false);
-        if (orderCard == null) return;
+        AccessibilityNodeInfo orderCard = findActiveOrderCardByViewId(root);
+        if (orderCard == null) orderCard = findActiveOrderCard(root, false);
+        if (orderCard == null) {
+            logOverviewDiagnostic("No unhandled clickable card found");
+            return;
+        }
         String orderCode = findOrderCode(orderCard);
-        orderCard.recycle();
-        if (orderCode.isEmpty() || UberRecoveryState.wasHandled(this, orderCode)) return;
+        if (orderCode.isEmpty() || UberRecoveryState.wasHandled(this, orderCode)) {
+            logOverviewDiagnostic(
+                orderCode.isEmpty()
+                    ? "Clickable card has no order code"
+                    : "Order already handled: " + orderCode
+            );
+            orderCard.recycle();
+            return;
+        }
+        long now = SystemClock.uptimeMillis();
+        if (
+            orderCode.equals(lastOrderClickAttemptCode)
+            && now - lastOrderClickAttemptAt < 1500L
+        ) {
+            orderCard.recycle();
+            return;
+        }
+        lastOrderClickAttemptCode = orderCode;
+        lastOrderClickAttemptAt = now;
         UberRecoveryState.requestFromActiveOrderOverview(this, orderCode);
+        boolean clicked = clickOrderCard(orderCard);
+        orderCard.recycle();
+        Log.i(TAG, "Direct active-order click " + orderCode + ": " + clicked);
+        if (clicked) {
+            uploadRecoveryStatus("active_order_clicked", orderCode);
+            scheduleRecovery(2500L);
+        }
+    }
+
+    private AccessibilityNodeInfo findActiveOrderCardByViewId(AccessibilityNodeInfo root) {
+        List<AccessibilityNodeInfo> containers = root.findAccessibilityNodeInfosByViewId(
+            UBER_ORDERS_PACKAGE + ":id/ub_ueo_active_order_land_container"
+        );
+        Rect activeBounds = new Rect();
+        if (!containers.isEmpty()) containers.get(0).getBoundsInScreen(activeBounds);
+        for (AccessibilityNodeInfo container : containers) container.recycle();
+
+        List<AccessibilityNodeInfo> subtitles = root.findAccessibilityNodeInfosByViewId(
+            UBER_ORDERS_PACKAGE + ":id/ub__orders_item_subtitle_text"
+        );
+        AccessibilityNodeInfo match = null;
+        for (AccessibilityNodeInfo subtitle : subtitles) {
+            Rect bounds = new Rect();
+            subtitle.getBoundsInScreen(bounds);
+            String orderCode = extractOrderCode(value(subtitle.getText()));
+            boolean insideActiveBounds = activeBounds.isEmpty()
+                || activeBounds.contains(Math.round(bounds.exactCenterX()), Math.round(bounds.exactCenterY()));
+            if (
+                match == null
+                && insideActiveBounds
+                && !orderCode.isEmpty()
+                && !UberRecoveryState.wasHandled(this, orderCode)
+            ) {
+                match = AccessibilityNodeInfo.obtain(subtitle);
+            }
+            subtitle.recycle();
+        }
+        if (match == null) {
+            logOverviewDiagnostic(
+                "Direct lookup containers=" + containers.size() + ", subtitles=" + subtitles.size()
+            );
+        }
+        return match;
+    }
+
+    private void logOverviewDiagnostic(String message) {
+        long now = SystemClock.uptimeMillis();
+        if (now - lastOverviewDiagnosticAt < 5000L) return;
+        lastOverviewDiagnosticAt = now;
+        Log.i(TAG, message);
     }
 
     private boolean clickOrderCard(AccessibilityNodeInfo orderCard) {
@@ -464,6 +555,12 @@ public class UberAccessibilityService extends AccessibilityService {
         if (node == null) return null;
         String viewId = value(node.getViewIdResourceName());
         boolean inside = insideActiveOrders || viewId.endsWith("/ub_ueo_active_order_land_container");
+        if (inside && viewId.endsWith("/ub__orders_item_subtitle_text")) {
+            String orderCode = extractOrderCode(value(node.getText()));
+            if (!orderCode.isEmpty() && !UberRecoveryState.wasHandled(this, orderCode)) {
+                return AccessibilityNodeInfo.obtain(node);
+            }
+        }
         if (inside && node.isClickable()) {
             String orderCode = findOrderCode(node);
             if (!orderCode.isEmpty() && !UberRecoveryState.wasHandled(this, orderCode)) {
