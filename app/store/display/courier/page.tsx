@@ -312,7 +312,7 @@ export default function StorePickupStatusDisplayPage() {
       </section>
 
       <div className="store-courier-work-grid" style={workLayoutStyle}>
-        <section className="store-courier-status-panel is-preparing">
+        <section className={`store-courier-status-panel is-preparing${preparingOrders.length ? "" : " is-empty"}`}>
           <div className="store-courier-section-head">
             <span className="store-courier-status-icon"><ChefHat aria-hidden="true" /></span>
             <div className="store-courier-section-copy">
@@ -340,7 +340,7 @@ export default function StorePickupStatusDisplayPage() {
             ) : null}
           </div>
         </section>
-        <section className="store-courier-status-panel is-waiting">
+        <section className={`store-courier-status-panel is-waiting${waitingOrders.length ? "" : " is-empty"}`}>
           <div className="store-courier-section-head">
             <span className="store-courier-status-icon"><Clock3 aria-hidden="true" /></span>
             <div className="store-courier-section-copy">
