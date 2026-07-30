@@ -15721,6 +15721,7 @@ body :where(
     min(var(--courier-code-width-font, 24cqw), 42cqh),
     84px
   );
+  line-height: 1.12;
 }
 
 .store-courier-order span,
