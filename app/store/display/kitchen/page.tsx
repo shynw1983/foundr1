@@ -153,6 +153,10 @@ export default function StoreKitchenPage() {
       const validKeys = new Set<string>();
       for (const task of (body.tasks ?? []) as KitchenTask[]) {
         task.itemGroups?.forEach((group, groupIndex) => {
+          validKeys.add(`${task.id}:order:${groupIndex}:product`);
+          group.options.forEach((_, optionIndex) => {
+            validKeys.add(`${task.id}:order:${groupIndex}:option:${optionIndex}`);
+          });
           group.productionLines.forEach((_, lineIndex) => {
             validKeys.add(`${task.id}:${groupIndex}:${lineIndex}`);
           });
@@ -490,56 +494,85 @@ export default function StoreKitchenPage() {
                     </div>
                   ) : null}
                 </div>
-                <div className="store-kitchen-order-summary">
+                <div className={`store-kitchen-order-summary${kitchenDisplayMode === "order_only" ? " is-order-only" : ""}`}>
                   <small>{task.kitchenLanguage === "zh" ? "客人下单内容" : "注文内容"}</small>
-                  {(task.itemGroups ?? []).map((group, groupIndex) => (
-                    <section className="store-kitchen-order-group" key={`${task.id}:group:${groupIndex}`}>
-                      <div className="store-kitchen-order-product">
-                        <span>{group.itemName}</span>
-                        {group.quantity > 1 ? <b>× {group.quantity}</b> : null}
-                      </div>
-                      <div className="store-kitchen-order-options">
-                        {group.options.map((option, optionIndex) => (
-                          <div className="store-kitchen-order-option" key={`${task.id}:customer:${groupIndex}:${optionIndex}`}>
-                            <span>{option.label}</span>
-                            {option.count > 1 ? <b>× {option.count}</b> : null}
+                  {(task.itemGroups ?? []).map((group, groupIndex) => {
+                    const productLineKey = `${task.id}:order:${groupIndex}:product`;
+                    return (
+                      <section className="store-kitchen-order-group" key={`${task.id}:group:${groupIndex}`}>
+                        {kitchenDisplayMode === "order_only" ? (
+                          <button
+                            className={`store-kitchen-order-product store-kitchen-order-action${checkedLineKeys.has(productLineKey) ? " is-checked" : ""}`}
+                            type="button"
+                            aria-pressed={checkedLineKeys.has(productLineKey)}
+                            onClick={() => toggleLineCheck(task, productLineKey, true)}
+                          >
+                            <span>{group.itemName}</span>
+                            {group.quantity > 1 ? <b>× {group.quantity}</b> : null}
+                          </button>
+                        ) : (
+                          <div className="store-kitchen-order-product">
+                            <span>{group.itemName}</span>
+                            {group.quantity > 1 ? <b>× {group.quantity}</b> : null}
                           </div>
-                        ))}
-                      </div>
-                      {kitchenDisplayMode !== "order_only" && group.productionLines.length ? (
-                        <div className="store-kitchen-items">
-                          <small className="store-kitchen-content-label">
-                            {task.kitchenLanguage === "zh"
-                              ? (kitchenDisplayMode === "simple" ? "对应食材" : "对应食材・操作说明")
-                              : (kitchenDisplayMode === "simple" ? "使用食材" : "使用食材・作業説明")}
-                          </small>
-                          {group.productionLines.map((line, lineIndex) => {
-                            const lineKey = `${task.id}:${groupIndex}:${lineIndex}`;
-                            const displayText = kitchenDisplayMode === "simple"
-                              ? simplifyKitchenLine(line, true)
-                              : line;
-                            const quantityParts = splitQuantityLabel(displayText);
-                            return (
+                        )}
+                        <div className="store-kitchen-order-options">
+                          {group.options.map((option, optionIndex) => {
+                            const optionLineKey = `${task.id}:order:${groupIndex}:option:${optionIndex}`;
+                            return kitchenDisplayMode === "order_only" ? (
                               <button
-                                className={[
-                                  "store-kitchen-item-line",
-                                  "store-kitchen-item-modifier",
-                                  checkedLineKeys.has(lineKey) ? "is-checked" : ""
-                                ].filter(Boolean).join(" ")}
-                                key={lineKey}
+                                className={`store-kitchen-order-option store-kitchen-order-action${checkedLineKeys.has(optionLineKey) ? " is-checked" : ""}`}
+                                key={`${task.id}:customer:${groupIndex}:${optionIndex}`}
                                 type="button"
-                                aria-pressed={checkedLineKeys.has(lineKey)}
-                                onClick={() => toggleLineCheck(task, lineKey, true)}
+                                aria-pressed={checkedLineKeys.has(optionLineKey)}
+                                onClick={() => toggleLineCheck(task, optionLineKey, true)}
                               >
-                                <span>{quantityParts.label}</span>
-                                {quantityParts.quantity ? <b>{quantityParts.quantity}</b> : null}
+                                <span>{option.label}</span>
+                                {option.count > 1 ? <b>× {option.count}</b> : null}
                               </button>
+                            ) : (
+                              <div className="store-kitchen-order-option" key={`${task.id}:customer:${groupIndex}:${optionIndex}`}>
+                                <span>{option.label}</span>
+                                {option.count > 1 ? <b>× {option.count}</b> : null}
+                              </div>
                             );
                           })}
                         </div>
-                      ) : null}
-                    </section>
-                  ))}
+                        {kitchenDisplayMode !== "order_only" && group.productionLines.length ? (
+                          <div className="store-kitchen-items">
+                            <small className="store-kitchen-content-label">
+                              {task.kitchenLanguage === "zh"
+                                ? (kitchenDisplayMode === "simple" ? "对应食材" : "对应食材・操作说明")
+                                : (kitchenDisplayMode === "simple" ? "使用食材" : "使用食材・作業説明")}
+                            </small>
+                            {group.productionLines.map((line, lineIndex) => {
+                              const lineKey = `${task.id}:${groupIndex}:${lineIndex}`;
+                              const displayText = kitchenDisplayMode === "simple"
+                                ? simplifyKitchenLine(line, true)
+                                : line;
+                              const quantityParts = splitQuantityLabel(displayText);
+                              return (
+                                <button
+                                  className={[
+                                    "store-kitchen-item-line",
+                                    "store-kitchen-item-modifier",
+                                    checkedLineKeys.has(lineKey) ? "is-checked" : ""
+                                  ].filter(Boolean).join(" ")}
+                                  key={lineKey}
+                                  type="button"
+                                  aria-pressed={checkedLineKeys.has(lineKey)}
+                                  onClick={() => toggleLineCheck(task, lineKey, true)}
+                                >
+                                  <span>{quantityParts.label}</span>
+                                  {quantityParts.quantity ? <b>{quantityParts.quantity}</b> : null}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </section>
+                    );
+                  })}
                 </div>
                 {task.note ? <p className="store-kitchen-note">{task.note}</p> : null}
                 <div className="store-kitchen-actions">
