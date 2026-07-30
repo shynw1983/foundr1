@@ -96,10 +96,19 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
     return { error: "Invalid menu item" };
   }
   const isPreset = requestedProductId !== menu.baseSoup.id;
-  const noodleChange = isPreset
-    ? findChoice(menu.noodleReplacementOptions, String(rawItem.noodleChange || "replace-none"), true)
-    : null;
-  if (isPreset && !noodleChange) return { error: "Invalid noodle replacement" };
+  const noodleChangeIds = isPreset && Array.isArray(rawItem.noodleChanges)
+    ? rawItem.noodleChanges.map(String).filter(Boolean)
+    : [];
+  if (noodleChangeIds.length > menu.noodleReplacementRule.limit) {
+    return { error: `麺の種類を変更するは${menu.noodleReplacementRule.limit}個まで選択できます。数量を減らしてから、もう一度お試しください。` };
+  }
+  const noodleChangeCounts = new Map<string, number>();
+  noodleChangeIds.forEach((id) => noodleChangeCounts.set(id, (noodleChangeCounts.get(id) ?? 0) + 1));
+  if ([...noodleChangeCounts.values()].some((quantity) => quantity > menu.noodleReplacementRule.perOptionMax)) {
+    return { error: `同じ麺の種類は${menu.noodleReplacementRule.perOptionMax}個まで選択できます。` };
+  }
+  const noodleChanges = noodleChangeIds.map((id) => findChoice(menu.noodleReplacementOptions, id, true));
+  if (noodleChanges.some((item) => !item)) return { error: "Invalid noodle replacement" };
 
   const medicinalSpice = findChoice(menu.medicinalSpiceOptions, String(rawItem.medicinalSpice || rawItem.medicinalSpiceOption || rawItem.spice || ""), menu.medicinalSpiceOptions.length > 0);
   const heat = findChoice(menu.heatLevels, String(rawItem.heat || rawItem.heatLevel || ""), menu.heatLevels.length > 0);
@@ -112,6 +121,9 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
   if (specialFlavorItems.some((item) => !item)) {
     return { error: "Invalid special flavor" };
   }
+  if (specialFlavorItems.length > 6 || new Set(selectedFlavorIds(rawItem)).size !== specialFlavorItems.length) {
+    return { error: "味変・追加調味は6個まで、同じ項目は1個まで選択できます。" };
+  }
 
   let selectionError = "";
   const selectedSections = menu.menuSections
@@ -120,6 +132,12 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
     const ids = selectedIdsForSection(rawItem, section);
     if (ids.length > section.limit) {
       selectionError = `${section.title}は${section.limit}個まで選択できます。数量を減らしてから、もう一度お試しください。`;
+      return { section, items: [] };
+    }
+    const counts = new Map<string, number>();
+    ids.forEach((id) => counts.set(id, (counts.get(id) ?? 0) + 1));
+    if ([...counts.values()].some((quantity) => quantity > section.perOptionMax)) {
+      selectionError = `${section.title}の同じ項目は${section.perOptionMax}個まで選択できます。数量を減らしてから、もう一度お試しください。`;
       return { section, items: [] };
     }
     const items = ids.map((id) => findChoice(section.items, id, true));
@@ -134,7 +152,7 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
   const optionItems = [medicinalSpice, heat, numb, ...specialFlavorItems].filter(Boolean) as MaamaaPricedOption[];
   const toppingItems = selectedSections.flatMap((section) => section.items);
   const amount = selectedProduct.price +
-    Number(noodleChange?.price || 0) +
+    (noodleChanges.filter(Boolean) as MaamaaPricedOption[]).reduce((sum, item) => sum + item.price, 0) +
     optionItems.reduce((sum, item) => sum + item.price, 0) +
     toppingItems.reduce((sum, item) => sum + item.price, 0);
   if (amount <= 0) return { error: "Invalid amount" };
@@ -144,7 +162,8 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
     heat ? `辛さ: ${heat.name}` : "",
     numb ? `痺れ: ${numb.name}` : "",
     ...((specialFlavorItems.filter(Boolean) as MaamaaPricedOption[]).map((item) => `味変: ${item.name}`)),
-    noodleChange ? `麺の変更: ${noodleChange.name}` : ""
+    ...countChoices(noodleChanges.filter(Boolean) as MaamaaPricedOption[])
+      .map(({ item, quantity }) => `麺の変更: ${quantityLabel(item.name, quantity)}`)
   ].filter(Boolean);
   const sectionLabels = selectedSections
     .filter((section) => section.items.length)
@@ -154,7 +173,7 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
   return {
     amount,
     selectedProduct,
-    noodleChange,
+    noodleChanges: noodleChanges.filter(Boolean) as MaamaaPricedOption[],
     detailLabel,
     optionItems,
     toppingItems,
@@ -185,7 +204,13 @@ function buildMaamaaItemPayload(
       heat: item.heat ? { id: item.heat.id, name: item.heat.name, price: item.heat.price } : null,
       numb: item.numb ? { id: item.numb.id, name: item.numb.name, price: item.numb.price } : null,
       specialFlavors: item.specialFlavorItems.map((flavor) => ({ id: flavor.id, name: flavor.name, price: flavor.price })),
-      noodleChange: item.noodleChange ? { id: item.noodleChange.id, name: item.noodleChange.name, price: item.noodleChange.price } : null
+      noodleChanges: countChoices(item.noodleChanges).map(({ item: noodle, quantity }) => ({
+        id: noodle.id,
+        name: noodle.name,
+        price: noodle.price,
+        quantity,
+        linePrice: noodle.price * quantity
+      }))
     },
     sections: item.selectedSections.map(({ section, items }) => ({
       sectionId: section.id,
@@ -208,7 +233,7 @@ function buildMaamaaProductionLabels(item: Exclude<ReturnType<typeof validateBui
     item.medicinalSpice?.name ?? "",
     item.heat ? `辛さ: ${item.heat.name}` : "",
     item.numb ? `痺れ: ${item.numb.name}` : "",
-    item.noodleChange ? `麺の変更: ${item.noodleChange.name}` : "",
+    ...countChoices(item.noodleChanges).map(({ item: noodle, quantity }) => `麺の変更: ${quantityLabel(noodle.name, quantity)}`),
     ...item.specialFlavorItems.map((flavor) => `味変: ${flavor.name}`),
     ...countChoices(item.toppingItems).map(({ item: topping, quantity }) => quantityLabel(topping.name, quantity))
   ].filter(Boolean);

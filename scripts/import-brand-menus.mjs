@@ -666,12 +666,12 @@ async function importMaamaa() {
       },
       baseSoup: menu.baseSoup,
       presetSoups: menu.presetSoups ?? [],
-      noodleReplacementOptions: menu.noodleReplacementOptions ?? [],
       optionGroupKeys: [
         "medicinal-spice",
         "heat",
         "numb",
         "special-flavor",
+        "noodle-replacement",
         ...menu.menuSections.map((section) => section.id)
       ]
     },
@@ -709,10 +709,11 @@ async function importMaamaa() {
   }
 
   const fixedGroups = [
-    { key: "medicinal-spice", name: "薬膳スパイス", type: "single", choices: menu.medicinalSpiceOptions, affectsProcedure: true, ruleJson: { source: "maamaa", defaultChoice: menu.medicinalSpiceOptions[0]?.id, optionValueType: "id" } },
-    { key: "heat", name: "辛さ", type: "single", choices: menu.heatLevels, affectsProcedure: true, ruleJson: { source: "maamaa", defaultChoice: "normal", optionValueType: "id" } },
-    { key: "numb", name: "痺れ", type: "single", choices: menu.numbLevels, affectsProcedure: true, ruleJson: { source: "maamaa", defaultChoice: "tiny", optionValueType: "id" } },
-    { key: "special-flavor", name: "味変・追加調味", type: "multiple", choices: menu.specialFlavors, affectsProcedure: true, ruleJson: { source: "maamaa", limit: 6, optionValueType: "id" } }
+    { key: "medicinal-spice", name: "薬膳スパイス", type: "single", choices: menu.medicinalSpiceOptions, affectsProcedure: true, ruleJson: { source: "maamaa", defaultChoice: menu.medicinalSpiceOptions[0]?.id, minSelections: 1, maxSelections: 1, allowRepeat: false, perOptionMax: 1, optionValueType: "id" } },
+    { key: "heat", name: "辛さ", type: "single", choices: menu.heatLevels, affectsProcedure: true, ruleJson: { source: "maamaa", defaultChoice: "normal", minSelections: 1, maxSelections: 1, allowRepeat: false, perOptionMax: 1, optionValueType: "id" } },
+    { key: "numb", name: "痺れ", type: "single", choices: menu.numbLevels, affectsProcedure: true, ruleJson: { source: "maamaa", defaultChoice: "tiny", minSelections: 1, maxSelections: 1, allowRepeat: false, perOptionMax: 1, optionValueType: "id" } },
+    { key: "special-flavor", name: "味変・追加調味", type: "multiple", choices: menu.specialFlavors, affectsProcedure: true, ruleJson: { source: "maamaa", limit: 6, minSelections: 0, maxSelections: 6, allowRepeat: false, perOptionMax: 1, optionValueType: "id" } },
+    { key: "noodle-replacement", name: "麺の種類を変更する", type: "quantity", choices: menu.noodleReplacementOptions, affectsProcedure: true, ruleJson: { source: "maamaa", limit: menu.noodleReplacementRule.limit, minSelections: 0, maxSelections: menu.noodleReplacementRule.limit, allowRepeat: true, perOptionMax: menu.noodleReplacementRule.perOptionMax, optionValueType: "id" } }
   ];
 
   let groupCount = 0;
@@ -743,7 +744,15 @@ async function importMaamaa() {
       name: section.title,
       selectionType: "quantity",
       affectsProcedure: true,
-      ruleJson: { source: "maamaa", limit: section.limit, optionValueType: "id" },
+      ruleJson: {
+        source: "maamaa",
+        limit: section.limit,
+        minSelections: 0,
+        maxSelections: section.limit,
+        allowRepeat: section.perOptionMax > 1,
+        perOptionMax: section.perOptionMax,
+        optionValueType: "id"
+      },
       displayNames: displayNamesFor(section.title, dictionaries),
       sortOrder: 100 + (index + 1) * 10
     });

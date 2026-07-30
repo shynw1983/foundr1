@@ -41,6 +41,7 @@ const expectedGroups = new Map([
   ["special-flavor", { name: "味変・追加調味", items: menu.specialFlavors }],
   ...menu.menuSections.map((section) => [section.id, { name: section.title, items: section.items }])
 ]);
+const supplementalGroupKeys = new Set(["noodle-replacement"]);
 const expectedOptionCount = [...expectedGroups.values()]
   .reduce((total, group) => total + group.items.length, 0);
 const snapshotOptionCount = snapshot.groups
@@ -146,7 +147,7 @@ for (const groupKey of expectedGroupKeys) {
 }
 
 for (const group of currentGroups) {
-  if (group.isActive && !expectedGroups.has(String(group.groupKey))) {
+  if (group.isActive && !expectedGroups.has(String(group.groupKey)) && !supplementalGroupKeys.has(String(group.groupKey))) {
     changes.push({ type: "deactivate", group: String(group.groupKey), key: String(group.groupKey), from: group.name, to: "inactive" });
   }
 }

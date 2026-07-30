@@ -19,6 +19,7 @@ export type MaamaaMenuSection = {
   title: string;
   displayNames?: Record<string, string>;
   limit: number;
+  perOptionMax: number;
   items: MaamaaPricedOption[];
 };
 
@@ -54,6 +55,10 @@ export type MaamaaCompatibleMenu = {
   specialFlavors: MaamaaPricedOption[];
   presetSoups: MaamaaPresetSoup[];
   noodleReplacementOptions: MaamaaPricedOption[];
+  noodleReplacementRule: {
+    limit: number;
+    perOptionMax: number;
+  };
   menuSections: MaamaaMenuSection[];
   stores: Array<{ id: string; label: string; osStoreId: string }>;
   selectedStoreId: string;
@@ -302,12 +307,9 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
   const choices = (key: string) => (optionsByGroup.get(groupByKey.get(key)?.id ?? "") ?? [])
     .filter((option) => !unavailableOptionKeys.has(option.optionKey))
     .map(choice);
-  const fixedGroupKeys = new Set(["medicinal-spice", "heat", "numb", "special-flavor"]);
+  const fixedGroupKeys = new Set(["medicinal-spice", "heat", "numb", "special-flavor", "noodle-replacement"]);
   const rawPresetSoups = Array.isArray(base.variableSchema?.presetSoups)
     ? base.variableSchema.presetSoups as Array<Record<string, unknown>>
-    : [];
-  const rawNoodleReplacementOptions = Array.isArray(base.variableSchema?.noodleReplacementOptions)
-    ? base.variableSchema.noodleReplacementOptions as Array<Record<string, unknown>>
     : [];
   const schemaChoice = (item: Record<string, unknown>): MaamaaPricedOption => ({
     id: String(item.id ?? ""),
@@ -322,7 +324,8 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
       id: group.groupKey,
       title: group.name,
       displayNames: group.displayNames,
-      limit: Number(group.ruleJson?.limit ?? 99),
+      limit: Number(group.ruleJson?.maxSelections ?? group.ruleJson?.limit ?? 99),
+      perOptionMax: Number(group.ruleJson?.perOptionMax ?? group.ruleJson?.maxSelections ?? group.ruleJson?.limit ?? 99),
       items: (optionsByGroup.get(group.id) ?? [])
         .filter((option) => !unavailableOptionKeys.has(option.optionKey))
         .map(choice)
@@ -417,9 +420,11 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
           };
         })
         .filter((item) => item.id && item.name),
-      noodleReplacementOptions: rawNoodleReplacementOptions
-        .map(schemaChoice)
-        .filter((item) => item.id && item.name),
+      noodleReplacementOptions: choices("noodle-replacement"),
+      noodleReplacementRule: {
+        limit: Number(groupByKey.get("noodle-replacement")?.ruleJson?.maxSelections ?? groupByKey.get("noodle-replacement")?.ruleJson?.limit ?? 2),
+        perOptionMax: Number(groupByKey.get("noodle-replacement")?.ruleJson?.perOptionMax ?? 2)
+      },
       menuSections,
       stores: publicStores,
       selectedStoreId: selectedStore?.id ?? publicStores[0]?.id ?? "",
