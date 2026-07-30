@@ -15587,23 +15587,23 @@ body :where(
 
 .store-courier-order.platform-uber_eats {
   --platform-label-color: #057a45;
-  --platform-label-bg: #e5f6ed;
+  --platform-label-bg: #ecefed;
 }
 
 .store-courier-order.platform-demae_can {
   --platform-label-color: #b62d2a;
-  --platform-label-bg: #fae9e8;
+  --platform-label-bg: #ecefed;
 }
 
 .store-courier-order.platform-rocket_now {
   --platform-label-color: #00479f;
-  --platform-label-bg: #e7eff9;
+  --platform-label-bg: #ecefed;
 }
 
 .store-courier-order.platform-maamaa_web,
 .store-courier-order.platform-nanacha_web {
   --platform-label-color: var(--pickup-web);
-  --platform-label-bg: #e7f0ec;
+  --platform-label-bg: #ecefed;
 }
 
 .store-courier-order > strong {
@@ -15644,12 +15644,11 @@ body :where(
   padding: 3px 7px;
   background: var(--platform-label-bg);
   color: var(--platform-label-color);
+  font-weight: 600;
   line-height: 1.2;
 }
 
 .store-courier-order.is-ready {
-  --platform-label-color: #555957;
-  --platform-label-bg: #ecefed;
   background: white;
   color: var(--courier-ready-ink);
 }
@@ -15665,7 +15664,7 @@ body :where(
 }
 
 .store-courier-order.is-ready > div {
-  justify-content: center;
+  justify-content: space-between;
   border-color: #dce3df;
   opacity: 1;
 }
