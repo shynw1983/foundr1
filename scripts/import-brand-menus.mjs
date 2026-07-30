@@ -223,6 +223,7 @@ async function upsertItem({
   basePrice,
   variableSchema,
   displayNames = {},
+  sortOrder = 100,
   isActive = true
 }) {
   const existing = await sql`
@@ -249,6 +250,7 @@ async function upsertItem({
         image_url = ${imageUrl},
         base_price = ${basePrice},
         variable_schema = ${schema}::jsonb,
+        sort_order = ${sortOrder},
         is_active = ${isActive},
         updated_at = now()
       where id = ${existing[0].id}
@@ -271,6 +273,7 @@ async function upsertItem({
       image_url,
       base_price,
       variable_schema,
+      sort_order,
       is_active,
       updated_at
     )
@@ -287,6 +290,7 @@ async function upsertItem({
       ${imageUrl},
       ${basePrice},
       ${schema}::jsonb,
+      ${sortOrder},
       ${isActive},
       now()
     )
@@ -631,8 +635,49 @@ async function importMaamaa() {
         ...menu.menuSections.map((section) => section.id)
       ]
     },
+    sortOrder: 10,
     isActive: true
   });
+
+  const presetCategories = [
+    { id: "chef-special", name: "シェフのスペシャル麻辣湯", sortOrder: 20 },
+    { id: "recommended-set", name: "おすすめ麻辣湯セット", sortOrder: 30 }
+  ];
+  for (const category of presetCategories) {
+    await upsertCategory({
+      brandId: brand.id,
+      externalId: `maamaa-${category.id}`,
+      name: category.name,
+      sortOrder: category.sortOrder
+    });
+  }
+  const categoryNameById = new Map(presetCategories.map((category) => [category.id, category.name]));
+  for (const [index, preset] of (menu.presetSoups ?? []).entries()) {
+    await upsertItem({
+      brandId: brand.id,
+      sourceId,
+      externalId: preset.id,
+      itemKind: "fixed_product",
+      name: preset.name,
+      category: categoryNameById.get(preset.category) ?? "おすすめ麻辣湯セット",
+      description: preset.note ?? "",
+      descriptionDisplayNames: displayNamesFor(preset.note ?? "", dictionaries),
+      imageUrl: "",
+      basePrice: preset.price ?? null,
+      displayNames: {
+        ...displayNamesFor(preset.name, dictionaries),
+        ...(preset.displayNames ?? {})
+      },
+      variableSchema: {
+        source: "maamaa-malatang-menu",
+        preset: true,
+        parentProductId: menu.baseSoup.id,
+        defaultNoodle: preset.defaultNoodle ?? "板春雨"
+      },
+      sortOrder: 20 + index * 10,
+      isActive: true
+    });
+  }
 
   const fixedGroups = [
     { key: "medicinal-spice", name: "薬膳スパイス", type: "single", choices: menu.medicinalSpiceOptions, affectsProcedure: true, ruleJson: { source: "maamaa", defaultChoice: menu.medicinalSpiceOptions[0]?.id, optionValueType: "id" } },
@@ -694,7 +739,7 @@ async function importMaamaa() {
     `;
   }
 
-  return { brand: brand.name, items: 1, groups: groupCount, options: optionCount };
+  return { brand: brand.name, items: 1 + (menu.presetSoups?.length ?? 0), groups: groupCount, options: optionCount };
 }
 
 const results = [];

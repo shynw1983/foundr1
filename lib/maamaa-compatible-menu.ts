@@ -182,6 +182,24 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
 
   const base = items[0];
   if (!base) throw new Error("base menu item not found");
+  const presetCatalogItems = await sql`
+    select
+      id::text,
+      coalesce(external_id, '') as "externalId",
+      name,
+      coalesce(display_names, '{}'::jsonb) as "displayNames",
+      coalesce(description, '') as description,
+      coalesce(description_display_names, '{}'::jsonb) as "descriptionDisplayNames",
+      base_price::float as "basePrice",
+      variable_schema as "variableSchema"
+    from menu_catalog_items
+    where brand_id = ${brand.id}
+      and item_kind = 'fixed_product'
+      and is_active = true
+      and variable_schema->>'source' = 'maamaa-malatang-menu'
+      and variable_schema->>'preset' = 'true'
+    order by sort_order, name
+  ` as MenuItemRow[];
 
   const publicStores = stores.map((store) => ({
     id: store.externalId || store.name,
@@ -221,6 +239,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
     : [];
   const unavailableOptionKeys = new Set(optionStoreSettings.map((setting) => String(setting.optionKey)));
 
+  const catalogItemIds = [base.id, ...presetCatalogItems.map((item) => item.id)];
   const storeSettings = selectedStore
     ? (await sql`
         select
@@ -231,11 +250,12 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         from menu_store_settings
         where brand_id = ${brand.id}
           and store_id = ${selectedStore.osStoreId}
-          and menu_catalog_item_id = ${base.id}
-        limit 1
+          and menu_catalog_item_id = any(${catalogItemIds}::uuid[])
       `) as StoreSettingRow[]
     : [];
-  const baseSetting = storeSettings[0];
+  const settingByItemId = new Map(storeSettings.map((setting) => [setting.menuCatalogItemId, setting]));
+  const baseSetting = settingByItemId.get(base.id);
+  const presetCatalogByExternalId = new Map(presetCatalogItems.map((item) => [item.externalId, item]));
 
   const groupByKey = new Map(groups.map((group) => [group.groupKey, group]));
   const choices = (key: string) => (optionsByGroup.get(groupByKey.get(key)?.id ?? "") ?? [])
@@ -330,15 +350,19 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
       numbLevels: choices("numb"),
       specialFlavors: choices("special-flavor"),
       presetSoups: rawPresetSoups
-        .map((item) => ({
-          ...schemaChoice(item),
-          menuCatalogItemId: base.id,
-          category: String(item.category ?? "recommended-set"),
-          defaultNoodle: String(item.defaultNoodle ?? "板春雨"),
-          note: String(item.note ?? ""),
-          isAvailable: baseSetting?.isAvailable ?? true,
-          websiteEnabled: baseSetting?.websiteEnabled ?? true
-        }))
+        .map((item) => {
+          const catalogItem = presetCatalogByExternalId.get(String(item.id ?? ""));
+          const setting = catalogItem ? settingByItemId.get(catalogItem.id) : undefined;
+          return {
+            ...schemaChoice(item),
+            menuCatalogItemId: catalogItem?.id ?? base.id,
+            category: String(item.category ?? "recommended-set"),
+            defaultNoodle: String(item.defaultNoodle ?? "板春雨"),
+            note: String(item.note ?? catalogItem?.description ?? ""),
+            isAvailable: setting?.isAvailable ?? true,
+            websiteEnabled: setting?.websiteEnabled ?? true
+          };
+        })
         .filter((item) => item.id && item.name),
       noodleReplacementOptions: rawNoodleReplacementOptions
         .map(schemaChoice)
