@@ -259,6 +259,21 @@ function findDisplayedTotal(nodes: NormalizedUberBridgeNode[]) {
   return 0;
 }
 
+function dedupeExactItems(items: UberBridgeItem[]) {
+  const signatures = new Set<string>();
+  return items.filter((item) => {
+    const signature = JSON.stringify({
+      name: item.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      modifiers: item.modifiers
+    });
+    if (signatures.has(signature)) return false;
+    signatures.add(signature);
+    return true;
+  });
+}
+
 export function parseUberBridgeSnapshot(
   rawNodes: UberBridgeNode[],
   capturedAt: Date
@@ -340,6 +355,7 @@ export function parseUberBridgeSnapshot(
 
   const pathBasedItems = parsePathBasedItems(normalizedNodes);
   if (pathBasedItems.length) items = pathBasedItems;
+  items = dedupeExactItems(items);
 
   for (const item of items) {
     item.optionTotal = item.modifiers.reduce(

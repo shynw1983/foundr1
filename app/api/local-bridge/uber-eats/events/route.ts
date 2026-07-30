@@ -32,6 +32,17 @@ function dateParts(date: Date) {
   return { pickupDate, pickupTime };
 }
 
+function hasExactDuplicateBridgeItems(value: unknown) {
+  if (!Array.isArray(value)) return false;
+  const signatures = new Set<string>();
+  for (const item of value) {
+    const signature = JSON.stringify(item);
+    if (signatures.has(signature)) return true;
+    signatures.add(signature);
+  }
+  return false;
+}
+
 async function resolveStoreBrand(storeId: string, parsedItemNames: string[]) {
   const sourceRows = await sql`
     select brands.id::text as "brandId", brands.name as "brandName"
@@ -90,14 +101,17 @@ async function upsertOperationalOrder(input: {
       id::text,
       status,
       coalesce(customer_summary ->> 'orderType', '') as "orderType",
-      coalesce((customer_summary #>> '{bridge,completeness}')::int, 0) as completeness
+      coalesce((customer_summary #>> '{bridge,completeness}')::int, 0) as completeness,
+      coalesce(customer_summary #> '{bridge,items}', '[]'::jsonb) as "bridgeItems"
     from store_customer_orders
     where order_source = 'uber_eats'
       and source_external_id = ${sourceExternalId}
     limit 1
   `;
   const existing = existingRows[0];
-  const shouldReplaceItems = !existing || parsed.completeness > Number(existing.completeness ?? 0);
+  const shouldReplaceItems = !existing
+    || parsed.completeness > Number(existing.completeness ?? 0)
+    || hasExactDuplicateBridgeItems(existing.bridgeItems);
   const nextStatus = existing
     && parsed.status === "new"
     && ["preparing", "ready"].includes(String(existing.status))
@@ -236,6 +250,12 @@ async function upsertOperationalOrder(input: {
           )
         `;
       }
+    }
+    for (const staleItem of existingItems.slice(parsed.items.length)) {
+      await sql`
+        delete from store_customer_order_items
+        where id::text = ${String(staleItem.id)}
+      `;
     }
   }
 

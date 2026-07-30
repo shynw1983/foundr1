@@ -94,6 +94,27 @@ test("parses modifier quantity when Uber shifts the name after the quantity node
   ]);
 });
 
+test("deduplicates exact item copies from stacked Uber accessibility pages", () => {
+  const buildItemNodes = (itemPath: string) => [
+    { path: `${itemPath}.0`, viewId: "com.uber.restaurants:id/ub__ueo_cart_item_quantity", text: "1 ×" },
+    { path: `${itemPath}.1`, viewId: "com.uber.restaurants:id/ub__ueo_cart_item_name", text: "牛肉マーラータン" },
+    { path: `${itemPath}.2`, viewId: "com.uber.restaurants:id/ub__ueo_cart_item_price", text: "￥1,880" },
+    { path: `${itemPath}.3.0.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_item_name", text: "辛さを選ぶ" },
+    { path: `${itemPath}.3.1.0`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_name", text: "普通辛" },
+    { path: `${itemPath}.3.1.2`, viewId: "com.uber.restaurants:id/ub__ueo_modifier_option_item_price", text: "￥0" }
+  ];
+  const parsed = parseUberBridgeSnapshot([
+    { path: "0.0.0.0.1", viewId: "com.uber.restaurants:id/ub__ueo_order_details_header_title", text: "顧客 • F559C" },
+    ...buildItemNodes("0.0.0.0.7.0"),
+    ...buildItemNodes("0.0.0.1.7.0")
+  ], new Date("2026-07-30T19:00:00+09:00"));
+
+  assert.ok(parsed);
+  assert.equal(parsed.items.length, 1);
+  assert.equal(parsed.items[0].quantity, 1);
+  assert.equal(parsed.total, 1880);
+});
+
 test("does not treat the active-order mark-ready button as a completed order", () => {
   const parsed = parseUberBridgeSnapshot([
     { viewId: "com.uber.restaurants:id/ub__ueo_order_details_header_title", text: "安藤, 総. • 83033" },
