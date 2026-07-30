@@ -253,26 +253,6 @@ export async function PATCH(request: Request) {
   const item = items[0] as { id: string; brandId: string } | undefined;
   if (!item) return Response.json({ error: "商品が見つかりません。" }, { status: 404 });
 
-  const websitePresentation = {
-    nameOverride: normalizeText((body.websitePresentation as Record<string, unknown> | undefined)?.nameOverride),
-    promotionPrefixOverride: normalizeText((body.websitePresentation as Record<string, unknown> | undefined)?.promotionPrefixOverride),
-    categoryOverride: normalizeText((body.websitePresentation as Record<string, unknown> | undefined)?.categoryOverride),
-    showPromotionPrefix: (body.websitePresentation as Record<string, unknown> | undefined)?.showPromotionPrefix !== false,
-    showEmoji: (body.websitePresentation as Record<string, unknown> | undefined)?.showEmoji !== false
-  };
-  await sql`
-    update menu_catalog_items
-    set
-      variable_schema = jsonb_set(
-        coalesce(variable_schema, '{}'::jsonb),
-        '{websitePresentation}',
-        ${JSON.stringify(websitePresentation)}::jsonb,
-        true
-      ),
-      updated_at = now()
-    where id = ${itemId}
-  `;
-
   const rows = await sql`
     insert into menu_store_settings (
       brand_id,

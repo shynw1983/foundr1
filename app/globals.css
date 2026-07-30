@@ -10620,41 +10620,48 @@ body :where(
   flex: 1 1 auto;
 }
 
-.store-menu-presentation {
-  border-top: 1px solid var(--line);
+.menu-presentation-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
   display: grid;
   gap: 12px;
-  grid-column: 1 / -1;
-  padding-top: 10px;
+  padding: 14px;
+  background: #f8fafc;
 }
 
-.store-menu-presentation summary {
-  color: var(--green);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 900;
+.menu-presentation-panel > div:first-child {
+  display: grid;
+  gap: 4px;
 }
 
-.store-menu-presentation-grid {
+.menu-presentation-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.menu-presentation-grid {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.store-menu-presentation-grid > label {
+.menu-presentation-grid > label {
   display: grid;
   gap: 6px;
 }
 
-.store-menu-presentation-grid label > span,
-.store-menu-presentation-preview > span {
+.menu-presentation-grid label > span,
+.menu-presentation-preview > span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 850;
 }
 
-.store-menu-presentation-grid input[type="text"],
-.store-menu-presentation-grid input:not([type]) {
+.menu-presentation-grid input[type="text"],
+.menu-presentation-grid input:not([type]) {
   min-height: 40px;
   min-width: 0;
   width: 100%;
@@ -10666,18 +10673,18 @@ body :where(
   font-weight: 800;
 }
 
-.store-menu-presentation-check {
+.menu-presentation-check {
   align-items: center;
   display: flex !important;
   grid-template-columns: auto 1fr;
 }
 
-.store-menu-presentation-check input {
+.menu-presentation-check input {
   height: 18px;
   width: 18px;
 }
 
-.store-menu-presentation-preview {
+.menu-presentation-preview {
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
@@ -10686,13 +10693,13 @@ body :where(
   background: white;
 }
 
-.store-menu-presentation-preview strong,
-.store-menu-presentation-preview small {
+.menu-presentation-preview strong,
+.menu-presentation-preview small {
   overflow-wrap: anywhere;
 }
 
 @media (max-width: 900px) {
-  .store-menu-presentation-grid {
+  .menu-presentation-grid {
     grid-template-columns: 1fr;
   }
 }

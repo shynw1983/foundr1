@@ -248,8 +248,7 @@ export default function StoreMenuPage() {
           menuCatalogItemId: item.id,
           websiteEnabled: nextItem.websiteEnabled,
           isAvailable: nextItem.isAvailable,
-          statusNote: nextItem.statusNote,
-          websitePresentation: nextItem.websitePresentation
+          statusNote: nextItem.statusNote
         })
       });
       if (!response.ok) throw new Error("save failed");
@@ -480,79 +479,6 @@ export default function StoreMenuPage() {
                           メモ保存
                         </button>
                       </div>
-                      <details className="store-menu-presentation">
-                        <summary>ウェブ表示名・Catchphrase・Emojiを編集</summary>
-                        <div className="store-menu-presentation-grid">
-                          <label>
-                            <span>商品名（空欄はUber同期名）</span>
-                            <input
-                              value={item.websitePresentation?.nameOverride ?? ""}
-                              onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? {
-                                ...entry,
-                                websitePresentation: { ...entry.websitePresentation, nameOverride: event.target.value }
-                              } : entry))}
-                              placeholder={item.name}
-                            />
-                          </label>
-                          <label>
-                            <span>Catchphrase（空欄はUber同期値）</span>
-                            <input
-                              value={item.websitePresentation?.promotionPrefixOverride ?? ""}
-                              onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? {
-                                ...entry,
-                                websitePresentation: { ...entry.websitePresentation, promotionPrefixOverride: event.target.value }
-                              } : entry))}
-                              placeholder={item.promotionPrefix || "Catchphraseなし"}
-                            />
-                          </label>
-                          <label>
-                            <span>カテゴリ（空欄はUber同期名）</span>
-                            <input
-                              value={item.websitePresentation?.categoryOverride ?? ""}
-                              onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? {
-                                ...entry,
-                                websitePresentation: { ...entry.websitePresentation, categoryOverride: event.target.value }
-                              } : entry))}
-                              placeholder={item.category || "未分類"}
-                            />
-                          </label>
-                          <label className="store-menu-presentation-check">
-                            <input
-                              type="checkbox"
-                              checked={item.websitePresentation?.showPromotionPrefix !== false}
-                              onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? {
-                                ...entry,
-                                websitePresentation: { ...entry.websitePresentation, showPromotionPrefix: event.target.checked }
-                              } : entry))}
-                            />
-                            <span>Catchphraseを表示</span>
-                          </label>
-                          <label className="store-menu-presentation-check">
-                            <input
-                              type="checkbox"
-                              checked={item.websitePresentation?.showEmoji !== false}
-                              onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? {
-                                ...entry,
-                                websitePresentation: { ...entry.websitePresentation, showEmoji: event.target.checked }
-                              } : entry))}
-                            />
-                            <span>Emojiを表示</span>
-                          </label>
-                          <div className="store-menu-presentation-preview">
-                            <span>ウェブ表示プレビュー</span>
-                            <strong>{itemName(item)}</strong>
-                            <small>{itemCategory(item)}</small>
-                          </div>
-                        </div>
-                        <button
-                          className="primary-button"
-                          type="button"
-                          disabled={savingId === item.id}
-                          onClick={() => void saveItem(item, {})}
-                        >
-                          表示設定を保存
-                        </button>
-                      </details>
                     </article>
                   ))}
                   {!visibleItems.length ? <p className="empty-state">{loading ? "読み込み中..." : "商品がありません。"}</p> : null}

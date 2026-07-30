@@ -86,6 +86,14 @@ type MenuItem = {
   isActive: boolean;
 };
 
+type WebsitePresentation = {
+  nameOverride?: string;
+  promotionPrefixOverride?: string;
+  categoryOverride?: string;
+  showPromotionPrefix?: boolean;
+  showEmoji?: boolean;
+};
+
 type MenuGroup = {
   id: string;
   brandId: string;
@@ -457,6 +465,49 @@ function updatePromotionPrefixDisplayName<T extends { promotionPrefixDisplayName
       [language]: value
     }
   };
+}
+
+function getWebsitePresentation(item: MenuItem): WebsitePresentation {
+  const value = item.variableSchema?.websitePresentation;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as WebsitePresentation
+    : {};
+}
+
+function updateWebsitePresentation(item: MenuItem, patch: Partial<WebsitePresentation>): MenuItem {
+  return {
+    ...item,
+    variableSchema: {
+      ...item.variableSchema,
+      websitePresentation: {
+        ...getWebsitePresentation(item),
+        ...patch
+      }
+    }
+  };
+}
+
+function stripMenuEmoji(value: string) {
+  return value
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function getWebsiteItemPreview(item: MenuItem) {
+  const presentation = getWebsitePresentation(item);
+  const name = presentation.nameOverride?.trim() || item.name;
+  const prefix = presentation.showPromotionPrefix === false
+    ? ""
+    : presentation.promotionPrefixOverride?.trim() || item.promotionPrefix;
+  const value = `${prefix}${name}`;
+  return presentation.showEmoji === false ? stripMenuEmoji(value) : value;
+}
+
+function getWebsiteCategoryPreview(item: MenuItem) {
+  const presentation = getWebsitePresentation(item);
+  const value = presentation.categoryOverride?.trim() || item.category || "未分類";
+  return presentation.showEmoji === false ? stripMenuEmoji(value) : value;
 }
 
 function isUberImportDraft(item: MenuItem) {
@@ -1895,6 +1946,59 @@ export default function MenuAdminPage() {
 	                  <span>公開中</span>
 	                </label>
 	              </div>
+              <section className="menu-presentation-panel">
+                <div>
+                  <strong>ブランドサイト表示</strong>
+                  <p>商品名・Catchphrase・分類・Emoji の表示は OS で一元管理します。空欄の場合は上のメニュー基本情報をそのまま使用します。</p>
+                </div>
+                <div className="menu-presentation-grid">
+                  <label>
+                    <span>ウェブ専用の商品名</span>
+                    <input
+                      value={getWebsitePresentation(itemDraft).nameOverride ?? ""}
+                      onChange={(event) => setItemDraft(updateWebsitePresentation(itemDraft, { nameOverride: event.target.value }))}
+                      placeholder={itemDraft.name || "商品名をそのまま使用"}
+                    />
+                  </label>
+                  <label>
+                    <span>ウェブ専用 Catchphrase</span>
+                    <input
+                      value={getWebsitePresentation(itemDraft).promotionPrefixOverride ?? ""}
+                      onChange={(event) => setItemDraft(updateWebsitePresentation(itemDraft, { promotionPrefixOverride: event.target.value }))}
+                      placeholder={itemDraft.promotionPrefix || "Catchphrase なし"}
+                    />
+                  </label>
+                  <label>
+                    <span>ウェブ専用の分類名</span>
+                    <input
+                      value={getWebsitePresentation(itemDraft).categoryOverride ?? ""}
+                      onChange={(event) => setItemDraft(updateWebsitePresentation(itemDraft, { categoryOverride: event.target.value }))}
+                      placeholder={itemDraft.category || "未分類"}
+                    />
+                  </label>
+                  <label className="menu-presentation-check">
+                    <input
+                      type="checkbox"
+                      checked={getWebsitePresentation(itemDraft).showPromotionPrefix !== false}
+                      onChange={(event) => setItemDraft(updateWebsitePresentation(itemDraft, { showPromotionPrefix: event.target.checked }))}
+                    />
+                    <span>Catchphraseを表示</span>
+                  </label>
+                  <label className="menu-presentation-check">
+                    <input
+                      type="checkbox"
+                      checked={getWebsitePresentation(itemDraft).showEmoji !== false}
+                      onChange={(event) => setItemDraft(updateWebsitePresentation(itemDraft, { showEmoji: event.target.checked }))}
+                    />
+                    <span>Emojiを表示</span>
+                  </label>
+                  <div className="menu-presentation-preview">
+                    <span>ウェブ表示プレビュー</span>
+                    <strong>{getWebsiteItemPreview(itemDraft)}</strong>
+                    <small>{getWebsiteCategoryPreview(itemDraft)}</small>
+                  </div>
+                </div>
+              </section>
               <div className="menu-translation-panel">
                 <div>
                   <strong>販促プレフィックスの多言語表示</strong>
