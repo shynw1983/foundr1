@@ -10,27 +10,11 @@ const deliverySources = ["uber_eats", "demae_can", "rocket_now"];
 const webReservationSources = ["maamaa_web", "nanacha_web"];
 const pickupSources = [...deliverySources, ...webReservationSources];
 
-function getBrandDisplayIdentity(brandName: string) {
+function getBrandLogoUrl(brandName: string) {
   const normalizedName = brandName.trim().toLowerCase();
-  if (normalizedName === "まぁ麻" || normalizedName === "maamaa") {
-    return {
-      logoUrl: "/brands/maamaa-slogan-landscape.png",
-      themeColor: "#c30e23",
-      themeSurface: "#7f2330"
-    };
-  }
-  if (normalizedName === "nanacha") {
-    return {
-      logoUrl: "/brands/nanacha-logo.png",
-      themeColor: "#231916",
-      themeSurface: "#231916"
-    };
-  }
-  return {
-    logoUrl: "",
-    themeColor: "",
-    themeSurface: ""
-  };
+  if (normalizedName === "まぁ麻" || normalizedName === "maamaa") return "/brands/maamaa-slogan-landscape.png";
+  if (normalizedName === "nanacha") return "/brands/nanacha-logo.png";
+  return "";
 }
 
 export async function GET(request: Request) {
@@ -117,7 +101,7 @@ export async function GET(request: Request) {
       const name = String(brand.name || "");
       return {
         name,
-        ...getBrandDisplayIdentity(name)
+        logoUrl: getBrandLogoUrl(name)
       };
     })
     .filter((brand) => brand.logoUrl);

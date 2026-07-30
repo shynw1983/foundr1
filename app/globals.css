@@ -15291,7 +15291,8 @@ body :where(
   --pickup-web: #185c46;
   --courier-paper: #f2f4f3;
   --courier-ink: #111815;
-  --courier-ready: #123f34;
+  --courier-ready: #262827;
+  --courier-ready-ink: #202321;
   --courier-blue: #2e6794;
   display: grid;
   grid-template-rows:
@@ -15647,12 +15648,14 @@ body :where(
 }
 
 .store-courier-order.is-ready {
+  --platform-label-color: #555957;
+  --platform-label-bg: #ecefed;
   background: white;
-  color: var(--courier-brand, var(--courier-ready));
+  color: var(--courier-ready-ink);
 }
 
 .store-courier-order.is-ready.platform-uber_eats {
-  color: var(--courier-brand, var(--courier-ready));
+  color: var(--courier-ready-ink);
 }
 
 .store-courier-order.is-ready > strong {
