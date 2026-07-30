@@ -43,8 +43,6 @@ public class UberAccessibilityService extends AccessibilityService {
     private String lastOrderClickAttemptCode = "";
     private long lastOrderClickAttemptAt = 0L;
     private long lastOverviewDiagnosticAt = 0L;
-    private String lastInventorySignal = "";
-    private long lastInventorySignalAt = 0L;
     private String pendingInventoryItemName = "";
     private String pendingInventoryInitialStatus = "";
     private long pendingInventoryClickedAt = 0L;
@@ -107,7 +105,6 @@ public class UberAccessibilityService extends AccessibilityService {
         JSONArray nodes = new JSONArray();
         collectNodes(root, "0", builder, nodes, new HashSet<>());
         captureInventoryStateTransition(packageName, root);
-        captureInventoryConfirmation(packageName, nodes);
         if (BridgeCommandState.current(this) != null) {
             handlePendingCommand(root, nodes);
             root.recycle();
@@ -139,46 +136,6 @@ public class UberAccessibilityService extends AccessibilityService {
             UberRecoveryState.requestFromActiveOrderDetails(this, orderCode);
         }
         captureOrderDetails(packageName, builder, nodes);
-    }
-
-    private void captureInventoryConfirmation(String packageName, JSONArray nodes) {
-        String signal = "";
-        for (int index = 0; index < nodes.length(); index += 1) {
-            JSONObject node = nodes.optJSONObject(index);
-            if (node == null || !node.optString("viewId").endsWith("/snackbar_text")) continue;
-            String value = (
-                node.optString("text") + "\n" + node.optString("contentDescription")
-            ).trim();
-            String normalized = value.toLowerCase();
-            if (
-                normalized.contains("売り切れ")
-                || normalized.contains("品切れ")
-                || normalized.contains("在庫切れ")
-                || normalized.contains("利用不可")
-                || normalized.contains("out of stock")
-                || normalized.contains("unavailable")
-                || normalized.contains("售罄")
-                || normalized.contains("缺货")
-                || normalized.contains("缺貨")
-            ) {
-                signal = value;
-                break;
-            }
-        }
-        if (signal.isEmpty()) return;
-        long now = System.currentTimeMillis();
-        if (signal.equals(lastInventorySignal) && now - lastInventorySignalAt < 30000L) return;
-        lastInventorySignal = signal;
-        lastInventorySignalAt = now;
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("signalText", signal);
-            payload.put("itemName", pendingInventoryItemName);
-            payload.put("isAvailable", false);
-            payload.put("nodes", nodes);
-            BridgeUploader.upload(this, "accessibility_inventory", packageName, payload);
-        } catch (Exception ignored) {
-        }
     }
 
     private void trackInventoryStatusClick(AccessibilityEvent event) {
@@ -310,13 +267,7 @@ public class UberAccessibilityService extends AccessibilityService {
     private void uploadInventoryState(String packageName, String itemName, String status) {
         try {
             boolean isAvailable = "available".equals(status);
-            String signature = itemName + "\n" + status;
-            long now = System.currentTimeMillis();
-            if (signature.equals(lastInventorySignal) && now - lastInventorySignalAt < 30000L) {
-                return;
-            }
-            lastInventorySignal = signature;
-            lastInventorySignalAt = now;
+            if (!BridgeInventoryState.shouldUpload(this, itemName, status)) return;
             JSONObject payload = new JSONObject();
             payload.put("itemName", itemName);
             payload.put("isAvailable", isAvailable);
