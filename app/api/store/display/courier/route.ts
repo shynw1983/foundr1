@@ -15,18 +15,21 @@ function getBrandDisplayIdentity(brandName: string) {
   if (normalizedName === "まぁ麻" || normalizedName === "maamaa") {
     return {
       logoUrl: "/brands/maamaa-slogan-landscape.png",
-      themeColor: "#c30e23"
+      themeColor: "#c30e23",
+      themeSurface: "#7f2330"
     };
   }
   if (normalizedName === "nanacha") {
     return {
       logoUrl: "/brands/nanacha-logo.png",
-      themeColor: "#231916"
+      themeColor: "#231916",
+      themeSurface: "#231916"
     };
   }
   return {
     logoUrl: "",
-    themeColor: ""
+    themeColor: "",
+    themeSurface: ""
   };
 }
 

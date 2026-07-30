@@ -26,6 +26,7 @@ type BrandLogo = {
   name: string;
   logoUrl: string;
   themeColor: string;
+  themeSurface: string;
 };
 
 const platformLabels: Record<PickupOrder["orderSource"], string> = {
@@ -206,10 +207,14 @@ export default function StorePickupStatusDisplayPage() {
   const brandThemeColor = brandLogos.length === 1 && brandLogos[0].themeColor
     ? brandLogos[0].themeColor
     : "#123f34";
+  const brandThemeSurface = brandLogos.length === 1 && brandLogos[0].themeSurface
+    ? brandLogos[0].themeSurface
+    : "#123f34";
   const displayLayoutStyle = {
     "--courier-ready-size": `${readyOrders.length ? readyLayout.rows + 0.5 : 0.5}fr`,
     "--courier-work-size": `${preparingOrders.length || waitingOrders.length ? workRows + 0.5 : 0.5}fr`,
-    "--courier-ready": brandThemeColor
+    "--courier-brand": brandThemeColor,
+    "--courier-ready": brandThemeSurface
   } as CSSProperties;
   const workLayoutStyle = {
     "--courier-preparing-size": preparingOrders.length

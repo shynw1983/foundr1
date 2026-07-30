@@ -15648,11 +15648,11 @@ body :where(
 
 .store-courier-order.is-ready {
   background: white;
-  color: var(--courier-ready);
+  color: var(--courier-brand, var(--courier-ready));
 }
 
 .store-courier-order.is-ready.platform-uber_eats {
-  color: var(--courier-ready);
+  color: var(--courier-brand, var(--courier-ready));
 }
 
 .store-courier-order.is-ready > strong {
