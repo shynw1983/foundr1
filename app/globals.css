@@ -15427,6 +15427,7 @@ body :where(
 .store-courier-status-panel {
   --status-color: #64748b;
   --status-soft: #f1f5f9;
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   align-content: start;
@@ -15456,8 +15457,12 @@ body :where(
 }
 
 .store-courier-status-panel::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
   height: 5px;
-  margin: -18px -18px 2px;
+  margin: 0;
   background: var(--status-color);
   content: "";
 }
@@ -15554,6 +15559,7 @@ body :where(
 }
 
 .store-courier-order {
+  container-type: size;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   align-content: center;
@@ -15588,6 +15594,9 @@ body :where(
 .store-courier-order > strong {
   display: block;
   align-self: center;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   color: var(--ink);
   font-size: clamp(34px, 5vw, 64px);
   font-weight: 600;
@@ -15596,6 +15605,8 @@ body :where(
 }
 
 .store-courier-order > div {
+  width: 100%;
+  min-width: 0;
   justify-content: space-between;
   gap: 10px;
   margin-top: 12px;
@@ -15605,7 +15616,9 @@ body :where(
 
 .store-courier-order span,
 .store-courier-order b {
+  min-width: 0;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .store-courier-order.is-ready {
@@ -15697,6 +15710,24 @@ body :where(
   font-size: 11px;
 }
 
+.store-courier-order > strong,
+.store-courier-order.is-ready > strong,
+.store-courier-ready-grid.is-dense .store-courier-order > strong,
+.store-courier-order-grid.is-dense .store-courier-order > strong,
+.store-courier-ready-grid.is-compact .store-courier-order > strong,
+.store-courier-order-grid.is-compact .store-courier-order > strong {
+  font-size: clamp(
+    20px,
+    min(var(--courier-code-width-font, 24cqw), 42cqh),
+    84px
+  );
+}
+
+.store-courier-order span,
+.store-courier-order b {
+  font-size: clamp(9px, min(6.5cqw, 12cqh), 14px);
+}
+
 @media (max-height: 820px) and (min-width: 781px) {
   .store-courier-display {
     gap: 10px;
@@ -15734,7 +15765,7 @@ body :where(
 
   .store-courier-status-panel::before {
     height: 4px;
-    margin: -12px -12px 0;
+    margin: 0;
   }
 
   .store-courier-section-head {

@@ -44,8 +44,15 @@ function countdownLabel(order: PickupOrder, now: number) {
 }
 
 function OrderCard({ order, now, ready = false }: { order: PickupOrder; now: number; ready?: boolean }) {
+  const codeLength = Math.max(1, Array.from(order.pickupCode).length);
+  const cardStyle = {
+    "--courier-code-width-font": `${130 / codeLength}cqw`
+  } as CSSProperties;
   return (
-    <article className={`store-courier-order platform-${order.orderSource}${ready ? " is-ready" : ""}`}>
+    <article
+      className={`store-courier-order platform-${order.orderSource}${ready ? " is-ready" : ""}`}
+      style={cardStyle}
+    >
       <strong>{order.pickupCode}</strong>
       <div>
         <span>{platformLabels[order.orderSource]}</span>
