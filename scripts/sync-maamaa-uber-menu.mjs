@@ -70,7 +70,14 @@ const mappedSourceNames = new Set(mapping.groups.flatMap((group) => (
   group.options.map((option) => `${group.groupKey}:${option.uberName}`)
 )));
 const newUberOptions = [...snapshotSourceNames].filter((key) => !mappedSourceNames.has(key));
-const removedUberOptions = [...mappedSourceNames].filter((key) => !snapshotSourceNames.has(key));
+const preservedMissingSourceNames = new Set(mapping.groups.flatMap((group) => (
+  group.options
+    .filter((option) => option.preserveWhenMissing === true)
+    .map((option) => `${group.groupKey}:${option.uberName}`)
+)));
+const removedUberOptions = [...mappedSourceNames].filter((key) => (
+  !snapshotSourceNames.has(key) && !preservedMissingSourceNames.has(key)
+));
 
 const sql = neon(process.env.DATABASE_URL);
 const brandRows = await sql`

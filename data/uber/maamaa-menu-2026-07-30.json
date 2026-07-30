@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-07-30",
+  "capturedAt": "2026-07-31",
   "storeId": "d6205da2-b809-531c-a7b2-d9cf505cf1c0",
   "baseSoup": {
     "name": "【自由にカスタム🤲】旨味マーラータンスープ｜麻辣烫汤底｜마라탕 육수｜Mala Tang Broth",
@@ -241,7 +241,7 @@
       ]
     },
     {
-      "accessibleName": "⚪️スタンダードトッピング 45 オプション Chevron right",
+      "accessibleName": "⚪️スタンダードトッピング 47 オプション Chevron right",
       "rows": [
         {
           "name": "ウインナー1個｜香肠｜소시지｜Sausage",
@@ -422,6 +422,14 @@
         {
           "name": "小松菜｜小松菜｜고마쓰나｜Komatsuna Greens",
           "priceText": "¥299"
+        },
+        {
+          "name": "レタス｜生菜｜상추｜Lettuce",
+          "priceText": "¥276"
+        },
+        {
+          "name": "空心菜｜空心菜｜공심채｜Water Spinach",
+          "priceText": "¥276"
         }
       ]
     },
@@ -493,8 +501,8 @@
           "priceText": "¥699"
         },
         {
-          "name": "【주꾸미🐙】丸ごとイイダコ１匹｜整只小章鱼｜통 쭈꾸미｜Whole Baby Octopus",
-          "priceText": "¥599"
+          "name": "イカ🦑 （約50g ）｜鱿鱼 ｜오징어｜ squid",
+          "priceText": "¥699"
         },
         {
           "name": "【旨味溢れる】ホッキ貝1個｜北寄贝｜북방조개｜Surf Clam",

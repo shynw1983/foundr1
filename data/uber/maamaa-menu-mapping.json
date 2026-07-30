@@ -1287,6 +1287,32 @@
           "uberName": "小松菜｜小松菜｜고마쓰나｜Komatsuna Greens",
           "uberPrice": 299,
           "matchedExisting": true
+        },
+        {
+          "optionKey": "lettuce",
+          "name": "レタス",
+          "displayNames": {
+            "zh": "生菜",
+            "ko": "상추",
+            "en": "Lettuce"
+          },
+          "websitePrice": 220,
+          "uberName": "レタス｜生菜｜상추｜Lettuce",
+          "uberPrice": 276,
+          "matchedExisting": false
+        },
+        {
+          "optionKey": "water-spinach",
+          "name": "空心菜",
+          "displayNames": {
+            "zh": "空心菜",
+            "ko": "공심채",
+            "en": "Water Spinach"
+          },
+          "websitePrice": 220,
+          "uberName": "空心菜｜空心菜｜공심채｜Water Spinach",
+          "uberPrice": 276,
+          "matchedExisting": false
         }
       ]
     },
@@ -1498,6 +1524,19 @@
           "matchedExisting": true
         },
         {
+          "optionKey": "squid",
+          "name": "イカ🦑（約50g）",
+          "displayNames": {
+            "zh": "鱿鱼",
+            "ko": "오징어",
+            "en": "Squid"
+          },
+          "websitePrice": 560,
+          "uberName": "イカ🦑 （約50g ）｜鱿鱼 ｜오징어｜ squid",
+          "uberPrice": 699,
+          "matchedExisting": false
+        },
+        {
           "optionKey": "baby-octopus",
           "name": "【주꾸미🐙】丸ごとイイダコ１匹",
           "displayNames": {
@@ -1508,7 +1547,8 @@
           "websitePrice": 480,
           "uberName": "【주꾸미🐙】丸ごとイイダコ１匹｜整只小章鱼｜통 쭈꾸미｜Whole Baby Octopus",
           "uberPrice": 599,
-          "matchedExisting": true
+          "matchedExisting": true,
+          "preserveWhenMissing": true
         },
         {
           "optionKey": "surf-clam",
