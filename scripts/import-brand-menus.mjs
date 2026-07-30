@@ -603,6 +603,20 @@ async function importMaamaa() {
     sourceType: "imported_site",
     sourceUrl: maamaaMenuPath
   });
+  const menuCategories = menu.menuCategories ?? [
+    { id: "base-soup", name: "🌶️旨味ベースの特別仕立てスープ", sortOrder: 10 },
+    { id: "chef-special", name: "👨‍🍳✨️シェフのスペシャル麻辣湯", sortOrder: 20 },
+    { id: "recommended-set", name: "🐉🌟おすすめ麻辣湯セット", sortOrder: 30 }
+  ];
+  for (const category of menuCategories) {
+    await upsertCategory({
+      brandId: brand.id,
+      externalId: `maamaa-${category.id}`,
+      name: category.name,
+      sortOrder: category.sortOrder
+    });
+  }
+  const categoryNameById = new Map(menuCategories.map((category) => [category.id, category.name]));
 
   const itemId = await upsertItem({
     brandId: brand.id,
@@ -610,12 +624,15 @@ async function importMaamaa() {
     externalId: menu.baseSoup.id,
     itemKind: "buildable_product",
     name: menu.baseSoup.name,
-    category: "マーラータン",
+    category: categoryNameById.get("base-soup") ?? "🌶️旨味ベースの特別仕立てスープ",
     description: menu.baseSoup.note ?? "",
     descriptionDisplayNames: displayNamesFor(menu.baseSoup.note ?? "", dictionaries),
     imageUrl: "",
     basePrice: menu.baseSoup.price ?? null,
-    displayNames: displayNamesFor(menu.baseSoup.name, dictionaries),
+    displayNames: {
+      ...displayNamesFor(menu.baseSoup.name, dictionaries),
+      ...(menu.baseSoup.displayNames ?? {})
+    },
     variableSchema: {
       source: "maamaa-malatang-menu",
       buildable: true,
@@ -639,19 +656,6 @@ async function importMaamaa() {
     isActive: true
   });
 
-  const presetCategories = [
-    { id: "chef-special", name: "シェフのスペシャル麻辣湯", sortOrder: 20 },
-    { id: "recommended-set", name: "おすすめ麻辣湯セット", sortOrder: 30 }
-  ];
-  for (const category of presetCategories) {
-    await upsertCategory({
-      brandId: brand.id,
-      externalId: `maamaa-${category.id}`,
-      name: category.name,
-      sortOrder: category.sortOrder
-    });
-  }
-  const categoryNameById = new Map(presetCategories.map((category) => [category.id, category.name]));
   for (const [index, preset] of (menu.presetSoups ?? []).entries()) {
     await upsertItem({
       brandId: brand.id,
@@ -659,7 +663,7 @@ async function importMaamaa() {
       externalId: preset.id,
       itemKind: "fixed_product",
       name: preset.name,
-      category: categoryNameById.get(preset.category) ?? "おすすめ麻辣湯セット",
+      category: categoryNameById.get(preset.category) ?? "🐉🌟おすすめ麻辣湯セット",
       description: preset.note ?? "",
       descriptionDisplayNames: displayNamesFor(preset.note ?? "", dictionaries),
       imageUrl: "",
