@@ -15584,44 +15584,25 @@ body :where(
   box-shadow: none;
 }
 
-.store-courier-order::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 5px;
-  border-radius: 12px 12px 0 0;
-  background: var(--platform-color);
-  content: "";
-}
-
-.store-courier-order::after {
-  position: absolute;
-  top: 2px;
-  left: 14px;
-  width: 9px;
-  height: 9px;
-  border: 2px solid white;
-  border-radius: 999px;
-  background: var(--platform-color);
-  content: "";
-}
-
 .store-courier-order.platform-uber_eats {
-  --platform-color: var(--courier-uber);
+  --platform-label-color: #057a45;
+  --platform-label-bg: #e5f6ed;
 }
 
 .store-courier-order.platform-demae_can {
-  --platform-color: var(--courier-demae);
+  --platform-label-color: #b62d2a;
+  --platform-label-bg: #fae9e8;
 }
 
 .store-courier-order.platform-rocket_now {
-  --platform-color: var(--courier-rocket);
+  --platform-label-color: #00479f;
+  --platform-label-bg: #e7eff9;
 }
 
 .store-courier-order.platform-maamaa_web,
 .store-courier-order.platform-nanacha_web {
-  --platform-color: var(--pickup-web);
+  --platform-label-color: var(--pickup-web);
+  --platform-label-bg: #e7f0ec;
 }
 
 .store-courier-order > strong {
@@ -15655,6 +15636,14 @@ body :where(
   min-width: 0;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.store-courier-order span {
+  border-radius: 4px;
+  padding: 3px 7px;
+  background: var(--platform-label-bg);
+  color: var(--platform-label-color);
+  line-height: 1.2;
 }
 
 .store-courier-order.is-ready {
