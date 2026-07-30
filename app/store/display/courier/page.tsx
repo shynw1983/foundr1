@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckCircle2, ChefHat, Clock3 } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
@@ -214,7 +215,7 @@ export default function StorePickupStatusDisplayPage() {
       ) : null}
 
       <header className="store-courier-header">
-        <div>
+        <div className="store-courier-brand-lockup">
           {brandLogos.length ? (
             <span className={`store-courier-brand-logos${brandLogos.length > 1 ? " is-multiple" : ""}`}>
               {brandLogos.map((brand) => (
@@ -232,47 +233,89 @@ export default function StorePickupStatusDisplayPage() {
           ) : (
             <span className="store-courier-brand-mark">F1</span>
           )}
-          <div className="store-courier-title">
-            <h1>Pick Up 状況</h1>
-            <p>注文番号をご確認ください</p>
-          </div>
+        </div>
+        <div className="store-courier-title">
+          <h1>Pick Up 状況</h1>
+          <p>注文番号をご確認ください</p>
         </div>
         <span className="store-courier-live"><i />自動更新中</span>
       </header>
 
-      <section className="store-courier-ready">
+      <section className="store-courier-ready store-courier-status-panel is-ready">
         <div className="store-courier-section-head">
-          <div>
-            <h2>お渡しできます</h2>
-            <p>スタッフへお声がけください</p>
+          <span className="store-courier-status-icon"><CheckCircle2 aria-hidden="true" /></span>
+          <div className="store-courier-section-copy">
+            <small>READY TO PICK UP</small>
+            <div>
+              <h2>お渡しできます</h2>
+              <p>スタッフへお声がけください</p>
+            </div>
           </div>
-          <strong>制作完了</strong>
+          <span className="store-courier-status-count">
+            <strong>{readyOrders.length}</strong>
+            <small>件</small>
+          </span>
         </div>
         <div className="store-courier-ready-grid">
           {readyOrders.map((order) => <OrderCard key={order.id} order={order} now={now} ready />)}
-          {!readyOrders.length ? <p className="store-courier-empty">現在、完成した注文はありません。</p> : null}
+          {!readyOrders.length ? (
+            <div className="store-courier-empty">
+              <CheckCircle2 aria-hidden="true" />
+              <p>現在、お渡しできる注文はありません</p>
+            </div>
+          ) : null}
         </div>
       </section>
 
       <div className="store-courier-work-grid">
-        <section>
+        <section className="store-courier-status-panel is-preparing">
           <div className="store-courier-section-head">
-            <h2>制作中</h2>
-            <strong>{preparingOrders.length}件</strong>
+            <span className="store-courier-status-icon"><ChefHat aria-hidden="true" /></span>
+            <div className="store-courier-section-copy">
+              <small>NOW PREPARING</small>
+              <div>
+                <h2>制作中</h2>
+                <p>ただいま順番にお作りしています</p>
+              </div>
+            </div>
+            <span className="store-courier-status-count">
+              <strong>{preparingOrders.length}</strong>
+              <small>件</small>
+            </span>
           </div>
           <div className="store-courier-order-grid">
             {preparingOrders.map((order) => <OrderCard key={order.id} order={order} now={now} />)}
-            {!preparingOrders.length ? <p className="store-courier-empty">制作中の注文はありません。</p> : null}
+            {!preparingOrders.length ? (
+              <div className="store-courier-empty">
+                <ChefHat aria-hidden="true" />
+                <p>現在、制作中の注文はありません</p>
+              </div>
+            ) : null}
           </div>
         </section>
-        <section>
+        <section className="store-courier-status-panel is-waiting">
           <div className="store-courier-section-head">
-            <h2>制作前</h2>
-            <strong>{waitingOrders.length}件</strong>
+            <span className="store-courier-status-icon"><Clock3 aria-hidden="true" /></span>
+            <div className="store-courier-section-copy">
+              <small>ORDER RECEIVED</small>
+              <div>
+                <h2>制作前</h2>
+                <p>ご注文を受け付けました</p>
+              </div>
+            </div>
+            <span className="store-courier-status-count">
+              <strong>{waitingOrders.length}</strong>
+              <small>件</small>
+            </span>
           </div>
           <div className="store-courier-order-grid">
             {waitingOrders.map((order) => <OrderCard key={order.id} order={order} now={now} />)}
-            {!waitingOrders.length ? <p className="store-courier-empty">制作前の注文はありません。</p> : null}
+            {!waitingOrders.length ? (
+              <div className="store-courier-empty">
+                <Clock3 aria-hidden="true" />
+                <p>現在、制作前の注文はありません</p>
+              </div>
+            ) : null}
           </div>
         </section>
       </div>
