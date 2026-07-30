@@ -118,6 +118,7 @@ type MenuOption = {
   optionKey: string;
   name: string;
   displayNames?: Record<string, string>;
+  imageUrl: string;
   priceDelta: number | null;
   affectsProcedure: boolean;
   sortOrder: number;
@@ -265,6 +266,7 @@ const emptyOption: MenuOption = {
   optionKey: "",
   name: "",
   displayNames: {},
+  imageUrl: "",
   priceDelta: null,
   affectsProcedure: true,
   sortOrder: 100,
@@ -546,6 +548,7 @@ export default function MenuAdminPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [photoStatus, setPhotoStatus] = useState("");
+  const [optionPhotoStatus, setOptionPhotoStatus] = useState("");
   const [savingKind, setSavingKind] = useState<"item" | "category" | "group" | "option" | "">("");
   const [draggingCategory, setDraggingCategory] = useState("");
   const [draggingItemId, setDraggingItemId] = useState("");
@@ -1049,6 +1052,34 @@ export default function MenuAdminPage() {
     }
   }
 
+  async function uploadMenuOptionPhoto(file: File) {
+    setOptionPhotoStatus("写真を処理中...");
+    setMessage("");
+    const uploadFile = await prepareMenuPhoto(file);
+    setOptionPhotoStatus("アップロード中...");
+    const formData = new FormData();
+    formData.append("file", uploadFile);
+    formData.append("itemName", optionDraft.name || "menu-option");
+
+    try {
+      const response = await fetch("/api/menus/photo", {
+        method: "POST",
+        body: formData
+      });
+      const result = await response.json().catch(() => ({})) as { url?: string; error?: string };
+      if (!response.ok || !result.url) {
+        setOptionPhotoStatus(result.error || "写真をアップロードできませんでした。");
+        return;
+      }
+
+      setOptionDraft((current) => ({ ...current, imageUrl: result.url ?? "" }));
+      setOptionPhotoStatus("アップロードしました。選択肢を保存すると公開メニューに反映されます。");
+    } catch {
+      setOptionPhotoStatus("通信エラーで写真をアップロードできませんでした。");
+      setMessage("写真をアップロードできませんでした。");
+    }
+  }
+
   async function prepareMenuPhoto(file: File) {
     if (!file.type.startsWith("image/") || file.type.includes("heic") || file.type.includes("heif")) return file;
     if (file.size <= 1.5 * 1024 * 1024) return file;
@@ -1115,6 +1146,15 @@ export default function MenuAdminPage() {
       return;
     }
     void uploadMenuPhoto(file);
+  }
+
+  function selectMenuOptionPhoto(file: File) {
+    if (!file.type.startsWith("image/")) {
+      setOptionPhotoStatus("");
+      setMessage("画像ファイルを選択してください。");
+      return;
+    }
+    void uploadMenuOptionPhoto(file);
   }
 
   function updateAllowedOption(group: MenuGroup, option: MenuOption, checked: boolean) {
@@ -1197,6 +1237,7 @@ export default function MenuAdminPage() {
 
   function editOption(option: MenuOption) {
     setOptionDraft(option);
+    setOptionPhotoStatus("");
     setActiveOptionGroupId(option.optionGroupId);
   }
 
@@ -1804,6 +1845,38 @@ export default function MenuAdminPage() {
                               />
                             </label>
                           ))}
+                        </div>
+                      </div>
+                      <div className="photo-upload-box menu-photo-upload">
+                        <div className="product-photo-preview">
+                          {optionDraft.imageUrl ? <img src={optionDraft.imageUrl} alt="" /> : <span>No image</span>}
+                        </div>
+                        <div>
+                          <label className="menu-full-field">
+                            <span>選択肢画像 URL</span>
+                            <input
+                              value={optionDraft.imageUrl}
+                              onChange={(event) => setOptionDraft({ ...optionDraft, imageUrl: event.target.value })}
+                              placeholder="https://..."
+                            />
+                          </label>
+                          <p>ブランドサイトで麺・トッピングなどの選択肢に表示する写真です。</p>
+                          <div className="photo-upload-actions">
+                            <label className="secondary-button">
+                              <Upload size={16} />
+                              写真を選択
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0];
+                                  event.currentTarget.value = "";
+                                  if (file) selectMenuOptionPhoto(file);
+                                }}
+                              />
+                            </label>
+                          </div>
+                          {optionPhotoStatus ? <small>{optionPhotoStatus}</small> : null}
                         </div>
                       </div>
 	                      <label className="checkbox-group menu-inline-check">

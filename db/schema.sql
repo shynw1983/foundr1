@@ -2132,6 +2132,7 @@ alter table menu_option_groups add column if not exists display_names jsonb not 
 alter table menu_option_groups add column if not exists applicable_categories text[] not null default '{}';
 alter table menu_options add column if not exists display_names jsonb not null default '{}'::jsonb;
 alter table menu_options add column if not exists applicable_categories text[] not null default '{}';
+alter table menu_options add column if not exists image_url text;
 
 create table if not exists store_operations (
   store_id uuid primary key references stores(id) on delete cascade,

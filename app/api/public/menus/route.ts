@@ -13,6 +13,7 @@ type MenuOption = {
   optionKey: string;
   name: string;
   displayNames?: Record<string, string>;
+  imageUrl: string;
   priceDelta: number | null;
   affectsProcedure: boolean;
   sortOrder: number;
@@ -229,6 +230,7 @@ export async function GET(request: Request) {
       menu_options.option_key as "optionKey",
       menu_options.name,
       coalesce(menu_options.display_names, '{}'::jsonb) as "displayNames",
+      coalesce(menu_options.image_url, '') as "imageUrl",
       menu_options.price_delta::float as "priceDelta",
       menu_options.affects_procedure as "affectsProcedure",
       menu_options.sort_order as "sortOrder"
@@ -283,7 +285,10 @@ export async function GET(request: Request) {
   const optionsByGroup = new Map<string, MenuOption[]>();
   for (const option of (options as MenuOption[]).filter((entry) => !unavailableOptionIds.has(entry.id))) {
     const groupOptions = optionsByGroup.get(option.optionGroupId) ?? [];
-    groupOptions.push(option);
+    groupOptions.push({
+      ...option,
+      imageUrl: publicUrl(option.imageUrl, request.url)
+    });
     optionsByGroup.set(option.optionGroupId, groupOptions);
   }
 
