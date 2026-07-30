@@ -10,11 +10,24 @@ const deliverySources = ["uber_eats", "demae_can", "rocket_now"];
 const webReservationSources = ["maamaa_web", "nanacha_web"];
 const pickupSources = [...deliverySources, ...webReservationSources];
 
-function getBrandLogoUrl(brandName: string) {
+function getBrandDisplayIdentity(brandName: string) {
   const normalizedName = brandName.trim().toLowerCase();
-  if (normalizedName === "まぁ麻" || normalizedName === "maamaa") return "/brands/maamaa-slogan-landscape.png";
-  if (normalizedName === "nanacha") return "/brands/nanacha-logo.png";
-  return "";
+  if (normalizedName === "まぁ麻" || normalizedName === "maamaa") {
+    return {
+      logoUrl: "/brands/maamaa-slogan-landscape.png",
+      themeColor: "#c30e23"
+    };
+  }
+  if (normalizedName === "nanacha") {
+    return {
+      logoUrl: "/brands/nanacha-logo.png",
+      themeColor: "#231916"
+    };
+  }
+  return {
+    logoUrl: "",
+    themeColor: ""
+  };
 }
 
 export async function GET(request: Request) {
@@ -97,10 +110,13 @@ export async function GET(request: Request) {
   ]);
 
   const brandLogos = storeBrandRows
-    .map((brand) => ({
-      name: String(brand.name || ""),
-      logoUrl: getBrandLogoUrl(String(brand.name || ""))
-    }))
+    .map((brand) => {
+      const name = String(brand.name || "");
+      return {
+        name,
+        ...getBrandDisplayIdentity(name)
+      };
+    })
     .filter((brand) => brand.logoUrl);
 
   return Response.json({

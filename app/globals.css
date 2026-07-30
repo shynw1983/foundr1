@@ -15449,7 +15449,7 @@ body :where(
 }
 
 .store-courier-status-panel.is-ready {
-  --status-color: #d9f5e8;
+  --status-color: rgba(255, 255, 255, 0.88);
   --status-soft: rgba(255, 255, 255, 0.12);
   background: var(--courier-ready);
   color: white;
