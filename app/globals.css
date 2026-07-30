@@ -15289,19 +15289,23 @@ body :where(
   --courier-demae: #da3734;
   --courier-rocket: #00479f;
   --pickup-web: #185c46;
+  --courier-paper: #f2f4f3;
+  --courier-ink: #111815;
+  --courier-ready: #123f34;
+  --courier-blue: #2e6794;
   display: grid;
   grid-template-rows:
     auto
     minmax(0, var(--courier-ready-size, 1.75fr))
     minmax(0, var(--courier-work-size, 1.75fr));
-  gap: 18px;
+  gap: 12px;
   width: 100%;
   height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
-  padding: 20px;
-  background: #f7f8f8;
-  color: var(--ink);
+  padding: 16px;
+  background: var(--courier-paper);
+  color: var(--courier-ink);
 }
 
 .store-courier-header,
@@ -15318,9 +15322,9 @@ body :where(
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 16px;
+  gap: 18px;
+  border-bottom: 1px solid #d6dbd8;
+  padding: 0 4px 12px;
 }
 
 .store-courier-brand-lockup {
@@ -15379,23 +15383,26 @@ body :where(
 }
 
 .store-courier-header h1 {
-  font-size: clamp(26px, 3.2vw, 42px);
-  font-weight: 600;
+  font-size: clamp(25px, 3vw, 40px);
+  font-weight: 650;
+  letter-spacing: -0.035em;
   line-height: 1.05;
 }
 
 .store-courier-header p,
 .store-courier-section-head p {
   margin-top: 4px;
-  color: var(--muted);
-  font-weight: 500;
+  color: #65706b;
+  font-weight: 450;
 }
 
 .store-courier-live {
   justify-self: end;
   gap: 8px;
   white-space: nowrap;
-  font-weight: 500;
+  color: #53605a;
+  font-size: 13px;
+  font-weight: 550;
 }
 
 .store-courier-live i {
@@ -15431,55 +15438,52 @@ body :where(
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   align-content: start;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--status-color) 22%, white);
-  border-radius: 18px;
-  padding: 18px;
-  background: white;
-  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06);
+  border: 0;
+  border-radius: 16px;
+  padding: 16px;
+  background: #fbfcfb;
+  box-shadow: none;
 }
 
 .store-courier-status-panel.is-ready {
-  --status-color: #185c46;
-  --status-soft: #eaf4ef;
+  --status-color: #d9f5e8;
+  --status-soft: rgba(255, 255, 255, 0.12);
+  background: var(--courier-ready);
+  color: white;
 }
 
 .store-courier-status-panel.is-preparing {
-  --status-color: #2563a6;
-  --status-soft: #eef5fb;
+  --status-color: var(--courier-blue);
+  --status-soft: #e7eff5;
+  background: #f9fbfc;
 }
 
 .store-courier-status-panel.is-waiting {
-  --status-color: #64748b;
-  --status-soft: #f1f5f9;
+  --status-color: #68736e;
+  --status-soft: #e9edeb;
+  background: #f9faf9;
 }
 
 .store-courier-status-panel::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 5px;
-  margin: 0;
-  background: var(--status-color);
-  content: "";
+  content: none;
 }
 
 .store-courier-status-icon {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
   background: var(--status-soft);
   color: var(--status-color);
 }
 
 .store-courier-status-icon svg {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   stroke-width: 1.8;
 }
 
@@ -15491,9 +15495,9 @@ body :where(
 
 .store-courier-section-copy > small {
   color: var(--status-color);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 650;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
 }
 
 .store-courier-section-copy > div {
@@ -15506,21 +15510,25 @@ body :where(
   white-space: nowrap;
 }
 
+.store-courier-status-panel.is-ready .store-courier-section-copy p {
+  color: rgba(255, 255, 255, 0.68);
+}
+
 .store-courier-status-count {
   display: flex;
   align-items: baseline;
   justify-content: center;
   gap: 3px;
-  min-width: 66px;
-  border-radius: 999px;
-  padding: 7px 12px;
+  min-width: 52px;
+  border-radius: 10px;
+  padding: 6px 9px;
   background: var(--status-soft);
   color: var(--status-color);
 }
 
 .store-courier-status-count strong {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 650;
   line-height: 1;
 }
 
@@ -15533,7 +15541,7 @@ body :where(
 .store-courier-work-grid,
 .store-courier-order-grid {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .store-courier-ready-grid {
@@ -15543,7 +15551,9 @@ body :where(
 }
 
 .store-courier-work-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns:
+    minmax(0, var(--courier-preparing-size, 1fr))
+    minmax(0, var(--courier-waiting-size, 1fr));
   min-height: 0;
 }
 
@@ -15566,12 +15576,35 @@ body :where(
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-left: 9px solid var(--platform-color);
+  position: relative;
+  border: 0;
   border-radius: 12px;
-  padding: 16px;
-  background: white;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+  padding: 14px;
+  background: #eef1ef;
+  box-shadow: none;
+}
+
+.store-courier-order::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 5px;
+  border-radius: 12px 12px 0 0;
+  background: var(--platform-color);
+  content: "";
+}
+
+.store-courier-order::after {
+  position: absolute;
+  top: 2px;
+  left: 14px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid white;
+  border-radius: 999px;
+  background: var(--platform-color);
+  content: "";
 }
 
 .store-courier-order.platform-uber_eats {
@@ -15597,10 +15630,13 @@ body :where(
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  color: var(--ink);
+  color: var(--courier-ink);
+  font-family: "Arial Narrow", "Roboto Condensed", "Helvetica Neue", Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
   font-size: clamp(34px, 5vw, 64px);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-stretch: condensed;
+  font-weight: 650;
+  letter-spacing: 0.025em;
   line-height: 1;
 }
 
@@ -15610,7 +15646,7 @@ body :where(
   justify-content: space-between;
   gap: 10px;
   margin-top: 12px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid #d9dedb;
   padding-top: 10px;
 }
 
@@ -15622,13 +15658,12 @@ body :where(
 }
 
 .store-courier-order.is-ready {
-  border: 0;
-  background: var(--platform-color);
-  color: white;
+  background: white;
+  color: var(--courier-ready);
 }
 
 .store-courier-order.is-ready.platform-uber_eats {
-  color: #07110b;
+  color: var(--courier-ready);
 }
 
 .store-courier-order.is-ready > strong {
@@ -15639,8 +15674,8 @@ body :where(
 
 .store-courier-order.is-ready > div {
   justify-content: center;
-  border-color: currentColor;
-  opacity: 0.9;
+  border-color: #dce3df;
+  opacity: 1;
 }
 
 .store-courier-empty {
@@ -15648,19 +15683,19 @@ body :where(
   grid-column: 1 / -1;
   place-items: center;
   align-content: center;
-  gap: 8px;
+  gap: 7px;
   min-height: 0;
-  border: 1px dashed color-mix(in srgb, var(--status-color) 28%, white);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--status-soft) 54%, white);
-  color: var(--muted);
-  font-weight: 500;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #77817c;
+  font-weight: 450;
   text-align: center;
 }
 
 .store-courier-empty svg {
-  width: 25px;
-  height: 25px;
+  width: 21px;
+  height: 21px;
   color: var(--status-color);
   opacity: 0.62;
 }
@@ -15671,7 +15706,7 @@ body :where(
 
 .store-courier-ready-grid.is-dense .store-courier-order,
 .store-courier-order-grid.is-dense .store-courier-order {
-  padding: 12px;
+  padding: 11px;
 }
 
 .store-courier-ready-grid.is-dense .store-courier-order > strong {
@@ -15689,7 +15724,6 @@ body :where(
 
 .store-courier-ready-grid.is-compact .store-courier-order,
 .store-courier-order-grid.is-compact .store-courier-order {
-  border-left-width: 6px;
   border-radius: 9px;
   padding: 8px 10px;
 }
@@ -15759,14 +15793,13 @@ body :where(
   }
 
   .store-courier-status-panel {
-    gap: 9px;
+    gap: 8px;
     border-radius: 14px;
     padding: 12px;
   }
 
   .store-courier-status-panel::before {
-    height: 4px;
-    margin: 0;
+    content: none;
   }
 
   .store-courier-section-head {

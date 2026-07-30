@@ -203,8 +203,16 @@ export default function StorePickupStatusDisplayPage() {
   const waitingLayout = getOrderGridLayout(waitingOrders.length, false);
   const workRows = Math.max(preparingLayout.rows, waitingLayout.rows);
   const displayLayoutStyle = {
-    "--courier-ready-size": `${readyLayout.rows + 0.75}fr`,
-    "--courier-work-size": `${workRows + 0.75}fr`
+    "--courier-ready-size": `${readyOrders.length ? readyLayout.rows + 0.5 : 0.5}fr`,
+    "--courier-work-size": `${preparingOrders.length || waitingOrders.length ? workRows + 0.5 : 0.5}fr`
+  } as CSSProperties;
+  const workLayoutStyle = {
+    "--courier-preparing-size": preparingOrders.length
+      ? (waitingOrders.length ? "1fr" : "1.55fr")
+      : "0.45fr",
+    "--courier-waiting-size": waitingOrders.length
+      ? (preparingOrders.length ? "1fr" : "1.55fr")
+      : "0.45fr"
   } as CSSProperties;
 
   return (
@@ -303,7 +311,7 @@ export default function StorePickupStatusDisplayPage() {
         </div>
       </section>
 
-      <div className="store-courier-work-grid">
+      <div className="store-courier-work-grid" style={workLayoutStyle}>
         <section className="store-courier-status-panel is-preparing">
           <div className="store-courier-section-head">
             <span className="store-courier-status-icon"><ChefHat aria-hidden="true" /></span>
