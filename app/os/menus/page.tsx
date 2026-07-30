@@ -90,6 +90,8 @@ type WebsitePresentation = {
   nameOverride?: string;
   promotionPrefixOverride?: string;
   categoryOverride?: string;
+  descriptionOverride?: string;
+  descriptionDisplayNamesOverride?: Record<string, string>;
   showPromotionPrefix?: boolean;
   showEmoji?: boolean;
 };
@@ -487,6 +489,16 @@ function updateWebsitePresentation(item: MenuItem, patch: Partial<WebsitePresent
       }
     }
   };
+}
+
+function updateWebsiteDescriptionDisplayName(item: MenuItem, language: string, value: string): MenuItem {
+  const presentation = getWebsitePresentation(item);
+  return updateWebsitePresentation(item, {
+    descriptionDisplayNamesOverride: {
+      ...(presentation.descriptionDisplayNamesOverride ?? {}),
+      [language]: value
+    }
+  });
 }
 
 function stripMenuEmoji(value: string) {
@@ -2109,17 +2121,18 @@ export default function MenuAdminPage() {
                 </div>
               </div>
               <label className="menu-full-field">
-                <span>日本語（原文）説明</span>
+                <span>共通の商品紹介（日本語）</span>
                 <textarea
                   value={itemDraft.description}
                   onChange={(event) => setItemDraft({ ...itemDraft, description: event.target.value })}
                   rows={3}
-                  placeholder="ブランドサイトや会員画面で日本語表示するときの説明"
+                  placeholder="Uber Eats など各チャネルで共通利用する商品紹介"
                 />
+                <small>Uber Eats から取り込んだ原文など、共通の商品紹介を保管します。</small>
               </label>
               <div className="menu-translation-panel">
                 <div>
-                  <strong>客表示・会員・ブランドサイト用説明</strong>
+                  <strong>共通の商品紹介（多言語）</strong>
                   <span>日本語（原文）説明から翻訳します。未入力の言語は English、最後に日本語説明へフォールバックします。</span>
                 </div>
                 <div className="menu-translation-grid">
@@ -2130,6 +2143,35 @@ export default function MenuAdminPage() {
                         value={itemDraft.descriptionDisplayNames?.[language.value] ?? ""}
                         onChange={(event) => setItemDraft(updateDescriptionDisplayName(itemDraft, language.value, event.target.value))}
                         placeholder={itemDraft.description || "説明"}
+                        rows={2}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <label className="menu-full-field">
+                <span>Web予約用の商品紹介（日本語）</span>
+                <textarea
+                  value={getWebsitePresentation(itemDraft).descriptionOverride ?? ""}
+                  onChange={(event) => setItemDraft(updateWebsitePresentation(itemDraft, { descriptionOverride: event.target.value }))}
+                  rows={5}
+                  placeholder={itemDraft.description || "未入力の場合は共通の商品紹介を表示"}
+                />
+                <small>ブランドサイトのWeb予約ではこちらを優先表示します。未入力の場合は共通の商品紹介を表示し、Uber Eats 用の原文は変更しません。</small>
+              </label>
+              <div className="menu-translation-panel">
+                <div>
+                  <strong>Web予約用の商品紹介（多言語）</strong>
+                  <span>未入力の言語は Web予約用 English、最後に Web予約用の日本語へフォールバックします。</span>
+                </div>
+                <div className="menu-translation-grid">
+                  {customerMenuLanguageOptions.map((language) => (
+                    <label key={language.value}>
+                      <span>{language.label}</span>
+                      <textarea
+                        value={getWebsitePresentation(itemDraft).descriptionDisplayNamesOverride?.[language.value] ?? ""}
+                        onChange={(event) => setItemDraft(updateWebsiteDescriptionDisplayName(itemDraft, language.value, event.target.value))}
+                        placeholder={getWebsitePresentation(itemDraft).descriptionOverride || itemDraft.description || "Web予約用の商品紹介"}
                         rows={2}
                       />
                     </label>

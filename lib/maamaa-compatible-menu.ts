@@ -27,6 +27,7 @@ export type MaamaaPresetSoup = MaamaaPricedOption & {
   category: string;
   defaultNoodle: string;
   note: string;
+  noteDisplayNames?: Record<string, string>;
   isAvailable: boolean;
   websiteEnabled: boolean;
 };
@@ -123,6 +124,14 @@ function websitePresentation(item: MenuItemRow) {
     name: String(value.nameOverride ?? "").trim() || item.name,
     promotionPrefix: String(value.promotionPrefixOverride ?? "").trim() || item.promotionPrefix,
     category: String(value.categoryOverride ?? "").trim() || item.category,
+    description: String(value.descriptionOverride ?? "").trim() || item.description,
+    descriptionDisplayNames: (
+      value.descriptionDisplayNamesOverride &&
+      typeof value.descriptionDisplayNamesOverride === "object" &&
+      !Array.isArray(value.descriptionDisplayNamesOverride)
+        ? value.descriptionDisplayNamesOverride
+        : item.descriptionDisplayNames
+    ) as Record<string, string> | undefined,
     showPromotionPrefix: value.showPromotionPrefix !== false,
     showEmoji: value.showEmoji !== false
   };
@@ -376,8 +385,8 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         showPromotionPrefix: basePresentation.showPromotionPrefix,
         showEmoji: basePresentation.showEmoji,
         price: baseSetting?.priceOverride ?? base.basePrice ?? 0,
-        note: base.description,
-        noteDisplayNames: base.descriptionDisplayNames,
+        note: basePresentation.description,
+        noteDisplayNames: basePresentation.descriptionDisplayNames,
         isAvailable: baseSetting?.isAvailable ?? true,
         websiteEnabled: baseSetting?.websiteEnabled ?? true
       },
@@ -401,7 +410,8 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
             menuCatalogItemId: catalogItem?.id ?? base.id,
             category: presentation?.category || String(item.category ?? "recommended-set"),
             defaultNoodle: String(item.defaultNoodle ?? "板春雨"),
-            note: String(item.note ?? catalogItem?.description ?? ""),
+            note: presentation?.description ?? String(item.note ?? ""),
+            noteDisplayNames: presentation?.descriptionDisplayNames,
             isAvailable: setting?.isAvailable ?? true,
             websiteEnabled: setting?.websiteEnabled ?? true
           };
