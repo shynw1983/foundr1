@@ -15230,36 +15230,47 @@ body :where(
 }
 
 .store-courier-header > div {
-  gap: 12px;
-}
-
-.store-courier-brand-mark {
-  display: grid;
-  place-items: center;
-  width: 58px;
-  height: 58px;
-  border-radius: 999px;
-  background: var(--green);
-  color: white;
-  font-weight: 600;
+  gap: clamp(18px, 2.4vw, 34px);
 }
 
 .store-courier-brand-logos {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-}
-
-.store-courier-brand-logos.is-multiple {
-  gap: 6px;
+  gap: 8px;
 }
 
 .store-courier-brand-logo {
   display: block;
-  width: 58px;
-  height: 58px;
-  border-radius: 999px;
+  width: auto;
+  max-width: clamp(220px, 22vw, 276px);
+  height: clamp(72px, 7vw, 92px);
   object-fit: contain;
+}
+
+.store-courier-brand-logos.is-multiple .store-courier-brand-logo {
+  max-width: clamp(100px, 14vw, 180px);
+  height: clamp(58px, 6vw, 76px);
+}
+
+.store-courier-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  background: var(--green);
+  color: white;
+  font-weight: 600;
+}
+
+.store-courier-brand-logo[alt^="nanacha"] {
+  width: clamp(72px, 7vw, 92px);
+  height: auto;
+}
+
+.store-courier-title {
+  min-width: 0;
 }
 
 .store-courier-header h1,
@@ -15272,7 +15283,7 @@ body :where(
 }
 
 .store-courier-header h1 {
-  font-size: clamp(28px, 4vw, 48px);
+  font-size: clamp(26px, 3.2vw, 42px);
   font-weight: 600;
   line-height: 1.05;
 }
@@ -15434,6 +15445,17 @@ body :where(
   .store-courier-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .store-courier-header > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .store-courier-brand-logo {
+    max-width: min(276px, 78vw);
+    height: auto;
   }
 
   .store-courier-order-grid {

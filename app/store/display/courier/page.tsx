@@ -223,8 +223,8 @@ export default function StorePickupStatusDisplayPage() {
                   className="store-courier-brand-logo"
                   src={brand.logoUrl}
                   alt={`${brand.name} ロゴ`}
-                  width={58}
-                  height={58}
+                  width={brand.logoUrl.includes("slogan-landscape") ? 1772 : 512}
+                  height={brand.logoUrl.includes("slogan-landscape") ? 591 : 512}
                   priority
                 />
               ))}
@@ -232,7 +232,7 @@ export default function StorePickupStatusDisplayPage() {
           ) : (
             <span className="store-courier-brand-mark">F1</span>
           )}
-          <div>
+          <div className="store-courier-title">
             <h1>Pick Up 状況</h1>
             <p>注文番号をご確認ください</p>
           </div>

@@ -12,7 +12,7 @@ const pickupSources = [...deliverySources, ...webReservationSources];
 
 function getBrandLogoUrl(brandName: string) {
   const normalizedName = brandName.trim().toLowerCase();
-  if (normalizedName === "まぁ麻" || normalizedName === "maamaa") return "/brands/maamaa-logo.png";
+  if (normalizedName === "まぁ麻" || normalizedName === "maamaa") return "/brands/maamaa-slogan-landscape.png";
   if (normalizedName === "nanacha") return "/brands/nanacha-logo.png";
   return "";
 }
