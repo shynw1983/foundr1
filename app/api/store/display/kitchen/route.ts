@@ -13,6 +13,24 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function buildCustomerItemSummary(value: unknown) {
+  if (!Array.isArray(value)) return "";
+  return value.flatMap((rawItem) => {
+    if (!rawItem || typeof rawItem !== "object") return [];
+    const item = rawItem as Record<string, unknown>;
+    const itemName = normalizeText(item.itemName);
+    if (!itemName) return [];
+    const quantity = Math.max(1, Math.floor(Number(item.quantity ?? 1) || 1));
+    const toppingLabels = Array.isArray(item.toppingLabels)
+      ? item.toppingLabels.map(normalizeText).filter(Boolean)
+      : [];
+    return [
+      `${itemName} x${quantity}`,
+      ...toppingLabels.map((label) => `・${label}`)
+    ];
+  }).join("\n");
+}
+
 async function getKitchenTasks(storeId: string, area = "") {
   const [rows, areas, settingsRows] = await Promise.all([sql`
     select
@@ -35,6 +53,18 @@ async function getKitchenTasks(storeId: string, area = "") {
       coalesce(store_customer_orders.customer_summary ->> 'orderType', '') as "orderType",
       coalesce(store_customer_orders.customer_summary ->> 'note', '') as note,
       store_customer_orders.customer_summary as "customerSummary",
+      coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'itemName', store_customer_order_items.item_name,
+            'quantity', store_customer_order_items.quantity,
+            'toppingLabels', store_customer_order_items.topping_labels
+          )
+          order by store_customer_order_items.sort_order, store_customer_order_items.created_at
+        )
+        from store_customer_order_items
+        where store_customer_order_items.order_id = store_customer_orders.id
+      ), '[]'::jsonb) as "orderedItems",
       store_customer_orders.created_at::text as "createdAt",
       to_char(store_customer_orders.created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime"
     from order_production_tasks
@@ -70,10 +100,16 @@ async function getKitchenTasks(storeId: string, area = "") {
     const kitchenLanguage = /maamaa|まぁ麻|麻辣/i.test(brandName)
       ? resolvePosKitchenTicketTemplate(printerSettings, brandId || null).language
       : "ja";
-    const { customerSummary, ...task } = row;
+    const { customerSummary, orderedItems, ...task } = row;
+    const customerItemSummary = buildCustomerItemSummary(orderedItems);
     return {
       ...task,
       kitchenLanguage,
+      customerItemSummary: localizeMaamaaProductionSummary(
+        customerItemSummary,
+        customerSummary,
+        kitchenLanguage
+      ),
       itemSummary: localizeMaamaaProductionSummary(
         normalizeText(row.itemSummary),
         customerSummary,
@@ -119,7 +155,9 @@ export async function GET(request: Request) {
     tasks,
     areas,
     displayLanguage,
-    kitchenDisplayMode: preferenceRows[0]?.kitchenDisplayMode === "simple" ? "simple" : "detailed",
+    kitchenDisplayMode: ["order_only", "simple"].includes(String(preferenceRows[0]?.kitchenDisplayMode))
+      ? preferenceRows[0]?.kitchenDisplayMode
+      : "detailed",
     serverNow: new Date().toISOString()
   }, { headers: { "Cache-Control": "no-store" } });
 }

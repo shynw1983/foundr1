@@ -12,6 +12,7 @@ type KitchenTask = {
   productionAreaLabel: string;
   status: string;
   printStatus: string;
+  customerItemSummary: string;
   itemSummary: string;
   startedAt: string;
   estimatedPrepMinutes: number;
@@ -24,6 +25,8 @@ type KitchenTask = {
   createdTime: string;
   kitchenLanguage: "ja" | "zh";
 };
+
+type KitchenDisplayMode = "order_only" | "simple" | "detailed";
 
 type StoreOption = {
   id: string;
@@ -86,7 +89,7 @@ export default function StoreKitchenPage() {
   const [tasks, setTasks] = useState<KitchenTask[]>([]);
   const [areas, setAreas] = useState<Array<{ value: string; label: string }>>([]);
   const [displayLanguage, setDisplayLanguage] = useState<"ja" | "zh">("ja");
-  const [kitchenDisplayMode, setKitchenDisplayMode] = useState<"simple" | "detailed">("detailed");
+  const [kitchenDisplayMode, setKitchenDisplayMode] = useState<KitchenDisplayMode>("detailed");
   const [selectedArea, setSelectedArea] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
@@ -140,7 +143,11 @@ export default function StoreKitchenPage() {
     setTasks(body.tasks ?? []);
     setAreas(body.areas ?? []);
     setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
-    setKitchenDisplayMode(body.kitchenDisplayMode === "simple" ? "simple" : "detailed");
+    setKitchenDisplayMode(
+      body.kitchenDisplayMode === "order_only" || body.kitchenDisplayMode === "simple"
+        ? body.kitchenDisplayMode
+        : "detailed"
+    );
     setCheckedLineKeys((current) => {
       const validKeys = new Set<string>();
       for (const task of (body.tasks ?? []) as KitchenTask[]) {
@@ -286,7 +293,7 @@ export default function StoreKitchenPage() {
     setSavingId("");
   }
 
-  async function saveKitchenDisplayMode(mode: "simple" | "detailed") {
+  async function saveKitchenDisplayMode(mode: KitchenDisplayMode) {
     const previous = kitchenDisplayMode;
     setKitchenDisplayMode(mode);
     const response = await fetch("/api/me/preferences", {
@@ -414,10 +421,16 @@ export default function StoreKitchenPage() {
             <span>{isChinese ? "内容显示" : "内容表示"}</span>
             <select
               value={kitchenDisplayMode}
-              onChange={(event) => void saveKitchenDisplayMode(event.target.value === "simple" ? "simple" : "detailed")}
+              onChange={(event) => {
+                const mode = event.target.value;
+                void saveKitchenDisplayMode(
+                  mode === "order_only" || mode === "simple" ? mode : "detailed"
+                );
+              }}
             >
-              <option value="simple">{isChinese ? "简洁（仅名称）" : "簡潔（名称のみ）"}</option>
-              <option value="detailed">{isChinese ? "详细（含操作说明）" : "詳細（作業説明あり）"}</option>
+              <option value="order_only">{isChinese ? "仅下单内容（熟练员工）" : "注文内容のみ（熟練者向け）"}</option>
+              <option value="simple">{isChinese ? "下单内容＋食材名称" : "注文内容＋食材名"}</option>
+              <option value="detailed">{isChinese ? "下单内容＋食材・操作说明" : "注文内容＋食材・作業説明"}</option>
             </select>
           </label>
           <button className="secondary-button" type="button" onClick={() => void load()}>{loading ? (isChinese ? "加载中" : "読み込み中") : (isChinese ? "刷新" : "更新")}</button>
@@ -472,8 +485,29 @@ export default function StoreKitchenPage() {
                     </div>
                   ) : null}
                 </div>
-                <div className="store-kitchen-items">
+                <div className="store-kitchen-order-summary">
+                  <small>{task.kitchenLanguage === "zh" ? "客人下单内容" : "注文内容"}</small>
+                  {splitLines(task.customerItemSummary || task.itemSummary).map((line, index) => {
+                    const quantityParts = splitQuantityLabel(line.text);
+                    return (
+                      <div
+                        className={line.isModifier ? "store-kitchen-order-option" : "store-kitchen-order-product"}
+                        key={`${task.id}:customer:${index}`}
+                      >
+                        <span>{quantityParts.label}</span>
+                        {quantityParts.quantity ? <b>{quantityParts.quantity}</b> : null}
+                      </div>
+                    );
+                  })}
+                </div>
+                {kitchenDisplayMode !== "order_only" ? <div className="store-kitchen-items">
+                  <small className="store-kitchen-content-label">
+                    {task.kitchenLanguage === "zh"
+                      ? (kitchenDisplayMode === "simple" ? "食材" : "食材・操作说明")
+                      : (kitchenDisplayMode === "simple" ? "食材" : "食材・作業説明")}
+                  </small>
                   {splitLines(task.itemSummary).map((line, index) => {
+                    if (!line.isModifier) return null;
                     const lineKey = `${task.id}:${index}`;
                     const displayText = kitchenDisplayMode === "simple"
                       ? simplifyKitchenLine(line.text, line.isModifier)
@@ -496,7 +530,7 @@ export default function StoreKitchenPage() {
                       </button>
                     );
                   })}
-                </div>
+                </div> : null}
                 {task.note ? <p className="store-kitchen-note">{task.note}</p> : null}
                 <div className="store-kitchen-actions">
                   <button className="secondary-button store-kitchen-reprint-button" type="button" disabled={savingId === task.id} onClick={() => void requestReprint(task)}>

@@ -15038,6 +15038,61 @@ body :where(
   gap: 8px;
 }
 
+.store-kitchen-order-summary {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #d9dedb;
+  border-radius: 8px;
+  padding: 12px;
+  background: white;
+}
+
+.store-kitchen-order-summary > small,
+.store-kitchen-content-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+}
+
+.store-kitchen-order-product,
+.store-kitchen-order-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.store-kitchen-order-product span,
+.store-kitchen-order-option span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.store-kitchen-order-product {
+  color: var(--ink);
+  font-size: clamp(26px, 2.4vw, 34px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.store-kitchen-order-option {
+  border-top: 1px solid #edf0ee;
+  padding-top: 8px;
+  color: #343a37;
+  font-size: clamp(17px, 1.55vw, 21px);
+  font-weight: 550;
+  line-height: 1.25;
+}
+
+.store-kitchen-order-product b,
+.store-kitchen-order-option b {
+  flex: 0 0 auto;
+  color: var(--ink);
+  font-size: 18px;
+}
+
 .store-kitchen-item-line {
   display: flex;
   align-items: center;

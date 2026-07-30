@@ -18,7 +18,7 @@ const allowedProductSummaryFields = new Set([
 
 type UiPreferences = {
   productMasterSummaryFields?: string[];
-  kitchenDisplayMode?: "simple" | "detailed";
+  kitchenDisplayMode?: "order_only" | "simple" | "detailed";
 };
 
 export async function PATCH(request: Request) {
@@ -29,7 +29,9 @@ export async function PATCH(request: Request) {
   const productMasterSummaryFields = Array.isArray(body.productMasterSummaryFields)
     ? body.productMasterSummaryFields.filter((field) => allowedProductSummaryFields.has(field)).slice(0, 6)
     : undefined;
-  const kitchenDisplayMode = body.kitchenDisplayMode === "simple" || body.kitchenDisplayMode === "detailed"
+  const kitchenDisplayMode = body.kitchenDisplayMode === "order_only"
+    || body.kitchenDisplayMode === "simple"
+    || body.kitchenDisplayMode === "detailed"
     ? body.kitchenDisplayMode
     : undefined;
 
