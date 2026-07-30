@@ -48,6 +48,7 @@ public class UberAccessibilityService extends AccessibilityService {
     private String pendingInventoryItemName = "";
     private String pendingInventoryInitialStatus = "";
     private long pendingInventoryClickedAt = 0L;
+    private final Runnable inventoryCaptureRunnable = this::capturePendingInventoryCurrentState;
     private String activeCommandId = "";
     private int commandAttempts = 0;
     private boolean commandReadyClickDispatched = false;
@@ -101,6 +102,7 @@ public class UberAccessibilityService extends AccessibilityService {
         trackInventoryStatusClick(event);
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
+        captureFocusedInventorySelection(packageName, root);
         StringBuilder builder = new StringBuilder();
         JSONArray nodes = new JSONArray();
         collectNodes(root, "0", builder, nodes, new HashSet<>());
@@ -185,19 +187,70 @@ public class UberAccessibilityService extends AccessibilityService {
         if (source == null) return;
         String status = inventoryStatus(value(source.getContentDescription()));
         if (status.isEmpty()) status = inventoryStatus(value(source.getText()));
+        if (status.isEmpty()) status = inventoryStatusInText(
+            value(source.getContentDescription()) + "\n" + value(source.getText())
+        );
+        if (status.isEmpty()) status = findInventoryStatusInAncestors(source);
         if (status.isEmpty()) {
+            Log.i(TAG, "Inventory click ignored: no status near " + value(source.getClassName()));
             source.recycle();
             return;
         }
         String itemName = findInventoryItemName(source);
+        Log.i(
+            TAG,
+            "Inventory click status=" + status + ", item="
+                + (itemName.length() > 120 ? itemName.substring(0, 120) : itemName)
+        );
         source.recycle();
         if (itemName.isEmpty()) return;
         pendingInventoryItemName = itemName;
         pendingInventoryInitialStatus = status;
         pendingInventoryClickedAt = System.currentTimeMillis();
+        handler.removeCallbacks(inventoryCaptureRunnable);
+        handler.postDelayed(inventoryCaptureRunnable, 900L);
+    }
+
+    private String findInventoryStatusInAncestors(AccessibilityNodeInfo source) {
+        AccessibilityNodeInfo cursor = AccessibilityNodeInfo.obtain(source);
+        for (int depth = 0; depth < 5 && cursor != null; depth += 1) {
+            String status = findInventoryStatus(cursor);
+            if (status.isEmpty()) {
+                status = inventoryStatusInText(
+                    value(cursor.getContentDescription()) + "\n" + value(cursor.getText())
+                );
+            }
+            AccessibilityNodeInfo parent = status.isEmpty() ? cursor.getParent() : null;
+            cursor.recycle();
+            cursor = parent;
+            if (!status.isEmpty()) {
+                if (cursor != null) cursor.recycle();
+                return status;
+            }
+        }
+        if (cursor != null) cursor.recycle();
+        return "";
     }
 
     private void captureInventoryStateTransition(String packageName, AccessibilityNodeInfo root) {
+        captureInventoryState(packageName, root, false);
+    }
+
+    private void capturePendingInventoryCurrentState() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null || !looksLikeUber(value(root.getPackageName()))) {
+            if (root != null) root.recycle();
+            return;
+        }
+        captureInventoryState(UBER_ORDERS_PACKAGE, root, true);
+        root.recycle();
+    }
+
+    private void captureInventoryState(
+        String packageName,
+        AccessibilityNodeInfo root,
+        boolean uploadCurrentState
+    ) {
         if (
             pendingInventoryItemName.isEmpty()
             || System.currentTimeMillis() - pendingInventoryClickedAt > 5 * 60 * 1000L
@@ -218,19 +271,65 @@ public class UberAccessibilityService extends AccessibilityService {
             match.recycle();
             if (!nextStatus.isEmpty()) break;
         }
-        if (nextStatus.isEmpty() || nextStatus.equals(pendingInventoryInitialStatus)) return;
+        if (
+            nextStatus.isEmpty()
+            || (!uploadCurrentState && nextStatus.equals(pendingInventoryInitialStatus))
+        ) return;
+        uploadInventoryState(packageName, pendingInventoryItemName, nextStatus);
+        clearPendingInventoryCapture();
+    }
+
+    private void captureFocusedInventorySelection(
+        String packageName,
+        AccessibilityNodeInfo node
+    ) {
+        if (node == null) return;
+        if (node.isFocused() || node.isSelected()) {
+            String status = findInventoryStatus(node);
+            if (status.isEmpty()) {
+                status = inventoryStatusInText(
+                    value(node.getContentDescription()) + "\n" + value(node.getText())
+                );
+            }
+            if (!status.isEmpty()) {
+                String itemName = findInventoryItemName(node);
+                if (!itemName.isEmpty()) {
+                    uploadInventoryState(packageName, itemName, status);
+                    return;
+                }
+            }
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            captureFocusedInventorySelection(packageName, child);
+            child.recycle();
+        }
+    }
+
+    private void uploadInventoryState(String packageName, String itemName, String status) {
         try {
-            boolean isAvailable = "available".equals(nextStatus);
+            boolean isAvailable = "available".equals(status);
+            String signature = itemName + "\n" + status;
+            long now = System.currentTimeMillis();
+            if (signature.equals(lastInventorySignal) && now - lastInventorySignalAt < 30000L) {
+                return;
+            }
+            lastInventorySignal = signature;
+            lastInventorySignalAt = now;
             JSONObject payload = new JSONObject();
-            payload.put("itemName", pendingInventoryItemName);
+            payload.put("itemName", itemName);
             payload.put("isAvailable", isAvailable);
             payload.put(
                 "signalText",
-                pendingInventoryItemName + (isAvailable ? " 在庫あり" : " 売り切れ")
+                itemName + (isAvailable ? " 在庫あり" : " 売り切れ")
             );
             BridgeUploader.upload(this, "accessibility_inventory", packageName, payload);
         } catch (Exception ignored) {
         }
+    }
+
+    private void clearPendingInventoryCapture() {
         pendingInventoryItemName = "";
         pendingInventoryInitialStatus = "";
         pendingInventoryClickedAt = 0L;
@@ -270,7 +369,7 @@ public class UberAccessibilityService extends AccessibilityService {
         String text = value == null ? "" : value.trim();
         if (
             text.length() < 2
-            || !inventoryStatus(text).isEmpty()
+            || !inventoryStatusInText(text).isEmpty()
             || text.matches("\\d+\\s*カスタマイズ.*")
             || text.matches("\\d+")
         ) return "";
@@ -306,6 +405,24 @@ public class UberAccessibilityService extends AccessibilityService {
             || "售罄".equals(normalized)
             || "缺货".equals(normalized)
             || "缺貨".equals(normalized)
+        ) return "sold_out";
+        return "";
+    }
+
+    private String inventoryStatusInText(String value) {
+        String normalized = value == null ? "" : value.trim().toLowerCase();
+        if (
+            normalized.contains("在庫あり")
+            || normalized.contains("available")
+            || normalized.contains("有货")
+            || normalized.contains("有貨")
+        ) return "available";
+        if (
+            normalized.contains("売り切れ")
+            || normalized.contains("out of stock")
+            || normalized.contains("售罄")
+            || normalized.contains("缺货")
+            || normalized.contains("缺貨")
         ) return "sold_out";
         return "";
     }
@@ -360,6 +477,7 @@ public class UberAccessibilityService extends AccessibilityService {
         recoveryScheduledAt = 0L;
         handler.removeCallbacks(uploadRunnable);
         handler.removeCallbacks(commandRunnable);
+        handler.removeCallbacks(inventoryCaptureRunnable);
         if (recoveryReceiverRegistered) {
             try {
                 unregisterReceiver(recoveryReceiver);
