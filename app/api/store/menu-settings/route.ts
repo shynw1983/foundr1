@@ -10,7 +10,15 @@ type MenuStoreItem = {
   brandId: string;
   brandName: string;
   name: string;
+  promotionPrefix: string;
   category: string;
+  websitePresentation: {
+    nameOverride?: string;
+    promotionPrefixOverride?: string;
+    categoryOverride?: string;
+    showPromotionPrefix?: boolean;
+    showEmoji?: boolean;
+  };
   imageUrl: string;
   basePrice: number | null;
   websiteEnabled: boolean;
@@ -92,7 +100,9 @@ export async function GET(request: Request) {
         menu_catalog_items.brand_id::text as "brandId",
         brands.name as "brandName",
         menu_catalog_items.name,
+        coalesce(menu_catalog_items.promotion_prefix, '') as "promotionPrefix",
         coalesce(menu_catalog_items.category, '') as category,
+        coalesce(menu_catalog_items.variable_schema->'websitePresentation', '{}'::jsonb) as "websitePresentation",
         coalesce(menu_catalog_items.image_url, '') as "imageUrl",
         menu_catalog_items.base_price::float as "basePrice",
         coalesce(menu_store_settings.website_enabled, true) as "websiteEnabled",
@@ -243,11 +253,32 @@ export async function PATCH(request: Request) {
   const item = items[0] as { id: string; brandId: string } | undefined;
   if (!item) return Response.json({ error: "商品が見つかりません。" }, { status: 404 });
 
+  const websitePresentation = {
+    nameOverride: normalizeText((body.websitePresentation as Record<string, unknown> | undefined)?.nameOverride),
+    promotionPrefixOverride: normalizeText((body.websitePresentation as Record<string, unknown> | undefined)?.promotionPrefixOverride),
+    categoryOverride: normalizeText((body.websitePresentation as Record<string, unknown> | undefined)?.categoryOverride),
+    showPromotionPrefix: (body.websitePresentation as Record<string, unknown> | undefined)?.showPromotionPrefix !== false,
+    showEmoji: (body.websitePresentation as Record<string, unknown> | undefined)?.showEmoji !== false
+  };
+  await sql`
+    update menu_catalog_items
+    set
+      variable_schema = jsonb_set(
+        coalesce(variable_schema, '{}'::jsonb),
+        '{websitePresentation}',
+        ${JSON.stringify(websitePresentation)}::jsonb,
+        true
+      ),
+      updated_at = now()
+    where id = ${itemId}
+  `;
+
   const rows = await sql`
     insert into menu_store_settings (
       brand_id,
       store_id,
       menu_catalog_item_id,
+      website_enabled,
       is_available,
       status_note,
       updated_by,
@@ -257,6 +288,7 @@ export async function PATCH(request: Request) {
       ${item.brandId},
       ${storeId},
       ${itemId},
+      ${body.websiteEnabled !== false},
       ${body.isAvailable !== false},
       ${normalizeText(body.statusNote)},
       ${session.id},
@@ -264,6 +296,7 @@ export async function PATCH(request: Request) {
     )
     on conflict (store_id, menu_catalog_item_id)
     do update set
+      website_enabled = excluded.website_enabled,
       is_available = excluded.is_available,
       status_note = excluded.status_note,
       updated_by = excluded.updated_by,
@@ -271,6 +304,7 @@ export async function PATCH(request: Request) {
     returning
       id::text,
       menu_catalog_item_id::text as "menuCatalogItemId",
+      website_enabled as "websiteEnabled",
       is_available as "isAvailable",
       status_note as "statusNote"
   `;

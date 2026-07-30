@@ -39,6 +39,12 @@ function choiceKey(choice, index) {
   return choice.id || slugKey(choice.label ?? choice.name, `choice-${index + 1}`);
 }
 
+function splitPromotionPrefix(value) {
+  const name = String(value ?? "").trim();
+  const match = name.match(/^((?:【[^】]+】)+)\s*(.+)$/u);
+  return match ? { promotionPrefix: match[1], name: match[2] } : { promotionPrefix: "", name };
+}
+
 async function loadDictionary(localeDir, language) {
   try {
     return JSON.parse(await readFile(`${localeDir}/${language}.json`, "utf8"));
@@ -215,6 +221,7 @@ async function upsertItem({
   sourceId,
   externalId,
   itemKind,
+  promotionPrefix,
   name,
   category,
   description,
@@ -227,7 +234,10 @@ async function upsertItem({
   isActive = true
 }) {
   const existing = await sql`
-    select id::text
+    select
+      id::text,
+      coalesce(promotion_prefix, '') as "promotionPrefix",
+      coalesce(variable_schema, '{}'::jsonb) as "variableSchema"
     from menu_catalog_items
     where brand_id = ${brandId}
       and store_id is null
@@ -235,13 +245,22 @@ async function upsertItem({
     limit 1
   `;
 
-  const schema = JSON.stringify(variableSchema ?? {});
+  const schema = JSON.stringify({
+    ...(variableSchema ?? {}),
+    ...(existing[0]?.variableSchema?.websitePresentation
+      ? { websitePresentation: existing[0].variableSchema.websitePresentation }
+      : {})
+  });
+  const resolvedPromotionPrefix = promotionPrefix === undefined
+    ? String(existing[0]?.promotionPrefix ?? "")
+    : String(promotionPrefix ?? "").trim();
   if (existing[0]) {
     const rows = await sql`
       update menu_catalog_items
       set
         menu_source_id = ${sourceId},
         item_kind = ${itemKind},
+        promotion_prefix = ${resolvedPromotionPrefix},
         name = ${name},
         display_names = ${JSON.stringify(displayNames)}::jsonb,
         category = ${category},
@@ -265,6 +284,7 @@ async function upsertItem({
       menu_source_id,
       external_id,
       item_kind,
+      promotion_prefix,
       name,
       display_names,
       category,
@@ -282,6 +302,7 @@ async function upsertItem({
       ${sourceId},
       ${externalId},
       ${itemKind},
+      ${resolvedPromotionPrefix},
       ${name},
       ${JSON.stringify(displayNames)}::jsonb,
       ${category},
@@ -618,12 +639,14 @@ async function importMaamaa() {
   }
   const categoryNameById = new Map(menuCategories.map((category) => [category.id, category.name]));
 
+  const baseSoupName = splitPromotionPrefix(menu.baseSoup.name);
   const itemId = await upsertItem({
     brandId: brand.id,
     sourceId,
     externalId: menu.baseSoup.id,
     itemKind: "buildable_product",
-    name: menu.baseSoup.name,
+    promotionPrefix: baseSoupName.promotionPrefix,
+    name: baseSoupName.name,
     category: categoryNameById.get("base-soup") ?? "🌶️旨味ベースの特別仕立てスープ",
     description: menu.baseSoup.note ?? "",
     descriptionDisplayNames: displayNamesFor(menu.baseSoup.note ?? "", dictionaries),
@@ -657,12 +680,14 @@ async function importMaamaa() {
   });
 
   for (const [index, preset] of (menu.presetSoups ?? []).entries()) {
+    const presetName = splitPromotionPrefix(preset.name);
     await upsertItem({
       brandId: brand.id,
       sourceId,
       externalId: preset.id,
       itemKind: "fixed_product",
-      name: preset.name,
+      promotionPrefix: presetName.promotionPrefix,
+      name: presetName.name,
       category: categoryNameById.get(preset.category) ?? "🐉🌟おすすめ麻辣湯セット",
       description: preset.note ?? "",
       descriptionDisplayNames: displayNamesFor(preset.note ?? "", dictionaries),

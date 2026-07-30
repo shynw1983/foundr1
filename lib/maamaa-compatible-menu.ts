@@ -7,6 +7,10 @@ export type MaamaaPricedOption = {
   id: string;
   name: string;
   displayNames?: Record<string, string>;
+  promotionPrefix?: string;
+  promotionPrefixDisplayNames?: Record<string, string>;
+  showPromotionPrefix?: boolean;
+  showEmoji?: boolean;
   price: number;
 };
 
@@ -33,6 +37,10 @@ export type MaamaaCompatibleMenu = {
     menuCatalogItemId: string;
     name: string;
     displayNames?: Record<string, string>;
+    promotionPrefix: string;
+    promotionPrefixDisplayNames?: Record<string, string>;
+    showPromotionPrefix: boolean;
+    showEmoji: boolean;
     price: number;
     note: string;
     noteDisplayNames?: Record<string, string>;
@@ -63,6 +71,9 @@ type MenuItemRow = {
   externalId: string;
   name: string;
   displayNames?: Record<string, string>;
+  promotionPrefix: string;
+  promotionPrefixDisplayNames?: Record<string, string>;
+  category: string;
   description: string;
   descriptionDisplayNames?: Record<string, string>;
   basePrice: number | null;
@@ -103,6 +114,20 @@ function choice(option: MenuOptionRow): MaamaaPricedOption {
   };
 }
 
+function websitePresentation(item: MenuItemRow) {
+  const raw = item.variableSchema?.websitePresentation;
+  const value = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? raw as Record<string, unknown>
+    : {};
+  return {
+    name: String(value.nameOverride ?? "").trim() || item.name,
+    promotionPrefix: String(value.promotionPrefixOverride ?? "").trim() || item.promotionPrefix,
+    category: String(value.categoryOverride ?? "").trim() || item.category,
+    showPromotionPrefix: value.showPromotionPrefix !== false,
+    showEmoji: value.showEmoji !== false
+  };
+}
+
 function normalizeStoreQuery(value = "") {
   return String(value).trim().toLowerCase();
 }
@@ -128,7 +153,10 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         id::text,
         coalesce(external_id, '') as "externalId",
         name,
+        coalesce(promotion_prefix, '') as "promotionPrefix",
+        coalesce(promotion_prefix_display_names, '{}'::jsonb) as "promotionPrefixDisplayNames",
         coalesce(display_names, '{}'::jsonb) as "displayNames",
+        coalesce(category, '') as category,
         coalesce(description, '') as description,
         coalesce(description_display_names, '{}'::jsonb) as "descriptionDisplayNames",
         base_price::float as "basePrice",
@@ -187,7 +215,10 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
       id::text,
       coalesce(external_id, '') as "externalId",
       name,
+      coalesce(promotion_prefix, '') as "promotionPrefix",
+      coalesce(promotion_prefix_display_names, '{}'::jsonb) as "promotionPrefixDisplayNames",
       coalesce(display_names, '{}'::jsonb) as "displayNames",
+      coalesce(category, '') as category,
       coalesce(description, '') as description,
       coalesce(description_display_names, '{}'::jsonb) as "descriptionDisplayNames",
       base_price::float as "basePrice",
@@ -256,6 +287,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
   const settingByItemId = new Map(storeSettings.map((setting) => [setting.menuCatalogItemId, setting]));
   const baseSetting = settingByItemId.get(base.id);
   const presetCatalogByExternalId = new Map(presetCatalogItems.map((item) => [item.externalId, item]));
+  const basePresentation = websitePresentation(base);
 
   const groupByKey = new Map(groups.map((group) => [group.groupKey, group]));
   const choices = (key: string) => (optionsByGroup.get(groupByKey.get(key)?.id ?? "") ?? [])
@@ -337,8 +369,12 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
       baseSoup: {
         id: base.externalId || "mala-soup",
         menuCatalogItemId: base.id,
-        name: base.name,
+        name: basePresentation.name,
         displayNames: base.displayNames,
+        promotionPrefix: basePresentation.promotionPrefix,
+        promotionPrefixDisplayNames: base.promotionPrefixDisplayNames,
+        showPromotionPrefix: basePresentation.showPromotionPrefix,
+        showEmoji: basePresentation.showEmoji,
         price: baseSetting?.priceOverride ?? base.basePrice ?? 0,
         note: base.description,
         noteDisplayNames: base.descriptionDisplayNames,
@@ -353,10 +389,17 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         .map((item) => {
           const catalogItem = presetCatalogByExternalId.get(String(item.id ?? ""));
           const setting = catalogItem ? settingByItemId.get(catalogItem.id) : undefined;
+          const presentation = catalogItem ? websitePresentation(catalogItem) : undefined;
           return {
             ...schemaChoice(item),
+            name: presentation?.name ?? String(item.name ?? ""),
+            displayNames: catalogItem?.displayNames ?? (item.displayNames ?? {}) as Record<string, string>,
+            promotionPrefix: presentation?.promotionPrefix ?? "",
+            promotionPrefixDisplayNames: catalogItem?.promotionPrefixDisplayNames,
+            showPromotionPrefix: presentation?.showPromotionPrefix ?? true,
+            showEmoji: presentation?.showEmoji ?? true,
             menuCatalogItemId: catalogItem?.id ?? base.id,
-            category: String(item.category ?? "recommended-set"),
+            category: presentation?.category || String(item.category ?? "recommended-set"),
             defaultNoodle: String(item.defaultNoodle ?? "板春雨"),
             note: String(item.note ?? catalogItem?.description ?? ""),
             isAvailable: setting?.isAvailable ?? true,

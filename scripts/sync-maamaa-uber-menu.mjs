@@ -84,7 +84,12 @@ if (!brandId) throw new Error("The maamaa brand was not found.");
 
 const [currentItems, currentGroups, currentOptions] = await Promise.all([
   sql`
-    select external_id as "externalId", name, base_price::float as price, is_active as "isActive"
+    select
+      external_id as "externalId",
+      coalesce(promotion_prefix, '') as "promotionPrefix",
+      name,
+      base_price::float as price,
+      is_active as "isActive"
     from menu_catalog_items
     where brand_id::text = ${brandId}
   `,
@@ -104,10 +109,11 @@ const [currentItems, currentGroups, currentOptions] = await Promise.all([
 
 const changes = [];
 const base = currentItems.find((item) => item.externalId === menu.baseSoup.id);
+const currentBaseName = base ? `${base.promotionPrefix || ""}${base.name}` : "";
 if (!base) {
   changes.push({ type: "add", group: "base-soup", key: menu.baseSoup.id, from: "-", to: `${menu.baseSoup.name} / ¥${menu.baseSoup.price}` });
-} else if (!base.isActive || base.name !== menu.baseSoup.name || Number(base.price) !== Number(menu.baseSoup.price)) {
-  changes.push({ type: "update", group: "base-soup", key: menu.baseSoup.id, from: `${base.name} / ¥${base.price}`, to: `${menu.baseSoup.name} / ¥${menu.baseSoup.price}` });
+} else if (!base.isActive || currentBaseName !== menu.baseSoup.name || Number(base.price) !== Number(menu.baseSoup.price)) {
+  changes.push({ type: "update", group: "base-soup", key: menu.baseSoup.id, from: `${currentBaseName} / ¥${base.price}`, to: `${menu.baseSoup.name} / ¥${menu.baseSoup.price}` });
 }
 
 const currentGroupByKey = new Map(currentGroups.map((group) => [String(group.groupKey), group]));

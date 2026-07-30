@@ -44,7 +44,15 @@ type StoreMenuItem = {
   brandId: string;
   brandName: string;
   name: string;
+  promotionPrefix: string;
   category: string;
+  websitePresentation: {
+    nameOverride?: string;
+    promotionPrefixOverride?: string;
+    categoryOverride?: string;
+    showPromotionPrefix?: boolean;
+    showEmoji?: boolean;
+  };
   imageUrl: string;
   basePrice: number | null;
   websiteEnabled: boolean;
@@ -76,12 +84,34 @@ type StoreMenuCategorySummary = {
 
 const optionCategoryKey = "__store_menu_options__";
 
+function stripEmoji(value: string) {
+  return value
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function itemName(item: StoreMenuItem) {
+  const presentation = item.websitePresentation ?? {};
+  const name = presentation.nameOverride?.trim() || item.name;
+  const prefix = presentation.showPromotionPrefix === false
+    ? ""
+    : presentation.promotionPrefixOverride?.trim() || item.promotionPrefix;
+  const value = `${prefix}${name}`;
+  return presentation.showEmoji === false ? stripEmoji(value) : value;
+}
+
+function itemCategory(item: StoreMenuItem) {
+  const value = item.websitePresentation?.categoryOverride?.trim() || item.category || "未分類";
+  return item.websitePresentation?.showEmoji === false ? stripEmoji(value) : value;
+}
+
 function getCategories(items: StoreMenuItem[], categories: StoreMenuCategory[], brandId: string): StoreMenuCategorySummary[] {
   const counts = new Map<string, number>();
   const masters = new Map<string, StoreMenuCategory>();
 
   for (const item of items) {
-    const name = item.category || "未分類";
+    const name = itemCategory(item);
     counts.set(name, (counts.get(name) ?? 0) + 1);
   }
 
@@ -153,7 +183,7 @@ export default function StoreMenuPage() {
     setSelectedStoreId(responseStoreId);
     if (responseStoreId) setStoredStoreSelection(responseStoreId);
     setSelectedBrandId((current) => resetFilters ? (nextBrands?.[0]?.id || "") : (current || nextBrands?.[0]?.id || ""));
-    setSelectedCategory((current) => resetFilters ? (nextItems?.[0]?.category || "未分類") : (current ?? (nextItems?.[0]?.category || "未分類")));
+    setSelectedCategory((current) => resetFilters ? (nextItems?.[0] ? itemCategory(nextItems[0]) : "未分類") : (current ?? (nextItems?.[0] ? itemCategory(nextItems[0]) : "未分類")));
     setMessage("");
     setLoading(false);
   }
@@ -174,8 +204,8 @@ export default function StoreMenuPage() {
     const normalizedQuery = query.trim().toLowerCase();
     return items.filter((item) => {
       if (selectedBrandId && item.brandId !== selectedBrandId) return false;
-      if (selectedCategory !== null && (item.category || "未分類") !== selectedCategory) return false;
-      if (normalizedQuery && !item.name.toLowerCase().includes(normalizedQuery)) return false;
+      if (selectedCategory !== null && itemCategory(item) !== selectedCategory) return false;
+      if (normalizedQuery && !itemName(item).toLowerCase().includes(normalizedQuery)) return false;
       return true;
     });
   }, [items, query, selectedBrandId, selectedCategory]);
@@ -216,8 +246,10 @@ export default function StoreMenuPage() {
         body: JSON.stringify({
           storeId: selectedStoreId,
           menuCatalogItemId: item.id,
+          websiteEnabled: nextItem.websiteEnabled,
           isAvailable: nextItem.isAvailable,
-          statusNote: nextItem.statusNote
+          statusNote: nextItem.statusNote,
+          websitePresentation: nextItem.websitePresentation
         })
       });
       if (!response.ok) throw new Error("save failed");
@@ -391,8 +423,8 @@ export default function StoreMenuPage() {
                       <div className="store-menu-item-main">
                         {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <div className="store-menu-image-empty">No image</div>}
                         <div>
-                          <strong>{item.name}</strong>
-                          <span>{item.brandName} / {item.category || "未分類"}</span>
+                          <strong>{itemName(item)}</strong>
+                          <span>{item.brandName} / {itemCategory(item)}</span>
                           <small>
                             {item.priceOverride == null ? `${item.basePrice ?? 0}円` : `${item.priceOverride}円 店舗価格`}
                             {" / "}
@@ -419,6 +451,22 @@ export default function StoreMenuPage() {
                           <XCircle size={17} />
                           売切
                         </button>
+                        <button
+                          className={item.websiteEnabled ? "store-status-button is-on" : "store-status-button"}
+                          type="button"
+                          disabled={savingId === item.id}
+                          onClick={() => void saveItem(item, { websiteEnabled: true })}
+                        >
+                          Web表示
+                        </button>
+                        <button
+                          className={!item.websiteEnabled ? "store-status-button is-off" : "store-status-button"}
+                          type="button"
+                          disabled={savingId === item.id}
+                          onClick={() => void saveItem(item, { websiteEnabled: false })}
+                        >
+                          Web非表示
+                        </button>
                       </div>
                       <div className="store-menu-note">
                         <input
@@ -432,6 +480,79 @@ export default function StoreMenuPage() {
                           メモ保存
                         </button>
                       </div>
+                      <details className="store-menu-presentation">
+                        <summary>ウェブ表示名・Catchphrase・Emojiを編集</summary>
+                        <div className="store-menu-presentation-grid">
+                          <label>
+                            <span>商品名（空欄はUber同期名）</span>
+                            <input
+                              value={item.websitePresentation?.nameOverride ?? ""}
+                              onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? {
+                                ...entry,
+                                websitePresentation: { ...entry.websitePresentation, nameOverride: event.target.value }
+                              } : entry))}
+                              placeholder={item.name}
+                            />
+                          </label>
+                          <label>
+                            <span>Catchphrase（空欄はUber同期値）</span>
+                            <input
+                              value={item.websitePresentation?.promotionPrefixOverride ?? ""}
+                              onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? {
+                                ...entry,
+                                websitePresentation: { ...entry.websitePresentation, promotionPrefixOverride: event.target.value }
+                              } : entry))}
+                              placeholder={item.promotionPrefix || "Catchphraseなし"}
+                            />
+                          </label>
+                          <label>
+                            <span>カテゴリ（空欄はUber同期名）</span>
+                            <input
+                              value={item.websitePresentation?.categoryOverride ?? ""}
+                              onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? {
+                                ...entry,
+                                websitePresentation: { ...entry.websitePresentation, categoryOverride: event.target.value }
+                              } : entry))}
+                              placeholder={item.category || "未分類"}
+                            />
+                          </label>
+                          <label className="store-menu-presentation-check">
+                            <input
+                              type="checkbox"
+                              checked={item.websitePresentation?.showPromotionPrefix !== false}
+                              onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? {
+                                ...entry,
+                                websitePresentation: { ...entry.websitePresentation, showPromotionPrefix: event.target.checked }
+                              } : entry))}
+                            />
+                            <span>Catchphraseを表示</span>
+                          </label>
+                          <label className="store-menu-presentation-check">
+                            <input
+                              type="checkbox"
+                              checked={item.websitePresentation?.showEmoji !== false}
+                              onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? {
+                                ...entry,
+                                websitePresentation: { ...entry.websitePresentation, showEmoji: event.target.checked }
+                              } : entry))}
+                            />
+                            <span>Emojiを表示</span>
+                          </label>
+                          <div className="store-menu-presentation-preview">
+                            <span>ウェブ表示プレビュー</span>
+                            <strong>{itemName(item)}</strong>
+                            <small>{itemCategory(item)}</small>
+                          </div>
+                        </div>
+                        <button
+                          className="primary-button"
+                          type="button"
+                          disabled={savingId === item.id}
+                          onClick={() => void saveItem(item, {})}
+                        >
+                          表示設定を保存
+                        </button>
+                      </details>
                     </article>
                   ))}
                   {!visibleItems.length ? <p className="empty-state">{loading ? "読み込み中..." : "商品がありません。"}</p> : null}
