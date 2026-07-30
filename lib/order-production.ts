@@ -1,12 +1,10 @@
 import { sql } from "./db";
 import {
-  findMaamaaProductionRule,
-  formatMaamaaProductionRule,
-  formatMaamaaSeasoningSelection,
   localizeMaamaaProductionSummary,
   normalizeMaamaaProductionReferenceSettings,
   type MaamaaProductionReferenceSettings
 } from "./maamaa-production-rules";
+import { buildMaamaaProductionItemLines } from "./maamaa-production-summary";
 import { calculateProductionEstimateMinutes } from "./production-estimate";
 import { syncWebReservationToSalesOrder } from "./sales-orders";
 import { syncDiningSessionFromProduction } from "./store-dining-sessions";
@@ -56,55 +54,6 @@ function labeledDetail(label: string, value: string) {
   const normalized = normalizeText(value);
   if (!normalized) return "";
   return /[:：]/.test(normalized) ? normalized : `${label}：${normalized}`;
-}
-
-function countRawLabels(labels: string[]) {
-  const counts = new Map<string, { label: string; count: number }>();
-  for (const label of labels) {
-    const normalized = normalizeText(label);
-    if (!normalized) continue;
-    const current = counts.get(normalized) ?? { label: normalized, count: 0 };
-    current.count += 1;
-    counts.set(normalized, current);
-  }
-  return Array.from(counts.values());
-}
-
-function getMaamaaSeasoningLine(
-  label: string,
-  settings: MaamaaProductionReferenceSettings
-) {
-  return formatMaamaaSeasoningSelection(label, settings.seasoningRules);
-}
-
-function buildMaamaaProductionItemLines(row: {
-  itemName: string;
-  quantity: number;
-  toppingLabels: string[] | null;
-}, settings: MaamaaProductionReferenceSettings) {
-  const toppingLabels = Array.isArray(row.toppingLabels) ? row.toppingLabels : [];
-  const seasoningLines: string[] = [];
-  const kitchenLines: string[] = [];
-  const fallbackLines: string[] = [];
-
-  for (const { label, count } of countRawLabels(toppingLabels)) {
-    const seasoningLine = getMaamaaSeasoningLine(label, settings);
-    if (seasoningLine) {
-      seasoningLines.push(seasoningLine);
-      continue;
-    }
-    const rule = findMaamaaProductionRule(label, settings.productionRules);
-    if (rule) {
-      kitchenLines.push(`${rule.section === "noodles" ? "麺" : "具材"}：${formatMaamaaProductionRule(rule, count)}`);
-    } else {
-      fallbackLines.push(`具材：${label}${count > 1 ? ` x${count}` : ""}`);
-    }
-  }
-
-  return [
-    `${row.itemName} x${row.quantity}`,
-    ...uniqueTextParts([...seasoningLines, ...kitchenLines, ...fallbackLines]).map((detail) => `・${detail}`)
-  ];
 }
 
 function buildProductionItemLines(row: {

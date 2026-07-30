@@ -311,10 +311,14 @@ const maamaaZhExactText: Record<string, string> = {
   "リクエスト制トッピング": "按需加料",
   "辛さ・味変": "辣度 / 调味",
   "セットメニュー": "套餐",
+  "セット青菜": "套餐青菜",
+  "セット根菜": "套餐根菜",
+  "セットきのこ": "套餐菌菇",
   "オペレーション": "操作注意",
   "もちもち板春雨": "Q弹宽粉",
   "板春雨追加": "追加宽粉",
   "板春雨": "宽粉",
+  "平太春雨": "宽粉",
   "牛筋麺": "牛筋面",
   "春雨": "粉丝",
   "トッポッキ": "年糕条",
@@ -849,6 +853,27 @@ export function findMaamaaProductionRule(label: string, rules = maamaaProduction
       .filter((name) => normalizedLabel.includes(name))
       .map((name) => ({ rule, matchedLength: name.length })))
     .sort((left, right) => right.matchedLength - left.matchedLength)[0]?.rule;
+}
+
+export function findMaamaaSetRule(label: string, rules = maamaaSetRules) {
+  const normalizedLabel = normalize(label);
+  const candidates = rules
+    .filter((rule) => !/(共通|通用|複数杯|多杯|operation)/i.test(rule.name))
+    .map((rule) => ({
+      rule,
+      normalizedName: normalize(rule.name)
+    }))
+    .filter(({ normalizedName }) => normalizedName);
+  const exactMatch = candidates.find(({ normalizedName }) => normalizedName === normalizedLabel);
+  if (exactMatch) return exactMatch.rule;
+  return candidates
+    .filter(({ normalizedName }) => normalizedLabel.includes(normalizedName))
+    .sort((left, right) => right.normalizedName.length - left.normalizedName.length)[0]?.rule;
+}
+
+export function findMaamaaCommonSetRule(rules = maamaaSetRules) {
+  return rules.find((rule) => /(共通|通用|common)/i.test(rule.name))
+    ?? rules.find((rule) => !/(複数杯|多杯|operation)/i.test(rule.name));
 }
 
 export function formatMaamaaProductionRule(rule: MaamaaProductionRule, count = 1) {
