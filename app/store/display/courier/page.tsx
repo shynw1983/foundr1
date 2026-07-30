@@ -2,7 +2,7 @@
 
 import { CheckCircle2, ChefHat, Clock3 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
 import { useVisibleRefresh } from "../../components/useVisibleRefresh";
@@ -53,6 +53,24 @@ function OrderCard({ order, now, ready = false }: { order: PickupOrder; now: num
       </div>
     </article>
   );
+}
+
+function getOrderGridLayout(count: number, wide: boolean) {
+  const maxColumns = wide
+    ? (count > 3 ? 4 : 3)
+    : (count > 2 ? 3 : 2);
+  const columns = Math.max(1, Math.min(count || 1, maxColumns));
+  const rows = Math.max(1, Math.ceil((count || 1) / columns));
+  const density = rows >= 3 ? "is-compact" : rows === 2 ? "is-dense" : "is-comfortable";
+  return {
+    columns,
+    rows,
+    density,
+    style: {
+      "--courier-grid-columns": columns,
+      "--courier-grid-rows": rows
+    } as CSSProperties
+  };
 }
 
 export default function StorePickupStatusDisplayPage() {
@@ -173,9 +191,17 @@ export default function StorePickupStatusDisplayPage() {
   const readyOrders = useMemo(() => orders.filter((order) => order.status === "ready"), [orders]);
   const preparingOrders = useMemo(() => orders.filter((order) => order.status === "preparing"), [orders]);
   const waitingOrders = useMemo(() => orders.filter((order) => order.status === "new"), [orders]);
+  const readyLayout = getOrderGridLayout(readyOrders.length, true);
+  const preparingLayout = getOrderGridLayout(preparingOrders.length, false);
+  const waitingLayout = getOrderGridLayout(waitingOrders.length, false);
+  const workRows = Math.max(preparingLayout.rows, waitingLayout.rows);
+  const displayLayoutStyle = {
+    "--courier-ready-size": `${readyLayout.rows + 0.75}fr`,
+    "--courier-work-size": `${workRows + 0.75}fr`
+  } as CSSProperties;
 
   return (
-    <main className="store-courier-display">
+    <main className="store-courier-display" style={displayLayoutStyle}>
       <button
         className="store-display-menu-button"
         type="button"
@@ -256,7 +282,10 @@ export default function StorePickupStatusDisplayPage() {
             <small>件</small>
           </span>
         </div>
-        <div className="store-courier-ready-grid">
+        <div
+          className={`store-courier-ready-grid ${readyLayout.density}`}
+          style={readyLayout.style}
+        >
           {readyOrders.map((order) => <OrderCard key={order.id} order={order} now={now} ready />)}
           {!readyOrders.length ? (
             <div className="store-courier-empty">
@@ -283,7 +312,10 @@ export default function StorePickupStatusDisplayPage() {
               <small>件</small>
             </span>
           </div>
-          <div className="store-courier-order-grid">
+          <div
+            className={`store-courier-order-grid ${preparingLayout.density}`}
+            style={preparingLayout.style}
+          >
             {preparingOrders.map((order) => <OrderCard key={order.id} order={order} now={now} />)}
             {!preparingOrders.length ? (
               <div className="store-courier-empty">
@@ -308,7 +340,10 @@ export default function StorePickupStatusDisplayPage() {
               <small>件</small>
             </span>
           </div>
-          <div className="store-courier-order-grid">
+          <div
+            className={`store-courier-order-grid ${waitingLayout.density}`}
+            style={waitingLayout.style}
+          >
             {waitingOrders.map((order) => <OrderCard key={order.id} order={order} now={now} />)}
             {!waitingOrders.length ? (
               <div className="store-courier-empty">
