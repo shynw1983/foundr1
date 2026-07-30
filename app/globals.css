@@ -15641,23 +15641,27 @@ body :where(
 }
 
 .store-courier-order.platform-uber_eats {
+  --platform-color: #057a45;
   --platform-label-color: #057a45;
   --platform-label-bg: #ecefed;
 }
 
 .store-courier-order.platform-demae_can {
+  --platform-color: #b62d2a;
   --platform-label-color: #b62d2a;
   --platform-label-bg: #ecefed;
 }
 
 .store-courier-order.platform-rocket_now {
+  --platform-color: #00479f;
   --platform-label-color: #00479f;
   --platform-label-bg: #ecefed;
 }
 
 .store-courier-order.platform-maamaa_web,
 .store-courier-order.platform-nanacha_web {
-  --platform-label-color: var(--pickup-web);
+  --platform-color: #4f5753;
+  --platform-label-color: #4f5753;
   --platform-label-bg: #ecefed;
 }
 
@@ -15704,24 +15708,41 @@ body :where(
 }
 
 .store-courier-order.is-ready {
+  grid-template-rows: minmax(0, 1fr) auto;
+  padding: 0;
   background: white;
-  color: var(--courier-ready-ink);
-}
-
-.store-courier-order.is-ready.platform-uber_eats {
-  color: var(--courier-ready-ink);
+  color: var(--platform-color, var(--courier-ready-ink));
 }
 
 .store-courier-order.is-ready > strong {
   color: currentColor;
   font-size: clamp(46px, 7vw, 84px);
+  padding: clamp(6px, 4cqh, 14px);
   text-align: center;
 }
 
 .store-courier-order.is-ready > div {
   justify-content: space-between;
-  border-color: #dce3df;
-  opacity: 1;
+  gap: 8px;
+  min-height: clamp(32px, 22cqh, 46px);
+  margin-top: 0;
+  border: 0;
+  padding: clamp(6px, 4cqh, 10px) clamp(9px, 4cqw, 14px);
+  background: var(--platform-color, #4f5753);
+  color: white;
+}
+
+.store-courier-order.is-ready > div span,
+.store-courier-order.is-ready > div b {
+  overflow: hidden;
+  color: white;
+  text-overflow: ellipsis;
+}
+
+.store-courier-order.is-ready > div span {
+  padding: 0;
+  background: transparent;
+  font-weight: 600;
 }
 
 .store-courier-empty {
@@ -15853,6 +15874,18 @@ body:has(.store-courier-display) .floating-feedback {
 .store-courier-order span,
 .store-courier-order b {
   font-size: clamp(9px, min(6.5cqw, 12cqh), 14px);
+}
+
+.store-courier-ready-grid.is-dense .store-courier-order.is-ready,
+.store-courier-ready-grid.is-compact .store-courier-order.is-ready {
+  padding: 0;
+}
+
+.store-courier-ready-grid.is-compact .store-courier-order.is-ready > div {
+  gap: 5px;
+  min-height: clamp(28px, 24cqh, 38px);
+  margin-top: 0;
+  padding: 5px 8px;
 }
 
 @media (max-height: 820px) and (min-width: 781px) {
