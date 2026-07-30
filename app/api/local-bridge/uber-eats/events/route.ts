@@ -263,7 +263,9 @@ function normalizeMenuMatch(value: unknown) {
 
 async function syncInventoryUnavailable(storeId: string, payload: Record<string, unknown>) {
   const signalText = cleanText(payload.signalText, 500);
-  const normalizedSignal = normalizeMenuMatch(signalText);
+  const itemName = cleanText(payload.itemName, 500);
+  const normalizedSignal = normalizeMenuMatch(itemName || signalText);
+  const isAvailable = payload.isAvailable === true;
   if (!normalizedSignal) return { status: "inventory_missing_signal", target: null };
 
   const rows = await sql`
@@ -319,29 +321,29 @@ async function syncInventoryUnavailable(storeId: string, payload: Record<string,
   if (strongest.length !== 1) return { status: "inventory_ambiguous", target: null };
 
   const target = strongest[0];
-  const statusNote = `Uber Eats Bridge: ${signalText}`.slice(0, 500);
+  const statusNote = `Uber Eats Bridge: ${signalText || itemName}`.slice(0, 500);
   if (target.kind === "option") {
     await sql`
       insert into menu_option_store_settings (
         brand_id, store_id, menu_option_id, is_available, status_note, updated_at
       )
-      values (${target.brandId}, ${storeId}, ${target.id}, false, ${statusNote}, now())
+      values (${target.brandId}, ${storeId}, ${target.id}, ${isAvailable}, ${statusNote}, now())
       on conflict (store_id, menu_option_id)
-      do update set is_available = false, status_note = excluded.status_note, updated_at = now()
+      do update set is_available = excluded.is_available, status_note = excluded.status_note, updated_at = now()
     `;
   } else {
     await sql`
       insert into menu_store_settings (
         brand_id, store_id, menu_catalog_item_id, is_available, status_note, updated_at
       )
-      values (${target.brandId}, ${storeId}, ${target.id}, false, ${statusNote}, now())
+      values (${target.brandId}, ${storeId}, ${target.id}, ${isAvailable}, ${statusNote}, now())
       on conflict (store_id, menu_catalog_item_id)
-      do update set is_available = false, status_note = excluded.status_note, updated_at = now()
+      do update set is_available = excluded.is_available, status_note = excluded.status_note, updated_at = now()
     `;
   }
   return {
     status: "inventory_synced",
-    target: { kind: target.kind, id: target.id, name: target.name }
+    target: { kind: target.kind, id: target.id, name: target.name, isAvailable }
   };
 }
 

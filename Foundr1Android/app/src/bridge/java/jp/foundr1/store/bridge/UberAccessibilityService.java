@@ -45,6 +45,9 @@ public class UberAccessibilityService extends AccessibilityService {
     private long lastOverviewDiagnosticAt = 0L;
     private String lastInventorySignal = "";
     private long lastInventorySignalAt = 0L;
+    private String pendingInventoryItemName = "";
+    private String pendingInventoryInitialStatus = "";
+    private long pendingInventoryClickedAt = 0L;
     private String activeCommandId = "";
     private int commandAttempts = 0;
     private boolean commandReadyClickDispatched = false;
@@ -95,11 +98,13 @@ public class UberAccessibilityService extends AccessibilityService {
         if (event == null || event.getPackageName() == null) return;
         String packageName = event.getPackageName().toString();
         if (!looksLikeUber(packageName)) return;
+        trackInventoryStatusClick(event);
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
         StringBuilder builder = new StringBuilder();
         JSONArray nodes = new JSONArray();
         collectNodes(root, "0", builder, nodes, new HashSet<>());
+        captureInventoryStateTransition(packageName, root);
         captureInventoryConfirmation(packageName, nodes);
         if (BridgeCommandState.current(this) != null) {
             handlePendingCommand(root, nodes);
@@ -166,10 +171,143 @@ public class UberAccessibilityService extends AccessibilityService {
         try {
             JSONObject payload = new JSONObject();
             payload.put("signalText", signal);
+            payload.put("itemName", pendingInventoryItemName);
+            payload.put("isAvailable", false);
             payload.put("nodes", nodes);
             BridgeUploader.upload(this, "accessibility_inventory", packageName, payload);
         } catch (Exception ignored) {
         }
+    }
+
+    private void trackInventoryStatusClick(AccessibilityEvent event) {
+        if (event.getEventType() != AccessibilityEvent.TYPE_VIEW_CLICKED) return;
+        AccessibilityNodeInfo source = event.getSource();
+        if (source == null) return;
+        String status = inventoryStatus(value(source.getContentDescription()));
+        if (status.isEmpty()) status = inventoryStatus(value(source.getText()));
+        if (status.isEmpty()) {
+            source.recycle();
+            return;
+        }
+        String itemName = findInventoryItemName(source);
+        source.recycle();
+        if (itemName.isEmpty()) return;
+        pendingInventoryItemName = itemName;
+        pendingInventoryInitialStatus = status;
+        pendingInventoryClickedAt = System.currentTimeMillis();
+    }
+
+    private void captureInventoryStateTransition(String packageName, AccessibilityNodeInfo root) {
+        if (
+            pendingInventoryItemName.isEmpty()
+            || System.currentTimeMillis() - pendingInventoryClickedAt > 5 * 60 * 1000L
+        ) return;
+        List<AccessibilityNodeInfo> matches = root.findAccessibilityNodeInfosByText(
+            pendingInventoryItemName
+        );
+        String nextStatus = "";
+        for (AccessibilityNodeInfo match : matches) {
+            AccessibilityNodeInfo cursor = AccessibilityNodeInfo.obtain(match);
+            for (int depth = 0; depth < 5 && cursor != null; depth += 1) {
+                nextStatus = findInventoryStatus(cursor);
+                AccessibilityNodeInfo parent = nextStatus.isEmpty() ? cursor.getParent() : null;
+                cursor.recycle();
+                cursor = parent;
+                if (!nextStatus.isEmpty()) break;
+            }
+            match.recycle();
+            if (!nextStatus.isEmpty()) break;
+        }
+        if (nextStatus.isEmpty() || nextStatus.equals(pendingInventoryInitialStatus)) return;
+        try {
+            boolean isAvailable = "available".equals(nextStatus);
+            JSONObject payload = new JSONObject();
+            payload.put("itemName", pendingInventoryItemName);
+            payload.put("isAvailable", isAvailable);
+            payload.put(
+                "signalText",
+                pendingInventoryItemName + (isAvailable ? " 在庫あり" : " 売り切れ")
+            );
+            BridgeUploader.upload(this, "accessibility_inventory", packageName, payload);
+        } catch (Exception ignored) {
+        }
+        pendingInventoryItemName = "";
+        pendingInventoryInitialStatus = "";
+        pendingInventoryClickedAt = 0L;
+    }
+
+    private String findInventoryItemName(AccessibilityNodeInfo source) {
+        AccessibilityNodeInfo cursor = AccessibilityNodeInfo.obtain(source);
+        String best = "";
+        for (int depth = 0; depth < 5 && cursor != null; depth += 1) {
+            String candidate = longestInventoryLabel(cursor);
+            if (candidate.length() > best.length()) best = candidate;
+            Rect bounds = new Rect();
+            cursor.getBoundsInScreen(bounds);
+            AccessibilityNodeInfo parent = cursor.getParent();
+            cursor.recycle();
+            cursor = parent;
+            if (!best.isEmpty() && bounds.height() >= 80 && bounds.height() <= 300) break;
+        }
+        if (cursor != null) cursor.recycle();
+        return best;
+    }
+
+    private String longestInventoryLabel(AccessibilityNodeInfo node) {
+        if (node == null) return "";
+        String best = inventoryLabel(value(node.getText()));
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            String candidate = longestInventoryLabel(child);
+            child.recycle();
+            if (candidate.length() > best.length()) best = candidate;
+        }
+        return best;
+    }
+
+    private String inventoryLabel(String value) {
+        String text = value == null ? "" : value.trim();
+        if (
+            text.length() < 2
+            || !inventoryStatus(text).isEmpty()
+            || text.matches("\\d+\\s*カスタマイズ.*")
+            || text.matches("\\d+")
+        ) return "";
+        return text;
+    }
+
+    private String findInventoryStatus(AccessibilityNodeInfo node) {
+        if (node == null) return "";
+        String status = inventoryStatus(value(node.getContentDescription()));
+        if (status.isEmpty()) status = inventoryStatus(value(node.getText()));
+        if (!status.isEmpty()) return status;
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            String match = findInventoryStatus(child);
+            child.recycle();
+            if (!match.isEmpty()) return match;
+        }
+        return "";
+    }
+
+    private String inventoryStatus(String value) {
+        String normalized = value == null ? "" : value.trim().toLowerCase();
+        if (
+            "在庫あり".equals(normalized)
+            || "available".equals(normalized)
+            || "有货".equals(normalized)
+            || "有貨".equals(normalized)
+        ) return "available";
+        if (
+            "売り切れ".equals(normalized)
+            || "out of stock".equals(normalized)
+            || "售罄".equals(normalized)
+            || "缺货".equals(normalized)
+            || "缺貨".equals(normalized)
+        ) return "sold_out";
+        return "";
     }
 
     private void captureOrderDetails(String packageName, StringBuilder builder, JSONArray nodes) {
