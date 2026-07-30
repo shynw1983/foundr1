@@ -1,6 +1,7 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
+import { reconcileUberReadyCommand } from "../../../../../lib/local-bridge-commands";
 import { localizeMaamaaProductionSummary, refreshActiveProductionTasksForStore, setProductionTaskStatus } from "../../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
 import { normalizePosPrinterSettings, resolvePosKitchenTicketTemplate } from "../../../../../lib/pos-printer";
@@ -201,7 +202,10 @@ export async function PATCH(request: Request) {
   `;
   if (!taskRows[0]) return Response.json({ error: "制作タスクが見つかりません。" }, { status: 404 });
   const orderId = await setProductionTaskStatus(taskId, status as "new" | "preparing" | "ready", session.id);
-  if (orderId) await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(orderId));
+  if (orderId) {
+    await reconcileUberReadyCommand(orderId);
+    await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(orderId));
+  }
   const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(body.area));
   return Response.json({ ok: true, tasks, areas, displayLanguage, serverNow: new Date().toISOString() });
 }

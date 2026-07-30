@@ -1,7 +1,6 @@
-import { createHash, timingSafeEqual } from "node:crypto";
-
 import { findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
+import { authorizeLocalBridge } from "../../../../../lib/local-bridge-auth";
 import { ensureProductionTasksForOrder } from "../../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
@@ -15,40 +14,6 @@ export const runtime = "nodejs";
 
 function cleanText(value: unknown, maxLength = 4000) {
   return String(value ?? "").trim().slice(0, maxLength);
-}
-
-function secureEqual(left: string, right: string) {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
-}
-
-async function authorizeBridge(request: Request, storeId: string) {
-  const header = request.headers.get("authorization") ?? "";
-  const token = header.replace(/^Bearer\s+/i, "").trim();
-  const expectedToken = process.env.LOCAL_BRIDGE_TOKEN;
-  if (expectedToken && token && secureEqual(token, expectedToken)) {
-    return { authorized: true, deviceId: "" };
-  }
-  if (!token && process.env.NODE_ENV !== "production") {
-    return { authorized: true, deviceId: "" };
-  }
-  if (!token || !storeId) return { authorized: false, deviceId: "" };
-
-  const tokenHash = createHash("sha256").update(token).digest("hex");
-  const rows = await sql`
-    select id::text
-    from local_bridge_devices
-    where token_hash = ${tokenHash}
-      and store_id::text = ${storeId}
-      and platform = 'uber_eats'
-      and is_enabled = true
-    limit 1
-  `;
-  return {
-    authorized: Boolean(rows[0]?.id),
-    deviceId: rows[0]?.id ? String(rows[0].id) : ""
-  };
 }
 
 function dateParts(date: Date) {
@@ -289,6 +254,97 @@ async function upsertOperationalOrder(input: {
   };
 }
 
+function normalizeMenuMatch(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s\u3000・·|｜()[\]（）「」『』【】"'’“”.,。、:：;；!！?？\-_/\\]/g, "");
+}
+
+async function syncInventoryUnavailable(storeId: string, payload: Record<string, unknown>) {
+  const signalText = cleanText(payload.signalText, 500);
+  const normalizedSignal = normalizeMenuMatch(signalText);
+  if (!normalizedSignal) return { status: "inventory_missing_signal", target: null };
+
+  const rows = await sql`
+    select
+      'item' as kind,
+      menu_catalog_items.id::text,
+      menu_catalog_items.brand_id::text as "brandId",
+      menu_catalog_items.name,
+      menu_catalog_items.display_names as "displayNames"
+    from menu_catalog_items
+    join store_brands
+      on store_brands.brand_id = menu_catalog_items.brand_id
+      and store_brands.store_id::text = ${storeId}
+    where menu_catalog_items.is_active = true
+      and menu_catalog_items.store_id is null
+    union all
+    select
+      'option' as kind,
+      menu_options.id::text,
+      menu_option_groups.brand_id::text as "brandId",
+      menu_options.name,
+      menu_options.display_names as "displayNames"
+    from menu_options
+    join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
+    join store_brands
+      on store_brands.brand_id = menu_option_groups.brand_id
+      and store_brands.store_id::text = ${storeId}
+    where menu_options.is_active = true
+      and menu_option_groups.is_active = true
+  `;
+  const menuRows = rows as Array<{
+    kind: string;
+    id: string;
+    brandId: string;
+    name: string;
+    displayNames: Record<string, unknown> | null;
+  }>;
+  const matches = menuRows.flatMap((row) => {
+    const displayNames = row.displayNames && typeof row.displayNames === "object"
+      ? Object.values(row.displayNames as Record<string, unknown>)
+      : [];
+    const aliases = [row.name, ...displayNames]
+      .map(normalizeMenuMatch)
+      .filter((alias) => alias.length >= 2);
+    const longestMatch = aliases
+      .filter((alias) => normalizedSignal.includes(alias))
+      .sort((left, right) => right.length - left.length)[0];
+    return longestMatch ? [{ ...row, matchLength: longestMatch.length }] : [];
+  });
+  if (!matches.length) return { status: "inventory_unmatched", target: null };
+  const longest = Math.max(...matches.map((match) => match.matchLength));
+  const strongest = matches.filter((match) => match.matchLength === longest);
+  if (strongest.length !== 1) return { status: "inventory_ambiguous", target: null };
+
+  const target = strongest[0];
+  const statusNote = `Uber Eats Bridge: ${signalText}`.slice(0, 500);
+  if (target.kind === "option") {
+    await sql`
+      insert into menu_option_store_settings (
+        brand_id, store_id, menu_option_id, is_available, status_note, updated_at
+      )
+      values (${target.brandId}, ${storeId}, ${target.id}, false, ${statusNote}, now())
+      on conflict (store_id, menu_option_id)
+      do update set is_available = false, status_note = excluded.status_note, updated_at = now()
+    `;
+  } else {
+    await sql`
+      insert into menu_store_settings (
+        brand_id, store_id, menu_catalog_item_id, is_available, status_note, updated_at
+      )
+      values (${target.brandId}, ${storeId}, ${target.id}, false, ${statusNote}, now())
+      on conflict (store_id, menu_catalog_item_id)
+      do update set is_available = false, status_note = excluded.status_note, updated_at = now()
+    `;
+  }
+  return {
+    status: "inventory_synced",
+    target: { kind: target.kind, id: target.id, name: target.name }
+  };
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") {
@@ -304,7 +360,7 @@ export async function POST(request: Request) {
   const payload = source.payload && typeof source.payload === "object" ? source.payload : {};
   const capturedAtValue = Number(source.capturedAt);
   const capturedAt = Number.isFinite(capturedAtValue) ? new Date(capturedAtValue) : new Date();
-  const authorization = await authorizeBridge(request, storeId);
+  const authorization = await authorizeLocalBridge(request, storeId);
   if (!authorization.authorized) {
     return Response.json({ error: "Unauthorized bridge token." }, { status: 401 });
   }
@@ -339,6 +395,27 @@ export async function POST(request: Request) {
         updated_at = now()
       where id::text = ${authorization.deviceId}
     `;
+  }
+  if (kind === "accessibility_inventory") {
+    const result = await syncInventoryUnavailable(storeId, payload as Record<string, unknown>)
+      .catch((error) => ({
+        status: "error",
+        target: null,
+        error: error instanceof Error ? error.message : "Unknown inventory sync error"
+      }));
+    const parseError = "error" in result ? cleanText(result.error, 1000) : "";
+    await sql`
+      update local_bridge_events
+      set parse_status = ${result.status}, parse_error = ${parseError}
+      where id::text = ${eventId}
+    `;
+    return Response.json({
+      ok: result.status !== "error",
+      event: rows[0],
+      parseStatus: result.status,
+      target: result.target,
+      error: parseError || undefined
+    }, { status: result.status === "error" ? 500 : 200 });
   }
   if (kind !== "accessibility_order") {
     return Response.json({ ok: true, event: rows[0], parseStatus: "raw" });

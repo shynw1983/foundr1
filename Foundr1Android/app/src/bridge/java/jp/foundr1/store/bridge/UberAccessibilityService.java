@@ -43,6 +43,12 @@ public class UberAccessibilityService extends AccessibilityService {
     private String lastOrderClickAttemptCode = "";
     private long lastOrderClickAttemptAt = 0L;
     private long lastOverviewDiagnosticAt = 0L;
+    private String lastInventorySignal = "";
+    private long lastInventorySignalAt = 0L;
+    private String activeCommandId = "";
+    private int commandAttempts = 0;
+    private boolean commandReadyClickDispatched = false;
+    private final Runnable commandRunnable = this::processPendingCommand;
     private final Runnable recoveryRunnable = () -> {
         recoveryScheduledAt = 0L;
         recoverNewOrder();
@@ -52,9 +58,13 @@ public class UberAccessibilityService extends AccessibilityService {
         public void onReceive(Context context, Intent intent) {
             if (
                 intent != null
-                && UberRecoveryState.ACTION_RECOVERY_REQUESTED.equals(intent.getAction())
             ) {
-                scheduleRecovery(250L);
+                if (UberRecoveryState.ACTION_RECOVERY_REQUESTED.equals(intent.getAction())) {
+                    scheduleRecovery(250L);
+                } else if (BridgeCommandState.ACTION_COMMAND_AVAILABLE.equals(intent.getAction())) {
+                    handler.removeCallbacks(commandRunnable);
+                    handler.postDelayed(commandRunnable, 150L);
+                }
             }
         }
     };
@@ -90,6 +100,12 @@ public class UberAccessibilityService extends AccessibilityService {
         StringBuilder builder = new StringBuilder();
         JSONArray nodes = new JSONArray();
         collectNodes(root, "0", builder, nodes, new HashSet<>());
+        captureInventoryConfirmation(packageName, nodes);
+        if (BridgeCommandState.current(this) != null) {
+            handlePendingCommand(root, nodes);
+            root.recycle();
+            return;
+        }
         boolean containsDetails = containsOrderDetails(nodes);
         boolean containsOverview = containsOrderOverview(nodes);
         if (!containsDetails) {
@@ -116,6 +132,44 @@ public class UberAccessibilityService extends AccessibilityService {
             UberRecoveryState.requestFromActiveOrderDetails(this, orderCode);
         }
         captureOrderDetails(packageName, builder, nodes);
+    }
+
+    private void captureInventoryConfirmation(String packageName, JSONArray nodes) {
+        String signal = "";
+        for (int index = 0; index < nodes.length(); index += 1) {
+            JSONObject node = nodes.optJSONObject(index);
+            if (node == null || !node.optString("viewId").endsWith("/snackbar_text")) continue;
+            String value = (
+                node.optString("text") + "\n" + node.optString("contentDescription")
+            ).trim();
+            String normalized = value.toLowerCase();
+            if (
+                normalized.contains("売り切れ")
+                || normalized.contains("品切れ")
+                || normalized.contains("在庫切れ")
+                || normalized.contains("利用不可")
+                || normalized.contains("out of stock")
+                || normalized.contains("unavailable")
+                || normalized.contains("售罄")
+                || normalized.contains("缺货")
+                || normalized.contains("缺貨")
+            ) {
+                signal = value;
+                break;
+            }
+        }
+        if (signal.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        if (signal.equals(lastInventorySignal) && now - lastInventorySignalAt < 30000L) return;
+        lastInventorySignal = signal;
+        lastInventorySignalAt = now;
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("signalText", signal);
+            payload.put("nodes", nodes);
+            BridgeUploader.upload(this, "accessibility_inventory", packageName, payload);
+        } catch (Exception ignored) {
+        }
     }
 
     private void captureOrderDetails(String packageName, StringBuilder builder, JSONArray nodes) {
@@ -148,7 +202,9 @@ public class UberAccessibilityService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         if (!recoveryReceiverRegistered) {
-            IntentFilter filter = new IntentFilter(UberRecoveryState.ACTION_RECOVERY_REQUESTED);
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(UberRecoveryState.ACTION_RECOVERY_REQUESTED);
+            filter.addAction(BridgeCommandState.ACTION_COMMAND_AVAILABLE);
             if (Build.VERSION.SDK_INT >= 33) {
                 registerReceiver(recoveryReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
             } else {
@@ -156,6 +212,7 @@ public class UberAccessibilityService extends AccessibilityService {
             }
             recoveryReceiverRegistered = true;
         }
+        if (BridgeCommandState.current(this) != null) handler.postDelayed(commandRunnable, 150L);
         if (UberRecoveryState.isPending(this)) scheduleRecovery(250L);
     }
 
@@ -164,6 +221,7 @@ public class UberAccessibilityService extends AccessibilityService {
         handler.removeCallbacks(recoveryRunnable);
         recoveryScheduledAt = 0L;
         handler.removeCallbacks(uploadRunnable);
+        handler.removeCallbacks(commandRunnable);
         if (recoveryReceiverRegistered) {
             try {
                 unregisterReceiver(recoveryReceiver);
@@ -172,6 +230,189 @@ public class UberAccessibilityService extends AccessibilityService {
             recoveryReceiverRegistered = false;
         }
         super.onDestroy();
+    }
+
+    private void processPendingCommand() {
+        JSONObject command = BridgeCommandState.current(this);
+        if (command == null) return;
+        String commandId = command.optString("id");
+        if (!commandId.equals(activeCommandId)) {
+            activeCommandId = commandId;
+            commandAttempts = 0;
+            commandReadyClickDispatched = false;
+        }
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null || !looksLikeUber(value(root.getPackageName()))) {
+            if (root != null) root.recycle();
+            UberRecoveryState.launchUber(this);
+            retryPendingCommand(1400L, "Uber Orders を開けませんでした。");
+            return;
+        }
+        JSONArray nodes = new JSONArray();
+        collectNodes(root, "0", new StringBuilder(), nodes, new HashSet<>());
+        handlePendingCommand(root, nodes);
+        root.recycle();
+    }
+
+    private void handlePendingCommand(AccessibilityNodeInfo root, JSONArray nodes) {
+        JSONObject command = BridgeCommandState.current(this);
+        if (command == null) return;
+        if (!"mark_order_ready".equals(command.optString("type"))) {
+            BridgeCommandState.fail(this, "Unsupported command: " + command.optString("type"));
+            resetCommandAttempt();
+            return;
+        }
+        String targetCode = extractOrderCode(
+            command.optJSONObject("payload") == null
+                ? ""
+                : command.optJSONObject("payload").optString("orderCode")
+        );
+        if (targetCode.isEmpty()) {
+            BridgeCommandState.fail(this, "注文番号がありません。");
+            resetCommandAttempt();
+            return;
+        }
+
+        if (containsOrderDetails(nodes)) {
+            String visibleCode = extractOrderCode(extractOrderKey(nodes));
+            if (!targetCode.equals(visibleCode)) {
+                performGlobalAction(GLOBAL_ACTION_BACK);
+                retryPendingCommand(1000L, "対象注文を開けませんでした。");
+                return;
+            }
+            AccessibilityNodeInfo action = findReadyAction(root);
+            if (action == null) {
+                if (commandReadyClickDispatched) {
+                    BridgeCommandState.complete(this, "ready_confirmed");
+                    resetCommandAttempt();
+                    return;
+                }
+                retryPendingCommand(1200L, "Uber の「準備完了」ボタンが見つかりません。");
+                return;
+            }
+            boolean clicked = clickOrderCard(action);
+            action.recycle();
+            if (clicked) {
+                commandReadyClickDispatched = true;
+                retryPendingCommand(1200L, "Uber の「準備完了」操作を確認できませんでした。");
+            } else {
+                retryPendingCommand(1000L, "Uber の「準備完了」ボタンを押せませんでした。");
+            }
+            return;
+        }
+
+        if (containsOrderOverview(nodes)) {
+            AccessibilityNodeInfo activeCard = findActiveOrderCardByCode(root, targetCode, false);
+            if (activeCard != null) {
+                if (commandReadyClickDispatched) {
+                    activeCard.recycle();
+                    retryPendingCommand(1200L, "Uber 側の準備完了を確認できませんでした。");
+                    return;
+                }
+                boolean clicked = clickOrderCard(activeCard);
+                activeCard.recycle();
+                if (clicked) {
+                    retryPendingCommand(1400L, "対象注文の詳細を開けませんでした。");
+                } else {
+                    retryPendingCommand(900L, "対象注文を押せませんでした。");
+                }
+                return;
+            }
+            if (treeContainsOrderCode(root, targetCode)) {
+                BridgeCommandState.complete(this, "already_ready");
+                resetCommandAttempt();
+                return;
+            }
+            retryPendingCommand(1200L, "準備中の対象注文が見つかりません。");
+            return;
+        }
+
+        performGlobalAction(GLOBAL_ACTION_BACK);
+        retryPendingCommand(1200L, "Uber の注文一覧へ戻れませんでした。");
+    }
+
+    private void retryPendingCommand(long delayMs, String finalError) {
+        commandAttempts += 1;
+        handler.removeCallbacks(commandRunnable);
+        if (commandAttempts >= 15) {
+            BridgeCommandState.fail(this, finalError);
+            resetCommandAttempt();
+            return;
+        }
+        handler.postDelayed(commandRunnable, delayMs);
+    }
+
+    private void resetCommandAttempt() {
+        activeCommandId = "";
+        commandAttempts = 0;
+        commandReadyClickDispatched = false;
+        handler.removeCallbacks(commandRunnable);
+    }
+
+    private AccessibilityNodeInfo findReadyAction(AccessibilityNodeInfo node) {
+        if (node == null) return null;
+        String viewId = value(node.getViewIdResourceName());
+        String label = value(node.getText()) + "\n" + value(node.getContentDescription());
+        if (
+            viewId.endsWith("/ub__order_details_action_secondary_button")
+            && node.isEnabled()
+            && isReadyActionText(label)
+        ) return AccessibilityNodeInfo.obtain(node);
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findReadyAction(child);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private boolean isReadyActionText(String value) {
+        String normalized = value == null ? "" : value.trim().toLowerCase();
+        return normalized.contains("準備完了")
+            || normalized.contains("准备完成")
+            || normalized.contains("準備完成")
+            || normalized.contains("准备好")
+            || normalized.contains("mark ready")
+            || normalized.contains("ready for pickup")
+            || normalized.contains("준비 완료");
+    }
+
+    private AccessibilityNodeInfo findActiveOrderCardByCode(
+        AccessibilityNodeInfo node,
+        String targetCode,
+        boolean insideActiveOrders
+    ) {
+        if (node == null) return null;
+        String viewId = value(node.getViewIdResourceName());
+        boolean inside = insideActiveOrders || viewId.endsWith("/ub_ueo_active_order_land_container");
+        if (inside && targetCode.equals(findOrderCode(node))) {
+            if (node.isClickable() || viewId.endsWith("/ub__orders_item_subtitle_text")) {
+                return AccessibilityNodeInfo.obtain(node);
+            }
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findActiveOrderCardByCode(child, targetCode, inside);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private boolean treeContainsOrderCode(AccessibilityNodeInfo node, String targetCode) {
+        if (node == null) return false;
+        if (targetCode.equals(extractOrderCode(value(node.getText())))) return true;
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            boolean match = treeContainsOrderCode(child, targetCode);
+            child.recycle();
+            if (match) return true;
+        }
+        return false;
     }
 
     private void collectNodes(

@@ -3915,6 +3915,26 @@ create table if not exists local_bridge_devices (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists local_bridge_commands (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  platform text not null default 'uber_eats',
+  command_type text not null,
+  idempotency_key text not null unique,
+  payload jsonb not null default '{}'::jsonb,
+  status text not null default 'pending',
+  attempts integer not null default 0,
+  available_at timestamptz not null default now(),
+  claimed_by_device_id uuid references local_bridge_devices(id) on delete set null,
+  claimed_at timestamptz,
+  claim_expires_at timestamptz,
+  completed_at timestamptz,
+  result jsonb not null default '{}'::jsonb,
+  last_error text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_local_bridge_events_platform_created
   on local_bridge_events(platform, created_at desc);
 
@@ -3922,6 +3942,8 @@ create index if not exists idx_local_bridge_events_store_created
   on local_bridge_events(store_external_id, created_at desc);
 create index if not exists idx_local_bridge_devices_store
   on local_bridge_devices(store_id, platform, is_enabled);
+create index if not exists idx_local_bridge_commands_pending
+  on local_bridge_commands(store_id, platform, status, available_at, created_at);
 create index if not exists idx_sales_import_rows_batch
   on sales_import_rows(batch_id, row_index);
 create index if not exists idx_procedure_books_menu_catalog_item on procedure_books(menu_catalog_item_id);

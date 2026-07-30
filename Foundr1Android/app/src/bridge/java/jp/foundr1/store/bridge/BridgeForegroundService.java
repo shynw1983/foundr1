@@ -42,6 +42,13 @@ public class BridgeForegroundService extends Service {
             handler.postDelayed(this, 2000);
         }
     };
+    private final Runnable commandPoll = new Runnable() {
+        @Override
+        public void run() {
+            BridgeCommandClient.poll(BridgeForegroundService.this);
+            handler.postDelayed(this, 8000);
+        }
+    };
 
     @Override
     public void onCreate() {
@@ -51,6 +58,7 @@ public class BridgeForegroundService extends Service {
         refreshAccessibilityWarning();
         handler.post(heartbeat);
         handler.post(recoveryWatchdog);
+        handler.post(commandPoll);
     }
 
     @Override
@@ -63,6 +71,7 @@ public class BridgeForegroundService extends Service {
     public void onDestroy() {
         handler.removeCallbacks(heartbeat);
         handler.removeCallbacks(recoveryWatchdog);
+        handler.removeCallbacks(commandPoll);
         super.onDestroy();
     }
 
