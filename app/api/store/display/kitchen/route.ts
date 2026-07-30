@@ -103,13 +103,22 @@ export async function GET(request: Request) {
 
   await refreshActiveProductionTasksForStore(storeFilter);
 
-  const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(params.get("area")));
+  const [{ tasks, areas, displayLanguage }, preferenceRows] = await Promise.all([
+    getKitchenTasks(storeFilter, normalizeText(params.get("area"))),
+    sql`
+      select coalesce(ui_preferences ->> 'kitchenDisplayMode', 'detailed') as "kitchenDisplayMode"
+      from employees
+      where id = ${session.id}
+      limit 1
+    `
+  ]);
   return Response.json({
     access,
     selectedStoreId: storeFilter,
     tasks,
     areas,
     displayLanguage,
+    kitchenDisplayMode: preferenceRows[0]?.kitchenDisplayMode === "simple" ? "simple" : "detailed",
     serverNow: new Date().toISOString()
   }, { headers: { "Cache-Control": "no-store" } });
 }

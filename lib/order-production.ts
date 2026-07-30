@@ -3,7 +3,9 @@ import {
   findMaamaaProductionRule,
   formatMaamaaProductionRule,
   formatMaamaaSeasoningSelection,
-  localizeMaamaaProductionSummary
+  localizeMaamaaProductionSummary,
+  normalizeMaamaaProductionReferenceSettings,
+  type MaamaaProductionReferenceSettings
 } from "./maamaa-production-rules";
 import { calculateProductionEstimateMinutes } from "./production-estimate";
 import { syncWebReservationToSalesOrder } from "./sales-orders";
@@ -68,27 +70,30 @@ function countRawLabels(labels: string[]) {
   return Array.from(counts.values());
 }
 
-function getMaamaaSeasoningLine(label: string) {
-  return formatMaamaaSeasoningSelection(label);
+function getMaamaaSeasoningLine(
+  label: string,
+  settings: MaamaaProductionReferenceSettings
+) {
+  return formatMaamaaSeasoningSelection(label, settings.seasoningRules);
 }
 
 function buildMaamaaProductionItemLines(row: {
   itemName: string;
   quantity: number;
   toppingLabels: string[] | null;
-}) {
+}, settings: MaamaaProductionReferenceSettings) {
   const toppingLabels = Array.isArray(row.toppingLabels) ? row.toppingLabels : [];
   const seasoningLines: string[] = [];
   const kitchenLines: string[] = [];
   const fallbackLines: string[] = [];
 
   for (const { label, count } of countRawLabels(toppingLabels)) {
-    const seasoningLine = getMaamaaSeasoningLine(label);
+    const seasoningLine = getMaamaaSeasoningLine(label, settings);
     if (seasoningLine) {
       seasoningLines.push(seasoningLine);
       continue;
     }
-    const rule = findMaamaaProductionRule(label);
+    const rule = findMaamaaProductionRule(label, settings.productionRules);
     if (rule) {
       kitchenLines.push(`${rule.section === "noodles" ? "麺" : "具材"}：${formatMaamaaProductionRule(rule, count)}`);
     } else {
@@ -118,11 +123,11 @@ function buildProductionItemLines(row: {
   }> | null;
   measuredQuantity: number | null;
   measuredUnit: string;
-}) {
+}, maamaaSettings: MaamaaProductionReferenceSettings) {
   const toppingLabels = Array.isArray(row.toppingLabels) ? row.toppingLabels : [];
   const isMaamaaBuildable = row.sizeKey === "maamaa_buildable";
   if (isMaamaaBuildable) {
-    return buildMaamaaProductionItemLines(row);
+    return buildMaamaaProductionItemLines(row, maamaaSettings);
   }
   const customizations = Array.isArray(row.customizations) ? row.customizations : [];
   if (customizations.length) {
@@ -166,7 +171,15 @@ export async function refreshActiveProductionTasksForStore(storeId: string, limi
   if (!normalizedStoreId) return;
 
   const rows = await sql`
-    select store_customer_orders.id::text
+    select
+      store_customer_orders.id::text,
+      (
+        select module_settings.settings
+        from module_settings
+        where module_settings.scope_key = 'global'
+          and module_settings.module_key = 'maamaa_production_reference'
+        limit 1
+      ) as "maamaaSettings"
     from store_customer_orders
     left join order_production_tasks on order_production_tasks.order_id = store_customer_orders.id
     where store_customer_orders.store_id::text = ${normalizedStoreId}
@@ -181,12 +194,28 @@ export async function refreshActiveProductionTasksForStore(storeId: string, limi
     order by store_customer_orders.created_at asc
     limit ${Math.max(1, Math.min(100, Math.floor(limit)))}
   `;
-  for (const order of rows as Array<{ id: string }>) {
-    await ensureProductionTasksForOrder(order.id);
+  if (!rows.length) return;
+  const maamaaSettings = normalizeMaamaaProductionReferenceSettings(rows[0]?.maamaaSettings);
+  for (const order of rows as Array<{ id: string; maamaaSettings: unknown }>) {
+    await ensureProductionTasksForOrder(order.id, maamaaSettings);
   }
 }
 
-export async function ensureProductionTasksForOrder(orderId: string) {
+async function readMaamaaProductionReferenceSettings() {
+  const rows = await sql`
+    select settings
+    from module_settings
+    where scope_key = 'global'
+      and module_key = 'maamaa_production_reference'
+    limit 1
+  `;
+  return normalizeMaamaaProductionReferenceSettings(rows[0]?.settings);
+}
+
+export async function ensureProductionTasksForOrder(
+  orderId: string,
+  providedMaamaaSettings?: MaamaaProductionReferenceSettings
+) {
   const normalizedOrderId = normalizeText(orderId);
   if (!normalizedOrderId) return [];
 
@@ -230,6 +259,7 @@ export async function ensureProductionTasksForOrder(orderId: string) {
     where store_customer_order_items.order_id::text = ${normalizedOrderId}
     order by store_customer_order_items.sort_order, store_customer_order_items.created_at
   `;
+  const maamaaSettings = providedMaamaaSettings ?? await readMaamaaProductionReferenceSettings();
 
   const grouped = new Map<string, { brandId: string; areaKey: string; areaLabel: string; lines: string[] }>();
   for (const row of itemRows as Array<{
@@ -251,7 +281,7 @@ export async function ensureProductionTasksForOrder(orderId: string) {
     const area = getProductionArea(row.brandName);
     const key = `${row.brandId || ""}:${area.key}`;
     const current = grouped.get(key) ?? { brandId: row.brandId || "", areaKey: area.key, areaLabel: area.label, lines: [] };
-    current.lines.push(...buildProductionItemLines(row));
+    current.lines.push(...buildProductionItemLines(row, maamaaSettings));
     grouped.set(key, current);
   }
 

@@ -18,6 +18,7 @@ const allowedProductSummaryFields = new Set([
 
 type UiPreferences = {
   productMasterSummaryFields?: string[];
+  kitchenDisplayMode?: "simple" | "detailed";
 };
 
 export async function PATCH(request: Request) {
@@ -28,6 +29,9 @@ export async function PATCH(request: Request) {
   const productMasterSummaryFields = Array.isArray(body.productMasterSummaryFields)
     ? body.productMasterSummaryFields.filter((field) => allowedProductSummaryFields.has(field)).slice(0, 6)
     : undefined;
+  const kitchenDisplayMode = body.kitchenDisplayMode === "simple" || body.kitchenDisplayMode === "detailed"
+    ? body.kitchenDisplayMode
+    : undefined;
 
   const rows = await sql`
     select coalesce(ui_preferences, '{}'::jsonb) as "uiPreferences"
@@ -37,7 +41,8 @@ export async function PATCH(request: Request) {
   const currentPreferences = (rows[0]?.uiPreferences ?? {}) as UiPreferences;
   const nextPreferences: UiPreferences = {
     ...currentPreferences,
-    ...(productMasterSummaryFields ? { productMasterSummaryFields } : {})
+    ...(productMasterSummaryFields ? { productMasterSummaryFields } : {}),
+    ...(kitchenDisplayMode ? { kitchenDisplayMode } : {})
   };
 
   await sql`

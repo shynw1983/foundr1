@@ -58,6 +58,19 @@ function splitQuantityLabel(text: string) {
   return { label: text, quantity: "" };
 }
 
+function simplifyKitchenLine(text: string, isModifier: boolean) {
+  if (!isModifier) return text;
+  const withoutDetails = text.replace(/（.*$/u, "").trim();
+  const customerCount = withoutDetails.match(/\s+x(\d+)$/u)?.[1] ?? "";
+  const withoutCustomerCount = withoutDetails.replace(/\s+x\d+$/u, "").trim();
+  const withoutRecipeQuantity = withoutCustomerCount
+    .replace(/\s+(?:追加)?(?:約)?\d+(?:\.\d+)?\s*(?:g|kg|個|枚|本|袋|パック|杯|人前|ヶ|个|张|根|包|份)(?:くらい)?$/u, "")
+    .trim();
+  return customerCount && Number(customerCount) > 1
+    ? `${withoutRecipeQuantity} x${customerCount}`
+    : withoutRecipeQuantity;
+}
+
 function getCountdownLabel(estimatedReadyAt: string, now: number, language: "ja" | "zh") {
   const target = new Date(estimatedReadyAt).getTime();
   if (!estimatedReadyAt || Number.isNaN(target)) return "";
@@ -73,6 +86,7 @@ export default function StoreKitchenPage() {
   const [tasks, setTasks] = useState<KitchenTask[]>([]);
   const [areas, setAreas] = useState<Array<{ value: string; label: string }>>([]);
   const [displayLanguage, setDisplayLanguage] = useState<"ja" | "zh">("ja");
+  const [kitchenDisplayMode, setKitchenDisplayMode] = useState<"simple" | "detailed">("detailed");
   const [selectedArea, setSelectedArea] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
@@ -126,6 +140,7 @@ export default function StoreKitchenPage() {
     setTasks(body.tasks ?? []);
     setAreas(body.areas ?? []);
     setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
+    setKitchenDisplayMode(body.kitchenDisplayMode === "simple" ? "simple" : "detailed");
     setCheckedLineKeys((current) => {
       const validKeys = new Set<string>();
       for (const task of (body.tasks ?? []) as KitchenTask[]) {
@@ -271,6 +286,17 @@ export default function StoreKitchenPage() {
     setSavingId("");
   }
 
+  async function saveKitchenDisplayMode(mode: "simple" | "detailed") {
+    const previous = kitchenDisplayMode;
+    setKitchenDisplayMode(mode);
+    const response = await fetch("/api/me/preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kitchenDisplayMode: mode })
+    });
+    if (!response.ok) setKitchenDisplayMode(previous);
+  }
+
   useEffect(() => {
     void load();
     if (realtimeStatus === "connected") return;
@@ -384,6 +410,16 @@ export default function StoreKitchenPage() {
             <option value="">{isChinese ? "全部" : "全部"}</option>
             {areas.map((area) => <option key={area.value} value={area.value}>{isChinese && area.label === "調理" ? "烹饪" : area.label}</option>)}
           </select>
+          <label className="store-context-selector is-compact">
+            <span>{isChinese ? "内容显示" : "内容表示"}</span>
+            <select
+              value={kitchenDisplayMode}
+              onChange={(event) => void saveKitchenDisplayMode(event.target.value === "simple" ? "simple" : "detailed")}
+            >
+              <option value="simple">{isChinese ? "简洁（仅名称）" : "簡潔（名称のみ）"}</option>
+              <option value="detailed">{isChinese ? "详细（含操作说明）" : "詳細（作業説明あり）"}</option>
+            </select>
+          </label>
           <button className="secondary-button" type="button" onClick={() => void load()}>{loading ? (isChinese ? "加载中" : "読み込み中") : (isChinese ? "刷新" : "更新")}</button>
           <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
             {isChinese ? "全屏・保持亮屏 ON" : "全画面・常時点灯 ON"}
@@ -439,7 +475,10 @@ export default function StoreKitchenPage() {
                 <div className="store-kitchen-items">
                   {splitLines(task.itemSummary).map((line, index) => {
                     const lineKey = `${task.id}:${index}`;
-                    const quantityParts = splitQuantityLabel(line.text);
+                    const displayText = kitchenDisplayMode === "simple"
+                      ? simplifyKitchenLine(line.text, line.isModifier)
+                      : line.text;
+                    const quantityParts = splitQuantityLabel(displayText);
                     return (
                       <button
                         className={[

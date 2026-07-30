@@ -32,6 +32,18 @@ test("shows repeated kitchen ingredients as the customer's selected count", () =
   assert.match(formatMaamaaProductionRule(sausage, 2), /ウインナー 1個 x2/);
 });
 
+test("prefers exact ingredient names over longer rules that contain the same text", () => {
+  assert.equal(findMaamaaProductionRule("豆腐")?.id, "tofu");
+  assert.equal(findMaamaaProductionRule("干し豆腐")?.id, "dried-tofu");
+  assert.equal(findMaamaaProductionRule("ほうれん草")?.id, "spinach");
+  assert.equal(findMaamaaProductionRule("ほうれん草えび餃子1個")?.id, "spinach-shrimp-dumpling");
+});
+
+test("uses the longest contained rule name only after exact matching fails", () => {
+  assert.equal(findMaamaaProductionRule("【大サイズ】老豆皮1枚")?.id, "old-tofu-skin");
+  assert.equal(findMaamaaProductionRule("国産プチトマト1個")?.id, "tomato");
+});
+
 test("localizes kitchen summaries with the Chinese labels preserved from Uber", () => {
   const summary = [
     "旨味マーラータンスープ x1",

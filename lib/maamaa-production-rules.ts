@@ -834,10 +834,21 @@ export function normalizeMaamaaProductionReferenceSettings(value: unknown): Maam
 
 export function findMaamaaProductionRule(label: string, rules = maamaaProductionRules) {
   const normalizedLabel = normalize(label.replace(/^トッピング[:：]/, ""));
-  return rules.find((rule) => {
-    const names = [rule.customerName, rule.kitchenName, rule.id ?? "", ...(rule.aliases ?? [])].filter(Boolean).map(normalize);
-    return names.some((name) => normalizedLabel === name || normalizedLabel.includes(name) || name.includes(normalizedLabel));
-  });
+  const candidates = rules.map((rule) => ({
+    rule,
+    names: [rule.customerName, rule.kitchenName, ...(rule.aliases ?? [])]
+      .filter(Boolean)
+      .map(normalize)
+      .filter(Boolean)
+  }));
+  const exactMatch = candidates.find(({ names }) => names.includes(normalizedLabel));
+  if (exactMatch) return exactMatch.rule;
+
+  return candidates
+    .flatMap(({ rule, names }) => names
+      .filter((name) => normalizedLabel.includes(name))
+      .map((name) => ({ rule, matchedLength: name.length })))
+    .sort((left, right) => right.matchedLength - left.matchedLength)[0]?.rule;
 }
 
 export function formatMaamaaProductionRule(rule: MaamaaProductionRule, count = 1) {
