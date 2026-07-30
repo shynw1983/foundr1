@@ -1,6 +1,7 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
+import { buildKitchenDisplayItemGroups } from "../../../../../lib/kitchen-display-groups";
 import { reconcileUberReadyCommand } from "../../../../../lib/local-bridge-commands";
 import { localizeMaamaaProductionSummary, refreshActiveProductionTasksForStore, setProductionTaskStatus } from "../../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
@@ -11,24 +12,6 @@ export const dynamic = "force-dynamic";
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
-}
-
-function buildCustomerItemSummary(value: unknown) {
-  if (!Array.isArray(value)) return "";
-  return value.flatMap((rawItem) => {
-    if (!rawItem || typeof rawItem !== "object") return [];
-    const item = rawItem as Record<string, unknown>;
-    const itemName = normalizeText(item.itemName);
-    if (!itemName) return [];
-    const quantity = Math.max(1, Math.floor(Number(item.quantity ?? 1) || 1));
-    const toppingLabels = Array.isArray(item.toppingLabels)
-      ? item.toppingLabels.map(normalizeText).filter(Boolean)
-      : [];
-    return [
-      `${itemName} x${quantity}`,
-      ...toppingLabels.map((label) => `・${label}`)
-    ];
-  }).join("\n");
 }
 
 async function getKitchenTasks(storeId: string, area = "") {
@@ -63,7 +46,12 @@ async function getKitchenTasks(storeId: string, area = "") {
           order by store_customer_order_items.sort_order, store_customer_order_items.created_at
         )
         from store_customer_order_items
+        left join menu_catalog_items on menu_catalog_items.id = store_customer_order_items.menu_catalog_item_id
         where store_customer_order_items.order_id = store_customer_orders.id
+          and (
+            order_production_tasks.brand_id is null
+            or coalesce(menu_catalog_items.brand_id, store_customer_orders.brand_id) = order_production_tasks.brand_id
+          )
       ), '[]'::jsonb) as "orderedItems",
       store_customer_orders.created_at::text as "createdAt",
       to_char(store_customer_orders.created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime"
@@ -101,20 +89,28 @@ async function getKitchenTasks(storeId: string, area = "") {
       ? resolvePosKitchenTicketTemplate(printerSettings, brandId || null).language
       : "ja";
     const { customerSummary, orderedItems, ...task } = row;
-    const customerItemSummary = buildCustomerItemSummary(orderedItems);
+    const localizedItemSummary = localizeMaamaaProductionSummary(
+      normalizeText(row.itemSummary),
+      customerSummary,
+      kitchenLanguage
+    );
+    const localizedOrderedItems = Array.isArray(orderedItems)
+      ? orderedItems.map((rawItem) => {
+        const item = rawItem && typeof rawItem === "object" ? rawItem as Record<string, unknown> : {};
+        return {
+          ...item,
+          itemName: localizeMaamaaProductionSummary(normalizeText(item.itemName), customerSummary, kitchenLanguage),
+          toppingLabels: Array.isArray(item.toppingLabels)
+            ? item.toppingLabels.map((label) => localizeMaamaaProductionSummary(normalizeText(label), customerSummary, kitchenLanguage))
+            : []
+        };
+      })
+      : [];
     return {
       ...task,
       kitchenLanguage,
-      customerItemSummary: localizeMaamaaProductionSummary(
-        customerItemSummary,
-        customerSummary,
-        kitchenLanguage
-      ),
-      itemSummary: localizeMaamaaProductionSummary(
-        normalizeText(row.itemSummary),
-        customerSummary,
-        kitchenLanguage
-      )
+      itemSummary: localizedItemSummary,
+      itemGroups: buildKitchenDisplayItemGroups(localizedOrderedItems, localizedItemSummary)
     };
   });
   const taskLanguages = new Set(tasks.map((task) => task.kitchenLanguage));

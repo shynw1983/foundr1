@@ -15040,11 +15040,36 @@ body :where(
 
 .store-kitchen-order-summary {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   border: 1px solid #d9dedb;
   border-radius: 8px;
   padding: 12px;
   background: white;
+}
+
+.store-kitchen-order-group {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  border-top: 2px solid #d9dedb;
+  padding-top: 14px;
+}
+
+.store-kitchen-order-summary > small + .store-kitchen-order-group {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.store-kitchen-order-options {
+  display: grid;
+  gap: 8px;
+}
+
+.store-kitchen-order-group > .store-kitchen-items {
+  gap: 7px;
+  margin-top: 3px;
+  border-left: 4px solid #cbd5d0;
+  padding: 10px 0 0 10px;
 }
 
 .store-kitchen-order-summary > small,

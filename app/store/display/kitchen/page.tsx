@@ -12,8 +12,16 @@ type KitchenTask = {
   productionAreaLabel: string;
   status: string;
   printStatus: string;
-  customerItemSummary: string;
   itemSummary: string;
+  itemGroups: Array<{
+    itemName: string;
+    quantity: number;
+    options: Array<{
+      label: string;
+      count: number;
+    }>;
+    productionLines: string[];
+  }>;
   startedAt: string;
   estimatedPrepMinutes: number;
   estimatedReadyAt: string;
@@ -42,13 +50,6 @@ const orderTypeLabels: Record<"ja" | "zh", Record<string, string>> = {
   ja: { eat_in: "店内", takeout: "持ち帰り", delivery: "配達", unknown: "受取方法未判定" },
   zh: { eat_in: "堂食", takeout: "自提", delivery: "外送", unknown: "取餐方式未确认" }
 };
-
-function splitLines(value: string) {
-  return value.split(/\n+/).map((line) => line.trim()).filter(Boolean).map((line) => ({
-    text: line,
-    isModifier: line.startsWith("・") || line.startsWith("- ")
-  }));
-}
 
 function splitQuantityLabel(text: string) {
   const multiplierMatch = text.match(/^(.*?)( x\d+)(（.*）)?$/);
@@ -151,7 +152,11 @@ export default function StoreKitchenPage() {
     setCheckedLineKeys((current) => {
       const validKeys = new Set<string>();
       for (const task of (body.tasks ?? []) as KitchenTask[]) {
-        splitLines(task.itemSummary).forEach((_, index) => validKeys.add(`${task.id}:${index}`));
+        task.itemGroups?.forEach((group, groupIndex) => {
+          group.productionLines.forEach((_, lineIndex) => {
+            validKeys.add(`${task.id}:${groupIndex}:${lineIndex}`);
+          });
+        });
       }
       return new Set(Array.from(current).filter((key) => validKeys.has(key)));
     });
@@ -487,50 +492,55 @@ export default function StoreKitchenPage() {
                 </div>
                 <div className="store-kitchen-order-summary">
                   <small>{task.kitchenLanguage === "zh" ? "客人下单内容" : "注文内容"}</small>
-                  {splitLines(task.customerItemSummary || task.itemSummary).map((line, index) => {
-                    const quantityParts = splitQuantityLabel(line.text);
-                    return (
-                      <div
-                        className={line.isModifier ? "store-kitchen-order-option" : "store-kitchen-order-product"}
-                        key={`${task.id}:customer:${index}`}
-                      >
-                        <span>{quantityParts.label}</span>
-                        {quantityParts.quantity ? <b>{quantityParts.quantity}</b> : null}
+                  {(task.itemGroups ?? []).map((group, groupIndex) => (
+                    <section className="store-kitchen-order-group" key={`${task.id}:group:${groupIndex}`}>
+                      <div className="store-kitchen-order-product">
+                        <span>{group.itemName}</span>
+                        {group.quantity > 1 ? <b>× {group.quantity}</b> : null}
                       </div>
-                    );
-                  })}
+                      <div className="store-kitchen-order-options">
+                        {group.options.map((option, optionIndex) => (
+                          <div className="store-kitchen-order-option" key={`${task.id}:customer:${groupIndex}:${optionIndex}`}>
+                            <span>{option.label}</span>
+                            {option.count > 1 ? <b>× {option.count}</b> : null}
+                          </div>
+                        ))}
+                      </div>
+                      {kitchenDisplayMode !== "order_only" && group.productionLines.length ? (
+                        <div className="store-kitchen-items">
+                          <small className="store-kitchen-content-label">
+                            {task.kitchenLanguage === "zh"
+                              ? (kitchenDisplayMode === "simple" ? "对应食材" : "对应食材・操作说明")
+                              : (kitchenDisplayMode === "simple" ? "使用食材" : "使用食材・作業説明")}
+                          </small>
+                          {group.productionLines.map((line, lineIndex) => {
+                            const lineKey = `${task.id}:${groupIndex}:${lineIndex}`;
+                            const displayText = kitchenDisplayMode === "simple"
+                              ? simplifyKitchenLine(line, true)
+                              : line;
+                            const quantityParts = splitQuantityLabel(displayText);
+                            return (
+                              <button
+                                className={[
+                                  "store-kitchen-item-line",
+                                  "store-kitchen-item-modifier",
+                                  checkedLineKeys.has(lineKey) ? "is-checked" : ""
+                                ].filter(Boolean).join(" ")}
+                                key={lineKey}
+                                type="button"
+                                aria-pressed={checkedLineKeys.has(lineKey)}
+                                onClick={() => toggleLineCheck(task, lineKey, true)}
+                              >
+                                <span>{quantityParts.label}</span>
+                                {quantityParts.quantity ? <b>{quantityParts.quantity}</b> : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </section>
+                  ))}
                 </div>
-                {kitchenDisplayMode !== "order_only" ? <div className="store-kitchen-items">
-                  <small className="store-kitchen-content-label">
-                    {task.kitchenLanguage === "zh"
-                      ? (kitchenDisplayMode === "simple" ? "食材" : "食材・操作说明")
-                      : (kitchenDisplayMode === "simple" ? "食材" : "食材・作業説明")}
-                  </small>
-                  {splitLines(task.itemSummary).map((line, index) => {
-                    if (!line.isModifier) return null;
-                    const lineKey = `${task.id}:${index}`;
-                    const displayText = kitchenDisplayMode === "simple"
-                      ? simplifyKitchenLine(line.text, line.isModifier)
-                      : line.text;
-                    const quantityParts = splitQuantityLabel(displayText);
-                    return (
-                      <button
-                        className={[
-                          "store-kitchen-item-line",
-                          line.isModifier ? "store-kitchen-item-modifier" : "store-kitchen-item-name",
-                          checkedLineKeys.has(lineKey) ? "is-checked" : ""
-                        ].filter(Boolean).join(" ")}
-                        key={lineKey}
-                        type="button"
-                        aria-pressed={checkedLineKeys.has(lineKey)}
-                        onClick={() => toggleLineCheck(task, lineKey, line.isModifier)}
-                      >
-                        <span>{quantityParts.label}</span>
-                        {quantityParts.quantity ? <b>{quantityParts.quantity}</b> : null}
-                      </button>
-                    );
-                  })}
-                </div> : null}
                 {task.note ? <p className="store-kitchen-note">{task.note}</p> : null}
                 <div className="store-kitchen-actions">
                   <button className="secondary-button store-kitchen-reprint-button" type="button" disabled={savingId === task.id} onClick={() => void requestReprint(task)}>
