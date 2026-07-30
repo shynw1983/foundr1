@@ -1352,12 +1352,15 @@ export default function ProcedureAdminPage() {
                             value={rule.productId ?? ""}
                             onChange={(event) => {
                               const product = maamaaReferenceProductsById.get(event.target.value);
+                              const productName = product ? getProductFamilyLabel(product) : undefined;
                               updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, {
                                 productId: product?.id,
-                                productName: product ? getProductFamilyLabel(product) : undefined,
+                                productName,
                                 productCategory: product?.category,
                                 productSubcategory: product?.subcategory,
-                                kitchenName: product ? getProductFamilyLabel(product) : rule.kitchenName
+                                kitchenName: product && (!rule.kitchenName.trim() || rule.kitchenName === rule.productName)
+                                  ? productName
+                                  : rule.kitchenName
                               });
                             }}
                             disabled={!canEdit}
@@ -1375,11 +1378,7 @@ export default function ProcedureAdminPage() {
                           <input
                             value={rule.kitchenName}
                             onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, {
-                              kitchenName: event.target.value,
-                              productId: undefined,
-                              productName: undefined,
-                              productCategory: undefined,
-                              productSubcategory: undefined
+                              kitchenName: event.target.value
                             })}
                             disabled={!canEdit}
                           />
