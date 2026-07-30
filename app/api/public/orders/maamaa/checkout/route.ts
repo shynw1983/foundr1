@@ -88,6 +88,19 @@ function selectedFlavorIds(body: Record<string, unknown>) {
 }
 
 function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<ReturnType<typeof getMaamaaCompatibleMenu>>["baseMenu"]) {
+  const requestedProductId = String(rawItem.productId || rawItem.baseSoupId || menu.baseSoup.id);
+  const selectedProduct = requestedProductId === menu.baseSoup.id
+    ? menu.baseSoup
+    : menu.presetSoups.find((item) => item.id === requestedProductId);
+  if (!selectedProduct || selectedProduct.websiteEnabled === false || selectedProduct.isAvailable === false) {
+    return { error: "Invalid menu item" };
+  }
+  const isPreset = requestedProductId !== menu.baseSoup.id;
+  const noodleChange = isPreset
+    ? findChoice(menu.noodleReplacementOptions, String(rawItem.noodleChange || "replace-none"), true)
+    : null;
+  if (isPreset && !noodleChange) return { error: "Invalid noodle replacement" };
+
   const medicinalSpice = findChoice(menu.medicinalSpiceOptions, String(rawItem.medicinalSpice || rawItem.medicinalSpiceOption || rawItem.spice || ""), menu.medicinalSpiceOptions.length > 0);
   const heat = findChoice(menu.heatLevels, String(rawItem.heat || rawItem.heatLevel || ""), menu.heatLevels.length > 0);
   const numb = findChoice(menu.numbLevels, String(rawItem.numb || rawItem.numbLevel || ""), menu.numbLevels.length > 0);
@@ -101,7 +114,9 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
   }
 
   let selectionError = "";
-  const selectedSections = menu.menuSections.map((section) => {
+  const selectedSections = menu.menuSections
+    .filter((section) => !isPreset || section.id !== "noodles")
+    .map((section) => {
     const ids = selectedIdsForSection(rawItem, section);
     if (ids.length > section.limit) {
       selectionError = `${section.title}は${section.limit}個まで選択できます。数量を減らしてから、もう一度お試しください。`;
@@ -118,7 +133,8 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
 
   const optionItems = [medicinalSpice, heat, numb, ...specialFlavorItems].filter(Boolean) as MaamaaPricedOption[];
   const toppingItems = selectedSections.flatMap((section) => section.items);
-  const amount = menu.baseSoup.price +
+  const amount = selectedProduct.price +
+    Number(noodleChange?.price || 0) +
     optionItems.reduce((sum, item) => sum + item.price, 0) +
     toppingItems.reduce((sum, item) => sum + item.price, 0);
   if (amount <= 0) return { error: "Invalid amount" };
@@ -127,7 +143,8 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
     medicinalSpice?.name,
     heat ? `辛さ: ${heat.name}` : "",
     numb ? `痺れ: ${numb.name}` : "",
-    ...((specialFlavorItems.filter(Boolean) as MaamaaPricedOption[]).map((item) => `味変: ${item.name}`))
+    ...((specialFlavorItems.filter(Boolean) as MaamaaPricedOption[]).map((item) => `味変: ${item.name}`)),
+    noodleChange ? `麺の変更: ${noodleChange.name}` : ""
   ].filter(Boolean);
   const sectionLabels = selectedSections
     .filter((section) => section.items.length)
@@ -136,6 +153,8 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
 
   return {
     amount,
+    selectedProduct,
+    noodleChange,
     detailLabel,
     optionItems,
     toppingItems,
@@ -156,16 +175,17 @@ function buildMaamaaItemPayload(
   return {
     itemIndex: index + 1,
     baseSoup: {
-      id: baseSoup.id,
-      menuCatalogItemId: baseSoup.menuCatalogItemId,
-      name: baseSoup.name,
-      price: baseSoup.price
+      id: item.selectedProduct.id,
+      menuCatalogItemId: item.selectedProduct.menuCatalogItemId || baseSoup.menuCatalogItemId,
+      name: item.selectedProduct.name,
+      price: item.selectedProduct.price
     },
     customization: {
       medicinalSpice: item.medicinalSpice ? { id: item.medicinalSpice.id, name: item.medicinalSpice.name, price: item.medicinalSpice.price } : null,
       heat: item.heat ? { id: item.heat.id, name: item.heat.name, price: item.heat.price } : null,
       numb: item.numb ? { id: item.numb.id, name: item.numb.name, price: item.numb.price } : null,
-      specialFlavors: item.specialFlavorItems.map((flavor) => ({ id: flavor.id, name: flavor.name, price: flavor.price }))
+      specialFlavors: item.specialFlavorItems.map((flavor) => ({ id: flavor.id, name: flavor.name, price: flavor.price })),
+      noodleChange: item.noodleChange ? { id: item.noodleChange.id, name: item.noodleChange.name, price: item.noodleChange.price } : null
     },
     sections: item.selectedSections.map(({ section, items }) => ({
       sectionId: section.id,
@@ -188,6 +208,7 @@ function buildMaamaaProductionLabels(item: Exclude<ReturnType<typeof validateBui
     item.medicinalSpice?.name ?? "",
     item.heat ? `辛さ: ${item.heat.name}` : "",
     item.numb ? `痺れ: ${item.numb.name}` : "",
+    item.noodleChange ? `麺の変更: ${item.noodleChange.name}` : "",
     ...item.specialFlavorItems.map((flavor) => `味変: ${flavor.name}`),
     ...countChoices(item.toppingItems).map(({ item: topping, quantity }) => quantityLabel(topping.name, quantity))
   ].filter(Boolean);

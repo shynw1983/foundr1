@@ -1,0 +1,599 @@
+{
+  "capturedAt": "2026-07-30",
+  "storeId": "d6205da2-b809-531c-a7b2-d9cf505cf1c0",
+  "baseSoup": {
+    "name": "【自由にカスタム🤲】旨味マーラータンスープ｜麻辣烫汤底｜마라탕 육수｜Mala Tang Broth",
+    "price": 415
+  },
+  "groups": [
+    {
+      "accessibleName": "薬膳の有無を選ぶ 2 オプション Chevron right",
+      "rows": [
+        {
+          "name": "薬膳スパイスあり【超おすすめ🏮】｜添加药膳香料｜약선 향신료 추가｜With Herbal Spice Blend",
+          "priceText": "¥0"
+        },
+        {
+          "name": "薬膳スパイスなし｜不要药膳香料｜약선 향신료 제외｜No Herbal Spice Blend",
+          "priceText": "¥0"
+        }
+      ]
+    },
+    {
+      "accessibleName": "【桁違いの風味の良さ🌶️】🔥辛さレベルをお選びください（希少で高価なジョロキア唐辛子使用🔥） 7 オプション Chevron right",
+      "rows": [
+        {
+          "name": "普通辛🔥｜普通辣｜보통 매운맛｜Regular Spicy",
+          "priceText": "¥0"
+        },
+        {
+          "name": "中辛🔥🔥｜中辣｜중간 매운맛｜Medium Spicy",
+          "priceText": "¥50"
+        },
+        {
+          "name": "大辛🔥🔥🔥👈️おすすめです😳｜大辣｜매우 매운맛｜Very Spicy",
+          "priceText": "¥75"
+        },
+        {
+          "name": "【ストレスを燃やし尽くす💪】激辛🔥🔥🔥🔥｜特辣｜매운맛(최고)｜Extra Spicy",
+          "priceText": "¥125"
+        },
+        {
+          "name": "鬼の一歩手前🔥🔥🔥🔥🔥｜鬼门关前｜귀신 직전 ｜One Step from He ll",
+          "priceText": "¥250"
+        },
+        {
+          "name": "修羅の道🔥🔥🔥🔥🔥🔥｜修罗之路｜수라의 길｜Path of Shura",
+          "priceText": "¥500"
+        },
+        {
+          "name": "【食べる、サウナ🧖‍♀️】地獄の業火🔥🔥🔥🔥🔥🔥🔥｜地狱业火｜지옥의 업화 ｜Infernal Hellfire",
+          "priceText": "¥999"
+        }
+      ]
+    },
+    {
+      "accessibleName": "【高級花椒】⚡️痺れレベルをお選びください 5 オプション Chevron right",
+      "rows": [
+        {
+          "name": "微シビレ｜微微麻｜약간 얼얼함｜Slightly Numbing",
+          "priceText": "¥0"
+        },
+        {
+          "name": "ちょいシビ⚡️｜微麻｜약한 얼얼함｜Mild Numbing",
+          "priceText": "¥0"
+        },
+        {
+          "name": "シビレ⚡️⚡️｜麻｜얼얼함｜Numbing",
+          "priceText": "¥42"
+        },
+        {
+          "name": "ビリリ⚡️⚡️⚡️｜重麻｜강한 얼얼함｜Strong Numbing",
+          "priceText": "¥84"
+        },
+        {
+          "name": "【舌が痺れるほどの幸福を💞】ビリビリ⚡️⚡️⚡️⚡️｜特麻｜극강 얼얼함｜Extreme Numbing",
+          "priceText": "¥126"
+        }
+      ]
+    },
+    {
+      "accessibleName": "🌶️スペシャルな味変をお楽しみください👑 7 オプション Chevron right",
+      "rows": [
+        {
+          "name": "【別添容器】香酢👈️超おすすめです🤫｜香醋｜흑식초｜Chinese Black Vinegar",
+          "priceText": "¥150"
+        },
+        {
+          "name": "【超凝縮旨味タレ🦐🐟️🧄🧅🥥】サーチャージャン｜沙茶酱｜사차소스｜Satay Sauce",
+          "priceText": "¥150"
+        },
+        {
+          "name": "発酵豆腐タレ｜南乳汁｜남유 소스｜Fermented Red Bean Curd Sauce",
+          "priceText": "¥150"
+        },
+        {
+          "name": "ごまピーナッツタレ🥜｜二八酱｜이팔 소스｜Sesame Peanut Blend (2:8 Sauce)",
+          "priceText": "¥246"
+        },
+        {
+          "name": "薬膳スパイス追加｜加药膳香料｜약선 향신료 추가｜Extra Herbal Spice Blend",
+          "priceText": "¥150"
+        },
+        {
+          "name": "にんにくマシマシ🧄｜加倍蒜蓉｜마늘 듬뿍｜Extra Garlic",
+          "priceText": "¥150"
+        },
+        {
+          "name": "フライドオニオン🧅｜炸洋葱碎｜프라이드 어니언｜Fried Onions",
+          "priceText": "¥176"
+        }
+      ]
+    },
+    {
+      "accessibleName": "🍜麺の種類を選ぶ 12 オプション Chevron right",
+      "rows": [
+        {
+          "name": "【おすすめ❗️】もちもち板春雨｜宽粉｜넓적당면｜Wide Sweet Potato Noodles",
+          "priceText": "¥216"
+        },
+        {
+          "name": "トウモロコシ麺｜玉米面｜옥수수면｜Corn Noodles",
+          "priceText": "¥216"
+        },
+        {
+          "name": "春雨｜粉丝｜당면｜Glass Noodles",
+          "priceText": "¥176"
+        },
+        {
+          "name": "さつまいも麺｜红薯粉｜고구마당면｜Sweet Potato Noodles",
+          "priceText": "¥176"
+        },
+        {
+          "name": "【もちもちつるん】牛筋麺｜牛筋面｜우근면｜Niujin Noodles",
+          "priceText": "¥276"
+        },
+        {
+          "name": "トッポッキ｜韩式年糕｜떡볶이떡｜Tteokbokki Rice Cakes",
+          "priceText": "¥216"
+        },
+        {
+          "name": "【ヘルシー】小大豆もやし｜黄豆芽｜콩나물｜Soybean Sprouts",
+          "priceText": "¥176"
+        },
+        {
+          "name": "さつまいも板春雨｜红薯宽粉｜고구마 넓적당면｜Wide Sweet Potato Noodles",
+          "priceText": "¥216"
+        },
+        {
+          "name": "【数量限定】山芋粉皮（丸）｜圆形山药粉皮｜둥근 참마 당면｜Round Chinese Yam Starch Sheets",
+          "priceText": "¥176"
+        },
+        {
+          "name": "山芋麺｜山药粉｜마 산약 당면｜Chinese Yam Noodles",
+          "priceText": "¥176"
+        },
+        {
+          "name": "【もっちりつるん】きしめん｜宽乌冬面｜기시멘｜Kishimen Noodles",
+          "priceText": "¥276"
+        },
+        {
+          "name": "【大盛り】刀削麺｜刀削面｜칼국수면｜Knife-Shaved Noodles",
+          "priceText": "¥276"
+        }
+      ]
+    },
+    {
+      "accessibleName": "🟢ベーシックトッピング 18 オプション Chevron right",
+      "rows": [
+        {
+          "name": "特選イカ団子1個｜花枝丸｜화지완(오징어 완자)｜Cuttlefish Ball",
+          "priceText": "¥250"
+        },
+        {
+          "name": "特選豚団子1個｜猪肉贡丸｜돼지고기 공완｜Taiwanese Pork Meatball",
+          "priceText": "¥250"
+        },
+        {
+          "name": "特選牛肉団子1個｜牛肉贡丸｜소고기 공완｜Taiwanese Beef Meatball",
+          "priceText": "¥250"
+        },
+        {
+          "name": "魚卵入り蟹団子1個｜蟹籽包｜날치알 게완자｜Crab Roe Ball",
+          "priceText": "¥276"
+        },
+        {
+          "name": "【肉汁たっぷり】肉餡入り魚団子｜福州鱼丸｜푸저우 어묵완자｜Fuzhou Fish Ball",
+          "priceText": "¥276"
+        },
+        {
+          "name": "特製ワンタン1個｜肉燕｜러우옌｜Rouyan (Fuzhou Pork Dumpling)",
+          "priceText": "¥150"
+        },
+        {
+          "name": "華味鳥つくね1個｜华味鸟鸡肉丸｜하카타 하나미도리 닭완자｜Hanamidori Chicken Meatball",
+          "priceText": "¥150"
+        },
+        {
+          "name": "火鍋豆皮｜火锅豆皮｜훠궈 두부피｜Hot Pot Tofu Skin",
+          "priceText": "¥196"
+        },
+        {
+          "name": "うずらの卵1個｜鹌鹑蛋｜메추리알｜Quail Eggs",
+          "priceText": "¥120"
+        },
+        {
+          "name": "結びゆば1個｜百叶结｜두부 매듭｜Tofu Knots",
+          "priceText": "¥149"
+        },
+        {
+          "name": "特選えび団子1個｜鲜虾丸｜새우완자｜Shrimp Ball",
+          "priceText": "¥276"
+        },
+        {
+          "name": "彩虹巻1個｜彩虹卷｜무지개 롤｜Rainbow Roll",
+          "priceText": "¥216"
+        },
+        {
+          "name": "ほうれん草えび餃子1個｜翡翠虾饺｜시금치 새우교자｜Spinach Shrimp Dumplings",
+          "priceText": "¥276"
+        },
+        {
+          "name": "【とろとろ食感✨️】生腐竹｜鲜腐竹｜생 푸주｜Fresh Tofu Skin",
+          "priceText": "¥276"
+        },
+        {
+          "name": "【スープが染み込む🤤】揚げ腐竹｜鲜炸腐竹｜튀긴 푸주｜Fried Tofu Skin",
+          "priceText": "¥276"
+        },
+        {
+          "name": "乾燥腐竹｜干腐竹｜건조 푸주｜Dried Tofu Skin",
+          "priceText": "¥216"
+        },
+        {
+          "name": "小麦グルテン｜面筋｜밀글루텐｜Wheat Gluten",
+          "priceText": "¥216"
+        },
+        {
+          "name": "【大サイズ】老豆皮1枚｜老豆皮｜노두부피｜Traditional Tofu Skin",
+          "priceText": "¥276"
+        }
+      ]
+    },
+    {
+      "accessibleName": "⚪️スタンダードトッピング 45 オプション Chevron right",
+      "rows": [
+        {
+          "name": "ウインナー1個｜香肠｜소시지｜Sausage",
+          "priceText": "¥150"
+        },
+        {
+          "name": "エリンギ｜杏鲍菇｜새송이버섯｜King Oyster Mushroom",
+          "priceText": "¥276"
+        },
+        {
+          "name": "えのき｜金针菇｜팽이버섯｜Enoki Mushroom",
+          "priceText": "¥276"
+        },
+        {
+          "name": "オクラ1本｜秋葵｜오크라｜Okra",
+          "priceText": "¥276"
+        },
+        {
+          "name": "カニカマ｜蟹棒｜게맛살｜Imitation Crab Stick",
+          "priceText": "¥276"
+        },
+        {
+          "name": "キャベツ｜卷心菜｜양배추｜Cabbage",
+          "priceText": "¥276"
+        },
+        {
+          "name": "グリーンアスパラガス1本｜芦笋｜그린 아스파라거스｜Green Asparagus",
+          "priceText": "¥276"
+        },
+        {
+          "name": "さつまいも｜红薯｜고구마｜Sweet Potato",
+          "priceText": "¥246"
+        },
+        {
+          "name": "しめじ｜蟹味菇｜만가닥버섯｜Shimeji Mushrooms",
+          "priceText": "¥276"
+        },
+        {
+          "name": "大判！横切りスパム1枚｜大块横切午餐肉（1片）｜두툼한 가로컷 스팸 1장｜1 Thick-Cut Slice of Spam",
+          "priceText": "¥276"
+        },
+        {
+          "name": "チンゲン菜｜上海青｜청경채｜Bok Choy",
+          "priceText": "¥346"
+        },
+        {
+          "name": "ニラ｜韭菜｜부추｜Chinese Chives",
+          "priceText": "¥276"
+        },
+        {
+          "name": "パクチー｜香菜｜고수｜Cilantro",
+          "priceText": "¥399"
+        },
+        {
+          "name": "ベビーコーン1本｜玉米笋｜베이비콘｜Baby Corn",
+          "priceText": "¥216"
+        },
+        {
+          "name": "れんこん1個｜莲藕｜연근｜Lotus Root",
+          "priceText": "¥129"
+        },
+        {
+          "name": "わかめ｜裙带菜｜미역｜Wakame Seaweed",
+          "priceText": "¥176"
+        },
+        {
+          "name": "ロールキャベツ1個｜卷心菜卷｜양배추 롤｜Cabbage Roll",
+          "priceText": "¥300"
+        },
+        {
+          "name": "豆苗｜豆苗｜완두순｜Pea Shoots",
+          "priceText": "¥276"
+        },
+        {
+          "name": "豆腐｜豆腐｜두부｜Tofu",
+          "priceText": "¥246"
+        },
+        {
+          "name": "白ネギ｜大葱｜대파｜Welsh Onion",
+          "priceText": "¥276"
+        },
+        {
+          "name": "白菜｜白菜｜배추｜Napa Cabbage",
+          "priceText": "¥346"
+        },
+        {
+          "name": "黒キクラゲ｜黑木耳｜목이버섯｜Wood Ear Mushroom",
+          "priceText": "¥276"
+        },
+        {
+          "name": "【コリコリ】白玉木耳｜白玉木耳｜백색 목이버섯｜White Wood Ear Mushroom",
+          "priceText": "¥326"
+        },
+        {
+          "name": "里芋1個｜芋头｜토란｜Taro",
+          "priceText": "¥156"
+        },
+        {
+          "name": "姫たけのこ1本｜小竹笋｜어린 죽순｜Baby Bamboo Shoots",
+          "priceText": "¥276"
+        },
+        {
+          "name": "【もちもち】穂先メンマ｜糯米笋｜죽순 멘마｜Tender Bamboo Menma",
+          "priceText": "¥276"
+        },
+        {
+          "name": "ブロッコリー｜西兰花｜브로콜리｜Broccoli",
+          "priceText": "¥276"
+        },
+        {
+          "name": "しいたけ｜香菇｜표고버섯｜Shiitake Mushroom",
+          "priceText": "¥276"
+        },
+        {
+          "name": "かぼちゃ｜南瓜｜단호박｜Kabocha Squash",
+          "priceText": "¥276"
+        },
+        {
+          "name": "白きくらげ｜银耳｜흰목이버섯｜White Fungus",
+          "priceText": "¥326"
+        },
+        {
+          "name": "牛肉スライス(1人前約50g)｜牛肉片｜소고기 슬라이스｜Sliced Beef",
+          "priceText": "¥439"
+        },
+        {
+          "name": "国産もち1個｜国产年糕｜일본산 떡｜Japanese Rice Cake",
+          "priceText": "¥200"
+        },
+        {
+          "name": "ほうれん草｜菠菜｜시금치｜Spinach",
+          "priceText": "¥276"
+        },
+        {
+          "name": "茄子｜茄子｜가지｜Eggplant",
+          "priceText": "¥276"
+        },
+        {
+          "name": "国産プチトマト1個｜国产小番茄｜일본산 방울토마토｜Japanese Cherry Tomatoes",
+          "priceText": "¥119"
+        },
+        {
+          "name": "セロリ｜芹菜｜셀러리｜Celery",
+          "priceText": "¥324"
+        },
+        {
+          "name": "ミニハンバーグ１個｜迷你汉堡排｜미니 함박스테이크｜Mini Hamburger Steak",
+          "priceText": "¥276"
+        },
+        {
+          "name": "【大分県産】小大豆もやし",
+          "priceText": "¥276"
+        },
+        {
+          "name": "【栄養】ベビーリーフ",
+          "priceText": "¥276"
+        },
+        {
+          "name": "ミニがんも1個｜迷你炸豆腐饼｜미니 두부튀김｜Mini Fried Tofu Fritter",
+          "priceText": "¥100"
+        },
+        {
+          "name": "油あげ｜油豆腐｜유부｜Fried Tofu (Aburaage)",
+          "priceText": "¥100"
+        },
+        {
+          "name": "【ぷちぷち】子持ちししゃも一匹｜柳叶鱼｜알배기 시샤모｜Roe Shishamo Smelt",
+          "priceText": "¥226"
+        },
+        {
+          "name": "たけのこ｜竹笋｜죽순｜Bamboo Shoots",
+          "priceText": "¥276"
+        },
+        {
+          "name": "菜の花｜菜心｜유채나물｜Rapeseed Greens",
+          "priceText": "¥276"
+        },
+        {
+          "name": "小松菜｜小松菜｜고마쓰나｜Komatsuna Greens",
+          "priceText": "¥299"
+        }
+      ]
+    },
+    {
+      "accessibleName": "💎プレミアムトッピング 23 オプション Chevron right",
+      "rows": [
+        {
+          "name": "【厳選】豚肉スライス(1人前約50g)｜猪肉片｜돼지고기 슬라이스｜Sliced Pork",
+          "priceText": "¥420"
+        },
+        {
+          "name": "【高級NZ子羊】厳選ラム肉(1人前約50g)｜精选羊肉｜엄선한 양고기｜Selected Lamb",
+          "priceText": "¥676"
+        },
+        {
+          "name": "丸ごとホタテ1個｜整颗扇贝｜통 가리비｜Whole Scallop",
+          "priceText": "¥390"
+        },
+        {
+          "name": "ヤリイカリング（1人前約50g）｜枪乌贼圈｜한치 링｜Spear Squid Rings",
+          "priceText": "¥390"
+        },
+        {
+          "name": "白身魚｜白身鱼｜흰살생선｜White Fish",
+          "priceText": "¥390"
+        },
+        {
+          "name": "たっぷりあさり｜蛤蜊（多份）｜바지락 듬뿍｜Extra Clams",
+          "priceText": "¥399"
+        },
+        {
+          "name": "【高たんぱく💪】国産とりむねスライス約50g",
+          "priceText": "¥399"
+        },
+        {
+          "name": "牛ハチノス約50g｜牛肚｜소양｜Beef Tripe",
+          "priceText": "¥599"
+        },
+        {
+          "name": "【国産】牛センマイ約50g｜牛百叶｜소 천엽｜Beef Omasum Tripe",
+          "priceText": "¥676"
+        },
+        {
+          "name": "【国産】豚タン約50g｜国产猪舌｜일본산 돼지혀｜Japanese Pork Tongu e",
+          "priceText": "¥499"
+        },
+        {
+          "name": "【スタミナ💪】国産豚レバー（1人前約50g）｜国产猪肝｜일본산 돼지간｜Japanese Pork Liver",
+          "priceText": "¥399"
+        },
+        {
+          "name": "ぷりぷり国産牛モツ(1人前約50g)｜国产牛肠｜국산 소곱창｜Japanese Beef Intestine",
+          "priceText": "¥599"
+        },
+        {
+          "name": "【コラーゲン】とろとろ国産豚軟骨(約50g)｜国产猪软骨｜일본산 돼지연골｜Japanese Pork Cartilage",
+          "priceText": "¥599"
+        },
+        {
+          "name": "【厳選牛】とろとろ国産牛すじ(1人前約50g)｜软烂国产牛筋｜부드러운 일본산 소힘줄｜Tender Japanese Beef Tendon",
+          "priceText": "¥699"
+        },
+        {
+          "name": "大海老1匹｜大虾｜왕새우｜King Prawns",
+          "priceText": "¥580"
+        },
+        {
+          "name": "【旨味が爆発💥】ぶつ切りたこ🐙（約50g）｜章鱼块｜문어 조각｜Octopus Pieces",
+          "priceText": "¥699"
+        },
+        {
+          "name": "【주꾸미🐙】丸ごとイイダコ１匹｜整只小章鱼｜통 쭈꾸미｜Whole Baby Octopus",
+          "priceText": "¥599"
+        },
+        {
+          "name": "【旨味溢れる】ホッキ貝1個｜北寄贝｜북방조개｜Surf Clam",
+          "priceText": "¥326"
+        },
+        {
+          "name": "【数量限定品】牛赤センマイ（約50g）｜牛红百叶｜소 홍천엽｜Beef Red Omasum Tripe",
+          "priceText": "¥526"
+        },
+        {
+          "name": "【数量限定品】牛もうちょう（約50g）｜牛盲肠｜소 맹장｜Beef Cecum",
+          "priceText": "¥576"
+        },
+        {
+          "name": "🦆合鴨あぶりスモーク｜炙烤烟熏鸭胸｜훈제 오리 가슴살｜Smoked Seared Duck Breast",
+          "priceText": "¥390"
+        },
+        {
+          "name": "鶏レバー＆ハツ｜鸡肝&鸡心｜닭간 & 닭심장｜Chicken Liver & Heart",
+          "priceText": "¥390"
+        },
+        {
+          "name": "ムール貝｜青口贝｜홍합｜Mussels",
+          "priceText": "¥399"
+        }
+      ]
+    },
+    {
+      "accessibleName": "👑VIPトッピング 6 オプション Chevron right",
+      "rows": [
+        {
+          "name": "【期間限定品】🦪広島県産牡蠣(3個)｜广岛县产牡蛎（3个）｜히로시마산 굴 (3개)｜Hiroshima Oysters (3 Pieces)",
+          "priceText": "¥880"
+        },
+        {
+          "name": "【厳選国産黒毛和牛🥩】極上の肉👑｜极品黑毛和牛｜최고급 흑모와규｜Premium Japanese Black Wagyu",
+          "priceText": "¥2,980"
+        },
+        {
+          "name": "【数量限定𓃟】糸島豚の特大フランクフルト1本｜糸岛猪特大香肠｜이토시마 돼지 특대 프랑크푸르트｜Extra Large Itoshima Pork Frankfurter",
+          "priceText": "¥1,250"
+        },
+        {
+          "name": "【極上🧀】丸ごとカマンベール｜整颗卡芒贝尔奶酪｜통 카망베르 치즈｜Whole Camembert Cheese",
+          "priceText": "¥1,280"
+        },
+        {
+          "name": "特選海鮮3種盛り👑（大えび1匹、ほたて1個、イカリング約50g）｜精选三种海鲜拼盘（大虾1只、扇贝1个、鱿鱼圈约50克）｜특선 해산물 3종 모둠 (왕새우 2마리, 가리비 1개, 오징어 링 약 50g)｜Premium Seafood Trio (2 King Prawns, 1 Scallop, Approx. 50g Squid Rings)",
+          "priceText": "¥1,680"
+        },
+        {
+          "name": "【ご褒美🫕】丸ごとモッツァレラ１個｜马苏里拉芝士｜모차렐라 치즈｜Mozzarella Cheese Ball",
+          "priceText": "¥1,280"
+        }
+      ]
+    },
+    {
+      "accessibleName": "🏆️ロイヤルVIPトッピング 1 オプション Chevron right",
+      "rows": [
+        {
+          "name": "特大ずわい蟹爪1個｜特大雪蟹蟹钳｜특대 대게 집게발｜Extra Large Snow Crab Claw",
+          "priceText": "¥1,080"
+        }
+      ]
+    },
+    {
+      "accessibleName": "【リクエスト制👑】お客様の推しトッピング😍 3 オプション Chevron right",
+      "rows": [
+        {
+          "name": "山クラゲ🥇｜贡菜｜궁채｜Gongcai (Dried Lettuce Stem)",
+          "priceText": "¥176"
+        },
+        {
+          "name": "ブンモジャ1本🥈｜粉耗子｜분모자｜Bunmoja Potato Noodles",
+          "priceText": "¥226"
+        },
+        {
+          "name": "もちもち小籠包1個🥉｜小笼包｜샤오룽바오｜Xiaolongbao",
+          "priceText": "¥216"
+        }
+      ]
+    },
+    {
+      "accessibleName": "【王道で最強💪悪魔的ペアリング😈🥤💞汗だくからの大復活✨️】冷え冷えコーラ 1 オプション Chevron right",
+      "rows": [
+        {
+          "name": "コーラ1ショット｜可乐｜콜라｜Cola",
+          "priceText": "¥350"
+        }
+      ]
+    },
+    {
+      "accessibleName": "⏳限定トッピング 1 オプション Chevron right",
+      "rows": [
+        {
+          "name": "特製旨辛肉味噌｜特制香辣肉味噌｜특제 매콤 고기 미소｜Special Savory Spicy Meat Miso Sauce",
+          "priceText": "¥399"
+        }
+      ]
+    }
+  ]
+}

@@ -18,6 +18,15 @@ export type MaamaaMenuSection = {
   items: MaamaaPricedOption[];
 };
 
+export type MaamaaPresetSoup = MaamaaPricedOption & {
+  menuCatalogItemId: string;
+  category: string;
+  defaultNoodle: string;
+  note: string;
+  isAvailable: boolean;
+  websiteEnabled: boolean;
+};
+
 export type MaamaaCompatibleMenu = {
   baseSoup: {
     id: string;
@@ -34,6 +43,8 @@ export type MaamaaCompatibleMenu = {
   heatLevels: MaamaaPricedOption[];
   numbLevels: MaamaaPricedOption[];
   specialFlavors: MaamaaPricedOption[];
+  presetSoups: MaamaaPresetSoup[];
+  noodleReplacementOptions: MaamaaPricedOption[];
   menuSections: MaamaaMenuSection[];
   stores: Array<{ id: string; label: string; osStoreId: string }>;
   selectedStoreId: string;
@@ -231,6 +242,18 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
     .filter((option) => !unavailableOptionKeys.has(option.optionKey))
     .map(choice);
   const fixedGroupKeys = new Set(["medicinal-spice", "heat", "numb", "special-flavor"]);
+  const rawPresetSoups = Array.isArray(base.variableSchema?.presetSoups)
+    ? base.variableSchema.presetSoups as Array<Record<string, unknown>>
+    : [];
+  const rawNoodleReplacementOptions = Array.isArray(base.variableSchema?.noodleReplacementOptions)
+    ? base.variableSchema.noodleReplacementOptions as Array<Record<string, unknown>>
+    : [];
+  const schemaChoice = (item: Record<string, unknown>): MaamaaPricedOption => ({
+    id: String(item.id ?? ""),
+    name: String(item.name ?? ""),
+    displayNames: (item.displayNames ?? {}) as Record<string, string>,
+    price: Number(item.price ?? 0)
+  });
 
   const menuSections = groups
     .filter((group) => !fixedGroupKeys.has(group.groupKey))
@@ -306,6 +329,20 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
       heatLevels: choices("heat"),
       numbLevels: choices("numb"),
       specialFlavors: choices("special-flavor"),
+      presetSoups: rawPresetSoups
+        .map((item) => ({
+          ...schemaChoice(item),
+          menuCatalogItemId: base.id,
+          category: String(item.category ?? "recommended-set"),
+          defaultNoodle: String(item.defaultNoodle ?? "板春雨"),
+          note: String(item.note ?? ""),
+          isAvailable: baseSetting?.isAvailable ?? true,
+          websiteEnabled: baseSetting?.websiteEnabled ?? true
+        }))
+        .filter((item) => item.id && item.name),
+      noodleReplacementOptions: rawNoodleReplacementOptions
+        .map(schemaChoice)
+        .filter((item) => item.id && item.name),
       menuSections,
       stores: publicStores,
       selectedStoreId: selectedStore?.id ?? publicStores[0]?.id ?? "",

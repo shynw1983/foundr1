@@ -8,6 +8,13 @@ const maamaaMenuPath = "/Users/wushengyin/Desktop/maamaa/src/data/malatang-menu.
 const nanachaLocaleDir = "/Users/wushengyin/Desktop/nanacha New HP/public/locales";
 const maamaaLocaleDir = "/Users/wushengyin/Desktop/maamaa/public/locales";
 const nanachaImageDir = new URL("../public/assets/menu/nanacha/", import.meta.url);
+const brandArgumentIndex = process.argv.indexOf("--brand");
+const selectedBrand = brandArgumentIndex >= 0 ? String(process.argv[brandArgumentIndex + 1] ?? "").trim().toLowerCase() : "";
+const pruneMissing = process.argv.includes("--prune");
+
+if (selectedBrand && !["nanacha", "maamaa"].includes(selectedBrand)) {
+  throw new Error(`Unknown --brand value: ${selectedBrand}`);
+}
 
 loadLocalEnv();
 
@@ -440,10 +447,12 @@ async function upsertOption({
 }
 
 async function upsertOptions(groupId, choices, { affectsProcedure = true, dictionaries = {} } = {}) {
+  const activeOptionKeys = [];
   for (const [index, choice] of choices.entries()) {
     const id = choiceKey(choice, index);
     const name = typeof choice === "string" ? choice : choice.label ?? choice.name;
     const price = typeof choice === "string" ? 0 : choice.price ?? 0;
+    activeOptionKeys.push(id);
     await upsertOption({
       groupId,
       externalId: id,
@@ -451,10 +460,24 @@ async function upsertOptions(groupId, choices, { affectsProcedure = true, dictio
       name,
       priceDelta: price,
       affectsProcedure,
-      displayNames: displayNamesFor(name, dictionaries),
+      displayNames: {
+        ...displayNamesFor(name, dictionaries),
+        ...(typeof choice === "string" ? {} : choice.displayNames ?? {})
+      },
       sortOrder: (index + 1) * 10,
       isActive: true
     });
+  }
+  if (pruneMissing) {
+    await sql`
+      update menu_options
+      set is_active = false, updated_at = now()
+      where option_group_id = ${groupId}
+        and option_key not in (
+          select jsonb_array_elements_text(${JSON.stringify(activeOptionKeys)}::jsonb)
+        )
+        and is_active = true
+    `;
   }
 }
 
@@ -598,6 +621,8 @@ async function importMaamaa() {
         unitPrice: menu.baseSoup.posWeightPricing?.unitPrice ?? menu.baseSoup.pricePerGram ?? null
       },
       baseSoup: menu.baseSoup,
+      presetSoups: menu.presetSoups ?? [],
+      noodleReplacementOptions: menu.noodleReplacementOptions ?? [],
       optionGroupKeys: [
         "medicinal-spice",
         "heat",
@@ -653,12 +678,28 @@ async function importMaamaa() {
     optionCount += section.items.length;
   }
 
+  if (pruneMissing) {
+    const activeGroupKeys = [
+      ...fixedGroups.map((group) => group.key),
+      ...menu.menuSections.map((section) => section.id)
+    ];
+    await sql`
+      update menu_option_groups
+      set is_active = false, updated_at = now()
+      where brand_id = ${brand.id}
+        and group_key not in (
+          select jsonb_array_elements_text(${JSON.stringify(activeGroupKeys)}::jsonb)
+        )
+        and is_active = true
+    `;
+  }
+
   return { brand: brand.name, items: 1, groups: groupCount, options: optionCount };
 }
 
 const results = [];
-results.push(await importNanacha());
-results.push(await importMaamaa());
+if (!selectedBrand || selectedBrand === "nanacha") results.push(await importNanacha());
+if (!selectedBrand || selectedBrand === "maamaa") results.push(await importMaamaa());
 
 const counts = await sql`
   select
@@ -676,3 +717,4 @@ const counts = await sql`
 `;
 
 console.log(JSON.stringify({ imported: results, totals: counts }, null, 2));
+process.exit(0);
