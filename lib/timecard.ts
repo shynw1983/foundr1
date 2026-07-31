@@ -731,9 +731,10 @@ export function summarizePayroll(
     }
     for (const setting of employee?.storePayrollSettings ?? []) {
       if (!setting.payrollEnabled) continue;
-      const storeDays = (daysByEmployeeAndStore.get(`${row.employeeId}:${setting.storeId}`) ?? [])
+      const allStoreDays = daysByEmployeeAndStore.get(`${row.employeeId}:${setting.storeId}`) ?? [];
+      const storeDays = allStoreDays
         .filter((day) => getEffectivePayrollSetting(employee, day.storeId, day.workDate) === setting);
-      const commuteDays = (daysByEmployeeAndStore.get(`${row.employeeId}:${setting.storeId}`) ?? [])
+      const commuteDays = allStoreDays
         .filter((day) => getEffectiveCommuteSetting(employee, day.storeId, day.workDate) === setting);
       const workDays = storeDays.filter((day) => day.workMinutes > 0).length;
       const workMinutes = storeDays.reduce((sum, day) => sum + day.workMinutes, 0);
@@ -921,7 +922,8 @@ export function summarizePayroll(
           : Math.min(uncappedCommuteAllowance, Math.ceil(setting.commuteAllowanceMonthlyCap));
         commuteAllowance += storeCommuteAllowance;
       }
-      const isMonthlyDeductionSetting = monthlyDeductionSettingByStore.get(setting.storeId) === setting;
+      const isMonthlyDeductionSetting = allStoreDays.length > 0
+        && monthlyDeductionSettingByStore.get(setting.storeId) === setting;
       const socialResult = isMonthlyDeductionSetting
         ? getSocialInsuranceDeduction(employee, setting, payrollMonth, socialInsuranceRows)
         : { amount: 0, alerts: [] as string[] };

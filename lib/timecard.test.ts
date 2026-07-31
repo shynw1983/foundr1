@@ -250,6 +250,38 @@ test("current and historical payroll settings deduct monthly charges only once",
   assert.equal(row.residentTax, 5000);
 });
 
+test("monthly deductions from another store do not leak into the payroll row", () => {
+  const employee: TimecardEmployee = {
+    id: "employee-1",
+    name: "テスト従業員",
+    role: "staff",
+    status: "active",
+    birthDate: "1986-12-04",
+    storeIds: ["store-1", "store-2"],
+    storePayrollSettings: [
+      setting({
+        applySocialInsurance: false,
+        applyResidentTax: false
+      }),
+      setting({
+        storeId: "store-2",
+        validFrom: "2025-11-01",
+        wageValidFrom: "2025-11-01",
+        commuteValidFrom: "2025-11-01"
+      })
+    ]
+  };
+
+  const row = summarizePayroll([employee], [workday], {
+    month: "2026-06",
+    periodEndExclusive: "2026-07-01",
+    socialInsuranceRows
+  }).rows[0];
+
+  assert.equal(row.socialInsurance, 0);
+  assert.equal(row.residentTax, 0);
+});
+
 test("a future payroll setting does not replace the setting effective for the closing period", () => {
   const row = payrollFor([
     setting({
