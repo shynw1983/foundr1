@@ -30,7 +30,14 @@ final class BridgeCommandClient {
             try {
                 JSONObject response = request(appContext, "GET", null);
                 JSONObject command = response == null ? null : response.optJSONObject("command");
-                if (command != null) BridgeCommandState.receive(appContext, command);
+                if (command != null) {
+                    Log.i(
+                        TAG,
+                        "Command received id=" + command.optString("id")
+                            + " type=" + command.optString("type")
+                    );
+                    BridgeCommandState.receive(appContext, command);
+                }
             } catch (Exception error) {
                 Log.w(TAG, "Command poll failed", error);
             } finally {

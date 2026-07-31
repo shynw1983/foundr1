@@ -20,6 +20,34 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized bridge token." }, { status: 401 });
   }
 
+  if (authorization.deviceId) {
+    await sql`
+      update local_bridge_devices
+      set last_seen_at = now(), updated_at = now()
+      where id::text = ${authorization.deviceId}
+        and (
+          last_seen_at is null
+          or last_seen_at < now() - interval '5 minutes'
+        )
+    `;
+  }
+
+  await sql`
+    update local_bridge_commands
+    set
+      status = 'failed',
+      claimed_by_device_id = null,
+      claimed_at = null,
+      claim_expires_at = null,
+      completed_at = coalesce(completed_at, now()),
+      last_error = 'Bridge command expired before execution.',
+      updated_at = now()
+    where store_id::text = ${authorization.storeId}
+      and platform = 'uber_eats'
+      and status in ('pending', 'processing')
+      and created_at < now() - interval '2 hours'
+  `;
+
   await sql`
     update local_bridge_commands
     set
@@ -95,6 +123,17 @@ export async function POST(request: Request) {
   const authorization = await authorize(request);
   if (!authorization.authorized || !authorization.storeId) {
     return Response.json({ error: "Unauthorized bridge token." }, { status: 401 });
+  }
+  if (authorization.deviceId) {
+    await sql`
+      update local_bridge_devices
+      set last_seen_at = now(), updated_at = now()
+      where id::text = ${authorization.deviceId}
+        and (
+          last_seen_at is null
+          or last_seen_at < now() - interval '5 minutes'
+        )
+    `;
   }
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const commandId = cleanText(body.commandId, 80);

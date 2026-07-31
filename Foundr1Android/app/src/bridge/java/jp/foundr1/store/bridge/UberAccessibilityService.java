@@ -51,6 +51,13 @@ public class UberAccessibilityService extends AccessibilityService {
     private int commandAttempts = 0;
     private boolean commandReadyClickDispatched = false;
     private final Runnable commandRunnable = this::processPendingCommand;
+    private final Runnable commandPollRunnable = new Runnable() {
+        @Override
+        public void run() {
+            BridgeCommandClient.poll(UberAccessibilityService.this);
+            handler.postDelayed(this, 8000L);
+        }
+    };
     private final Runnable recoveryRunnable = () -> {
         recoveryScheduledAt = 0L;
         recoverNewOrder();
@@ -419,6 +426,8 @@ public class UberAccessibilityService extends AccessibilityService {
             recoveryReceiverRegistered = true;
         }
         if (BridgeCommandState.current(this) != null) handler.postDelayed(commandRunnable, 150L);
+        handler.removeCallbacks(commandPollRunnable);
+        handler.post(commandPollRunnable);
         if (UberRecoveryState.isPending(this)) scheduleRecovery(250L);
     }
 
@@ -428,6 +437,7 @@ public class UberAccessibilityService extends AccessibilityService {
         recoveryScheduledAt = 0L;
         handler.removeCallbacks(uploadRunnable);
         handler.removeCallbacks(commandRunnable);
+        handler.removeCallbacks(commandPollRunnable);
         handler.removeCallbacks(inventoryCaptureRunnable);
         if (recoveryReceiverRegistered) {
             try {
