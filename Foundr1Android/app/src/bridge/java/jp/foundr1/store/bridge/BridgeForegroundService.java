@@ -59,6 +59,13 @@ public class BridgeForegroundService extends Service {
     }
 
     @Override
+    public void onTimeout(int startId, int fgsType) {
+        handler.removeCallbacks(heartbeat);
+        handler.removeCallbacks(recoveryWatchdog);
+        stopSelf(startId);
+    }
+
+    @Override
     public void onDestroy() {
         handler.removeCallbacks(heartbeat);
         handler.removeCallbacks(recoveryWatchdog);
