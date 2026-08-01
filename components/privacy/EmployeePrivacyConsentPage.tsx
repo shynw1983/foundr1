@@ -34,6 +34,13 @@ function getNextPath() {
   return window.location.pathname.startsWith("/staff") ? "/staff" : "/store";
 }
 
+function getLoginPath() {
+  if (typeof window === "undefined") return "/os/login";
+  if (window.location.pathname.startsWith("/store")) return "/store/login";
+  if (window.location.pathname.startsWith("/staff")) return "/staff/login";
+  return "/os/login";
+}
+
 export function EmployeePrivacyConsentPage() {
   const [pendingConsents, setPendingConsents] = useState<PrivacyDocumentSummary[]>([]);
   const [expandedDocumentId, setExpandedDocumentId] = useState("");
@@ -52,7 +59,7 @@ export function EmployeePrivacyConsentPage() {
       const response = await fetch("/api/privacy-consents", { cache: "no-store" });
       if (!response.ok) {
         if (response.status === 401) {
-          window.location.href = `/os/login?next=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
+          window.location.href = `${getLoginPath()}?next=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
           return;
         }
         const body = await response.json().catch(() => ({})) as ConsentResponse;

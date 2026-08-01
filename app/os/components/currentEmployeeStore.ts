@@ -18,11 +18,19 @@ export function getCachedCurrentEmployee() {
   return cachedEmployee;
 }
 
-function redirectToOsLogin() {
-  if (typeof window === "undefined" || window.location.pathname.startsWith("/os/login")) return;
+function redirectToSurfaceLogin() {
+  if (typeof window === "undefined") return;
 
-  const nextPath = `${window.location.pathname}${window.location.search}`;
-  window.location.href = `/os/login?next=${encodeURIComponent(nextPath)}`;
+  const pathname = window.location.pathname;
+  const loginPath = pathname === "/store" || pathname.startsWith("/store/")
+    ? "/store/login"
+    : pathname === "/staff" || pathname.startsWith("/staff/")
+      ? "/staff/login"
+      : "/os/login";
+  if (pathname === loginPath || pathname.startsWith(`${loginPath}/`)) return;
+
+  const nextPath = `${pathname}${window.location.search}`;
+  window.location.href = `${loginPath}?next=${encodeURIComponent(nextPath)}`;
 }
 
 export async function loadCurrentEmployee() {
@@ -36,7 +44,7 @@ export async function loadCurrentEmployee() {
     .then(async (response) => {
       if (!response.ok) {
         cachedEmployee = null;
-        if (response.status === 401) redirectToOsLogin();
+        if (response.status === 401) redirectToSurfaceLogin();
         return null;
       }
       const body = await response.json().catch(() => ({})) as { employee?: CurrentEmployee };
