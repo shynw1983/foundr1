@@ -29,17 +29,28 @@ export async function requireOsSession(): Promise<EmployeeSession | null> {
       join employees on employees.id = employee_sessions.employee_id
       where employee_sessions.id = ${session.sessionId}::uuid
         and employees.id = ${session.id}::uuid
+        and employees.role = ${session.role}
         and employees.status = 'active'
         and employee_sessions.session_version = ${session.sessionVersion}
         and employees.session_version = ${session.sessionVersion}
         and employee_sessions.revoked_at is null
-        and employee_sessions.expires_at > now()
+        and (
+          employee_sessions.expires_at > now()
+          or (
+            employees.role = 'store_terminal'
+            and employee_sessions.surface = 'store'
+            and employee_sessions.created_at > now() - interval '400 days'
+          )
+        )
       limit 1
     ), touched_session as (
       update employee_sessions
       set
         last_seen_at = now(),
-        expires_at = now() + interval '14 days'
+        expires_at = now() + case
+          when active_session.role = 'store_terminal' then interval '400 days'
+          else interval '14 days'
+        end
       from active_session
       where employee_sessions.id = active_session.session_id
         and (

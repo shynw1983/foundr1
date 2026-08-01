@@ -1,7 +1,8 @@
 import { authCookieName, readSessionToken } from "./auth";
 import { sql } from "./db";
 
-const rollingSessionIntervalSql = "14 days";
+const defaultRollingSessionIntervalSql = "14 days";
+const storeTerminalRollingSessionIntervalSql = "400 days";
 const limitedEmployeeSessionRoles = new Set(["store_manager", "staff"]);
 const maxLimitedEmployeeSessions = 2;
 
@@ -28,6 +29,12 @@ export function sessionCookieMaxAge() {
   return 60 * 60 * 24 * 400;
 }
 
+export function employeeSessionRollingInterval(role: string) {
+  return role === "store_terminal"
+    ? storeTerminalRollingSessionIntervalSql
+    : defaultRollingSessionIntervalSql;
+}
+
 export async function createEmployeeSession(input: {
   employeeId: string;
   role: string;
@@ -35,6 +42,7 @@ export async function createEmployeeSession(input: {
   surface: string;
   request: Request;
 }) {
+  const rollingSessionIntervalSql = employeeSessionRollingInterval(input.role);
   const rows = await sql`
     insert into employee_sessions (
       employee_id,
@@ -82,7 +90,8 @@ export async function createEmployeeSession(input: {
   return sessionId;
 }
 
-export async function touchEmployeeSession(sessionId: string, employeeId: string, sessionVersion: number) {
+export async function touchEmployeeSession(sessionId: string, employeeId: string, sessionVersion: number, role = "") {
+  const rollingSessionIntervalSql = employeeSessionRollingInterval(role);
   const rows = await sql`
     update employee_sessions
     set last_seen_at = now(),
