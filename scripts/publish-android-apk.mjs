@@ -26,9 +26,10 @@ const appConfigs = {
     legacyFileName: "foundr1-staff-latest.apk"
   },
   bridge: {
-    title: "Foundr1 Bridge",
+    title: "Foundr1 Bridge for Uber Eats",
     packageName: "jp.foundr1.bridge",
-    legacyFileName: "foundr1-bridge-latest.apk"
+    legacyFileName: "foundr1-bridge-latest.apk",
+    initialVersionName: "1.0.0"
   }
 };
 
@@ -81,7 +82,12 @@ const previousVersion = readPreviousVersion();
 const previousVersionCode = Number(previousVersion?.versionCode ?? 0);
 const nextVersionCode = Number(parseArgValue(versionCodeArg)) || Math.max(1, previousVersionCode + 1);
 const dateKey = formatTokyoDateKey();
-const nextVersionName = parseArgValue(versionNameArg) || `0.1.${nextVersionCode}`;
+const previousVersionName = String(previousVersion?.versionName ?? "").trim();
+const semanticVersionMatch = previousVersionName.match(/^(\d+)\.(\d+)\.(\d+)$/);
+const automaticVersionName = semanticVersionMatch
+  ? `${semanticVersionMatch[1]}.${semanticVersionMatch[2]}.${Number(semanticVersionMatch[3]) + 1}`
+  : appConfigs[flavor].initialVersionName ?? `0.1.${nextVersionCode}`;
+const nextVersionName = parseArgValue(versionNameArg) || automaticVersionName;
 
 if (!skipBuild) {
   execFileSync("./gradlew", [gradleTask], {

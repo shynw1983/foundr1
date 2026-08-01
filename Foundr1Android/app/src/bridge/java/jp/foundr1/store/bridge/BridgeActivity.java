@@ -56,7 +56,7 @@ public class BridgeActivity extends Activity {
         scrollView.addView(layout);
 
         TextView title = new TextView(this);
-        title.setText("Foundr1 Bridge");
+        title.setText("Foundr1 Bridge for Uber Eats");
         title.setTextSize(24);
         title.setPadding(0, 0, 0, dp(12));
         layout.addView(title);

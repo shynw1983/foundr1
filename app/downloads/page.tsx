@@ -20,7 +20,7 @@ type ApkVersion = {
   gitSubject?: string;
 };
 
-const appOrder = ["store", "os", "member", "staff"];
+const appOrder = ["store", "bridge", "os", "member", "staff"];
 
 export const metadata: Metadata = {
   title: "Foundr1 APK Downloads",

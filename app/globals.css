@@ -38665,7 +38665,7 @@ a:focus-visible {
 .apk-downloads-heading {
   display: grid;
   gap: 6px;
-  width: min(100%, 980px);
+  width: min(100%, 1180px);
   margin: 0 auto;
 }
 
@@ -38687,9 +38687,9 @@ a:focus-visible {
 
 .apk-downloads-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
-  width: min(100%, 980px);
+  width: min(100%, 1180px);
   margin: 0 auto;
 }
 
@@ -38772,6 +38772,12 @@ a:focus-visible {
 
   .staff-home-summary {
     grid-column: span 2;
+  }
+}
+
+@media (max-width: 1180px) {
+  .apk-downloads-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

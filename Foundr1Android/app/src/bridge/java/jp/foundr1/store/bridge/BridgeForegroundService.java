@@ -90,7 +90,7 @@ public class BridgeForegroundService extends Service {
             : new Notification.Builder(this);
         return builder
             .setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("Foundr1 Bridge 稼働中")
+            .setContentTitle("Foundr1 Bridge for Uber Eats 稼働中")
             .setContentText("Uber Eats の通知と画面文字を同期します")
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -101,7 +101,7 @@ public class BridgeForegroundService extends Service {
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationChannel channel = new NotificationChannel(
             CHANNEL_ID,
-            "Foundr1 Bridge",
+            "Foundr1 Bridge for Uber Eats",
             NotificationManager.IMPORTANCE_LOW
         );
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -109,7 +109,7 @@ public class BridgeForegroundService extends Service {
             manager.createNotificationChannel(channel);
             NotificationChannel alertChannel = new NotificationChannel(
                 ALERT_CHANNEL_ID,
-                "Foundr1 Bridge 警告",
+                "Foundr1 Bridge for Uber Eats 警告",
                 NotificationManager.IMPORTANCE_HIGH
             );
             alertChannel.setDescription("Uber注文の読み取りが停止した場合に通知します");
