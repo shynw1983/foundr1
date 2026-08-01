@@ -1,4 +1,4 @@
-self.__FOUNDR1_STORE_CACHE = "foundr1-store-shell-v1";
+self.__FOUNDR1_STORE_CACHE = "foundr1-store-shell-v2";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -36,8 +36,17 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith((async () => {
     try {
-      const response = await fetch(event.request);
-      if (response.ok && requestUrl.origin === self.location.origin && requestUrl.pathname.startsWith("/store")) {
+      const response = await fetch(event.request, { cache: "no-store" });
+      const responseUrl = new URL(response.url);
+      const isCacheableStorePage = response.ok
+        && !response.redirected
+        && requestUrl.origin === self.location.origin
+        && responseUrl.origin === self.location.origin
+        && requestUrl.pathname.startsWith("/store")
+        && responseUrl.pathname === requestUrl.pathname
+        && !requestUrl.pathname.startsWith("/store/login")
+        && !requestUrl.pathname.startsWith("/store/logout");
+      if (isCacheableStorePage) {
         const cache = await caches.open(self.__FOUNDR1_STORE_CACHE);
         await cache.put(event.request, response.clone());
       }
