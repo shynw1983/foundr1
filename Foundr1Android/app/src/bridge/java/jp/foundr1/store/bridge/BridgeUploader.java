@@ -26,15 +26,33 @@ final class BridgeUploader {
 
     private BridgeUploader() {}
 
+    interface UploadCallback {
+        void onComplete(boolean success);
+    }
+
     static void upload(Context context, String kind, String packageName, JSONObject payload) {
+        upload(context, kind, packageName, payload, null);
+    }
+
+    static void upload(
+        Context context,
+        String kind,
+        String packageName,
+        JSONObject payload,
+        UploadCallback callback
+    ) {
         Context appContext = context.getApplicationContext();
         EXECUTOR.execute(() -> {
+            boolean success = false;
             try {
                 flushPending(appContext);
                 JSONObject body = buildBody(appContext, kind, packageName, payload);
-                if (!send(appContext, body) && shouldQueue(kind)) enqueue(appContext, body);
+                success = send(appContext, body);
+                if (!success && shouldQueue(kind)) enqueue(appContext, body);
             } catch (Exception error) {
                 Log.w(TAG, "Upload failed", error);
+            } finally {
+                if (callback != null) callback.onComplete(success);
             }
         });
     }
@@ -80,7 +98,10 @@ final class BridgeUploader {
     }
 
     private static boolean shouldQueue(String kind) {
-        return !"heartbeat".equals(kind) && !"test".equals(kind);
+        return !"heartbeat".equals(kind)
+            && !"test".equals(kind)
+            && !"bridge_crash".equals(kind)
+            && !"bridge_exit".equals(kind);
     }
 
     private static void enqueue(Context context, JSONObject body) {

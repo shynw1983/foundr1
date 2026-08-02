@@ -11,6 +11,14 @@ public class UberNotificationListenerService extends NotificationListenerService
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
+        try {
+            handleNotificationPosted(sbn);
+        } catch (RuntimeException error) {
+            BridgeCrashReporter.reportCaught(this, "notification_listener", error);
+        }
+    }
+
+    private void handleNotificationPosted(StatusBarNotification sbn) {
         String packageName = sbn == null ? "" : sbn.getPackageName();
         if (!looksLikeUber(packageName)) return;
         Notification notification = sbn.getNotification();

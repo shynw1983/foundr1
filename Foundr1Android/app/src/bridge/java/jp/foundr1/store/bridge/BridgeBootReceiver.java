@@ -8,11 +8,15 @@ import android.os.Build;
 public class BridgeBootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        Intent serviceIntent = new Intent(context, BridgeForegroundService.class);
-        if (Build.VERSION.SDK_INT >= 26) {
-            context.startForegroundService(serviceIntent);
-        } else {
-            context.startService(serviceIntent);
+        try {
+            Intent serviceIntent = new Intent(context, BridgeForegroundService.class);
+            if (Build.VERSION.SDK_INT >= 26) {
+                context.startForegroundService(serviceIntent);
+            } else {
+                context.startService(serviceIntent);
+            }
+        } catch (RuntimeException error) {
+            BridgeCrashReporter.reportCaught(context, "boot_receiver", error);
         }
     }
 }

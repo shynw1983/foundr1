@@ -46,21 +46,24 @@ public class UberAccessibilityService extends AccessibilityService {
     private String pendingInventoryItemName = "";
     private String pendingInventoryInitialStatus = "";
     private long pendingInventoryClickedAt = 0L;
-    private final Runnable inventoryCaptureRunnable = this::capturePendingInventoryCurrentState;
+    private final Runnable inventoryCaptureRunnable = () -> runGuarded(
+        "inventory_capture",
+        this::capturePendingInventoryCurrentState
+    );
     private String activeCommandId = "";
     private int commandAttempts = 0;
     private boolean commandReadyClickDispatched = false;
-    private final Runnable commandRunnable = this::processPendingCommand;
+    private final Runnable commandRunnable = () -> runGuarded("command", this::processPendingCommand);
     private final Runnable commandPollRunnable = new Runnable() {
         @Override
         public void run() {
-            BridgeCommandClient.poll(UberAccessibilityService.this);
+            runGuarded("command_poll", () -> BridgeCommandClient.poll(UberAccessibilityService.this));
             handler.postDelayed(this, 8000L);
         }
     };
     private final Runnable recoveryRunnable = () -> {
         recoveryScheduledAt = 0L;
-        recoverNewOrder();
+        runGuarded("order_recovery", this::recoverNewOrder);
     };
     private final BroadcastReceiver recoveryReceiver = new BroadcastReceiver() {
         @Override
@@ -83,7 +86,10 @@ public class UberAccessibilityService extends AccessibilityService {
         if (text.length() < 8) return;
         long now = System.currentTimeMillis();
         if (text.equals(lastUploadedText) && now - lastUploadedAt < 30000) {
-            handler.postDelayed(this::scrollOrderDetailsForward, 700);
+            handler.postDelayed(
+                () -> runGuarded("order_scroll", this::scrollOrderDetailsForward),
+                700
+            );
             return;
         }
         lastUploadedText = text;
@@ -94,13 +100,25 @@ public class UberAccessibilityService extends AccessibilityService {
             payload.put("textLength", text.length());
             payload.put("nodes", pendingNodes);
             BridgeUploader.upload(this, "accessibility_order", pendingPackageName, payload);
-            handler.postDelayed(this::scrollOrderDetailsForward, 700);
+            handler.postDelayed(
+                () -> runGuarded("order_scroll", this::scrollOrderDetailsForward),
+                700
+            );
         } catch (Exception ignored) {
         }
     };
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        try {
+            handleAccessibilityEvent(event);
+        } catch (RuntimeException error) {
+            BridgeCrashReporter.reportCaught(this, "accessibility_event", error);
+            if (UberRecoveryState.isPending(this)) scheduleRecovery(1200L);
+        }
+    }
+
+    private void handleAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
         String packageName = event.getPackageName().toString();
         if (!looksLikeUber(packageName)) return;
@@ -143,6 +161,15 @@ public class UberAccessibilityService extends AccessibilityService {
             UberRecoveryState.requestFromActiveOrderDetails(this, orderCode);
         }
         captureOrderDetails(packageName, builder, nodes);
+    }
+
+    private void runGuarded(String stage, Runnable operation) {
+        try {
+            operation.run();
+        } catch (RuntimeException error) {
+            BridgeCrashReporter.reportCaught(this, stage, error);
+            if (UberRecoveryState.isPending(this)) scheduleRecovery(1200L);
+        }
     }
 
     private void trackInventoryStatusClick(AccessibilityEvent event) {
