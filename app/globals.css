@@ -15014,6 +15014,70 @@ body :where(
   text-decoration: none;
 }
 
+.store-kitchen-bridge-status {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  z-index: 135;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  max-width: min(70vw, 420px);
+  border: 1px solid #d7dcd9;
+  border-radius: 999px;
+  padding: 5px 12px;
+  color: #202522;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 5px 18px rgba(20, 28, 24, 0.1);
+  transform: translateX(-50%);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.store-kitchen-bridge-status > span {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #b7791f;
+  box-shadow: 0 0 0 3px rgba(183, 121, 31, 0.12);
+}
+
+.store-kitchen-bridge-status strong,
+.store-kitchen-bridge-status b,
+.store-kitchen-bridge-status small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.store-kitchen-bridge-status strong {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.store-kitchen-bridge-status b {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.store-kitchen-bridge-status small {
+  color: #5f6863;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.store-kitchen-bridge-status.is-healthy > span {
+  background: #18704a;
+  box-shadow: 0 0 0 3px rgba(24, 112, 74, 0.12);
+}
+
+.store-kitchen-bridge-status.is-error > span {
+  background: #be182d;
+  box-shadow: 0 0 0 3px rgba(190, 24, 45, 0.12);
+}
+
 .store-kitchen-toolbar,
 .store-pickup-toolbar {
   display: flex;

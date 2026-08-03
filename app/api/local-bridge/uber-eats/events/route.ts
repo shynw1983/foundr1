@@ -379,6 +379,7 @@ export async function POST(request: Request) {
   const packageName = cleanText(source.packageName, 160);
   const deviceName = cleanText(source.deviceName, 240);
   const storeId = cleanText(source.storeId, 80);
+  const clientEventId = cleanText(source.clientEventId, 120) || null;
   const payload = source.payload && typeof source.payload === "object" ? source.payload : {};
   const capturedAtValue = Number(source.capturedAt);
   const capturedAt = Number.isFinite(capturedAtValue) ? new Date(capturedAtValue) : new Date();
@@ -389,6 +390,7 @@ export async function POST(request: Request) {
 
   const rows = await sql`
     insert into local_bridge_events (
+      client_event_id,
       platform,
       kind,
       package_name,
@@ -397,6 +399,7 @@ export async function POST(request: Request) {
       payload
     )
     values (
+      ${clientEventId},
       ${platform},
       ${kind},
       ${packageName},
@@ -404,6 +407,8 @@ export async function POST(request: Request) {
       ${storeId},
       ${JSON.stringify(payload)}::jsonb
     )
+    on conflict (client_event_id) do update set
+      client_event_id = excluded.client_event_id
     returning id::text, created_at
   `;
 

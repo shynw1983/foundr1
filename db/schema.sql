@@ -3893,6 +3893,7 @@ create index if not exists idx_sales_import_batches_source_month
 
 create table if not exists local_bridge_events (
   id uuid primary key default gen_random_uuid(),
+  client_event_id text,
   platform text not null default 'uber_eats',
   kind text not null,
   package_name text not null default '',
@@ -3912,6 +3913,8 @@ create table if not exists local_bridge_devices (
   token_hash text not null unique,
   is_enabled boolean not null default true,
   last_seen_at timestamptz,
+  health_status jsonb not null default '{}'::jsonb,
+  last_status_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -3936,11 +3939,17 @@ create table if not exists local_bridge_commands (
   updated_at timestamptz not null default now()
 );
 
+alter table local_bridge_events add column if not exists client_event_id text;
+alter table local_bridge_devices add column if not exists health_status jsonb not null default '{}'::jsonb;
+alter table local_bridge_devices add column if not exists last_status_at timestamptz;
+
 create index if not exists idx_local_bridge_events_platform_created
   on local_bridge_events(platform, created_at desc);
 
 create index if not exists idx_local_bridge_events_store_created
   on local_bridge_events(store_external_id, created_at desc);
+create unique index if not exists idx_local_bridge_events_client_event
+  on local_bridge_events(client_event_id);
 create index if not exists idx_local_bridge_devices_store
   on local_bridge_devices(store_id, platform, is_enabled);
 create index if not exists idx_local_bridge_commands_pending

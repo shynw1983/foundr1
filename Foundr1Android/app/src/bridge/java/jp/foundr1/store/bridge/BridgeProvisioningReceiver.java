@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.SharedPreferences;
-import android.os.Build;
 
 public class BridgeProvisioningReceiver extends BroadcastReceiver {
     @Override
@@ -20,12 +19,7 @@ public class BridgeProvisioningReceiver extends BroadcastReceiver {
         putIfPresent(editor, BridgeConfig.KEY_DEVICE_NAME, intent.getStringExtra("deviceName"));
         editor.commit();
 
-        Intent serviceIntent = new Intent(context, BridgeForegroundService.class);
-        if (Build.VERSION.SDK_INT >= 26) {
-            context.startForegroundService(serviceIntent);
-        } else {
-            context.startService(serviceIntent);
-        }
+        BridgeServiceStarter.ensureStarted(context, "provisioning");
     }
 
     private void putIfPresent(SharedPreferences.Editor editor, String key, String value) {

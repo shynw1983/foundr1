@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
+import { bridgeRealtimeChannel } from "../../../../lib/local-bridge-realtime";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
     key: process.env.PUSHER_KEY || "",
     cluster: process.env.PUSHER_CLUSTER || "",
     versionChannel: "store-version",
+    bridgeChannel: selectedStoreId ? bridgeRealtimeChannel(selectedStoreId) : "",
     channels: channelStoreIds.map((storeId) => `private-store-orders-${storeId}`)
   }, { headers: { "Cache-Control": "no-store" } });
 }

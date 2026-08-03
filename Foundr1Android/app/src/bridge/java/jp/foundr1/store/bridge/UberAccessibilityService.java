@@ -58,7 +58,7 @@ public class UberAccessibilityService extends AccessibilityService {
         @Override
         public void run() {
             runGuarded("command_poll", () -> BridgeCommandClient.poll(UberAccessibilityService.this));
-            handler.postDelayed(this, 8000L);
+            handler.postDelayed(this, 5 * 60 * 1000L);
         }
     };
     private final Runnable recoveryRunnable = () -> {
@@ -99,6 +99,7 @@ public class UberAccessibilityService extends AccessibilityService {
             payload.put("screenText", text);
             payload.put("textLength", text.length());
             payload.put("nodes", pendingNodes);
+            payload.put("orderCode", extractOrderCode(extractOrderKey(pendingNodes)));
             BridgeUploader.upload(this, "accessibility_order", pendingPackageName, payload);
             handler.postDelayed(
                 () -> runGuarded("order_scroll", this::scrollOrderDetailsForward),
@@ -441,6 +442,8 @@ public class UberAccessibilityService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        BridgeHealthState.setAccessibilityConnected(this, true);
+        BridgeServiceStarter.ensureStarted(this, "accessibility_connected");
         if (!recoveryReceiverRegistered) {
             IntentFilter filter = new IntentFilter();
             filter.addAction(UberRecoveryState.ACTION_RECOVERY_REQUESTED);
@@ -460,6 +463,7 @@ public class UberAccessibilityService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
+        BridgeHealthState.setAccessibilityConnected(this, false);
         handler.removeCallbacks(recoveryRunnable);
         recoveryScheduledAt = 0L;
         handler.removeCallbacks(uploadRunnable);

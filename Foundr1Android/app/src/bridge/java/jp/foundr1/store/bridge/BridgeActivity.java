@@ -2,19 +2,30 @@ package jp.foundr1.store.bridge;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.NotificationManager;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.InputType;
 import android.text.TextUtils;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -22,162 +33,412 @@ import android.widget.Toast;
 
 import org.json.JSONObject;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
 import jp.foundr1.store.R;
 
 public class BridgeActivity extends Activity {
+    private static final int COLOR_INK = Color.rgb(31, 37, 34);
+    private static final int COLOR_MUTED = Color.rgb(96, 105, 100);
+    private static final int COLOR_LINE = Color.rgb(218, 224, 220);
+    private static final int COLOR_CANVAS = Color.rgb(244, 247, 245);
+    private static final int COLOR_HEALTHY = Color.rgb(24, 112, 74);
+    private static final int COLOR_ATTENTION = Color.rgb(183, 121, 31);
+    private static final int COLOR_ERROR = Color.rgb(190, 24, 45);
+
     private EditText endpointInput;
     private EditText tokenInput;
     private EditText storeIdInput;
     private EditText deviceNameInput;
-    private TextView accessibilityStatus;
-    private Button accessibilityButton;
+    private TextView overallTitle;
+    private TextView overallDetail;
+    private TextView uberStage;
+    private TextView bridgeStage;
+    private TextView osStage;
+    private TextView accessibilityRow;
+    private TextView notificationRow;
+    private TextView realtimeRow;
+    private TextView batteryRow;
+    private TextView recentOrder;
+    private TextView queueSummary;
+    private LinearLayout statusCard;
+    private LinearLayout advancedLayout;
+    private Button selfTestButton;
+    private boolean healthReceiverRegistered = false;
+    private final BroadcastReceiver healthReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            updateStatus();
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         buildLayout();
         requestNotificationPermissionIfNeeded();
-        startBridgeService();
+        BridgeServiceStarter.ensureStarted(this, "activity_create");
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (!healthReceiverRegistered) {
+            IntentFilter filter = new IntentFilter(BridgeHealthState.ACTION_CHANGED);
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(healthReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                registerReceiver(healthReceiver, filter);
+            }
+            healthReceiverRegistered = true;
+        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        updateAccessibilityStatus();
-        startBridgeService();
+        BridgeServiceStarter.ensureStarted(this, "activity_resume");
+        BridgeRealtimeClient.start(this);
+        updateStatus();
+    }
+
+    @Override
+    protected void onStop() {
+        if (healthReceiverRegistered) {
+            try { unregisterReceiver(healthReceiver); } catch (Exception ignored) {}
+            healthReceiverRegistered = false;
+        }
+        super.onStop();
     }
 
     private void buildLayout() {
-        int padding = dp(18);
         ScrollView scrollView = new ScrollView(this);
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(padding, padding, padding, padding);
-        scrollView.addView(layout);
+        scrollView.setFillViewport(true);
+        scrollView.setBackgroundColor(COLOR_CANVAS);
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setPadding(dp(20), dp(20), dp(20), dp(28));
+        scrollView.addView(page);
 
-        TextView title = new TextView(this);
-        title.setText("Foundr1 Bridge for Uber Eats");
-        title.setTextSize(24);
-        title.setPadding(0, 0, 0, dp(12));
-        layout.addView(title);
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(0, 0, 0, dp(18));
+        ImageView icon = new ImageView(this);
+        try { icon.setImageDrawable(getPackageManager().getApplicationIcon(getPackageName())); } catch (Exception ignored) {}
+        header.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        LinearLayout heading = new LinearLayout(this);
+        heading.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        headingParams.leftMargin = dp(12);
+        header.addView(heading, headingParams);
+        heading.addView(text("Foundr1 Bridge", 23, COLOR_INK, Typeface.BOLD));
+        heading.addView(text("for Uber Eats  ·  v" + BridgeStatusReporter.versionName(this), 13, COLOR_MUTED, Typeface.NORMAL));
+        page.addView(header);
 
-        TextView help = new TextView(this);
-        help.setText("Uber Eats の通知と画面文字を読み取り、Foundr1 OS に送信します。まず接続先を保存し、通知アクセスとユーザー補助を有効にしてください。");
-        help.setTextSize(14);
-        help.setPadding(0, 0, 0, dp(16));
-        layout.addView(help);
+        statusCard = new LinearLayout(this);
+        statusCard.setOrientation(LinearLayout.VERTICAL);
+        statusCard.setPadding(dp(20), dp(20), dp(20), dp(20));
+        overallTitle = text("接続を確認しています", 25, COLOR_INK, Typeface.BOLD);
+        overallDetail = text("数秒お待ちください", 14, COLOR_MUTED, Typeface.NORMAL);
+        overallDetail.setPadding(0, dp(7), 0, 0);
+        statusCard.addView(overallTitle);
+        statusCard.addView(overallDetail);
+        page.addView(statusCard, matchWidth(dp(12)));
 
-        accessibilityStatus = new TextView(this);
-        accessibilityStatus.setTextSize(18);
-        accessibilityStatus.setTextColor(Color.WHITE);
-        accessibilityStatus.setPadding(dp(16), dp(16), dp(16), dp(16));
-        accessibilityStatus.setOnClickListener(
-            view -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        );
-        layout.addView(accessibilityStatus, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
+        LinearLayout chain = section(page, "注文連携");
+        LinearLayout chainRow = new LinearLayout(this);
+        chainRow.setGravity(Gravity.CENTER_VERTICAL);
+        uberStage = chainStage("Uber Orders");
+        bridgeStage = chainStage("Bridge");
+        osStage = chainStage("Foundr1 OS");
+        chainRow.addView(uberStage, weighted());
+        chainRow.addView(text("→", 18, COLOR_MUTED, Typeface.NORMAL));
+        chainRow.addView(bridgeStage, weighted());
+        chainRow.addView(text("→", 18, COLOR_MUTED, Typeface.NORMAL));
+        chainRow.addView(osStage, weighted());
+        chain.addView(chainRow);
 
-        accessibilityButton = addButton(
-            layout,
-            "ユーザー補助設定を開く",
-            view -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        );
+        LinearLayout checks = section(page, "システム状態");
+        accessibilityRow = statusRow(checks, "画面読み取り");
+        notificationRow = statusRow(checks, "Uber 通知読み取り");
+        realtimeRow = statusRow(checks, "Foundr1 OS 接続");
+        batteryRow = statusRow(checks, "バックグラウンド保護");
 
-        endpointInput = addInput(layout, "Endpoint URL", BridgeConfig.endpoint(this));
-        tokenInput = addInput(layout, "Bridge token", BridgeConfig.token(this));
-        storeIdInput = addInput(layout, "Store ID（任意）", BridgeConfig.storeId(this));
-        deviceNameInput = addInput(layout, "Device name（任意）", BridgeConfig.deviceName(this));
+        LinearLayout activity = section(page, "最近の動作");
+        recentOrder = text("最近の注文：まだありません", 15, COLOR_INK, Typeface.NORMAL);
+        queueSummary = text("未送信：0件", 14, COLOR_MUTED, Typeface.NORMAL);
+        queueSummary.setPadding(0, dp(8), 0, 0);
+        activity.addView(recentOrder);
+        activity.addView(queueSummary);
 
-        addButton(layout, "保存してサービス開始", view -> {
-            saveConfig();
-            startBridgeService();
-            Toast.makeText(this, "保存しました。", Toast.LENGTH_SHORT).show();
+        addPrimaryButton(page, "Uber Orders を開く", view -> openUberOrders());
+        selfTestButton = addSecondaryButton(page, "接続を診断", view -> runSelfTest());
+
+        Button advancedButton = addTextButton(page, "管理者設定を表示", null);
+        advancedLayout = new LinearLayout(this);
+        advancedLayout.setOrientation(LinearLayout.VERTICAL);
+        advancedLayout.setVisibility(View.GONE);
+        advancedButton.setOnClickListener(view -> {
+            boolean show = advancedLayout.getVisibility() != View.VISIBLE;
+            advancedLayout.setVisibility(show ? View.VISIBLE : View.GONE);
+            advancedButton.setText(show ? "管理者設定を閉じる" : "管理者設定を表示");
         });
-        addButton(layout, "テスト送信", view -> sendTestEvent());
-        addButton(layout, "通知アクセスを開く", view -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
-        addButton(layout, "電池最適化の除外を開く", view -> openBatterySettings());
+        page.addView(advancedLayout);
+        buildAdvancedSettings(advancedLayout);
 
         setContentView(scrollView);
-        updateAccessibilityStatus();
+        updateStatus();
     }
 
-    private EditText addInput(LinearLayout layout, String label, String value) {
-        TextView textView = new TextView(this);
-        textView.setText(label);
-        textView.setPadding(0, dp(10), 0, dp(4));
+    private void buildAdvancedSettings(LinearLayout layout) {
+        TextView warning = text(
+            "店舗管理者向けの設定です。通常の営業中は変更しないでください。",
+            13,
+            COLOR_MUTED,
+            Typeface.NORMAL
+        );
+        warning.setPadding(0, dp(12), 0, dp(10));
+        layout.addView(warning);
+        endpointInput = addInput(layout, "接続先 URL", BridgeConfig.endpoint(this), false);
+        tokenInput = addInput(layout, "Bridge Token", BridgeConfig.token(this), true);
+        storeIdInput = addInput(layout, "店舗 ID（必須）", BridgeConfig.storeId(this), false);
+        deviceNameInput = addInput(layout, "端末名", BridgeConfig.deviceName(this), false);
+        addPrimaryButton(layout, "設定を保存して再接続", view -> {
+            saveConfig();
+            BridgeRealtimeClient.disconnect(this);
+            BridgeRealtimeClient.start(this);
+            BridgeServiceStarter.ensureStarted(this, "settings_saved");
+            Toast.makeText(this, "設定を保存しました", Toast.LENGTH_SHORT).show();
+            updateStatus();
+        });
+        addSecondaryButton(layout, "画面読み取り設定を開く", view -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        addSecondaryButton(layout, "通知アクセス設定を開く", view -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+        addSecondaryButton(layout, "電池制限を解除する", view -> openBatterySettings());
+    }
+
+    private void updateStatus() {
+        if (overallTitle == null) return;
+        BridgeHealthState.Snapshot health = BridgeHealthState.snapshot(this);
+        boolean accessibilityAuthorized = isAccessibilityServiceEnabled();
+        boolean notificationAuthorized = isNotificationListenerEnabled();
+        boolean notificationsAllowed = ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).areNotificationsEnabled();
+        boolean batteryProtected = isIgnoringBatteryOptimizations();
+        boolean configured = !BridgeConfig.endpoint(this).isEmpty()
+            && !BridgeConfig.token(this).isEmpty()
+            && !BridgeConfig.storeId(this).isEmpty();
+
+        String level;
+        String problem;
+        if (!notificationsAllowed) {
+            level = "error";
+            problem = "Bridge の状態通知を許可してください";
+        } else if (!accessibilityAuthorized) {
+            level = "error";
+            problem = "画面読み取りを有効にしてください";
+        } else if (!notificationAuthorized) {
+            level = "error";
+            problem = "Uber の通知アクセスを有効にしてください";
+        } else if (!configured) {
+            level = "error";
+            problem = "店舗の接続設定が未完了です";
+        } else {
+            level = BridgeStatusReporter.healthLevel(health);
+            problem = BridgeStatusReporter.problem(health);
+        }
+
+        int accent = "healthy".equals(level) ? COLOR_HEALTHY : "attention".equals(level) ? COLOR_ATTENTION : COLOR_ERROR;
+        int soft = "healthy".equals(level)
+            ? Color.rgb(235, 246, 240)
+            : "attention".equals(level) ? Color.rgb(251, 246, 233) : Color.rgb(253, 237, 240);
+        overallTitle.setText("healthy".equals(level) ? "✓ 注文連携は正常です" : "attention".equals(level) ? "△ 確認中の項目があります" : "！注文連携を確認してください");
+        overallTitle.setTextColor(accent);
+        overallDetail.setText("healthy".equals(level) ? "Uber Orders から Foundr1 OS まで接続されています" : problem);
+        statusCard.setBackground(cardBackground(soft, accent, 14));
+        getWindow().setStatusBarColor(accent);
+        getWindow().setNavigationBarColor(accent);
+
+        updateStage(uberStage, accessibilityAuthorized && health.accessibilityConnected);
+        updateStage(bridgeStage, notificationAuthorized && health.notificationConnected && health.pendingCount == 0);
+        updateStage(osStage, health.realtimeConnected);
+        updateRow(accessibilityRow, accessibilityAuthorized && health.accessibilityConnected, accessibilityAuthorized ? "接続確認中" : "設定が必要");
+        updateRow(notificationRow, notificationAuthorized && health.notificationConnected, notificationAuthorized ? "接続確認中" : "設定が必要");
+        updateRow(realtimeRow, health.realtimeConnected, health.realtimeConnected ? "正常" : "再接続中");
+        updateRow(batteryRow, batteryProtected, batteryProtected ? "制限なし" : "解除が必要");
+
+        if (health.lastOrderCode.isEmpty()) {
+            recentOrder.setText("最近の注文：まだありません");
+        } else {
+            recentOrder.setText("最近の注文：" + health.lastOrderCode + "  ·  " + formatTime(health.lastOrderAt));
+        }
+        queueSummary.setText(health.pendingCount == 0 ? "未送信：0件" : "未送信：" + health.pendingCount + "件（自動再送中）");
+        queueSummary.setTextColor(health.pendingCount == 0 ? COLOR_MUTED : COLOR_ATTENTION);
+    }
+
+    private void runSelfTest() {
+        selfTestButton.setEnabled(false);
+        selfTestButton.setText("接続を確認しています…");
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("message", "Foundr1 Bridge self test");
+            BridgeUploader.upload(this, "test", "", payload, success -> runOnUiThread(() -> {
+                selfTestButton.setEnabled(true);
+                selfTestButton.setText(success ? "✓ 接続テスト成功" : "接続テスト失敗 — 設定を確認");
+                selfTestButton.setTextColor(success ? COLOR_HEALTHY : COLOR_ERROR);
+                updateStatus();
+            }));
+        } catch (Exception error) {
+            selfTestButton.setEnabled(true);
+            selfTestButton.setText("接続テスト失敗 — 設定を確認");
+            selfTestButton.setTextColor(COLOR_ERROR);
+        }
+    }
+
+    private LinearLayout section(LinearLayout page, String title) {
+        TextView label = text(title, 13, COLOR_MUTED, Typeface.BOLD);
+        label.setPadding(dp(2), dp(20), 0, dp(7));
+        page.addView(label);
+        LinearLayout section = new LinearLayout(this);
+        section.setOrientation(LinearLayout.VERTICAL);
+        section.setPadding(dp(16), dp(14), dp(16), dp(14));
+        section.setBackground(cardBackground(Color.WHITE, COLOR_LINE, 12));
+        page.addView(section, matchWidth(0));
+        return section;
+    }
+
+    private TextView chainStage(String label) {
+        TextView view = text("○\n" + label, 13, COLOR_MUTED, Typeface.BOLD);
+        view.setGravity(Gravity.CENTER);
+        view.setPadding(dp(4), dp(5), dp(4), dp(5));
+        return view;
+    }
+
+    private void updateStage(TextView view, boolean ok) {
+        String label = view.getText().toString().replaceFirst("^[✓○]\n", "");
+        view.setText((ok ? "✓" : "○") + "\n" + label);
+        view.setTextColor(ok ? COLOR_HEALTHY : COLOR_MUTED);
+    }
+
+    private TextView statusRow(LinearLayout parent, String label) {
+        TextView row = text(label, 15, COLOR_INK, Typeface.NORMAL);
+        row.setPadding(0, dp(9), 0, dp(9));
+        row.setTag(label);
+        parent.addView(row);
+        return row;
+    }
+
+    private void updateRow(TextView row, boolean ok, String fallback) {
+        String label = String.valueOf(row.getTag());
+        row.setText(label + "    " + (ok ? "✓ 正常" : "△ " + fallback));
+        row.setTextColor(ok ? COLOR_INK : COLOR_ATTENTION);
+    }
+
+    private EditText addInput(LinearLayout layout, String label, String value, boolean secret) {
+        TextView textView = text(label, 13, COLOR_MUTED, Typeface.BOLD);
+        textView.setPadding(0, dp(11), 0, dp(4));
         layout.addView(textView);
         EditText editText = new EditText(this);
         editText.setText(value);
-        editText.setSingleLine(false);
-        editText.setMinLines(1);
-        editText.setLayoutParams(new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
-        layout.addView(editText);
+        editText.setSingleLine(true);
+        editText.setTextSize(14);
+        editText.setTextColor(COLOR_INK);
+        editText.setBackground(cardBackground(Color.WHITE, COLOR_LINE, 8));
+        editText.setPadding(dp(12), dp(10), dp(12), dp(10));
+        if (secret) editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        layout.addView(editText, matchWidth(0));
         return editText;
     }
 
-    private Button addButton(LinearLayout layout, String label, android.view.View.OnClickListener listener) {
+    private Button addPrimaryButton(LinearLayout layout, String label, View.OnClickListener listener) {
+        Button button = button(label, Color.WHITE, COLOR_INK, listener);
+        layout.addView(button, matchWidth(dp(12)));
+        return button;
+    }
+
+    private Button addSecondaryButton(LinearLayout layout, String label, View.OnClickListener listener) {
+        Button button = button(label, COLOR_INK, Color.WHITE, listener);
+        button.setBackground(cardBackground(Color.WHITE, COLOR_LINE, 10));
+        layout.addView(button, matchWidth(dp(9)));
+        return button;
+    }
+
+    private Button addTextButton(LinearLayout layout, String label, View.OnClickListener listener) {
+        Button button = button(label, COLOR_MUTED, Color.TRANSPARENT, listener);
+        layout.addView(button, matchWidth(dp(8)));
+        return button;
+    }
+
+    private Button button(String label, int textColor, int backgroundColor, View.OnClickListener listener) {
         Button button = new Button(this);
         button.setText(label);
+        button.setTextSize(15);
+        button.setTextColor(textColor);
         button.setAllCaps(false);
-        button.setOnClickListener(listener);
+        button.setMinHeight(dp(52));
+        button.setGravity(Gravity.CENTER);
+        button.setBackground(cardBackground(backgroundColor, backgroundColor, 10));
+        if (listener != null) button.setOnClickListener(listener);
+        return button;
+    }
+
+    private TextView text(String value, int size, int color, int style) {
+        TextView view = new TextView(this);
+        view.setText(value);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        view.setTypeface(Typeface.create("sans-serif", style));
+        view.setLineSpacing(0, 1.12f);
+        return view;
+    }
+
+    private GradientDrawable cardBackground(int fill, int stroke, int radiusDp) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(fill);
+        drawable.setCornerRadius(dp(radiusDp));
+        if (stroke != fill && stroke != Color.TRANSPARENT) drawable.setStroke(dp(1), stroke);
+        return drawable;
+    }
+
+    private LinearLayout.LayoutParams matchWidth(int topMargin) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        params.topMargin = dp(10);
-        layout.addView(button, params);
-        return button;
+        params.topMargin = topMargin;
+        return params;
     }
 
-    private void updateAccessibilityStatus() {
-        if (accessibilityStatus == null || accessibilityButton == null) return;
-        boolean enabled = isAccessibilityServiceEnabled();
-        if (enabled) {
-            getWindow().setStatusBarColor(Color.rgb(24, 112, 74));
-            getWindow().setNavigationBarColor(Color.rgb(24, 112, 74));
-            accessibilityStatus.setText("✓ ユーザー補助：有効\nUber注文を読み取れます");
-            accessibilityStatus.setBackgroundColor(Color.rgb(24, 112, 74));
-            accessibilityButton.setVisibility(View.GONE);
-        } else {
-            getWindow().setStatusBarColor(Color.rgb(190, 24, 45));
-            getWindow().setNavigationBarColor(Color.rgb(190, 24, 45));
-            accessibilityStatus.setText(
-                "⚠ ユーザー補助が停止しています\n"
-                + "Uber注文を読み取れません。APK更新後は再度有効にしてください。"
-            );
-            accessibilityStatus.setBackgroundColor(Color.rgb(190, 24, 45));
-            accessibilityButton.setVisibility(View.VISIBLE);
-            accessibilityButton.setText("今すぐユーザー補助を有効にする");
-            accessibilityButton.setTextColor(Color.WHITE);
-            accessibilityButton.setBackgroundColor(Color.rgb(190, 24, 45));
-        }
+    private LinearLayout.LayoutParams weighted() {
+        return new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
     }
 
     private boolean isAccessibilityServiceEnabled() {
-        if (
-            Settings.Secure.getInt(
-                getContentResolver(),
-                Settings.Secure.ACCESSIBILITY_ENABLED,
-                0
-            ) != 1
-        ) return false;
-        String enabledServices = Settings.Secure.getString(
-            getContentResolver(),
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        );
+        if (Settings.Secure.getInt(getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, 0) != 1) return false;
+        String enabledServices = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         if (TextUtils.isEmpty(enabledServices)) return false;
         String expected = getPackageName() + "/" + UberAccessibilityService.class.getName();
         TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter(':');
         splitter.setString(enabledServices);
+        while (splitter.hasNext()) if (expected.equalsIgnoreCase(splitter.next())) return true;
+        return false;
+    }
+
+    private boolean isNotificationListenerEnabled() {
+        String enabled = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
+        if (TextUtils.isEmpty(enabled)) return false;
+        TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter(':');
+        splitter.setString(enabled);
         while (splitter.hasNext()) {
-            if (expected.equalsIgnoreCase(splitter.next())) return true;
+            ComponentName component = ComponentName.unflattenFromString(splitter.next());
+            if (component != null && getPackageName().equals(component.getPackageName())) return true;
         }
         return false;
+    }
+
+    private boolean isIgnoringBatteryOptimizations() {
+        PowerManager manager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        return manager != null && manager.isIgnoringBatteryOptimizations(getPackageName());
     }
 
     private void saveConfig() {
@@ -189,24 +450,14 @@ public class BridgeActivity extends Activity {
         editor.apply();
     }
 
-    private void sendTestEvent() {
-        saveConfig();
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("message", "Foundr1 Bridge test event");
-            BridgeUploader.upload(this, "test", "", payload);
-            Toast.makeText(this, "テスト送信しました。", Toast.LENGTH_SHORT).show();
-        } catch (Exception ignored) {
+    private void openUberOrders() {
+        Intent intent = getPackageManager().getLaunchIntentForPackage("com.uber.restaurants");
+        if (intent == null) {
+            Toast.makeText(this, "Uber Orders が見つかりません", Toast.LENGTH_SHORT).show();
+            return;
         }
-    }
-
-    private void startBridgeService() {
-        Intent intent = new Intent(this, BridgeForegroundService.class);
-        if (Build.VERSION.SDK_INT >= 26) {
-            startForegroundService(intent);
-        } else {
-            startService(intent);
-        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
     }
 
     private void openBatterySettings() {
@@ -223,6 +474,11 @@ public class BridgeActivity extends Activity {
         if (Build.VERSION.SDK_INT < 33) return;
         if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return;
         requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 4101);
+    }
+
+    private String formatTime(long value) {
+        if (value <= 0) return "";
+        return new SimpleDateFormat("HH:mm", Locale.JAPAN).format(new Date(value));
     }
 
     private int dp(int value) {

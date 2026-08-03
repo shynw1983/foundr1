@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { publishBridgeCommandAvailable } from "./local-bridge-realtime";
 
 export async function reconcileUberReadyCommand(orderId: string) {
   const rows = await sql`
@@ -56,4 +57,5 @@ export async function reconcileUberReadyCommand(orderId: string) {
       end,
       updated_at = now()
   `;
+  await publishBridgeCommandAvailable(order.storeId).catch(() => undefined);
 }

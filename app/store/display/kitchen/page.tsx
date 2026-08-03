@@ -41,6 +41,17 @@ type StoreOption = {
   name: string;
 };
 
+type BridgeStatus = {
+  level?: "healthy" | "attention" | "error";
+  problem?: string;
+  pendingCount?: number;
+  lastOrderCode?: string;
+  lastOrderAt?: string;
+  lastSeenAt?: string;
+  recentlyOnline?: boolean;
+  deviceName?: string;
+};
+
 const statusLabels: Record<"ja" | "zh", Record<string, string>> = {
   ja: { new: "制作待ち", preparing: "制作中", ready: "完成" },
   zh: { new: "待制作", preparing: "制作中", ready: "已完成" }
@@ -97,6 +108,8 @@ export default function StoreKitchenPage() {
   const [reprintQueuedId, setReprintQueuedId] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
+  const [bridgePresence, setBridgePresence] = useState<"connecting" | "online" | "offline">("connecting");
   const [menuOpen, setMenuOpen] = useState(false);
   const [checkedLineKeys, setCheckedLineKeys] = useState<Set<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
@@ -104,6 +117,7 @@ export default function StoreKitchenPage() {
   const serverOffsetRef = useRef(0);
   const loadSequenceRef = useRef(0);
   const autoStartingTaskIdsRef = useRef<Set<string>>(new Set());
+  const bridgeMemberIdsRef = useRef<Set<string>>(new Set());
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   useEffect(() => {
@@ -149,6 +163,7 @@ export default function StoreKitchenPage() {
         ? body.kitchenDisplayMode
         : "detailed"
     );
+    setBridgeStatus(body.bridgeStatus ?? null);
     setCheckedLineKeys((current) => {
       const validKeys = new Set<string>();
       for (const task of (body.tasks ?? []) as KitchenTask[]) {
@@ -352,14 +367,23 @@ export default function StoreKitchenPage() {
         const { acquireSharedPusher } = await import("../../../../lib/shared-pusher-client");
         if (!active) return;
         pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
-        pusher.connection.bind("unavailable", () => {
-          if (active) setRealtimeStatus("polling");
+    pusher.connection.bind("unavailable", () => {
+          if (active) {
+            setRealtimeStatus("polling");
+            setBridgePresence("connecting");
+          }
         });
         pusher.connection.bind("failed", () => {
-          if (active) setRealtimeStatus("polling");
+          if (active) {
+            setRealtimeStatus("polling");
+            setBridgePresence("connecting");
+          }
         });
         pusher.connection.bind("disconnected", () => {
-          if (active) setRealtimeStatus("polling");
+          if (active) {
+            setRealtimeStatus("polling");
+            setBridgePresence("connecting");
+          }
         });
         channels = config.channels.map((channelName: string) => {
           const channel = pusher.subscribe(channelName);
@@ -373,6 +397,34 @@ export default function StoreKitchenPage() {
           channel.bind("order.updated", refreshFromEvent);
           return channel;
         });
+        if (config.bridgeChannel) {
+          const bridgeChannel = pusher.subscribe(config.bridgeChannel);
+          bridgeChannel.bind("pusher:subscription_succeeded", (members: any) => {
+            if (!active) return;
+            const bridgeIds = new Set<string>();
+            if (members?.each) {
+              members.each((member: any) => {
+                if (member?.info?.role === "bridge") bridgeIds.add(String(member.id));
+              });
+            }
+            bridgeMemberIdsRef.current = bridgeIds;
+            setBridgePresence(bridgeIds.size > 0 ? "online" : "offline");
+          });
+          bridgeChannel.bind("pusher:member_added", (member: any) => {
+            if (!active || member?.info?.role !== "bridge") return;
+            bridgeMemberIdsRef.current.add(String(member.id));
+            setBridgePresence("online");
+          });
+          bridgeChannel.bind("pusher:member_removed", (member: any) => {
+            if (!active || member?.info?.role !== "bridge") return;
+            bridgeMemberIdsRef.current.delete(String(member.id));
+            setBridgePresence(bridgeMemberIdsRef.current.size > 0 ? "online" : "offline");
+          });
+          bridgeChannel.bind("bridge.status.updated", (event: any) => {
+            if (active && event?.status) setBridgeStatus((current) => ({ ...current, ...event.status }));
+          });
+          channels.push(bridgeChannel);
+        }
       })
       .catch(() => {
         if (active) setRealtimeStatus("polling");
@@ -383,6 +435,9 @@ export default function StoreKitchenPage() {
       channels.forEach((channel) => {
         channel.unbind("order.created", refreshFromEvent);
         channel.unbind("order.updated", refreshFromEvent);
+        channel.unbind("pusher:member_added");
+        channel.unbind("pusher:member_removed");
+        channel.unbind("bridge.status.updated");
         pusher?.unsubscribe(channel.name);
       });
       pusher?.disconnect();
@@ -393,6 +448,20 @@ export default function StoreKitchenPage() {
   const visibleTasks = useMemo(() => tasks.filter((task) => task.status !== "ready"), [tasks]);
   const readyTasks = useMemo(() => tasks.filter((task) => task.status === "ready"), [tasks]);
   const isChinese = displayLanguage === "zh";
+  const bridgeOnline = bridgePresence === "online"
+    || (bridgePresence === "connecting" && bridgeStatus?.recentlyOnline === true);
+  const bridgeLevel = !bridgeOnline
+    ? "error"
+    : bridgeStatus?.level === "error"
+      ? "error"
+      : bridgeStatus?.level === "attention" || bridgePresence === "connecting"
+        ? "attention"
+        : "healthy";
+  const bridgeLabel = bridgeLevel === "healthy"
+    ? (isChinese ? "Bridge 正常" : "Bridge 正常")
+    : bridgeLevel === "attention"
+      ? (isChinese ? "Bridge 检查中" : "Bridge 確認中")
+      : (isChinese ? "Bridge 异常" : "Bridge 異常");
 
   return (
     <main className="store-kitchen-display store-kitchen-page">
@@ -453,6 +522,15 @@ export default function StoreKitchenPage() {
           <a className="danger-button" href="/store/logout">ログアウト</a>
         </div>
       ) : null}
+
+      <div className={`store-kitchen-bridge-status is-${bridgeLevel}`} title={bridgeStatus?.problem || bridgeLabel}>
+        <span aria-hidden="true" />
+        <strong>Uber</strong>
+        <b>{bridgeLabel}</b>
+        {Number(bridgeStatus?.pendingCount ?? 0) > 0 ? (
+          <small>{isChinese ? `待发送 ${bridgeStatus?.pendingCount}` : `未送信 ${bridgeStatus?.pendingCount}`}</small>
+        ) : null}
+      </div>
 
       <section className="store-kitchen-board">
         <div>

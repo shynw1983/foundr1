@@ -5,9 +5,11 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Handler;
@@ -15,8 +17,6 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.provider.Settings;
 import android.text.TextUtils;
-
-import org.json.JSONObject;
 
 import jp.foundr1.store.R;
 
@@ -27,28 +27,26 @@ public class BridgeForegroundService extends Service {
     private static final int ACCESSIBILITY_ALERT_ID = 5202;
     private static final int CONNECTION_ALERT_ID = 5203;
     private static final int HEALTHY_COLOR = Color.rgb(24, 112, 74);
+    private static final int ATTENTION_COLOR = Color.rgb(183, 121, 31);
     private static final int UNHEALTHY_COLOR = Color.rgb(190, 24, 45);
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private boolean heartbeatAttempted = false;
-    private boolean backendConnected = false;
+    private final long createdAt = System.currentTimeMillis();
     private String lastProblem = "";
-    private final Runnable heartbeat = new Runnable() {
+    private boolean healthReceiverRegistered = false;
+    private final Runnable healthRefresh = new Runnable() {
         @Override
         public void run() {
-            BridgeUploader.upload(
-                BridgeForegroundService.this,
-                "heartbeat",
-                "",
-                new JSONObject(),
-                success -> handler.post(() -> {
-                    heartbeatAttempted = true;
-                    backendConnected = success;
-                    refreshBridgeStatus();
-                })
-            );
             refreshAccessibilityWarning();
             refreshBridgeStatus();
+            BridgeStatusReporter.reportIfNeeded(BridgeForegroundService.this, false);
             handler.postDelayed(this, 60000);
+        }
+    };
+    private final BroadcastReceiver healthReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            refreshBridgeStatus();
+            BridgeStatusReporter.reportIfNeeded(BridgeForegroundService.this, false);
         }
     };
     private final Runnable recoveryWatchdog = new Runnable() {
@@ -64,31 +62,44 @@ public class BridgeForegroundService extends Service {
     public void onCreate() {
         super.onCreate();
         createChannel();
-        startForeground(NOTIFICATION_ID, buildStatusNotification(false, "接続確認中"));
+        startForeground(NOTIFICATION_ID, buildStatusNotification("attention", "接続確認中"));
+        IntentFilter filter = new IntentFilter(BridgeHealthState.ACTION_CHANGED);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(healthReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(healthReceiver, filter);
+        }
+        healthReceiverRegistered = true;
+        BridgeRealtimeClient.start(this);
         refreshAccessibilityWarning();
         refreshBridgeStatus();
-        handler.post(heartbeat);
+        handler.post(healthRefresh);
         handler.post(recoveryWatchdog);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         refreshAccessibilityWarning();
+        BridgeRealtimeClient.start(this);
         refreshBridgeStatus();
         return START_STICKY;
     }
 
     @Override
     public void onTimeout(int startId, int fgsType) {
-        handler.removeCallbacks(heartbeat);
+        handler.removeCallbacks(healthRefresh);
         handler.removeCallbacks(recoveryWatchdog);
         stopSelf(startId);
     }
 
     @Override
     public void onDestroy() {
-        handler.removeCallbacks(heartbeat);
+        handler.removeCallbacks(healthRefresh);
         handler.removeCallbacks(recoveryWatchdog);
+        if (healthReceiverRegistered) {
+            try { unregisterReceiver(healthReceiver); } catch (Exception ignored) {}
+            healthReceiverRegistered = false;
+        }
         super.onDestroy();
     }
 
@@ -97,7 +108,9 @@ public class BridgeForegroundService extends Service {
         return null;
     }
 
-    private Notification buildStatusNotification(boolean healthy, String detail) {
+    private Notification buildStatusNotification(String level, String detail) {
+        boolean healthy = "healthy".equals(level);
+        boolean attention = "attention".equals(level);
         Intent intent = new Intent(this, BridgeActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(
             this,
@@ -110,45 +123,54 @@ public class BridgeForegroundService extends Service {
             : new Notification.Builder(this);
         return builder
             .setSmallIcon(healthy ? R.drawable.ic_bridge_status_ok : R.drawable.ic_bridge_status_error)
-            .setContentTitle(healthy ? "Bridge 接続正常" : "Bridge 接続異常")
+            .setContentTitle(healthy ? "Bridge 接続正常" : attention ? "Bridge 確認が必要" : "Bridge 接続異常")
             .setContentText(detail)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_STATUS)
-            .setColor(healthy ? HEALTHY_COLOR : UNHEALTHY_COLOR)
+            .setColor(healthy ? HEALTHY_COLOR : attention ? ATTENTION_COLOR : UNHEALTHY_COLOR)
             .build();
     }
 
     private void refreshBridgeStatus() {
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return;
-        String problem = currentProblem(manager);
-        boolean healthy = problem.isEmpty();
+        HealthResult health = currentHealth(manager);
+        boolean healthy = "healthy".equals(health.level);
         String detail = healthy
             ? "Uber Eats の読み取りと Foundr1 OS への接続は正常です"
-            : problem;
-        manager.notify(NOTIFICATION_ID, buildStatusNotification(healthy, detail));
+            : health.problem;
+        manager.notify(NOTIFICATION_ID, buildStatusNotification(health.level, detail));
 
-        boolean connectionChecking = "Foundr1 OS への接続を確認中です".equals(problem);
-        if (!healthy && !connectionChecking && !problem.equals(lastProblem)) {
-            manager.notify(CONNECTION_ALERT_ID, buildConnectionAlert(problem));
+        if ("error".equals(health.level) && !health.problem.equals(lastProblem)) {
+            manager.notify(CONNECTION_ALERT_ID, buildConnectionAlert(health.problem));
         } else if (healthy) {
             manager.cancel(CONNECTION_ALERT_ID);
         }
-        lastProblem = healthy ? "" : problem;
+        lastProblem = healthy ? "" : health.problem;
     }
 
-    private String currentProblem(NotificationManager manager) {
-        if (!manager.areNotificationsEnabled()) return "Bridge の通知が許可されていません";
-        if (!isNotificationListenerEnabled()) return "Uber Eats の通知アクセスが無効です";
-        if (!isAccessibilityServiceEnabled()) return "Uber Eats の画面読み取りが無効です";
-        if (BridgeConfig.endpoint(this).isEmpty() || BridgeConfig.token(this).isEmpty()) {
-            return "Foundr1 OS の接続設定が未完了です";
+    private HealthResult currentHealth(NotificationManager manager) {
+        if (!manager.areNotificationsEnabled()) return HealthResult.error("Bridge の通知が許可されていません");
+        if (!isNotificationListenerEnabled()) return HealthResult.error("Uber Eats の通知アクセスが無効です");
+        if (!isAccessibilityServiceEnabled()) return HealthResult.error("Uber Eats の画面読み取りが無効です");
+        if (
+            BridgeConfig.endpoint(this).isEmpty()
+            || BridgeConfig.token(this).isEmpty()
+            || BridgeConfig.storeId(this).isEmpty()
+        ) return HealthResult.error("店舗の接続設定が未完了です");
+        BridgeHealthState.Snapshot state = BridgeHealthState.snapshot(this);
+        if (!state.accessibilityConnected) return HealthResult.attention("画面読み取りサービスの接続を確認中です");
+        if (!state.notificationConnected) return HealthResult.attention("通知読み取りサービスの接続を確認中です");
+        if (!state.realtimeConnected) {
+            return System.currentTimeMillis() - createdAt > 90000L
+                ? HealthResult.error("Foundr1 OS のリアルタイム接続が切れています")
+                : HealthResult.attention("Foundr1 OS のリアルタイム接続を確認中です");
         }
-        if (!heartbeatAttempted) return "Foundr1 OS への接続を確認中です";
-        if (!backendConnected) return "Foundr1 OS に接続できません";
-        return "";
+        if (state.pendingCount > 0) return HealthResult.attention("未送信データが " + state.pendingCount + " 件あります");
+        if (!state.lastUploadError.isEmpty()) return HealthResult.attention(state.lastUploadError);
+        return HealthResult.healthy();
     }
 
     private Notification buildConnectionAlert(String problem) {
@@ -264,5 +286,19 @@ public class BridgeForegroundService extends Service {
             if (component != null && getPackageName().equals(component.getPackageName())) return true;
         }
         return false;
+    }
+
+    private static final class HealthResult {
+        final String level;
+        final String problem;
+
+        private HealthResult(String level, String problem) {
+            this.level = level;
+            this.problem = problem;
+        }
+
+        static HealthResult healthy() { return new HealthResult("healthy", ""); }
+        static HealthResult attention(String problem) { return new HealthResult("attention", problem); }
+        static HealthResult error(String problem) { return new HealthResult("error", problem); }
     }
 }

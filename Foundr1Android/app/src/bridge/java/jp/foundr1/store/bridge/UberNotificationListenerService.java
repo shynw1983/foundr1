@@ -10,6 +10,26 @@ public class UberNotificationListenerService extends NotificationListenerService
     private static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
 
     @Override
+    public void onListenerConnected() {
+        super.onListenerConnected();
+        BridgeHealthState.setNotificationConnected(this, true);
+        BridgeServiceStarter.ensureStarted(this, "notification_connected");
+    }
+
+    @Override
+    public void onListenerDisconnected() {
+        BridgeHealthState.setNotificationConnected(this, false);
+        requestRebind(new android.content.ComponentName(this, UberNotificationListenerService.class));
+        super.onListenerDisconnected();
+    }
+
+    @Override
+    public void onDestroy() {
+        BridgeHealthState.setNotificationConnected(this, false);
+        super.onDestroy();
+    }
+
+    @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         try {
             handleNotificationPosted(sbn);

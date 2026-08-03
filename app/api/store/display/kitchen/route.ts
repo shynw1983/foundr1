@@ -136,15 +136,30 @@ export async function GET(request: Request) {
 
   await refreshActiveProductionTasksForStore(storeFilter);
 
-  const [{ tasks, areas, displayLanguage }, preferenceRows] = await Promise.all([
+  const [{ tasks, areas, displayLanguage }, preferenceRows, bridgeRows] = await Promise.all([
     getKitchenTasks(storeFilter, normalizeText(params.get("area"))),
     sql`
       select coalesce(ui_preferences ->> 'kitchenDisplayMode', 'detailed') as "kitchenDisplayMode"
       from employees
       where id = ${session.id}
       limit 1
+    `,
+    sql`
+      select
+        device_name as "deviceName",
+        coalesce(last_seen_at::text, '') as "lastSeenAt",
+        coalesce(last_status_at::text, '') as "lastStatusAt",
+        coalesce(health_status, '{}'::jsonb) as status,
+        (last_seen_at > now() - interval '7 minutes') as "recentlyOnline"
+      from local_bridge_devices
+      where store_id::text = ${storeFilter}
+        and platform = 'uber_eats'
+        and is_enabled = true
+      order by last_seen_at desc nulls last, updated_at desc
+      limit 1
     `
   ]);
+  const bridgeRow = bridgeRows[0] as Record<string, unknown> | undefined;
   return Response.json({
     access,
     selectedStoreId: storeFilter,
@@ -154,6 +169,15 @@ export async function GET(request: Request) {
     kitchenDisplayMode: ["order_only", "simple"].includes(String(preferenceRows[0]?.kitchenDisplayMode))
       ? preferenceRows[0]?.kitchenDisplayMode
       : "detailed",
+    bridgeStatus: bridgeRow ? {
+      deviceName: normalizeText(bridgeRow.deviceName),
+      lastSeenAt: normalizeText(bridgeRow.lastSeenAt),
+      lastStatusAt: normalizeText(bridgeRow.lastStatusAt),
+      recentlyOnline: bridgeRow.recentlyOnline === true,
+      ...((bridgeRow.status && typeof bridgeRow.status === "object")
+        ? bridgeRow.status as Record<string, unknown>
+        : {})
+    } : null,
     serverNow: new Date().toISOString()
   }, { headers: { "Cache-Control": "no-store" } });
 }

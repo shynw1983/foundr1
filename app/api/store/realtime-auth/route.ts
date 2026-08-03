@@ -1,5 +1,6 @@
 import { canAccessStore, requireOsSession } from "../../../../lib/api-auth";
 import { getPusher } from "../../../../lib/order-realtime";
+import { bridgeRealtimeChannel } from "../../../../lib/local-bridge-realtime";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,19 @@ export async function POST(request: Request) {
     const pusher = getPusher();
     if (!pusher) return Response.json({ error: "Realtime unavailable" }, { status: 503 });
     return Response.json(pusher.authorizeChannel(socketId, channelName));
+  }
+
+  const bridgePrefix = "presence-store-bridge-";
+  const bridgeStoreId = channelName.startsWith(bridgePrefix)
+    ? channelName.slice(bridgePrefix.length)
+    : "";
+  if (socketId && bridgeStoreId && await canAccessStore(session, bridgeStoreId)) {
+    const pusher = getPusher();
+    if (!pusher) return Response.json({ error: "Realtime unavailable" }, { status: 503 });
+    return Response.json(pusher.authorizeChannel(socketId, bridgeRealtimeChannel(bridgeStoreId), {
+      user_id: `kitchen:${session.id}`,
+      user_info: { role: "kitchen" }
+    }));
   }
 
   const prefix = "private-store-orders-";

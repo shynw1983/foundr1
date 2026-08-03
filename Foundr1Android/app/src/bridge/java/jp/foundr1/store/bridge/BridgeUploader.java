@@ -1,12 +1,10 @@
 package jp.foundr1.store.bridge;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Build;
 import android.provider.Settings;
 import android.util.Log;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.OutputStream;
@@ -14,15 +12,13 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 final class BridgeUploader {
     private static final String TAG = "Foundr1Bridge";
-    private static final String KEY_PENDING_UPLOADS = "pending_uploads";
-    private static final int MAX_PENDING_UPLOADS = 100;
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
-    private static final Object QUEUE_LOCK = new Object();
 
     private BridgeUploader() {}
 
@@ -47,10 +43,27 @@ final class BridgeUploader {
             try {
                 flushPending(appContext);
                 JSONObject body = buildBody(appContext, kind, packageName, payload);
-                success = send(appContext, body);
-                if (!success && shouldQueue(kind)) enqueue(appContext, body);
+                SendResult result = send(appContext, body);
+                success = result == SendResult.SUCCESS;
+                if (result == SendResult.RETRY && shouldQueue(kind)) {
+                    BridgeUploadQueue.get(appContext).enqueue(body);
+                } else if (result == SendResult.PERMANENT_FAILURE) {
+                    BridgeHealthState.recordUploadError(appContext, "送信内容が拒否されました");
+                }
+                if (success) {
+                    BridgeHealthState.recordUploadSuccess(appContext);
+                    if ("accessibility_order".equals(kind)) {
+                        BridgeHealthState.recordOrderUpload(
+                            appContext,
+                            payload == null ? "" : payload.optString("orderCode")
+                        );
+                    }
+                }
+                refreshPendingCount(appContext);
             } catch (Exception error) {
                 Log.w(TAG, "Upload failed", error);
+                BridgeHealthState.recordUploadError(appContext, "ネットワーク送信に失敗しました");
+                refreshPendingCount(appContext);
             } finally {
                 if (callback != null) callback.onComplete(success);
             }
@@ -59,6 +72,7 @@ final class BridgeUploader {
 
     private static JSONObject buildBody(Context context, String kind, String packageName, JSONObject payload) throws Exception {
         JSONObject body = new JSONObject();
+        body.put("clientEventId", UUID.randomUUID().toString());
         body.put("platform", "uber_eats");
         body.put("kind", kind);
         body.put("packageName", packageName == null ? "" : packageName);
@@ -69,7 +83,7 @@ final class BridgeUploader {
         return body;
     }
 
-    private static boolean send(Context context, JSONObject body) {
+    private static SendResult send(Context context, JSONObject body) {
         HttpURLConnection connection = null;
         try {
             byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
@@ -86,12 +100,15 @@ final class BridgeUploader {
                 stream.write(bytes);
             }
             int status = connection.getResponseCode();
-            if (status >= 200 && status < 300) return true;
+            if (status >= 200 && status < 300) return SendResult.SUCCESS;
             Log.w(TAG, "Upload failed with HTTP " + status);
-            return false;
+            if (status == 408 || status == 425 || status == 429 || status >= 500) {
+                return SendResult.RETRY;
+            }
+            return SendResult.PERMANENT_FAILURE;
         } catch (Exception error) {
             Log.w(TAG, "Upload failed", error);
-            return false;
+            return SendResult.RETRY;
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -104,48 +121,28 @@ final class BridgeUploader {
             && !"bridge_exit".equals(kind);
     }
 
-    private static void enqueue(Context context, JSONObject body) {
-        synchronized (QUEUE_LOCK) {
-            SharedPreferences preferences = BridgeConfig.prefs(context);
-            JSONArray pending;
-            try {
-                pending = new JSONArray(preferences.getString(KEY_PENDING_UPLOADS, "[]"));
-            } catch (Exception ignored) {
-                pending = new JSONArray();
+    private static void flushPending(Context context) {
+        BridgeUploadQueue queue = BridgeUploadQueue.get(context);
+        for (BridgeUploadQueue.Item item : queue.items()) {
+            queue.noteAttempt(item.id);
+            SendResult result = send(context, item.body);
+            if (result == SendResult.SUCCESS) {
+                queue.delete(item.id);
+                BridgeHealthState.recordUploadSuccess(context);
+                continue;
             }
-            JSONArray next = new JSONArray();
-            int start = Math.max(0, pending.length() - MAX_PENDING_UPLOADS + 1);
-            for (int index = start; index < pending.length(); index += 1) {
-                JSONObject item = pending.optJSONObject(index);
-                if (item != null) next.put(item);
+            if (result == SendResult.PERMANENT_FAILURE) {
+                queue.delete(item.id);
+                BridgeHealthState.recordUploadError(context, "保留中の送信内容が拒否されました");
+                continue;
             }
-            next.put(body);
-            preferences.edit().putString(KEY_PENDING_UPLOADS, next.toString()).apply();
+            break;
         }
+        refreshPendingCount(context);
     }
 
-    private static void flushPending(Context context) {
-        synchronized (QUEUE_LOCK) {
-            SharedPreferences preferences = BridgeConfig.prefs(context);
-            JSONArray pending;
-            try {
-                pending = new JSONArray(preferences.getString(KEY_PENDING_UPLOADS, "[]"));
-            } catch (Exception ignored) {
-                pending = new JSONArray();
-            }
-            if (pending.length() == 0) return;
-            JSONArray remaining = new JSONArray();
-            boolean networkFailed = false;
-            for (int index = 0; index < pending.length(); index += 1) {
-                JSONObject item = pending.optJSONObject(index);
-                if (item == null) continue;
-                if (networkFailed || !send(context, item)) {
-                    networkFailed = true;
-                    remaining.put(item);
-                }
-            }
-            preferences.edit().putString(KEY_PENDING_UPLOADS, remaining.toString()).apply();
-        }
+    private static void refreshPendingCount(Context context) {
+        BridgeHealthState.setPendingCount(context, BridgeUploadQueue.get(context).count());
     }
 
     private static String resolveDeviceName(Context context) {
@@ -154,5 +151,11 @@ final class BridgeUploader {
         String androidId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
         String model = String.format(Locale.US, "%s %s", Build.MANUFACTURER, Build.MODEL).trim();
         return model + (androidId == null || androidId.isEmpty() ? "" : " / " + androidId);
+    }
+
+    private enum SendResult {
+        SUCCESS,
+        RETRY,
+        PERMANENT_FAILURE
     }
 }
