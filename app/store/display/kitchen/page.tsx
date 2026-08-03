@@ -60,6 +60,14 @@ type InventorySyncState = {
   error?: string;
 };
 
+type UnavailableInventoryItem = {
+  inventoryKey: string;
+  ingredientLabel: string;
+  targetKind: "item" | "option";
+  brandId: string;
+  targets: InventoryTarget[];
+};
+
 type KitchenDisplayMode = "order_only" | "simple" | "detailed";
 
 type StoreOption = {
@@ -143,6 +151,11 @@ export default function StoreKitchenPage() {
   const [inventorySaving, setInventorySaving] = useState(false);
   const [inventorySyncByKey, setInventorySyncByKey] = useState<Record<string, InventorySyncState>>({});
   const [inventoryKeyByLineKey, setInventoryKeyByLineKey] = useState<Record<string, string>>({});
+  const [inventoryManagerOpen, setInventoryManagerOpen] = useState(false);
+  const [unavailableInventory, setUnavailableInventory] = useState<UnavailableInventoryItem[]>([]);
+  const [inventoryListLoading, setInventoryListLoading] = useState(false);
+  const [inventoryListError, setInventoryListError] = useState("");
+  const [inventoryRestoringKey, setInventoryRestoringKey] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const selectedStoreIdRef = useRef(selectedStoreId);
   const serverOffsetRef = useRef(0);
@@ -150,6 +163,7 @@ export default function StoreKitchenPage() {
   const autoStartingTaskIdsRef = useRef<Set<string>>(new Set());
   const bridgeMemberIdsRef = useRef<Set<string>>(new Set());
   const inventoryPointerRef = useRef<{ lineKey: string; x: number; y: number; handled: boolean } | null>(null);
+  const inventoryCommandKeyByIdRef = useRef<Record<string, string>>({});
   const suppressIngredientClickUntilRef = useRef(0);
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
@@ -343,6 +357,52 @@ export default function StoreKitchenPage() {
     setInventorySaving(false);
   }
 
+  async function loadUnavailableInventory(storeId = selectedStoreIdRef.current) {
+    if (!storeId) return;
+    setInventoryListLoading(true);
+    setInventoryListError("");
+    const params = new URLSearchParams({ storeId, ts: String(Date.now()) });
+    const response = await fetch(`/api/store/display/kitchen/inventory?${params.toString()}`, { cache: "no-store" });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setUnavailableInventory(Array.isArray(body.items) ? body.items : []);
+    } else {
+      setInventoryListError(String(body.error ?? (displayLanguage === "zh" ? "无法读取缺货项目。" : "売り切れ項目を読み込めませんでした。")));
+    }
+    setInventoryListLoading(false);
+  }
+
+  async function restoreInventoryItem(item: UnavailableInventoryItem) {
+    if (inventoryRestoringKey) return;
+    setInventoryRestoringKey(item.inventoryKey);
+    setInventoryListError("");
+    const response = await fetch("/api/store/display/kitchen/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "apply",
+        storeId: selectedStoreId,
+        brandId: item.brandId,
+        ingredientLabel: item.ingredientLabel,
+        targetKind: item.targetKind,
+        isAvailable: true
+      })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok && body.commandId) {
+      const inventoryKey = String(body.inventoryKey || item.inventoryKey);
+      const commandId = String(body.commandId);
+      inventoryCommandKeyByIdRef.current[commandId] = inventoryKey;
+      setInventorySyncByKey((current) => ({
+        ...current,
+        [inventoryKey]: { commandId, status: "pending" }
+      }));
+    } else {
+      setInventoryListError(String(body.error ?? (isChinese ? "无法发送恢复销售操作。" : "販売再開を送信できませんでした。")));
+    }
+    setInventoryRestoringKey("");
+  }
+
   async function updateTask(task: KitchenTask, status: "new" | "preparing" | "ready") {
     setSavingId(task.id);
     const response = await fetch("/api/store/display/kitchen", {
@@ -475,6 +535,12 @@ export default function StoreKitchenPage() {
   }, [realtimeStatus, selectedArea]);
 
   useEffect(() => {
+    if (selectedStoreId) void loadUnavailableInventory(selectedStoreId);
+    // The sold-out list is intentionally loaded only when the store changes, not on the kitchen refresh loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStoreId]);
+
+  useEffect(() => {
     let pusher: any;
     let channels: any[] = [];
     let active = true;
@@ -559,8 +625,10 @@ export default function StoreKitchenPage() {
           bridgeChannel.bind("bridge.command.updated", (event: any) => {
             const command = event?.command;
             if (!active || !command?.id) return;
+            const commandId = String(command.id);
+            const inventoryKey = inventoryCommandKeyByIdRef.current[commandId] ?? "";
             setInventorySyncByKey((current) => Object.fromEntries(
-              Object.entries(current).map(([key, value]) => value.commandId === String(command.id)
+              Object.entries(current).map(([key, value]) => value.commandId === commandId
                 ? [key, {
                   ...value,
                   status: command.status === "succeeded"
@@ -572,6 +640,10 @@ export default function StoreKitchenPage() {
                 } satisfies InventorySyncState]
                 : [key, value])
             ));
+            if (inventoryKey && command.status === "succeeded") {
+              setUnavailableInventory((current) => current.filter((item) => item.inventoryKey !== inventoryKey));
+              delete inventoryCommandKeyByIdRef.current[commandId];
+            }
           });
           channels.push(bridgeChannel);
         }
@@ -663,6 +735,14 @@ export default function StoreKitchenPage() {
             </select>
           </label>
           <button className="secondary-button" type="button" onClick={() => void load()}>{loading ? (isChinese ? "加载中" : "読み込み中") : (isChinese ? "刷新" : "更新")}</button>
+          <button className="store-kitchen-inventory-manager-button" type="button" onClick={() => {
+            setMenuOpen(false);
+            setInventoryManagerOpen(true);
+            void loadUnavailableInventory();
+          }}>
+            <span>{isChinese ? "缺货管理" : "売切管理"}</span>
+            {unavailableInventory.length ? <b>{unavailableInventory.length}</b> : null}
+          </button>
           <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
             {isChinese ? "全屏・保持亮屏 ON" : "全画面・常時点灯 ON"}
           </button>
@@ -1030,6 +1110,72 @@ export default function StoreKitchenPage() {
                   : (inventoryDialog.task.kitchenLanguage === "zh" ? "全部设为缺货" : "すべて売り切れにする")}
               </button>
             </footer>
+          </section>
+        </div>
+      ) : null}
+      {inventoryManagerOpen ? (
+        <div className="store-kitchen-inventory-modal-backdrop" role="presentation" onPointerDown={(event) => {
+          if (event.target === event.currentTarget && !inventoryRestoringKey) setInventoryManagerOpen(false);
+        }}>
+          <section className="store-kitchen-inventory-modal store-kitchen-inventory-manager" role="dialog" aria-modal="true" aria-labelledby="inventory-manager-title">
+            <header>
+              <span>Foundr1 × Uber Eats</span>
+              <button type="button" aria-label={isChinese ? "关闭" : "閉じる"} disabled={Boolean(inventoryRestoringKey)} onClick={() => setInventoryManagerOpen(false)}>×</button>
+            </header>
+            <div className="store-kitchen-inventory-manager-heading">
+              <div>
+                <h2 id="inventory-manager-title">{isChinese ? "缺货管理" : "売切管理"}</h2>
+                <p>{isChinese ? "补充库存后，在这里恢复销售。关联的 Uber 选项会同时恢复。" : "補充後はここから販売を再開します。関連する Uber の選択肢も同時に戻ります。"}</p>
+              </div>
+              <strong>{unavailableInventory.length}</strong>
+            </div>
+            {!bridgeOnline ? (
+              <p className="store-kitchen-inventory-manager-warning">
+                {isChinese ? "Bridge 当前离线。恢复操作可以发送，但会在 Bridge 重新在线后执行。" : "Bridge は現在オフラインです。再開操作は送信され、オンライン復帰後に実行されます。"}
+              </p>
+            ) : null}
+            {inventoryListError ? <p className="is-error">{inventoryListError}</p> : null}
+            {inventoryListLoading ? (
+              <div className="store-kitchen-inventory-manager-empty">{isChinese ? "正在读取缺货项目…" : "売り切れ項目を読み込み中…"}</div>
+            ) : unavailableInventory.length ? (
+              <div className="store-kitchen-inventory-manager-list">
+                {unavailableInventory.map((item) => {
+                  const sync = inventorySyncByKey[item.inventoryKey];
+                  const pending = sync?.status === "pending";
+                  return (
+                    <article key={`${item.brandId}:${item.targetKind}:${item.inventoryKey}`}>
+                      <div className="store-kitchen-inventory-manager-copy">
+                        <small>{item.targetKind === "item" ? (isChinese ? "商品" : "商品") : (isChinese ? "选项" : "選択肢")}</small>
+                        <strong>{item.ingredientLabel}</strong>
+                        <div>
+                          {item.targets.map((target) => (
+                            <span key={target.targetId}>{target.label}</span>
+                          ))}
+                        </div>
+                        {sync?.status === "failed" ? <em>{sync.error || (isChinese ? "Uber 恢复失败，请重试。" : "Uber の再開に失敗しました。再試行してください。")}</em> : null}
+                      </div>
+                      <button
+                        className="primary-button"
+                        type="button"
+                        disabled={Boolean(inventoryRestoringKey) || pending}
+                        onClick={() => void restoreInventoryItem(item)}
+                      >
+                        {pending
+                          ? (isChinese ? "正在同步…" : "同期中…")
+                          : inventoryRestoringKey === item.inventoryKey
+                            ? (isChinese ? "正在发送…" : "送信中…")
+                            : (isChinese ? "恢复销售" : "販売を再開")}
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="store-kitchen-inventory-manager-empty">
+                <strong>{isChinese ? "目前没有缺货项目" : "現在、売り切れはありません"}</strong>
+                <span>{isChinese ? "所有商品和选项都可以销售。" : "すべての商品・選択肢を販売できます。"}</span>
+              </div>
+            )}
           </section>
         </div>
       ) : null}
