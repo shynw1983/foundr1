@@ -172,6 +172,7 @@ export async function POST(request: Request) {
         targets: resolved.targets.map((target) => ({
           kind: target.kind,
           targetId: target.targetId,
+          groupKey: target.kind === "option" ? target.groupKey : "",
           label: target.label,
           aliases: target.aliases
         }))
