@@ -1,0 +1,97 @@
+{
+  "storeId": "d6205da2-b809-531c-a7b2-d9cf505cf1c0",
+  "capturedAt": "2026-08-03",
+  "selectionGroup": "🍜麺の種類を選ぶ",
+  "replacementGroup": "🍜麺の種類を変更する",
+  "summary": {
+    "selectionOptionCount": 12,
+    "replacementOptionCount": 13,
+    "alreadySeparatePairs": 2,
+    "replacementOnlyOptions": 1,
+    "sharedPairsToSplit": 10
+  },
+  "alreadySeparate": [
+    {
+      "optionKey": "replace-extra-wide-harusame",
+      "currentName": "板春雨追加｜加宽粉｜넓적당면 추가｜Extra Wide Sweet Potato Noodles",
+      "replacementName": "板春雨に変更｜更换为宽粉｜넓적당면으로 변경｜Change to Wide Sweet Potato Noodles",
+      "uberPrice": 216
+    },
+    {
+      "optionKey": "replace-corn-noodle",
+      "currentName": "【お一人様1回限り】トウモロコシ麺｜玉米面｜옥수수면｜Corn Noodles",
+      "replacementName": "【お一人様1回限り】トウモロコシ麺に変更｜更换为玉米面｜옥수수면으로 변경｜Change to Corn Noodles",
+      "uberPrice": 0
+    }
+  ],
+  "replacementOnly": [
+    {
+      "optionKey": "replace-rice-noodle",
+      "currentName": "ビーフン",
+      "replacementName": "ビーフンに変更｜更换为米粉｜쌀국수로 변경｜Change to Rice Noodles",
+      "uberPrice": 176
+    }
+  ],
+  "sharedToSplit": [
+    {
+      "optionKey": "replace-harusame",
+      "currentName": "春雨｜粉丝｜당면｜Glass Noodles",
+      "replacementName": "春雨に変更｜更换为粉丝｜당면으로 변경｜Change to Glass Noodles",
+      "uberPrice": 176
+    },
+    {
+      "optionKey": "replace-sweet-potato-noodle",
+      "currentName": "さつまいも麺｜红薯粉｜고구마당면｜Sweet Potato Noodles",
+      "replacementName": "さつまいも麺に変更｜更换为红薯粉｜고구마당면으로 변경｜Change to Sweet Potato Noodles",
+      "uberPrice": 176
+    },
+    {
+      "optionKey": "replace-round-yam-sheet",
+      "currentName": "【数量限定】山芋粉皮（丸）｜圆形山药粉皮｜둥근 참마 당면｜Round Chinese Yam Starch Sheets",
+      "replacementName": "【数量限定】山芋粉皮（丸）に変更｜更换为圆形山药粉皮｜둥근 참마 당면으로 변경｜Change to Round Chinese Yam Starch Sheets",
+      "uberPrice": 176
+    },
+    {
+      "optionKey": "replace-yam-noodle",
+      "currentName": "山芋麺｜山药粉｜마 산약 당면｜Chinese Yam Noodles",
+      "replacementName": "山芋麺に変更｜更换为山药粉｜마 산약 당면으로 변경｜Change to Chinese Yam Noodles",
+      "uberPrice": 176
+    },
+    {
+      "optionKey": "replace-wide-sweet-potato-noodle",
+      "currentName": "さつまいも板春雨｜红薯宽粉｜고구마 넓적당면｜Wide Sweet Potato Noodles",
+      "replacementName": "さつまいも板春雨に変更｜更换为红薯宽粉｜고구마 넓적당면으로 변경｜Change to Wide Sweet Potato Noodles",
+      "uberPrice": 216
+    },
+    {
+      "optionKey": "replace-soybean-sprouts-noodle",
+      "currentName": "【ヘルシー】小大豆もやし｜黄豆芽｜콩나물｜Soybean Sprouts",
+      "replacementName": "【ヘルシー】小大豆もやしに変更｜更换为黄豆芽｜콩나물로 변경｜Change to Soybean Sprouts",
+      "uberPrice": 176
+    },
+    {
+      "optionKey": "replace-tteokbokki",
+      "currentName": "トッポッキ｜韩式年糕｜떡볶이떡｜Tteokbokki Rice Cakes",
+      "replacementName": "トッポッキに変更｜更换为韩式年糕｜떡볶이떡으로 변경｜Change to Tteokbokki Rice Cakes",
+      "uberPrice": 216
+    },
+    {
+      "optionKey": "replace-knife-shaved-noodle",
+      "currentName": "【大盛り】刀削麺｜刀削面｜칼국수면｜Knife-Shaved Noodles",
+      "replacementName": "【大盛り】刀削麺に変更｜更换为刀削面｜칼국수면으로 변경｜Change to Knife-Shaved Noodles",
+      "uberPrice": 276
+    },
+    {
+      "optionKey": "replace-kishimen",
+      "currentName": "【もっちりつるん】きしめん｜宽乌冬面｜기시멘｜Kishimen Noodles",
+      "replacementName": "【もっちりつるん】きしめんに変更｜更换为宽乌冬面｜기시멘으로 변경｜Change to Kishimen Noodles",
+      "uberPrice": 276
+    },
+    {
+      "optionKey": "replace-beef-noodle",
+      "currentName": "【もちもちつるん】牛筋麺｜牛筋面｜우근면｜Niujin Noodles",
+      "replacementName": "【もちもちつるん】牛筋麺に変更｜更换为牛筋面｜우근면으로 변경｜Change to Niujin Noodles",
+      "uberPrice": 276
+    }
+  ]
+}
