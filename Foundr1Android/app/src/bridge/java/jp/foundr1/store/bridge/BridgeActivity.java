@@ -65,6 +65,7 @@ public class BridgeActivity extends Activity {
     private TextView queueSummary;
     private LinearLayout statusCard;
     private LinearLayout advancedLayout;
+    private Button repairButton;
     private Button selfTestButton;
     private boolean healthReceiverRegistered = false;
     private final BroadcastReceiver healthReceiver = new BroadcastReceiver() {
@@ -146,6 +147,9 @@ public class BridgeActivity extends Activity {
         statusCard.addView(overallTitle);
         statusCard.addView(overallDetail);
         page.addView(statusCard, matchWidth(dp(12)));
+
+        repairButton = addPrimaryButton(page, "接続を修復する", view -> repairConnection());
+        repairButton.setVisibility(View.GONE);
 
         LinearLayout chain = section(page, "注文連携");
         LinearLayout chainRow = new LinearLayout(this);
@@ -274,6 +278,83 @@ public class BridgeActivity extends Activity {
         }
         queueSummary.setText(health.pendingCount == 0 ? "未送信：0件" : "未送信：" + health.pendingCount + "件（自動再送中）");
         queueSummary.setTextColor(health.pendingCount == 0 ? COLOR_MUTED : COLOR_ATTENTION);
+
+        updateRepairButton(
+            level,
+            notificationsAllowed,
+            accessibilityAuthorized,
+            notificationAuthorized,
+            health,
+            batteryProtected,
+            configured
+        );
+    }
+
+    private void updateRepairButton(
+        String level,
+        boolean notificationsAllowed,
+        boolean accessibilityAuthorized,
+        boolean notificationAuthorized,
+        BridgeHealthState.Snapshot health,
+        boolean batteryProtected,
+        boolean configured
+    ) {
+        if (repairButton == null) return;
+        if ("healthy".equals(level)) {
+            repairButton.setVisibility(View.GONE);
+            return;
+        }
+        repairButton.setVisibility(View.VISIBLE);
+        if (!notificationsAllowed) repairButton.setText("Bridge の通知を許可する");
+        else if (!accessibilityAuthorized) repairButton.setText("画面読み取りを有効にする");
+        else if (!notificationAuthorized) repairButton.setText("Uber 通知読み取りを有効にする");
+        else if (!health.notificationConnected && isXiaomi()) repairButton.setText("Xiaomi の自動起動を確認する");
+        else if (!health.notificationConnected) repairButton.setText("通知読み取りを再接続する");
+        else if (!batteryProtected) repairButton.setText("バックグラウンド制限を解除する");
+        else if (!configured) repairButton.setText("店舗の接続設定を開く");
+        else repairButton.setText("今すぐ再接続する");
+    }
+
+    private void repairConnection() {
+        BridgeHealthState.Snapshot health = BridgeHealthState.snapshot(this);
+        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        boolean notificationsAllowed = notificationManager != null && notificationManager.areNotificationsEnabled();
+        if (!notificationsAllowed) {
+            Intent intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+            startActivity(intent);
+            return;
+        }
+        if (!isAccessibilityServiceEnabled()) {
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+            return;
+        }
+        if (!isNotificationListenerEnabled()) {
+            startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
+            return;
+        }
+        if (!health.notificationConnected) {
+            UberNotificationListenerService.requestConnection(this);
+            if (isXiaomi()) {
+                openAutoStartSettings();
+            } else {
+                Toast.makeText(this, "通知読み取りを再接続しています", Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
+        if (!isIgnoringBatteryOptimizations()) {
+            openBatterySettings();
+            return;
+        }
+        if (BridgeConfig.storeId(this).isEmpty() || BridgeConfig.token(this).isEmpty()) {
+            advancedLayout.setVisibility(View.VISIBLE);
+            Toast.makeText(this, "店舗 ID と Bridge Token を確認してください", Toast.LENGTH_LONG).show();
+            return;
+        }
+        BridgeRealtimeClient.disconnect(this);
+        BridgeRealtimeClient.start(this);
+        BridgeServiceStarter.ensureStarted(this, "manual_repair");
+        Toast.makeText(this, "再接続しています", Toast.LENGTH_SHORT).show();
     }
 
     private void runSelfTest() {
@@ -467,6 +548,34 @@ public class BridgeActivity extends Activity {
             startActivity(intent);
         } catch (Exception error) {
             startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+        }
+    }
+
+    private boolean isXiaomi() {
+        return "xiaomi".equalsIgnoreCase(Build.MANUFACTURER)
+            || "redmi".equalsIgnoreCase(Build.BRAND)
+            || "poco".equalsIgnoreCase(Build.BRAND);
+    }
+
+    private void openAutoStartSettings() {
+        Intent intent = new Intent("miui.intent.action.OP_AUTO_START");
+        intent.setData(Uri.parse("package:" + getPackageName()));
+        try {
+            startActivity(intent);
+            Toast.makeText(this, "Foundr1 Bridge の自動起動を ON にしてください", Toast.LENGTH_LONG).show();
+        } catch (Exception firstError) {
+            try {
+                Intent fallback = new Intent();
+                fallback.setComponent(new ComponentName(
+                    "com.miui.securitycenter",
+                    "com.miui.permcenter.autostart.AutoStartManagementActivity"
+                ));
+                startActivity(fallback);
+                Toast.makeText(this, "Foundr1 Bridge の自動起動を ON にしてください", Toast.LENGTH_LONG).show();
+            } catch (Exception secondError) {
+                startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .setData(Uri.parse("package:" + getPackageName())));
+            }
         }
     }
 

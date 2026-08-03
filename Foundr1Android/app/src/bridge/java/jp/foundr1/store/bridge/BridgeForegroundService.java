@@ -165,7 +165,9 @@ public class BridgeForegroundService extends Service {
         if (!state.notificationConnected) {
             UberNotificationListenerService.requestConnection(this);
             return System.currentTimeMillis() - createdAt > 90000L
-                ? HealthResult.error("通知読み取りサービスを再接続できません")
+                ? HealthResult.error(isXiaomi()
+                    ? "Xiaomi の自動起動を許可してください"
+                    : "通知読み取りサービスを再接続できません")
                 : HealthResult.attention("通知読み取りサービスの接続を確認中です");
         }
         if (!state.realtimeConnected) {
@@ -176,6 +178,12 @@ public class BridgeForegroundService extends Service {
         if (state.pendingCount > 0) return HealthResult.attention("未送信データが " + state.pendingCount + " 件あります");
         if (!state.lastUploadError.isEmpty()) return HealthResult.attention(state.lastUploadError);
         return HealthResult.healthy();
+    }
+
+    private boolean isXiaomi() {
+        return "xiaomi".equalsIgnoreCase(Build.MANUFACTURER)
+            || "redmi".equalsIgnoreCase(Build.BRAND)
+            || "poco".equalsIgnoreCase(Build.BRAND);
     }
 
     private Notification buildConnectionAlert(String problem) {
