@@ -107,15 +107,11 @@
 .inventory-content {
   display: grid;
   gap: 16px;
-  width: min(100%, 1180px);
-  margin-inline: auto;
 }
 
 .inventory-topbar {
   align-items: flex-end;
   gap: 18px;
-  width: min(100%, 1180px);
-  margin-inline: auto;
 }
 
 .inventory-topbar-actions {
@@ -170,7 +166,7 @@
 
 .inventory-summary article {
   display: grid;
-  min-height: 112px;
+  min-height: 118px;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
