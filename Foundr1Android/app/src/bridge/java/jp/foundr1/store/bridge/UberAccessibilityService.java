@@ -825,6 +825,11 @@ public class UberAccessibilityService extends AccessibilityService {
         }
 
         boolean inventoryScreen = isInventoryScreen(root);
+        if (inventoryScreen && isInventoryNavigationDrawerVisible(root)) {
+            performGlobalAction(GLOBAL_ACTION_BACK);
+            retryPendingCommand(700L, "Uber のサイドメニューを閉じています。");
+            return;
+        }
         if (inventoryScreen && commandInventorySearchTargetIndex != commandInventoryTargetIndex) {
             AccessibilityNodeInfo search = findNodeByClass(root, "android.widget.EditText");
             String searchText = inventorySearchText(target.optString("label"), aliases);
@@ -1049,6 +1054,18 @@ public class UberAccessibilityService extends AccessibilityService {
             );
         } catch (Exception ignored) {
         }
+    }
+
+    private boolean isInventoryNavigationDrawerVisible(AccessibilityNodeInfo root) {
+        boolean japaneseDrawer = subtreeContainsText(root, "注文履歴")
+            && subtreeContainsText(root, "予約注文")
+            && subtreeContainsText(root, "設定")
+            && subtreeContainsText(root, "ヘルプ");
+        boolean englishDrawer = subtreeContainsText(root, "Order history")
+            && subtreeContainsText(root, "Scheduled orders")
+            && subtreeContainsText(root, "Settings")
+            && subtreeContainsText(root, "Help");
+        return japaneseDrawer || englishDrawer;
     }
 
     private AccessibilityNodeInfo findInventoryTargetNode(
