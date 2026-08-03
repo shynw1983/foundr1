@@ -149,7 +149,7 @@ export default function StoreKitchenPage() {
   const loadSequenceRef = useRef(0);
   const autoStartingTaskIdsRef = useRef<Set<string>>(new Set());
   const bridgeMemberIdsRef = useRef<Set<string>>(new Set());
-  const inventoryPointerRef = useRef<{ lineKey: string; x: number; y: number } | null>(null);
+  const inventoryPointerRef = useRef<{ lineKey: string; x: number; y: number; handled: boolean } | null>(null);
   const suppressIngredientClickUntilRef = useRef(0);
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
@@ -245,23 +245,29 @@ export default function StoreKitchenPage() {
   }
 
   function startInventorySwipe(lineKey: string, clientX: number, clientY: number) {
-    inventoryPointerRef.current = { lineKey, x: clientX, y: clientY };
+    inventoryPointerRef.current = { lineKey, x: clientX, y: clientY, handled: false };
+  }
+
+  function moveInventorySwipe(lineKey: string, clientX: number, clientY: number) {
+    const start = inventoryPointerRef.current;
+    if (!start || start.lineKey !== lineKey || start.handled) return;
+    const deltaX = clientX - start.x;
+    const deltaY = clientY - start.y;
+    if (deltaX < -38 && Math.abs(deltaX) > Math.abs(deltaY) * 1.1) {
+      start.handled = true;
+      suppressIngredientClickUntilRef.current = Date.now() + 700;
+      setRevealedInventoryLineKey(lineKey);
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.(24);
+    } else if (deltaX > 32 && Math.abs(deltaX) > Math.abs(deltaY) * 1.1 && revealedInventoryLineKey === lineKey) {
+      start.handled = true;
+      suppressIngredientClickUntilRef.current = Date.now() + 500;
+      setRevealedInventoryLineKey("");
+    }
   }
 
   function finishInventorySwipe(lineKey: string, clientX: number, clientY: number) {
-    const start = inventoryPointerRef.current;
+    moveInventorySwipe(lineKey, clientX, clientY);
     inventoryPointerRef.current = null;
-    if (!start || start.lineKey !== lineKey) return;
-    const deltaX = clientX - start.x;
-    const deltaY = clientY - start.y;
-    if (deltaX < -54 && Math.abs(deltaX) > Math.abs(deltaY) * 1.25) {
-      suppressIngredientClickUntilRef.current = Date.now() + 500;
-      setRevealedInventoryLineKey(lineKey);
-      if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.(24);
-    } else if (deltaX > 36 && revealedInventoryLineKey === lineKey) {
-      suppressIngredientClickUntilRef.current = Date.now() + 350;
-      setRevealedInventoryLineKey("");
-    }
   }
 
   async function previewInventoryChange(
@@ -741,7 +747,11 @@ export default function StoreKitchenPage() {
                               className={`store-kitchen-order-product store-kitchen-order-action${checkedLineKeys.has(productLineKey) ? " is-checked" : ""}`}
                               type="button"
                               aria-pressed={checkedLineKeys.has(productLineKey)}
-                              onPointerDown={(event) => startInventorySwipe(productLineKey, event.clientX, event.clientY)}
+                              onPointerDown={(event) => {
+                                event.currentTarget.setPointerCapture?.(event.pointerId);
+                                startInventorySwipe(productLineKey, event.clientX, event.clientY);
+                              }}
+                              onPointerMove={(event) => moveInventorySwipe(productLineKey, event.clientX, event.clientY)}
                               onPointerUp={(event) => finishInventorySwipe(productLineKey, event.clientX, event.clientY)}
                               onPointerCancel={() => { inventoryPointerRef.current = null; }}
                               onClick={() => toggleLineCheck(task, productLineKey, true)}
@@ -823,7 +833,11 @@ export default function StoreKitchenPage() {
                                     ].filter(Boolean).join(" ")}
                                     type="button"
                                     aria-pressed={checkedLineKeys.has(lineKey)}
-                                    onPointerDown={(event) => startInventorySwipe(lineKey, event.clientX, event.clientY)}
+                                    onPointerDown={(event) => {
+                                      event.currentTarget.setPointerCapture?.(event.pointerId);
+                                      startInventorySwipe(lineKey, event.clientX, event.clientY);
+                                    }}
+                                    onPointerMove={(event) => moveInventorySwipe(lineKey, event.clientX, event.clientY)}
                                     onPointerUp={(event) => finishInventorySwipe(lineKey, event.clientX, event.clientY)}
                                     onPointerCancel={() => { inventoryPointerRef.current = null; }}
                                     onClick={() => toggleLineCheck(task, lineKey, true)}
