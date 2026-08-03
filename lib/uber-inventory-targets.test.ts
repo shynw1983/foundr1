@@ -39,6 +39,16 @@ test("groups the default wide noodle and the extra wide noodle action", () => {
   assert.equal(result.targets.length, 2);
 });
 
+test("matches a customer-facing topping label directly", () => {
+  const result = resolveUberInventoryTargets("香醋", [
+    row({ id: "vinegar", groupKey: "toppings", optionKey: "vinegar", name: "香醋" }),
+    row({ id: "black-fungus", groupKey: "toppings", optionKey: "black-fungus", name: "黒きくらげ" })
+  ]);
+
+  assert.equal(result.targets.length, 1);
+  assert.equal(result.targets[0]?.menuOptionId, "vinegar");
+});
+
 test("matches a catalog item by its localized customer-facing name", () => {
   const result = resolveUberInventoryItemTarget("经典麻辣烫套餐", [{
     id: "item-1",

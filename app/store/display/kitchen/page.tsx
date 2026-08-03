@@ -733,25 +733,16 @@ export default function StoreKitchenPage() {
                       : undefined;
                     return (
                       <section className="store-kitchen-order-group" key={`${task.id}:group:${groupIndex}`}>
-                        {kitchenDisplayMode === "order_only" ? (
-                          <div className={`store-kitchen-inventory-swipe${revealedInventoryLineKey === productLineKey ? " is-revealed" : ""}`}>
-                            <button
-                              className="store-kitchen-inventory-action"
-                              type="button"
-                              onClick={() => void previewInventoryChange(task, productLineKey, group.itemName, "item")}
-                            >
-                              <span>{task.kitchenLanguage === "zh" ? "商品缺货" : "商品売切れ"}</span>
-                              <small>Uber</small>
-                            </button>
-                            <button
-                              className="store-kitchen-inventory-quick-action"
-                              type="button"
-                              aria-label={task.kitchenLanguage === "zh" ? `${group.itemName} 设为缺货` : `${group.itemName}を売り切れにする`}
-                              onClick={() => void previewInventoryChange(task, productLineKey, group.itemName, "item")}
-                            >
-                              <span>{task.kitchenLanguage === "zh" ? "缺货" : "売切"}</span>
-                              <small>Uber</small>
-                            </button>
+                        <div className={`store-kitchen-inventory-swipe${revealedInventoryLineKey === productLineKey ? " is-revealed" : ""}`}>
+                          <button
+                            className="store-kitchen-inventory-action"
+                            type="button"
+                            onClick={() => void previewInventoryChange(task, productLineKey, group.itemName, "item")}
+                          >
+                            <span>{task.kitchenLanguage === "zh" ? "商品缺货" : "商品売切れ"}</span>
+                            <small>Uber</small>
+                          </button>
+                          {kitchenDisplayMode === "order_only" ? (
                             <button
                               className={`store-kitchen-order-product store-kitchen-order-action${checkedLineKeys.has(productLineKey) ? " is-checked" : ""}`}
                               type="button"
@@ -777,31 +768,101 @@ export default function StoreKitchenPage() {
                                 </em>
                               ) : null}
                             </button>
-                          </div>
-                        ) : (
-                          <div className="store-kitchen-order-product">
-                            <span>{group.itemName}</span>
-                            {group.quantity > 1 ? <b>× {group.quantity}</b> : null}
-                          </div>
-                        )}
+                          ) : (
+                            <div
+                              className="store-kitchen-order-product store-kitchen-product-swipe-foreground"
+                              onPointerDown={(event) => {
+                                event.currentTarget.setPointerCapture?.(event.pointerId);
+                                startInventorySwipe(productLineKey, event.clientX, event.clientY);
+                              }}
+                              onPointerMove={(event) => moveInventorySwipe(productLineKey, event.clientX, event.clientY)}
+                              onPointerUp={(event) => finishInventorySwipe(productLineKey, event.clientX, event.clientY)}
+                              onPointerCancel={() => { inventoryPointerRef.current = null; }}
+                            >
+                              <span>{group.itemName}</span>
+                              {group.quantity > 1 ? <b>× {group.quantity}</b> : null}
+                              {productInventorySync ? (
+                                <em className={`store-kitchen-inventory-sync is-${productInventorySync.status}`}>
+                                  {productInventorySync.status === "pending"
+                                    ? (task.kitchenLanguage === "zh" ? "Uber 待同步" : "Uber 同期待ち")
+                                    : productInventorySync.status === "succeeded"
+                                      ? (task.kitchenLanguage === "zh" ? "Uber 已缺货" : "Uber 売切れ済み")
+                                      : (task.kitchenLanguage === "zh" ? "同步失败" : "同期失敗")}
+                                </em>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
                         <div className="store-kitchen-order-options">
                           {group.options.map((option, optionIndex) => {
                             const optionLineKey = `${task.id}:order:${groupIndex}:option:${optionIndex}`;
-                            return kitchenDisplayMode === "order_only" ? (
-                              <button
-                                className={`store-kitchen-order-option store-kitchen-order-action${checkedLineKeys.has(optionLineKey) ? " is-checked" : ""}`}
+                            const optionInventoryKey = inventoryKeyByLineKey[optionLineKey] ?? "";
+                            const optionInventorySync = optionInventoryKey
+                              ? inventorySyncByKey[optionInventoryKey]
+                              : undefined;
+                            return (
+                              <div
+                                className={`store-kitchen-inventory-swipe${revealedInventoryLineKey === optionLineKey ? " is-revealed" : ""}`}
                                 key={`${task.id}:customer:${groupIndex}:${optionIndex}`}
-                                type="button"
-                                aria-pressed={checkedLineKeys.has(optionLineKey)}
-                                onClick={() => toggleLineCheck(task, optionLineKey, true)}
                               >
-                                <span>{option.label}</span>
-                                {option.count > 1 ? <b>× {option.count}</b> : null}
-                              </button>
-                            ) : (
-                              <div className="store-kitchen-order-option" key={`${task.id}:customer:${groupIndex}:${optionIndex}`}>
-                                <span>{option.label}</span>
-                                {option.count > 1 ? <b>× {option.count}</b> : null}
+                                <button
+                                  className="store-kitchen-inventory-action"
+                                  type="button"
+                                  onClick={() => void previewInventoryChange(task, optionLineKey, option.label, "option")}
+                                >
+                                  <span>{task.kitchenLanguage === "zh" ? "加料缺货" : "選択肢売切れ"}</span>
+                                  <small>Uber</small>
+                                </button>
+                                {kitchenDisplayMode === "order_only" ? (
+                                  <button
+                                    className={`store-kitchen-order-option store-kitchen-order-action${checkedLineKeys.has(optionLineKey) ? " is-checked" : ""}`}
+                                    type="button"
+                                    aria-pressed={checkedLineKeys.has(optionLineKey)}
+                                    onPointerDown={(event) => {
+                                      event.currentTarget.setPointerCapture?.(event.pointerId);
+                                      startInventorySwipe(optionLineKey, event.clientX, event.clientY);
+                                    }}
+                                    onPointerMove={(event) => moveInventorySwipe(optionLineKey, event.clientX, event.clientY)}
+                                    onPointerUp={(event) => finishInventorySwipe(optionLineKey, event.clientX, event.clientY)}
+                                    onPointerCancel={() => { inventoryPointerRef.current = null; }}
+                                    onClick={() => toggleLineCheck(task, optionLineKey, true)}
+                                  >
+                                    <span>{option.label}</span>
+                                    {option.count > 1 ? <b>× {option.count}</b> : null}
+                                    {optionInventorySync ? (
+                                      <em className={`store-kitchen-inventory-sync is-${optionInventorySync.status}`}>
+                                        {optionInventorySync.status === "pending"
+                                          ? (task.kitchenLanguage === "zh" ? "Uber 待同步" : "Uber 同期待ち")
+                                          : optionInventorySync.status === "succeeded"
+                                            ? (task.kitchenLanguage === "zh" ? "Uber 已缺货" : "Uber 売切れ済み")
+                                            : (task.kitchenLanguage === "zh" ? "同步失败" : "同期失敗")}
+                                      </em>
+                                    ) : null}
+                                  </button>
+                                ) : (
+                                  <div
+                                    className="store-kitchen-order-option store-kitchen-option-swipe-foreground"
+                                    onPointerDown={(event) => {
+                                      event.currentTarget.setPointerCapture?.(event.pointerId);
+                                      startInventorySwipe(optionLineKey, event.clientX, event.clientY);
+                                    }}
+                                    onPointerMove={(event) => moveInventorySwipe(optionLineKey, event.clientX, event.clientY)}
+                                    onPointerUp={(event) => finishInventorySwipe(optionLineKey, event.clientX, event.clientY)}
+                                    onPointerCancel={() => { inventoryPointerRef.current = null; }}
+                                  >
+                                    <span>{option.label}</span>
+                                    {option.count > 1 ? <b>× {option.count}</b> : null}
+                                    {optionInventorySync ? (
+                                      <em className={`store-kitchen-inventory-sync is-${optionInventorySync.status}`}>
+                                        {optionInventorySync.status === "pending"
+                                          ? (task.kitchenLanguage === "zh" ? "Uber 待同步" : "Uber 同期待ち")
+                                          : optionInventorySync.status === "succeeded"
+                                            ? (task.kitchenLanguage === "zh" ? "Uber 已缺货" : "Uber 売切れ済み")
+                                            : (task.kitchenLanguage === "zh" ? "同步失败" : "同期失敗")}
+                                      </em>
+                                    ) : null}
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -832,15 +893,6 @@ export default function StoreKitchenPage() {
                                     onClick={() => void previewInventoryChange(task, lineKey, displayText)}
                                   >
                                     <span>{task.kitchenLanguage === "zh" ? "库存不足" : "在庫不足"}</span>
-                                    <small>Uber</small>
-                                  </button>
-                                  <button
-                                    className="store-kitchen-inventory-quick-action"
-                                    type="button"
-                                    aria-label={task.kitchenLanguage === "zh" ? `${displayText} 设为缺货` : `${displayText}を売り切れにする`}
-                                    onClick={() => void previewInventoryChange(task, lineKey, displayText)}
-                                  >
-                                    <span>{task.kitchenLanguage === "zh" ? "缺货" : "売切"}</span>
                                     <small>Uber</small>
                                   </button>
                                   <button
