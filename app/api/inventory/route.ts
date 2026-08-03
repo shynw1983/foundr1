@@ -1,4 +1,4 @@
-import { canAccessStore, requireOsSession } from "../../../lib/api-auth";
+import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { roleHasPermission } from "../../../lib/role-permissions";
 
@@ -19,19 +19,15 @@ export async function GET(request: Request) {
     return Response.json({ error: "この店舗の在庫を確認する権限がありません。" }, { status: 403 });
   }
 
+  const scope = await getSessionStoreScope(session);
+
   const stores = await sql`
     select stores.id::text as id, stores.name
     from stores
     where stores.status = 'active'
       and (
-        ${session.role === "owner" || session.role === "manager"}
-        or exists (
-          select 1
-          from employee_scopes
-          where employee_scopes.employee_id = ${session.id}
-            and employee_scopes.scope_type = 'store'
-            and employee_scopes.store_id = stores.id
-        )
+        ${scope.allStores}
+        or stores.id::text = any(${scope.storeIds})
       )
     order by stores.name
   `;

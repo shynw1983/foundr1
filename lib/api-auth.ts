@@ -4,6 +4,7 @@ import { sql } from "./db";
 
 const writableRoles = new Set(["owner", "manager", "store_owner", "store_manager", "staff"]);
 const allStoreAccessRoles = new Set(["owner", "manager"]);
+export const osStoreContextCookieName = "foundr1_os_store_context";
 
 export type StoreScope = {
   allStores: boolean;
@@ -117,6 +118,13 @@ export async function requireOwnerOsSession() {
 
 export async function getSessionStoreScope(session: EmployeeSession): Promise<StoreScope> {
   if (allStoreAccessRoles.has(session.role)) {
+    const cookieStore = await cookies();
+    const selectedStoreId = String(cookieStore.get(osStoreContextCookieName)?.value ?? "").trim();
+
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(selectedStoreId)) {
+      return { allStores: false, storeIds: [selectedStoreId] };
+    }
+
     return { allStores: true, storeIds: [] };
   }
 

@@ -20,6 +20,89 @@
   --font-cjk-tc: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Noto Sans CJK TC", "Source Han Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
 }
 
+.os-global-store-picker {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.os-global-store-picker-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.os-global-store-picker select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 30px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.os-global-store-picker select:focus-visible {
+  border-color: var(--green);
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.os-global-store-picker-error {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 240px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: var(--red);
+  color: white;
+  font-size: 11px;
+}
+
+.sidebar-user .os-global-store-picker {
+  width: 100%;
+}
+
+.sidebar-user .os-global-store-picker-label {
+  color: var(--color-sidebar-muted);
+}
+
+.sidebar-user .os-global-store-picker select {
+  border-color: var(--color-sidebar-line);
+  background: rgba(255, 255, 255, 0.075);
+  color: #f7fafc;
+}
+
+@media (min-width: 1121px) and (max-width: 1420px) {
+  .sidebar:not(:has(.nav-shell.is-expanded)) .os-global-store-picker {
+    display: none;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .os-global-store-picker {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1120px) {
+  .os-home-topbar > .os-home-user > .user-panel .os-global-store-picker {
+    display: none;
+  }
+
+  .mobile-nav-user .os-global-store-picker {
+    width: 100%;
+  }
+}
+
 /* Inventory: coarse, touch-first counts for restaurant storage. */
 .inventory-content {
   display: grid;

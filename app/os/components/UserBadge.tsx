@@ -4,6 +4,7 @@ import { LogOut, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { NotificationMenu } from "./NotificationMenu";
 import { OsLanguagePicker } from "./OsTranslationProvider";
+import { OsStoreContextPicker } from "./OsStoreContextPicker";
 import { getCachedCurrentEmployee, loadCurrentEmployee, type CurrentEmployee } from "./currentEmployeeStore";
 import { useCloseOnOutside } from "./useCloseOnOutside";
 
@@ -67,6 +68,7 @@ export function UserBadge({
 
   return (
     <div className="user-panel">
+      <OsStoreContextPicker />
       <details className="account-menu" ref={accountMenuRef}>
         <summary className="user-badge" title={`ログインID: ${employee.loginId}`}>
           <span className="user-avatar" aria-hidden="true">{getInitial(employee.name)}</span>
