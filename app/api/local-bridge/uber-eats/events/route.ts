@@ -4,6 +4,7 @@ import { authorizeLocalBridge } from "../../../../../lib/local-bridge-auth";
 import { ensureProductionTasksForOrder } from "../../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
+import { publishBridgeInventoryUpdated } from "../../../../../lib/local-bridge-realtime";
 import {
   parseUberBridgeSnapshot,
   toUberBridgeOperationalItem,
@@ -342,27 +343,37 @@ async function syncInventoryUnavailable(storeId: string, payload: Record<string,
 
   const target = strongest[0];
   const statusNote = `Uber Eats Bridge: ${signalText || itemName}`.slice(0, 500);
+  let changed = false;
   if (target.kind === "option") {
-    await sql`
+    const settingRows = await sql`
       insert into menu_option_store_settings (
         brand_id, store_id, menu_option_id, is_available, status_note, updated_at
       )
       values (${target.brandId}, ${storeId}, ${target.id}, ${isAvailable}, ${statusNote}, now())
       on conflict (store_id, menu_option_id)
       do update set is_available = excluded.is_available, status_note = excluded.status_note, updated_at = now()
+      where menu_option_store_settings.is_available is distinct from excluded.is_available
+        or menu_option_store_settings.status_note is distinct from excluded.status_note
+      returning id::text
     `;
+    changed = settingRows.length > 0;
   } else {
-    await sql`
+    const settingRows = await sql`
       insert into menu_store_settings (
         brand_id, store_id, menu_catalog_item_id, is_available, status_note, updated_at
       )
       values (${target.brandId}, ${storeId}, ${target.id}, ${isAvailable}, ${statusNote}, now())
       on conflict (store_id, menu_catalog_item_id)
       do update set is_available = excluded.is_available, status_note = excluded.status_note, updated_at = now()
+      where menu_store_settings.is_available is distinct from excluded.is_available
+        or menu_store_settings.status_note is distinct from excluded.status_note
+      returning id::text
     `;
+    changed = settingRows.length > 0;
   }
   return {
     status: "inventory_synced",
+    changed,
     target: { kind: target.kind, id: target.id, name: target.name, isAvailable }
   };
 }
@@ -436,6 +447,9 @@ export async function POST(request: Request) {
       set parse_status = ${result.status}, parse_error = ${parseError}
       where id::text = ${eventId}
     `;
+    if (result.status === "inventory_synced" && "changed" in result && result.changed && result.target) {
+      await publishBridgeInventoryUpdated(storeId, result.target).catch(() => undefined);
+    }
     return Response.json({
       ok: result.status !== "error",
       event: rows[0],

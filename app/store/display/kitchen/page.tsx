@@ -645,6 +645,9 @@ export default function StoreKitchenPage() {
               delete inventoryCommandKeyByIdRef.current[commandId];
             }
           });
+          bridgeChannel.bind("bridge.inventory.updated", () => {
+            if (active) void loadUnavailableInventory(selectedStoreIdRef.current);
+          });
           channels.push(bridgeChannel);
         }
       })
@@ -661,6 +664,7 @@ export default function StoreKitchenPage() {
         channel.unbind("pusher:member_removed");
         channel.unbind("bridge.status.updated");
         channel.unbind("bridge.command.updated");
+        channel.unbind("bridge.inventory.updated");
         pusher?.unsubscribe(channel.name);
       });
       pusher?.disconnect();
