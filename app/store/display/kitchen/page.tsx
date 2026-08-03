@@ -744,6 +744,15 @@ export default function StoreKitchenPage() {
                               <small>Uber</small>
                             </button>
                             <button
+                              className="store-kitchen-inventory-quick-action"
+                              type="button"
+                              aria-label={task.kitchenLanguage === "zh" ? `${group.itemName} 设为缺货` : `${group.itemName}を売り切れにする`}
+                              onClick={() => void previewInventoryChange(task, productLineKey, group.itemName, "item")}
+                            >
+                              <span>{task.kitchenLanguage === "zh" ? "缺货" : "売切"}</span>
+                              <small>Uber</small>
+                            </button>
+                            <button
                               className={`store-kitchen-order-product store-kitchen-order-action${checkedLineKeys.has(productLineKey) ? " is-checked" : ""}`}
                               type="button"
                               aria-pressed={checkedLineKeys.has(productLineKey)}
@@ -823,6 +832,15 @@ export default function StoreKitchenPage() {
                                     onClick={() => void previewInventoryChange(task, lineKey, displayText)}
                                   >
                                     <span>{task.kitchenLanguage === "zh" ? "库存不足" : "在庫不足"}</span>
+                                    <small>Uber</small>
+                                  </button>
+                                  <button
+                                    className="store-kitchen-inventory-quick-action"
+                                    type="button"
+                                    aria-label={task.kitchenLanguage === "zh" ? `${displayText} 设为缺货` : `${displayText}を売り切れにする`}
+                                    onClick={() => void previewInventoryChange(task, lineKey, displayText)}
+                                  >
+                                    <span>{task.kitchenLanguage === "zh" ? "缺货" : "売切"}</span>
                                     <small>Uber</small>
                                   </button>
                                   <button
