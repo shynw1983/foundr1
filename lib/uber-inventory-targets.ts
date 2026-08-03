@@ -88,6 +88,42 @@ export function resolveUberInventoryTargets(
   rows: UberInventoryOptionRow[]
 ) {
   const cleanedLabel = cleanKitchenLabel(ingredientLabel);
+  const normalizedInput = normalize(cleanedLabel);
+  const preparedRows = rows.map((row) => {
+    const aliases = optionAliases(row);
+    return {
+      row,
+      aliases,
+      normalizedAliases: aliases.map(normalize).filter((value) => value.length >= 2),
+      canonicalKey: canonicalInventoryKey(row.externalId || row.optionKey)
+    };
+  });
+  const exactRows = preparedRows.filter(({ normalizedAliases }) =>
+    normalizedAliases.some((alias) => alias === normalizedInput)
+  );
+  if (exactRows.length) {
+    const exactKeys = new Set(exactRows.map(({ canonicalKey }) => canonicalKey).filter(Boolean));
+    const inventoryKey = exactKeys.size === 1 ? [...exactKeys][0] : normalizedInput;
+    const selectedRows = exactKeys.size === 1
+      ? preparedRows.filter(({ canonicalKey }) => exactKeys.has(canonicalKey))
+      : exactRows;
+    return {
+      inventoryKey,
+      ingredientLabel: cleanedLabel,
+      targets: selectedRows.map(({ row, aliases }) => ({
+        kind: "option" as const,
+        targetId: row.id,
+        menuOptionId: row.id,
+        brandId: row.brandId,
+        groupKey: row.groupKey,
+        optionKey: row.optionKey,
+        inventoryKey,
+        label: row.name,
+        aliases,
+        isAvailable: row.isAvailable
+      }))
+    };
+  }
   const rule = findMaamaaProductionRule(cleanedLabel, maamaaProductionRules);
   const rawRuleKey = rule?.id ?? "";
   const inventoryKey = canonicalInventoryKey(rawRuleKey || normalize(cleanedLabel));
@@ -100,10 +136,7 @@ export function resolveUberInventoryTargets(
   const normalizedRuleAliases = ruleAliases.map(normalize).filter((value) => value.length >= 2);
   const noodleRule = rule?.section === "noodles";
 
-  const targets = rows.flatMap((row) => {
-    const rowKey = canonicalInventoryKey(row.externalId || row.optionKey);
-    const aliases = optionAliases(row);
-    const normalizedAliases = aliases.map(normalize).filter((value) => value.length >= 2);
+  const targets = preparedRows.flatMap(({ row, aliases, normalizedAliases, canonicalKey: rowKey }) => {
     const keyMatches = Boolean(rawRuleKey) && rowKey === inventoryKey;
     const nameMatches = normalizedRuleAliases.some((ruleAlias) =>
       normalizedAliases.some((alias) => alias === ruleAlias || alias.includes(ruleAlias))

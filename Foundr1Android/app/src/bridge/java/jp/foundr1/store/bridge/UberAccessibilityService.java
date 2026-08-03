@@ -60,6 +60,7 @@ public class UberAccessibilityService extends AccessibilityService {
     private boolean commandInventoryChoiceClickDispatched = false;
     private boolean commandInventoryConfirmDispatched = false;
     private int commandInventorySearchTargetIndex = -1;
+    private long commandInventorySearchStartedAt = 0L;
     private final Runnable commandRunnable = () -> runGuarded("command", this::processPendingCommand);
     private final Runnable commandPollRunnable = new Runnable() {
         @Override
@@ -526,6 +527,7 @@ public class UberAccessibilityService extends AccessibilityService {
             commandInventoryChoiceClickDispatched = false;
             commandInventoryConfirmDispatched = false;
             commandInventorySearchTargetIndex = -1;
+            commandInventorySearchStartedAt = 0L;
         }
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null || !looksLikeUber(value(root.getPackageName()))) {
@@ -635,6 +637,12 @@ public class UberAccessibilityService extends AccessibilityService {
             resetCommandAttempt();
             return;
         }
+        Log.i(
+            TAG,
+            "Command retry attempt=" + commandAttempts
+                + " delayMs=" + delayMs
+                + " reason=" + finalError
+        );
         handler.postDelayed(commandRunnable, delayMs);
     }
 
@@ -647,6 +655,7 @@ public class UberAccessibilityService extends AccessibilityService {
         commandInventoryChoiceClickDispatched = false;
         commandInventoryConfirmDispatched = false;
         commandInventorySearchTargetIndex = -1;
+        commandInventorySearchStartedAt = 0L;
         handler.removeCallbacks(commandRunnable);
     }
 
@@ -737,10 +746,8 @@ public class UberAccessibilityService extends AccessibilityService {
             }
         }
 
-        if (
-            isInventoryScreen(root)
-            && commandInventorySearchTargetIndex != commandInventoryTargetIndex
-        ) {
+        boolean inventoryScreen = isInventoryScreen(root);
+        if (inventoryScreen && commandInventorySearchTargetIndex != commandInventoryTargetIndex) {
             AccessibilityNodeInfo search = findNodeByClass(root, "android.widget.EditText");
             String searchText = inventorySearchText(target.optString("label"), aliases);
             if (search != null && !searchText.isEmpty()) {
@@ -753,12 +760,27 @@ public class UberAccessibilityService extends AccessibilityService {
                 search.recycle();
                 if (changed) {
                     commandInventorySearchTargetIndex = commandInventoryTargetIndex;
-                    retryPendingCommand(900L, "Uber の対象商品を検索できませんでした。");
+                    commandInventorySearchStartedAt = System.currentTimeMillis();
+                    Log.i(TAG, "Inventory search started target=" + target.optString("label") + " query=" + searchText);
+                    retryPendingCommand(2200L, "Uber の検索結果を待っています。");
                     return;
                 }
             } else if (search != null) {
                 search.recycle();
             }
+        }
+
+        if (inventoryScreen) {
+            long waitingMs = commandInventorySearchStartedAt <= 0L
+                ? 0L
+                : System.currentTimeMillis() - commandInventorySearchStartedAt;
+            if (commandInventorySearchTargetIndex == commandInventoryTargetIndex && waitingMs < 12000L) {
+                retryPendingCommand(1500L, "Uber の検索結果を待っています。");
+                return;
+            }
+            BridgeCommandState.fail(this, "Uber の検索結果に対象商品が見つかりませんでした。");
+            resetCommandAttempt();
+            return;
         }
 
         AccessibilityNodeInfo menuAction = findActionByLabels(
@@ -769,7 +791,7 @@ public class UberAccessibilityService extends AccessibilityService {
             boolean clicked = clickOrderCard(menuAction);
             menuAction.recycle();
             if (clicked) {
-                retryPendingCommand(1200L, "Uber の商品管理を開けませんでした。");
+                retryPendingCommand(3000L, "Uber の商品管理を開けませんでした。");
                 return;
             }
         }
@@ -781,7 +803,7 @@ public class UberAccessibilityService extends AccessibilityService {
             boolean clicked = clickOrderCard(drawerButton);
             drawerButton.recycle();
             if (clicked) {
-                retryPendingCommand(550L, "Uber のメニューを開けませんでした。");
+                retryPendingCommand(900L, "Uber のメニューを開けませんでした。");
                 return;
             }
         }
@@ -800,6 +822,7 @@ public class UberAccessibilityService extends AccessibilityService {
         commandInventoryChoiceClickDispatched = false;
         commandInventoryConfirmDispatched = false;
         commandInventorySearchTargetIndex = -1;
+        commandInventorySearchStartedAt = 0L;
         handler.removeCallbacks(commandRunnable);
         handler.postDelayed(commandRunnable, 250L);
     }

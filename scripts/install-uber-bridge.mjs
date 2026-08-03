@@ -37,29 +37,87 @@ const adb = (...args) => execFileSync(
   { encoding: "utf8" }
 );
 
+const wait = (milliseconds) => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+};
+
+const readEnabledComponents = () => {
+  const value = adb(
+    "shell",
+    "settings",
+    "get",
+    "secure",
+    "enabled_accessibility_services"
+  ).trim();
+  return value && value !== "null" ? value.split(":").filter(Boolean) : [];
+};
+
+const readAccessibilityHealth = () => {
+  const dump = adb("shell", "dumpsys", "accessibility");
+  const boundLine = dump.match(/Bound services:\{([^\n]*)/i)?.[1] || "";
+  const crashedLine = dump.match(/Crashed services:\{([^\n]*)/i)?.[1] || "";
+  return {
+    enabled: readEnabledComponents().includes(component),
+    bound: boundLine.includes("Foundr1 Bridge") || boundLine.includes("jp.foundr1.bridge"),
+    crashed: crashedLine.includes("Foundr1 Bridge") || crashedLine.includes("jp.foundr1.bridge"),
+  };
+};
+
+const rebindAccessibilityService = () => {
+  const enabledComponents = readEnabledComponents().filter((value) => value !== component);
+
+  // Reinstalling an enabled accessibility service can leave Android reporting it as
+  // enabled while the service remains in the crashed set. Fully cycle accessibility
+  // and restore every previously enabled component so the new APK is really bound.
+  adb("shell", "settings", "put", "secure", "accessibility_enabled", "0");
+  if (enabledComponents.length > 0) {
+    adb(
+      "shell",
+      "settings",
+      "put",
+      "secure",
+      "enabled_accessibility_services",
+      enabledComponents.join(":")
+    );
+  } else {
+    adb("shell", "settings", "delete", "secure", "enabled_accessibility_services");
+  }
+  wait(1200);
+  enabledComponents.push(component);
+  adb(
+    "shell",
+    "settings",
+    "put",
+    "secure",
+    "enabled_accessibility_services",
+    enabledComponents.join(":")
+  );
+  adb("shell", "settings", "put", "secure", "accessibility_enabled", "1");
+};
+
 process.stdout.write(adb("install", "-r", apkPath));
 
-const enabledValue = adb(
-  "shell",
-  "settings",
-  "get",
-  "secure",
-  "enabled_accessibility_services"
-).trim();
-const enabledComponents = enabledValue && enabledValue !== "null"
-  ? enabledValue.split(":").filter(Boolean)
-  : [];
-if (!enabledComponents.includes(component)) enabledComponents.push(component);
+let accessibilityHealth = { enabled: false, bound: false, crashed: false };
+for (let attempt = 1; attempt <= 3; attempt += 1) {
+  rebindAccessibilityService();
+  wait(1800);
+  accessibilityHealth = readAccessibilityHealth();
+  if (
+    accessibilityHealth.enabled
+    && accessibilityHealth.bound
+    && !accessibilityHealth.crashed
+  ) break;
+}
+if (
+  !accessibilityHealth.enabled
+  || !accessibilityHealth.bound
+  || accessibilityHealth.crashed
+) {
+  throw new Error(
+    `Bridge accessibility service is unhealthy after installation: ${JSON.stringify(accessibilityHealth)}`
+  );
+}
 
-adb(
-  "shell",
-  "settings",
-  "put",
-  "secure",
-  "enabled_accessibility_services",
-  enabledComponents.join(":")
-);
-adb("shell", "settings", "put", "secure", "accessibility_enabled", "1");
 adb(
   "shell",
   "am",
@@ -75,19 +133,12 @@ adb(
   "com.uber.restaurants/.RootActivity"
 );
 
-const verified = adb(
-  "shell",
-  "settings",
-  "get",
-  "secure",
-  "enabled_accessibility_services"
-).trim().split(":").includes(component);
-if (!verified) throw new Error("Bridge accessibility service was not enabled after installation.");
-
 console.log(JSON.stringify({
   deviceId,
   apkPath,
-  accessibilityEnabled: true,
+  accessibilityEnabled: accessibilityHealth.enabled,
+  accessibilityBound: accessibilityHealth.bound,
+  accessibilityCrashed: accessibilityHealth.crashed,
   bridgeStarted: true,
   uberStarted: true
 }));

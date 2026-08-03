@@ -49,6 +49,19 @@ test("matches a customer-facing topping label directly", () => {
   assert.equal(result.targets[0]?.menuOptionId, "vinegar");
 });
 
+test("uses an exact Chinese option name before similar yam names", () => {
+  const result = resolveUberInventoryTargets("山药粉", [
+    row({ id: "yam", groupKey: "noodles", optionKey: "yam-noodle", externalId: "yam-noodle", name: "山芋麺", displayNames: { zh: "山药粉" } }),
+    row({ id: "replace-yam", groupKey: "noodle-replacement", optionKey: "replace-yam-noodle", externalId: "replace-yam-noodle", name: "山芋麺に変更", displayNames: { zh: "更换为山药粉" } }),
+    row({ id: "yam-sheet", groupKey: "noodles", optionKey: "round-yam-sheet", externalId: "round-yam-sheet", name: "山芋粉皮（丸）", displayNames: { zh: "圆形山药粉皮" } }),
+    row({ id: "replace-yam-sheet", groupKey: "noodle-replacement", optionKey: "replace-round-yam-sheet", externalId: "replace-round-yam-sheet", name: "山芋粉皮（丸）に変更", displayNames: { zh: "更换为圆形山药粉皮" } })
+  ]);
+
+  assert.equal(result.inventoryKey, "yam-noodle");
+  assert.deepEqual(result.targets.map((target) => target.menuOptionId), ["yam", "replace-yam"]);
+  assert.equal(result.targets[0]?.label, "山芋麺");
+});
+
 test("matches a catalog item by its localized customer-facing name", () => {
   const result = resolveUberInventoryItemTarget("经典麻辣烫套餐", [{
     id: "item-1",
