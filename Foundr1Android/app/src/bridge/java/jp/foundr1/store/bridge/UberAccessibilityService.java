@@ -39,6 +39,7 @@ public class UberAccessibilityService extends AccessibilityService {
     private long lastUploadedAt = 0L;
     private boolean finishingRecovery = false;
     private boolean recoveryReceiverRegistered = false;
+    private BridgeOverlayController overlayController;
     private long recoveryScheduledAt = 0L;
     private String lastOrderClickAttemptCode = "";
     private long lastOrderClickAttemptAt = 0L;
@@ -76,6 +77,8 @@ public class UberAccessibilityService extends AccessibilityService {
                 } else if (BridgeCommandState.ACTION_COMMAND_AVAILABLE.equals(intent.getAction())) {
                     handler.removeCallbacks(commandRunnable);
                     handler.postDelayed(commandRunnable, 150L);
+                } else if (BridgeHealthState.ACTION_CHANGED.equals(intent.getAction())) {
+                    if (overlayController != null) overlayController.updateHealth();
                 }
             }
         }
@@ -122,6 +125,19 @@ public class UberAccessibilityService extends AccessibilityService {
     private void handleAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
         String packageName = event.getPackageName().toString();
+        if (overlayController != null) {
+            if (looksLikeUber(packageName)) {
+                overlayController.setUberVisible(true);
+            } else if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                boolean uberActive = false;
+                AccessibilityNodeInfo activeRoot = getRootInActiveWindow();
+                if (activeRoot != null) {
+                    uberActive = looksLikeUber(value(activeRoot.getPackageName()));
+                    activeRoot.recycle();
+                }
+                overlayController.setUberVisible(uberActive);
+            }
+        }
         if (!looksLikeUber(packageName)) return;
         trackInventoryStatusClick(event);
         AccessibilityNodeInfo root = getRootInActiveWindow();
@@ -444,10 +460,17 @@ public class UberAccessibilityService extends AccessibilityService {
         super.onServiceConnected();
         BridgeHealthState.setAccessibilityConnected(this, true);
         BridgeServiceStarter.ensureStarted(this, "accessibility_connected");
+        overlayController = new BridgeOverlayController(this);
+        AccessibilityNodeInfo activeRoot = getRootInActiveWindow();
+        if (activeRoot != null) {
+            overlayController.setUberVisible(looksLikeUber(value(activeRoot.getPackageName())));
+            activeRoot.recycle();
+        }
         if (!recoveryReceiverRegistered) {
             IntentFilter filter = new IntentFilter();
             filter.addAction(UberRecoveryState.ACTION_RECOVERY_REQUESTED);
             filter.addAction(BridgeCommandState.ACTION_COMMAND_AVAILABLE);
+            filter.addAction(BridgeHealthState.ACTION_CHANGED);
             if (Build.VERSION.SDK_INT >= 33) {
                 registerReceiver(recoveryReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
             } else {
@@ -464,6 +487,10 @@ public class UberAccessibilityService extends AccessibilityService {
     @Override
     public void onDestroy() {
         BridgeHealthState.setAccessibilityConnected(this, false);
+        if (overlayController != null) {
+            overlayController.destroy();
+            overlayController = null;
+        }
         handler.removeCallbacks(recoveryRunnable);
         recoveryScheduledAt = 0L;
         handler.removeCallbacks(uploadRunnable);
