@@ -714,12 +714,16 @@ public class UberAccessibilityService extends AccessibilityService {
             }
         }
 
-        AccessibilityNodeInfo dialog = findNodeByClass(root, "android.app.AlertDialog");
-        if (dialog != null && commandInventoryStatusClickDispatched) {
+        boolean inventoryDialogVisible = isInventoryDialogVisible(root);
+        if (inventoryDialogVisible) {
+            // Uber renders this modal inside a WebView, so it is not exposed as an
+            // android.app.AlertDialog. Treat the four modal labels as the stable
+            // signal and resume here even when the preceding gesture callback was
+            // lost or the accessibility service was reconnected.
+            commandInventoryStatusClickDispatched = true;
             String soldOutMode = payload.optString("soldOutMode", "indefinite");
             if (!commandInventoryChoiceClickDispatched) {
                 boolean clicked = tapInventoryDialogChoice(root, makeAvailable, soldOutMode);
-                dialog.recycle();
                 if (clicked) {
                     commandInventoryChoiceClickDispatched = true;
                     retryPendingCommand(450L, "Uber の在庫期間を選択できませんでした。");
@@ -730,7 +734,6 @@ public class UberAccessibilityService extends AccessibilityService {
             }
             if (!commandInventoryConfirmDispatched) {
                 boolean clicked = tapInventoryDialogConfirm(root);
-                dialog.recycle();
                 if (clicked) {
                     commandInventoryConfirmDispatched = true;
                     retryPendingCommand(1100L, "Uber の在庫変更を確定できませんでした。");
@@ -739,7 +742,6 @@ public class UberAccessibilityService extends AccessibilityService {
                 }
                 return;
             }
-            dialog.recycle();
             retryPendingCommand(700L, "Uber の在庫変更画面を閉じられませんでした。");
             return;
         }
@@ -1034,6 +1036,14 @@ public class UberAccessibilityService extends AccessibilityService {
             ? 0.467f
             : ("today".equals(soldOutMode) ? 0.602f : 0.735f);
         return tapScreenFraction(root, 0.535f, yFraction);
+    }
+
+    private boolean isInventoryDialogVisible(AccessibilityNodeInfo root) {
+        return root != null
+            && subtreeContainsText(root, "在庫あり")
+            && subtreeContainsText(root, "本日売り切れ")
+            && subtreeContainsText(root, "再販予定なし")
+            && subtreeContainsText(root, "確定");
     }
 
     private boolean tapInventoryDialogConfirm(AccessibilityNodeInfo root) {
