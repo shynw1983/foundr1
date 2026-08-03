@@ -36,11 +36,15 @@ final class BridgeCommandState {
     }
 
     static void complete(Context context, String resultStatus) {
+        complete(context, resultStatus, null);
+    }
+
+    static void complete(Context context, String resultStatus, JSONObject resultDetails) {
         JSONObject command = current(context);
         if (command == null) return;
         preferences(context).edit().remove(KEY_COMMAND).apply();
         try {
-            JSONObject result = new JSONObject();
+            JSONObject result = resultDetails == null ? new JSONObject() : resultDetails;
             result.put("outcome", resultStatus);
             BridgeCommandClient.acknowledge(
                 context,

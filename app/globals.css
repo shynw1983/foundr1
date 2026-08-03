@@ -15639,7 +15639,18 @@ body :where(
   margin: 8px 0 0;
 }
 
-.store-kitchen-inventory-manager-heading > strong {
+.store-kitchen-inventory-manager-heading-actions {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.store-kitchen-inventory-manager-heading-actions > button {
+  min-height: 48px;
+  white-space: nowrap;
+}
+
+.store-kitchen-inventory-manager-heading-actions > strong {
   display: grid;
   min-width: 56px;
   height: 56px;
@@ -15648,6 +15659,15 @@ body :where(
   background: #202522;
   color: #fff;
   font-size: 24px;
+  font-weight: 600;
+}
+
+.store-kitchen-inventory-audit-result {
+  border: 1px solid #b8d2c4;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #f0f7f3;
+  color: #195d3f !important;
   font-weight: 600;
 }
 
@@ -15743,6 +15763,16 @@ body :where(
 }
 
 @media (max-width: 640px) {
+  .store-kitchen-inventory-manager-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .store-kitchen-inventory-manager-heading-actions {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
   .store-kitchen-inventory-manager-list article {
     grid-template-columns: 1fr;
   }

@@ -68,6 +68,16 @@ type UnavailableInventoryItem = {
   targets: InventoryTarget[];
 };
 
+type InventoryAuditState = {
+  commandId: string;
+  status: "pending" | "succeeded" | "failed";
+  targetCount: number;
+  checkedCount: number;
+  updatedCount: number;
+  missingCount: number;
+  error: string;
+};
+
 type KitchenDisplayMode = "order_only" | "simple" | "detailed";
 
 type StoreOption = {
@@ -156,6 +166,7 @@ export default function StoreKitchenPage() {
   const [inventoryListLoading, setInventoryListLoading] = useState(false);
   const [inventoryListError, setInventoryListError] = useState("");
   const [inventoryRestoringKey, setInventoryRestoringKey] = useState("");
+  const [inventoryAudit, setInventoryAudit] = useState<InventoryAuditState | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const selectedStoreIdRef = useRef(selectedStoreId);
   const serverOffsetRef = useRef(0);
@@ -403,6 +414,34 @@ export default function StoreKitchenPage() {
     setInventoryRestoringKey("");
   }
 
+  async function startInventoryAudit() {
+    if (inventoryAudit?.status === "pending") return;
+    const confirmed = window.confirm(isChinese
+      ? "开始完整检查后，Bridge 会逐项打开 Uber 菜单读取库存。检查期间请不要操作 Uber 平板。是否开始？"
+      : "完全チェック中は Bridge が Uber メニューを順番に開きます。完了まで Uber タブレットを操作しないでください。開始しますか？");
+    if (!confirmed) return;
+    setInventoryListError("");
+    const response = await fetch("/api/store/display/kitchen/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "audit", storeId: selectedStoreId })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok && body.commandId) {
+      setInventoryAudit({
+        commandId: String(body.commandId),
+        status: "pending",
+        targetCount: Number(body.targetCount ?? 0),
+        checkedCount: 0,
+        updatedCount: 0,
+        missingCount: 0,
+        error: ""
+      });
+    } else {
+      setInventoryListError(String(body.error ?? (isChinese ? "无法开始完整检查。" : "完全チェックを開始できませんでした。")));
+    }
+  }
+
   async function updateTask(task: KitchenTask, status: "new" | "preparing" | "ready") {
     setSavingId(task.id);
     const response = await fetch("/api/store/display/kitchen", {
@@ -644,6 +683,22 @@ export default function StoreKitchenPage() {
               setUnavailableInventory((current) => current.filter((item) => item.inventoryKey !== inventoryKey));
               delete inventoryCommandKeyByIdRef.current[commandId];
             }
+            setInventoryAudit((current) => {
+              if (!current || current.commandId !== commandId) return current;
+              const result = command.result && typeof command.result === "object" ? command.result : {};
+              return {
+                ...current,
+                status: command.status === "succeeded"
+                  ? "succeeded"
+                  : command.status === "pending" || command.status === "processing"
+                    ? "pending"
+                    : "failed",
+                checkedCount: Number(result.checkedCount ?? current.checkedCount),
+                updatedCount: Number(result.updatedCount ?? current.updatedCount),
+                missingCount: Number(result.missingCount ?? current.missingCount),
+                error: String(command.error ?? "")
+              };
+            });
           });
           bridgeChannel.bind("bridge.inventory.updated", () => {
             if (active) void loadUnavailableInventory(selectedStoreIdRef.current);
@@ -1131,8 +1186,24 @@ export default function StoreKitchenPage() {
                 <h2 id="inventory-manager-title">{isChinese ? "缺货管理" : "売切管理"}</h2>
                 <p>{isChinese ? "补充库存后，在这里恢复销售。关联的 Uber 选项会同时恢复。" : "補充後はここから販売を再開します。関連する Uber の選択肢も同時に戻ります。"}</p>
               </div>
-              <strong>{unavailableInventory.length}</strong>
+              <div className="store-kitchen-inventory-manager-heading-actions">
+                <button className="secondary-button" type="button" disabled={inventoryAudit?.status === "pending"} onClick={() => void startInventoryAudit()}>
+                  {inventoryAudit?.status === "pending"
+                    ? (isChinese ? `完整检查中 · ${inventoryAudit.targetCount}项` : `完全チェック中 · ${inventoryAudit.targetCount}件`)
+                    : (isChinese ? "手动完整检查" : "手動完全チェック")}
+                </button>
+                <strong>{unavailableInventory.length}</strong>
+              </div>
             </div>
+            {inventoryAudit?.status === "succeeded" ? (
+              <p className="store-kitchen-inventory-audit-result">
+                {isChinese
+                  ? `完整检查完成：已读取 ${inventoryAudit.checkedCount} 项，未识别 ${inventoryAudit.missingCount} 项。`
+                  : `完全チェック完了：${inventoryAudit.checkedCount}件を確認、未識別 ${inventoryAudit.missingCount}件。`}
+              </p>
+            ) : inventoryAudit?.status === "failed" ? (
+              <p className="is-error">{inventoryAudit.error || (isChinese ? "完整检查失败，请重试。" : "完全チェックに失敗しました。再実行してください。")}</p>
+            ) : null}
             {!bridgeOnline ? (
               <p className="store-kitchen-inventory-manager-warning">
                 {isChinese ? "Bridge 当前离线。恢复操作可以发送，但会在 Bridge 重新在线后执行。" : "Bridge は現在オフラインです。再開操作は送信され、オンライン復帰後に実行されます。"}

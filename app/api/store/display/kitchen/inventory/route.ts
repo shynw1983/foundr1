@@ -94,6 +94,57 @@ async function loadTargets(storeId: string, brandId: string, ingredientLabel: st
   return resolveUberInventoryTargets(ingredientLabel, rows as UberInventoryOptionRow[]);
 }
 
+async function loadInventoryAuditTargets(storeId: string) {
+  const optionRows = await sql`
+    select
+      menu_options.id::text,
+      menu_option_groups.brand_id::text as "brandId",
+      menu_option_groups.group_key as "groupKey",
+      menu_options.name,
+      menu_options.display_names as "displayNames"
+    from menu_options
+    join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
+    join store_brands
+      on store_brands.brand_id = menu_option_groups.brand_id
+      and store_brands.store_id::text = ${storeId}
+    where menu_options.is_active = true
+      and menu_option_groups.is_active = true
+    order by menu_option_groups.sort_order, menu_options.sort_order
+  `;
+  const itemRows = await sql`
+    select
+      menu_catalog_items.id::text,
+      menu_catalog_items.brand_id::text as "brandId",
+      menu_catalog_items.name,
+      menu_catalog_items.display_names as "displayNames"
+    from menu_catalog_items
+    join store_brands
+      on store_brands.brand_id = menu_catalog_items.brand_id
+      and store_brands.store_id::text = ${storeId}
+    where menu_catalog_items.is_active = true
+      and (menu_catalog_items.store_id is null or menu_catalog_items.store_id::text = ${storeId})
+    order by menu_catalog_items.sort_order
+  `;
+  return [
+    ...itemRows.map((row) => ({
+      kind: "item",
+      targetId: String(row.id),
+      brandId: String(row.brandId),
+      groupKey: "",
+      label: String(row.name),
+      aliases: inventoryAliases(String(row.name), row.displayNames as Record<string, unknown> | null)
+    })),
+    ...optionRows.map((row) => ({
+      kind: "option",
+      targetId: String(row.id),
+      brandId: String(row.brandId),
+      groupKey: String(row.groupKey),
+      label: String(row.name),
+      aliases: inventoryAliases(String(row.name), row.displayNames as Record<string, unknown> | null)
+    }))
+  ];
+}
+
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -205,7 +256,7 @@ export async function GET(request: Request) {
     from local_bridge_commands
     where id::text = ${commandId}
       and store_id::text = ${storeId}
-      and command_type = 'set_inventory_availability'
+      and command_type in ('set_inventory_availability', 'audit_inventory')
     limit 1
   `;
   if (!rows[0]) return Response.json({ error: "同期指示が見つかりません。" }, { status: 404 });
@@ -222,8 +273,54 @@ export async function POST(request: Request) {
   const action = text(body.action, 40) || "preview";
   const targetKind = body.targetKind === "item" ? "item" : "option";
   const isAvailable = body.isAvailable === true;
-  if (!storeId || !ingredientLabel || !["preview", "apply"].includes(action)) {
+  if (!storeId || !["preview", "apply", "audit"].includes(action)) {
     return Response.json({ error: "食材と操作内容を確認してください。" }, { status: 400 });
+  }
+
+  if (action === "audit") {
+    const activeRows = await sql`
+      select id::text, payload
+      from local_bridge_commands
+      where store_id::text = ${storeId}
+        and platform = 'uber_eats'
+        and command_type = 'audit_inventory'
+        and status in ('pending', 'processing')
+      order by created_at desc
+      limit 1
+    `;
+    if (activeRows[0]) {
+      const activePayload = activeRows[0].payload as { targets?: unknown[] } | null;
+      return Response.json({
+        ok: true,
+        commandId: String(activeRows[0].id),
+        targetCount: Array.isArray(activePayload?.targets) ? activePayload.targets.length : 0,
+        existing: true
+      });
+    }
+    const targets = await loadInventoryAuditTargets(storeId);
+    if (!targets.length) {
+      return Response.json({ error: "チェック対象の Uber メニューがありません。" }, { status: 409 });
+    }
+    const commandId = randomUUID();
+    await sql`
+      insert into local_bridge_commands (
+        id, store_id, platform, command_type, idempotency_key, payload
+      )
+      values (
+        ${commandId},
+        ${storeId},
+        'uber_eats',
+        'audit_inventory',
+        ${`uber_eats:audit_inventory:${storeId}:${commandId}`},
+        ${JSON.stringify({ targets })}::jsonb
+      )
+    `;
+    await publishBridgeCommandAvailable(storeId).catch(() => undefined);
+    return Response.json({ ok: true, commandId, targetCount: targets.length, existing: false });
+  }
+
+  if (!ingredientLabel) {
+    return Response.json({ error: "食材を確認してください。" }, { status: 400 });
   }
 
   const resolved = await loadTargets(storeId, brandId, ingredientLabel, targetKind);

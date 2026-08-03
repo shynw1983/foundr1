@@ -66,6 +66,7 @@ public class UberAccessibilityService extends AccessibilityService {
     private int commandInventoryCollapsedGroupIndex = 0;
     private long commandInventorySearchStartedAt = 0L;
     private long commandInventoryHostClickedAt = 0L;
+    private JSONArray commandInventoryAuditResults = new JSONArray();
     private long commandNextAttemptAt = 0L;
     private final Runnable commandRunnable = () -> runGuarded("command", this::processPendingCommand);
     private final Runnable commandPollRunnable = new Runnable() {
@@ -546,6 +547,7 @@ public class UberAccessibilityService extends AccessibilityService {
             commandInventoryHostTargetIndex = -1;
             commandInventorySearchStartedAt = 0L;
             commandInventoryHostClickedAt = 0L;
+            commandInventoryAuditResults = new JSONArray();
         }
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null || !looksLikeUber(value(root.getPackageName()))) {
@@ -564,7 +566,10 @@ public class UberAccessibilityService extends AccessibilityService {
         JSONObject command = BridgeCommandState.current(this);
         if (command == null) return;
         String commandType = command.optString("type");
-        if ("set_inventory_availability".equals(commandType)) {
+        if (
+            "set_inventory_availability".equals(commandType)
+            || "audit_inventory".equals(commandType)
+        ) {
             handleInventoryCommand(root, command);
             return;
         }
@@ -647,7 +652,10 @@ public class UberAccessibilityService extends AccessibilityService {
         handler.removeCallbacks(commandRunnable);
         JSONObject command = BridgeCommandState.current(this);
         int maximumAttempts = command != null
-            && "set_inventory_availability".equals(command.optString("type"))
+            && (
+                "set_inventory_availability".equals(command.optString("type"))
+                || "audit_inventory".equals(command.optString("type"))
+            )
                 ? 120
                 : 15;
         if (commandAttempts >= maximumAttempts) {
@@ -679,11 +687,13 @@ public class UberAccessibilityService extends AccessibilityService {
         commandInventoryCollapsedGroupIndex = 0;
         commandInventorySearchStartedAt = 0L;
         commandInventoryHostClickedAt = 0L;
+        commandInventoryAuditResults = new JSONArray();
         commandNextAttemptAt = 0L;
         handler.removeCallbacks(commandRunnable);
     }
 
     private void handleInventoryCommand(AccessibilityNodeInfo root, JSONObject command) {
+        boolean auditOnly = "audit_inventory".equals(command.optString("type"));
         JSONObject payload = command.optJSONObject("payload");
         JSONArray targets = payload == null ? null : payload.optJSONArray("targets");
         if (targets == null || targets.length() == 0) {
@@ -692,7 +702,19 @@ public class UberAccessibilityService extends AccessibilityService {
             return;
         }
         if (commandInventoryTargetIndex >= targets.length()) {
-            BridgeCommandState.complete(this, "inventory_updated");
+            if (auditOnly) {
+                try {
+                    JSONObject result = new JSONObject();
+                    result.put("items", commandInventoryAuditResults);
+                    result.put("checkedCount", commandInventoryAuditResults.length());
+                    result.put("targetCount", targets.length());
+                    BridgeCommandState.complete(this, "inventory_audited", result);
+                } catch (Exception error) {
+                    BridgeCommandState.fail(this, "在庫チェック結果を保存できませんでした。");
+                }
+            } else {
+                BridgeCommandState.complete(this, "inventory_updated");
+            }
             resetCommandAttempt();
             return;
         }
@@ -715,6 +737,11 @@ public class UberAccessibilityService extends AccessibilityService {
         }
 
         boolean inventoryDialogVisible = isInventoryDialogVisible(root);
+        if (auditOnly && inventoryDialogVisible) {
+            performGlobalAction(GLOBAL_ACTION_BACK);
+            retryPendingCommand(700L, "Uber の在庫変更画面を閉じています。");
+            return;
+        }
         if (inventoryDialogVisible) {
             // Uber renders this modal inside a WebView, so it is not exposed as an
             // android.app.AlertDialog. Treat the four modal labels as the stable
@@ -758,6 +785,12 @@ public class UberAccessibilityService extends AccessibilityService {
             labelNode.recycle();
             if (row != null) {
                 String currentStatus = findInventoryStatus(row);
+                if (auditOnly && !currentStatus.isEmpty()) {
+                    row.recycle();
+                    appendInventoryAuditResult(target, currentStatus, true);
+                    advanceInventoryTarget();
+                    return;
+                }
                 if (desiredStatus.equals(currentStatus)) {
                     row.recycle();
                     advanceInventoryTarget();
@@ -933,8 +966,13 @@ public class UberAccessibilityService extends AccessibilityService {
                 retryPendingCommand(1200L, "Uber の商品オプションを待っています。");
                 return;
             }
-            BridgeCommandState.fail(this, "Uber の商品内に対象選択肢が見つかりませんでした。");
-            resetCommandAttempt();
+            if (auditOnly) {
+                appendInventoryAuditResult(target, "", false);
+                advanceInventoryTarget();
+            } else {
+                BridgeCommandState.fail(this, "Uber の商品内に対象選択肢が見つかりませんでした。");
+                resetCommandAttempt();
+            }
             return;
         }
 
@@ -985,6 +1023,32 @@ public class UberAccessibilityService extends AccessibilityService {
         commandNextAttemptAt = 0L;
         handler.removeCallbacks(commandRunnable);
         handler.postDelayed(commandRunnable, 250L);
+    }
+
+    private void appendInventoryAuditResult(
+        JSONObject target,
+        String status,
+        boolean found
+    ) {
+        try {
+            JSONObject result = new JSONObject();
+            result.put("kind", target.optString("kind"));
+            result.put("targetId", target.optString("targetId"));
+            result.put("brandId", target.optString("brandId"));
+            result.put("label", target.optString("label"));
+            result.put("groupKey", target.optString("groupKey"));
+            result.put("found", found);
+            result.put("status", status);
+            result.put("isAvailable", "available".equals(status));
+            commandInventoryAuditResults.put(result);
+            Log.i(
+                TAG,
+                "Inventory audit " + (found ? status : "missing")
+                    + " label=" + target.optString("label")
+                    + " progress=" + commandInventoryAuditResults.length()
+            );
+        } catch (Exception ignored) {
+        }
     }
 
     private AccessibilityNodeInfo findInventoryTargetNode(
