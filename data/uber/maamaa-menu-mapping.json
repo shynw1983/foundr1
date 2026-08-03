@@ -364,6 +364,20 @@
           "matchedExisting": true
         },
         {
+          "optionKey": "rice-noodle",
+          "name": "ビーフン",
+          "displayNames": {
+            "zh": "米粉",
+            "ko": "쌀국수",
+            "en": "Rice Noodles"
+          },
+          "websitePrice": 140,
+          "uberName": "ビーフン｜米粉｜쌀국수｜Rice Noodles",
+          "uberPrice": 176,
+          "externalId": "rice-noodle",
+          "matchedExisting": true
+        },
+        {
           "optionKey": "beef-noodle",
           "name": "【もちもちつるん】牛筋麺",
           "displayNames": {

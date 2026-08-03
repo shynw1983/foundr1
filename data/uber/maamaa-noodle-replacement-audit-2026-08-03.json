@@ -4,10 +4,10 @@
   "selectionGroup": "🍜麺の種類を選ぶ",
   "replacementGroup": "🍜麺の種類を変更する",
   "summary": {
-    "selectionOptionCount": 12,
+    "selectionOptionCount": 13,
     "replacementOptionCount": 13,
-    "alreadySeparatePairs": 2,
-    "replacementOnlyOptions": 1,
+    "alreadySeparatePairs": 3,
+    "replacementOnlyOptions": 0,
     "sharedPairsToSplit": 10
   },
   "alreadySeparate": [
@@ -22,16 +22,15 @@
       "currentName": "【お一人様1回限り】トウモロコシ麺｜玉米面｜옥수수면｜Corn Noodles",
       "replacementName": "【お一人様1回限り】トウモロコシ麺に変更｜更换为玉米面｜옥수수면으로 변경｜Change to Corn Noodles",
       "uberPrice": 0
-    }
-  ],
-  "replacementOnly": [
+    },
     {
       "optionKey": "replace-rice-noodle",
-      "currentName": "ビーフン",
+      "currentName": "ビーフン｜米粉｜쌀국수｜Rice Noodles",
       "replacementName": "ビーフンに変更｜更换为米粉｜쌀국수로 변경｜Change to Rice Noodles",
       "uberPrice": 176
     }
   ],
+  "replacementOnly": [],
   "sharedToSplit": [
     {
       "optionKey": "replace-harusame",
