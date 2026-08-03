@@ -544,6 +544,22 @@ export default function InventoryPage() {
               <PackageSearch size={30} />
               <h3>{data.items.length === 0 ? "在庫確認の商品はまだありません" : "条件に合う商品がありません"}</h3>
               <p>{data.items.length === 0 ? "「商品を追加」から、まず冷凍庫にある主要商品を登録してください。" : "保管場所または検索条件を変更してください。"}</p>
+              {data.items.length === 0 ? (
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => {
+                    if (data.locations.length === 0) {
+                      setShowLocationSettings(true);
+                      return;
+                    }
+                    setShowSetup(true);
+                  }}
+                >
+                  <PackagePlus size={17} />
+                  商品を追加
+                </button>
+              ) : null}
             </section>
           ) : (
             <section className="inventory-list">

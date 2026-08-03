@@ -107,12 +107,15 @@
 .inventory-content {
   display: grid;
   gap: 16px;
-  padding: 18px;
+  width: min(100%, 1180px);
+  margin-inline: auto;
 }
 
 .inventory-topbar {
   align-items: flex-end;
   gap: 18px;
+  width: min(100%, 1180px);
+  margin-inline: auto;
 }
 
 .inventory-topbar-actions {
@@ -167,7 +170,7 @@
 
 .inventory-summary article {
   display: grid;
-  min-height: 126px;
+  min-height: 112px;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -563,11 +566,15 @@
 .inventory-empty {
   display: grid;
   justify-items: center;
-  gap: 8px;
-  min-height: 230px;
+  gap: 10px;
+  min-height: 190px;
   place-content: center;
   color: var(--muted);
   text-align: center;
+}
+
+.inventory-empty > svg {
+  color: var(--green);
 }
 
 .inventory-empty h3,
@@ -585,6 +592,14 @@
   max-width: 520px;
   font-size: 13px;
   line-height: 1.6;
+}
+
+.inventory-empty .primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 4px;
 }
 
 .inventory-history summary {
@@ -627,10 +642,6 @@
 }
 
 @media (max-width: 760px) {
-  .inventory-content {
-    padding: 12px;
-  }
-
   .inventory-topbar,
   .inventory-topbar-actions,
   .inventory-toolbar,
@@ -3994,6 +4005,7 @@ body :where(
 
   .sidebar {
     z-index: 130;
+    grid-template-columns: minmax(0, 1fr);
     width: 78px;
     padding: 14px 8px;
     overflow: visible;
@@ -4202,8 +4214,14 @@ body :where(
   .nav-list {
     gap: 4px;
     width: 100%;
+    min-width: 0;
     padding-right: 0;
     overflow: visible;
+  }
+
+  .nav-shell {
+    width: 100%;
+    min-width: 0;
   }
 
   .nav-module {
