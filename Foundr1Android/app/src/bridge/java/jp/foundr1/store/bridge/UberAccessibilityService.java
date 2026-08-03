@@ -11,6 +11,7 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
@@ -54,6 +55,11 @@ public class UberAccessibilityService extends AccessibilityService {
     private String activeCommandId = "";
     private int commandAttempts = 0;
     private boolean commandReadyClickDispatched = false;
+    private int commandInventoryTargetIndex = 0;
+    private boolean commandInventoryStatusClickDispatched = false;
+    private boolean commandInventoryChoiceClickDispatched = false;
+    private boolean commandInventoryConfirmDispatched = false;
+    private int commandInventorySearchTargetIndex = -1;
     private final Runnable commandRunnable = () -> runGuarded("command", this::processPendingCommand);
     private final Runnable commandPollRunnable = new Runnable() {
         @Override
@@ -515,6 +521,11 @@ public class UberAccessibilityService extends AccessibilityService {
             activeCommandId = commandId;
             commandAttempts = 0;
             commandReadyClickDispatched = false;
+            commandInventoryTargetIndex = 0;
+            commandInventoryStatusClickDispatched = false;
+            commandInventoryChoiceClickDispatched = false;
+            commandInventoryConfirmDispatched = false;
+            commandInventorySearchTargetIndex = -1;
         }
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null || !looksLikeUber(value(root.getPackageName()))) {
@@ -532,7 +543,12 @@ public class UberAccessibilityService extends AccessibilityService {
     private void handlePendingCommand(AccessibilityNodeInfo root, JSONArray nodes) {
         JSONObject command = BridgeCommandState.current(this);
         if (command == null) return;
-        if (!"mark_order_ready".equals(command.optString("type"))) {
+        String commandType = command.optString("type");
+        if ("set_inventory_availability".equals(commandType)) {
+            handleInventoryCommand(root, command);
+            return;
+        }
+        if (!"mark_order_ready".equals(commandType)) {
             BridgeCommandState.fail(this, "Unsupported command: " + command.optString("type"));
             resetCommandAttempt();
             return;
@@ -609,7 +625,12 @@ public class UberAccessibilityService extends AccessibilityService {
     private void retryPendingCommand(long delayMs, String finalError) {
         commandAttempts += 1;
         handler.removeCallbacks(commandRunnable);
-        if (commandAttempts >= 15) {
+        JSONObject command = BridgeCommandState.current(this);
+        int maximumAttempts = command != null
+            && "set_inventory_availability".equals(command.optString("type"))
+                ? 45
+                : 15;
+        if (commandAttempts >= maximumAttempts) {
             BridgeCommandState.fail(this, finalError);
             resetCommandAttempt();
             return;
@@ -621,7 +642,343 @@ public class UberAccessibilityService extends AccessibilityService {
         activeCommandId = "";
         commandAttempts = 0;
         commandReadyClickDispatched = false;
+        commandInventoryTargetIndex = 0;
+        commandInventoryStatusClickDispatched = false;
+        commandInventoryChoiceClickDispatched = false;
+        commandInventoryConfirmDispatched = false;
+        commandInventorySearchTargetIndex = -1;
         handler.removeCallbacks(commandRunnable);
+    }
+
+    private void handleInventoryCommand(AccessibilityNodeInfo root, JSONObject command) {
+        JSONObject payload = command.optJSONObject("payload");
+        JSONArray targets = payload == null ? null : payload.optJSONArray("targets");
+        if (targets == null || targets.length() == 0) {
+            BridgeCommandState.fail(this, "在庫連動の対象がありません。");
+            resetCommandAttempt();
+            return;
+        }
+        if (commandInventoryTargetIndex >= targets.length()) {
+            BridgeCommandState.complete(this, "inventory_updated");
+            resetCommandAttempt();
+            return;
+        }
+        JSONObject target = targets.optJSONObject(commandInventoryTargetIndex);
+        if (target == null) {
+            advanceInventoryTarget();
+            return;
+        }
+        boolean makeAvailable = payload.optBoolean("isAvailable", false);
+        String desiredStatus = makeAvailable ? "available" : "sold_out";
+        JSONArray aliases = target.optJSONArray("aliases");
+
+        AccessibilityNodeInfo dialog = findNodeByClass(root, "android.app.AlertDialog");
+        if (dialog != null && commandInventoryStatusClickDispatched) {
+            String choiceLabel = makeAvailable ? "在庫あり" : "本日売り切れ";
+            if (!commandInventoryChoiceClickDispatched) {
+                AccessibilityNodeInfo choice = findChoiceByLabel(dialog, choiceLabel);
+                boolean clicked = choice != null && clickOrderCard(choice);
+                if (choice != null) choice.recycle();
+                dialog.recycle();
+                if (clicked) {
+                    commandInventoryChoiceClickDispatched = true;
+                    retryPendingCommand(450L, "Uber の在庫期間を選択できませんでした。");
+                } else {
+                    retryPendingCommand(600L, "Uber の在庫期間が見つかりませんでした。");
+                }
+                return;
+            }
+            if (!commandInventoryConfirmDispatched) {
+                AccessibilityNodeInfo confirm = findActionByLabels(dialog, new String[] { "確定", "Confirm" });
+                boolean clicked = confirm != null && clickOrderCard(confirm);
+                if (confirm != null) confirm.recycle();
+                dialog.recycle();
+                if (clicked) {
+                    commandInventoryConfirmDispatched = true;
+                    retryPendingCommand(1100L, "Uber の在庫変更を確定できませんでした。");
+                } else {
+                    retryPendingCommand(600L, "Uber の確定ボタンが見つかりませんでした。");
+                }
+                return;
+            }
+            dialog.recycle();
+            retryPendingCommand(700L, "Uber の在庫変更画面を閉じられませんでした。");
+            return;
+        }
+
+        AccessibilityNodeInfo labelNode = findInventoryTargetNode(root, target.optString("label"), aliases);
+        if (labelNode != null) {
+            AccessibilityNodeInfo row = findInventoryRow(labelNode);
+            labelNode.recycle();
+            if (row != null) {
+                String currentStatus = findInventoryStatus(row);
+                if (desiredStatus.equals(currentStatus)) {
+                    row.recycle();
+                    advanceInventoryTarget();
+                    return;
+                }
+                if (!currentStatus.isEmpty() && !commandInventoryStatusClickDispatched) {
+                    AccessibilityNodeInfo statusAction = findInventoryStatusAction(row, currentStatus);
+                    boolean clicked = statusAction != null && clickOrderCard(statusAction);
+                    if (statusAction != null) statusAction.recycle();
+                    row.recycle();
+                    if (clicked) {
+                        commandInventoryStatusClickDispatched = true;
+                        retryPendingCommand(900L, "Uber の在庫状態を変更できませんでした。");
+                    } else {
+                        retryPendingCommand(800L, "Uber の在庫ボタンを押せませんでした。");
+                    }
+                    return;
+                }
+                row.recycle();
+            }
+        }
+
+        if (
+            isInventoryScreen(root)
+            && commandInventorySearchTargetIndex != commandInventoryTargetIndex
+        ) {
+            AccessibilityNodeInfo search = findNodeByClass(root, "android.widget.EditText");
+            String searchText = inventorySearchText(target.optString("label"), aliases);
+            if (search != null && !searchText.isEmpty()) {
+                Bundle arguments = new Bundle();
+                arguments.putCharSequence(
+                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                    searchText
+                );
+                boolean changed = search.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
+                search.recycle();
+                if (changed) {
+                    commandInventorySearchTargetIndex = commandInventoryTargetIndex;
+                    retryPendingCommand(900L, "Uber の対象商品を検索できませんでした。");
+                    return;
+                }
+            } else if (search != null) {
+                search.recycle();
+            }
+        }
+
+        AccessibilityNodeInfo menuAction = findActionByLabels(
+            root,
+            new String[] { "メニュー", "商品", "在庫管理", "Menu", "Items" }
+        );
+        if (menuAction != null) {
+            boolean clicked = clickOrderCard(menuAction);
+            menuAction.recycle();
+            if (clicked) {
+                retryPendingCommand(1200L, "Uber の商品管理を開けませんでした。");
+                return;
+            }
+        }
+        AccessibilityNodeInfo drawerButton = findNodeByViewIdSuffix(
+            root,
+            "/ub__ueo_orders_header_menu_button"
+        );
+        if (drawerButton != null) {
+            boolean clicked = clickOrderCard(drawerButton);
+            drawerButton.recycle();
+            if (clicked) {
+                retryPendingCommand(550L, "Uber のメニューを開けませんでした。");
+                return;
+            }
+        }
+        if (scrollInventoryForward(root)) {
+            retryPendingCommand(650L, "Uber の対象商品が見つかりませんでした。");
+            return;
+        }
+        performGlobalAction(GLOBAL_ACTION_BACK);
+        retryPendingCommand(1000L, "Uber の対象商品が見つかりませんでした。");
+    }
+
+    private void advanceInventoryTarget() {
+        commandInventoryTargetIndex += 1;
+        commandAttempts = 0;
+        commandInventoryStatusClickDispatched = false;
+        commandInventoryChoiceClickDispatched = false;
+        commandInventoryConfirmDispatched = false;
+        commandInventorySearchTargetIndex = -1;
+        handler.removeCallbacks(commandRunnable);
+        handler.postDelayed(commandRunnable, 250L);
+    }
+
+    private AccessibilityNodeInfo findInventoryTargetNode(
+        AccessibilityNodeInfo root,
+        String primaryLabel,
+        JSONArray aliases
+    ) {
+        LinkedHashMap<String, Boolean> candidates = new LinkedHashMap<>();
+        if (primaryLabel != null && !primaryLabel.trim().isEmpty()) candidates.put(primaryLabel.trim(), true);
+        if (aliases != null) {
+            for (int index = 0; index < aliases.length(); index += 1) {
+                String alias = aliases.optString(index).trim();
+                if (!alias.isEmpty()) candidates.put(alias, true);
+            }
+        }
+        for (String candidate : candidates.keySet()) {
+            List<AccessibilityNodeInfo> matches = root.findAccessibilityNodeInfosByText(candidate);
+            AccessibilityNodeInfo selected = null;
+            for (AccessibilityNodeInfo match : matches) {
+                if (selected == null && match.isVisibleToUser()) selected = AccessibilityNodeInfo.obtain(match);
+                match.recycle();
+            }
+            if (selected != null) return selected;
+        }
+        return null;
+    }
+
+    private boolean isInventoryScreen(AccessibilityNodeInfo root) {
+        List<AccessibilityNodeInfo> matches = root.findAccessibilityNodeInfosByText("商品の提供状況");
+        boolean found = !matches.isEmpty();
+        for (AccessibilityNodeInfo match : matches) match.recycle();
+        return found;
+    }
+
+    private String inventorySearchText(String primaryLabel, JSONArray aliases) {
+        String value = primaryLabel == null ? "" : primaryLabel;
+        if (value.isEmpty() && aliases != null && aliases.length() > 0) value = aliases.optString(0);
+        String firstLanguage = value.split("[｜|]", 2)[0];
+        return firstLanguage
+            .replaceAll("【[^】]*】", "")
+            .replaceAll("に変更$", "")
+            .replaceAll("追加$", "")
+            .replaceAll("[\\p{So}\\p{Sk}]", "")
+            .trim();
+    }
+
+    private AccessibilityNodeInfo findNodeByClass(AccessibilityNodeInfo node, String className) {
+        if (node == null) return null;
+        if (className.equals(value(node.getClassName()))) return AccessibilityNodeInfo.obtain(node);
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findNodeByClass(child, className);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findNodeByViewIdSuffix(AccessibilityNodeInfo node, String suffix) {
+        if (node == null) return null;
+        if (value(node.getViewIdResourceName()).endsWith(suffix) && node.isEnabled()) {
+            return AccessibilityNodeInfo.obtain(node);
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findNodeByViewIdSuffix(child, suffix);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findChoiceByLabel(AccessibilityNodeInfo node, String label) {
+        if (node == null) return null;
+        if (label.equals(value(node.getText()).trim()) || label.equals(value(node.getContentDescription()).trim())) {
+            AccessibilityNodeInfo parent = node.getParent();
+            if (parent != null) {
+                AccessibilityNodeInfo clickable = findFirstClickable(parent);
+                parent.recycle();
+                if (clickable != null) return clickable;
+            }
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findChoiceByLabel(child, label);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findFirstClickable(AccessibilityNodeInfo node) {
+        if (node == null) return null;
+        if (node.isClickable() && node.isEnabled()) return AccessibilityNodeInfo.obtain(node);
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findFirstClickable(child);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findInventoryRow(AccessibilityNodeInfo labelNode) {
+        AccessibilityNodeInfo cursor = AccessibilityNodeInfo.obtain(labelNode);
+        for (int depth = 0; depth < 6 && cursor != null; depth += 1) {
+            if (!findInventoryStatus(cursor).isEmpty()) return cursor;
+            AccessibilityNodeInfo parent = cursor.getParent();
+            cursor.recycle();
+            cursor = parent;
+        }
+        if (cursor != null) cursor.recycle();
+        return null;
+    }
+
+    private AccessibilityNodeInfo findInventoryStatusAction(AccessibilityNodeInfo node, String status) {
+        if (node == null) return null;
+        String ownStatus = inventoryStatus(value(node.getContentDescription()));
+        if (ownStatus.isEmpty()) ownStatus = inventoryStatus(value(node.getText()));
+        if (status.equals(ownStatus) && node.isEnabled()) {
+            AccessibilityNodeInfo clickable = clickableAncestor(node, 4);
+            if (clickable != null) return clickable;
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findInventoryStatusAction(child, status);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findActionByLabels(AccessibilityNodeInfo node, String[] labels) {
+        if (node == null) return null;
+        String text = value(node.getText()).trim();
+        String description = value(node.getContentDescription()).trim();
+        for (String label : labels) {
+            if (label.equalsIgnoreCase(text) || label.equalsIgnoreCase(description)) {
+                AccessibilityNodeInfo clickable = clickableAncestor(node, 3);
+                if (clickable != null) return clickable;
+            }
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findActionByLabels(child, labels);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo clickableAncestor(AccessibilityNodeInfo node, int maximumDepth) {
+        AccessibilityNodeInfo cursor = AccessibilityNodeInfo.obtain(node);
+        for (int depth = 0; depth <= maximumDepth && cursor != null; depth += 1) {
+            if (cursor.isClickable() && cursor.isEnabled()) return cursor;
+            AccessibilityNodeInfo parent = cursor.getParent();
+            cursor.recycle();
+            cursor = parent;
+        }
+        if (cursor != null) cursor.recycle();
+        return null;
+    }
+
+    private boolean scrollInventoryForward(AccessibilityNodeInfo node) {
+        if (node == null) return false;
+        if (node.isScrollable() && node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) return true;
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            boolean scrolled = scrollInventoryForward(child);
+            child.recycle();
+            if (scrolled) return true;
+        }
+        return false;
     }
 
     private AccessibilityNodeInfo findReadyAction(AccessibilityNodeInfo node) {

@@ -1,5 +1,6 @@
 import { sql } from "../../../../../lib/db";
 import { authorizeLocalBridge } from "../../../../../lib/local-bridge-auth";
+import { publishBridgeCommandUpdated } from "../../../../../lib/local-bridge-realtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -161,7 +162,7 @@ export async function POST(request: Request) {
         ${authorization.deviceId} = ''
         or claimed_by_device_id::text = ${authorization.deviceId}
       )
-    returning id::text
+    returning id::text, status
   ` : await sql`
     update local_bridge_commands
     set
@@ -182,8 +183,14 @@ export async function POST(request: Request) {
         ${authorization.deviceId} = ''
         or claimed_by_device_id::text = ${authorization.deviceId}
       )
-    returning id::text
+    returning id::text, status
   `;
   if (!rows[0]) return Response.json({ error: "Command is no longer claimable." }, { status: 409 });
+  await publishBridgeCommandUpdated(authorization.storeId, {
+    id: commandId,
+    status: String(rows[0].status ?? status),
+    error,
+    result
+  }).catch(() => undefined);
   return Response.json({ ok: true });
 }

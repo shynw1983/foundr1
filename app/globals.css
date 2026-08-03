@@ -15336,6 +15336,81 @@ body :where(
   cursor: pointer;
 }
 
+.store-kitchen-inventory-swipe {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #a51d24;
+  touch-action: pan-y;
+}
+
+.store-kitchen-inventory-swipe .store-kitchen-item-line {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  padding: 0 12px;
+  background: #fff;
+  transition: transform 180ms ease;
+}
+
+.store-kitchen-inventory-swipe.is-revealed .store-kitchen-item-line {
+  transform: translateX(-116px);
+}
+
+.store-kitchen-inventory-action {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 116px;
+  border: 0;
+  padding: 8px;
+  background: #a51d24;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.store-kitchen-inventory-action span,
+.store-kitchen-inventory-action small {
+  display: block;
+  line-height: 1.15;
+}
+
+.store-kitchen-inventory-action span {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.store-kitchen-inventory-action small {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.store-kitchen-inventory-sync {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: #ecefed;
+  color: #505854;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.store-kitchen-inventory-sync.is-succeeded {
+  background: #222725;
+  color: #fff;
+}
+
+.store-kitchen-inventory-sync.is-failed {
+  background: #f7e4e5;
+  color: #8e1920;
+}
+
 .store-kitchen-item-line span {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -15368,6 +15443,124 @@ body :where(
 .store-kitchen-item-line.is-checked b {
   background: #b91c1c;
   color: white;
+}
+
+.store-kitchen-inventory-modal-backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 22, 20, 0.56);
+}
+
+.store-kitchen-inventory-modal {
+  width: min(560px, 100%);
+  max-height: min(720px, calc(100dvh - 48px));
+  overflow: auto;
+  border-radius: 14px;
+  padding: 22px;
+  background: #fff;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.24);
+}
+
+.store-kitchen-inventory-modal header,
+.store-kitchen-inventory-modal footer,
+.store-kitchen-inventory-modal li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.store-kitchen-inventory-modal header span {
+  color: #4d5651;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.store-kitchen-inventory-modal header button {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: #f0f2f1;
+  color: #252a27;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.store-kitchen-inventory-modal h2 {
+  margin: 10px 0 4px;
+  font-size: clamp(24px, 4vw, 34px);
+  line-height: 1.15;
+}
+
+.store-kitchen-inventory-modal > strong {
+  display: block;
+  color: #8e1920;
+  font-size: 21px;
+}
+
+.store-kitchen-inventory-modal p {
+  margin: 18px 0;
+  color: #4d5651;
+  line-height: 1.55;
+}
+
+.store-kitchen-inventory-modal p.is-error {
+  border-radius: 8px;
+  padding: 12px;
+  background: #f7e4e5;
+  color: #8e1920;
+}
+
+.store-kitchen-inventory-modal ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.store-kitchen-inventory-modal li {
+  min-height: 54px;
+  border: 1px solid #dfe3e1;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.store-kitchen-inventory-modal li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.store-kitchen-inventory-modal li small {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #ecefed;
+  color: #505854;
+  font-weight: 650;
+}
+
+.store-kitchen-inventory-modal footer {
+  justify-content: flex-end;
+  margin-top: 22px;
+}
+
+.store-kitchen-inventory-modal footer button {
+  min-height: 52px;
+  padding-inline: 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .store-kitchen-inventory-swipe .store-kitchen-item-line {
+    transition: none;
+  }
 }
 
 .store-kitchen-item-name {

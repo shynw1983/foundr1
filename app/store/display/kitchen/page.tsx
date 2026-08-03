@@ -8,6 +8,7 @@ import { useVisibleRefresh } from "../../components/useVisibleRefresh";
 type KitchenTask = {
   id: string;
   orderId: string;
+  brandId: string;
   productionArea: string;
   productionAreaLabel: string;
   status: string;
@@ -32,6 +33,30 @@ type KitchenTask = {
   note: string;
   createdTime: string;
   kitchenLanguage: "ja" | "zh";
+};
+
+type InventoryTarget = {
+  menuOptionId: string;
+  groupKey: string;
+  optionKey: string;
+  label: string;
+  isAvailable: boolean;
+};
+
+type InventoryDialog = {
+  lineKey: string;
+  ingredientLabel: string;
+  inventoryKey: string;
+  targets: InventoryTarget[];
+  loading: boolean;
+  error: string;
+  task: KitchenTask;
+};
+
+type InventorySyncState = {
+  commandId: string;
+  status: "pending" | "succeeded" | "failed";
+  error?: string;
 };
 
 type KitchenDisplayMode = "order_only" | "simple" | "detailed";
@@ -112,12 +137,19 @@ export default function StoreKitchenPage() {
   const [bridgePresence, setBridgePresence] = useState<"connecting" | "online" | "offline">("connecting");
   const [menuOpen, setMenuOpen] = useState(false);
   const [checkedLineKeys, setCheckedLineKeys] = useState<Set<string>>(() => new Set());
+  const [revealedInventoryLineKey, setRevealedInventoryLineKey] = useState("");
+  const [inventoryDialog, setInventoryDialog] = useState<InventoryDialog | null>(null);
+  const [inventorySaving, setInventorySaving] = useState(false);
+  const [inventorySyncByKey, setInventorySyncByKey] = useState<Record<string, InventorySyncState>>({});
+  const [inventoryKeyByLineKey, setInventoryKeyByLineKey] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => Date.now());
   const selectedStoreIdRef = useRef(selectedStoreId);
   const serverOffsetRef = useRef(0);
   const loadSequenceRef = useRef(0);
   const autoStartingTaskIdsRef = useRef<Set<string>>(new Set());
   const bridgeMemberIdsRef = useRef<Set<string>>(new Set());
+  const inventoryPointerRef = useRef<{ lineKey: string; x: number; y: number } | null>(null);
+  const suppressIngredientClickUntilRef = useRef(0);
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   useEffect(() => {
@@ -188,6 +220,7 @@ export default function StoreKitchenPage() {
   });
 
   function toggleLineCheck(task: KitchenTask, key: string, isIngredient: boolean) {
+    if (Date.now() < suppressIngredientClickUntilRef.current) return;
     const wasChecked = checkedLineKeys.has(key);
     setCheckedLineKeys((current) => {
       const next = new Set(current);
@@ -208,6 +241,91 @@ export default function StoreKitchenPage() {
     void updateTask(task, "preparing").finally(() => {
       autoStartingTaskIdsRef.current.delete(task.id);
     });
+  }
+
+  function startInventorySwipe(lineKey: string, clientX: number, clientY: number) {
+    inventoryPointerRef.current = { lineKey, x: clientX, y: clientY };
+  }
+
+  function finishInventorySwipe(lineKey: string, clientX: number, clientY: number) {
+    const start = inventoryPointerRef.current;
+    inventoryPointerRef.current = null;
+    if (!start || start.lineKey !== lineKey) return;
+    const deltaX = clientX - start.x;
+    const deltaY = clientY - start.y;
+    if (deltaX < -54 && Math.abs(deltaX) > Math.abs(deltaY) * 1.25) {
+      suppressIngredientClickUntilRef.current = Date.now() + 500;
+      setRevealedInventoryLineKey(lineKey);
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.(24);
+    } else if (deltaX > 36 && revealedInventoryLineKey === lineKey) {
+      suppressIngredientClickUntilRef.current = Date.now() + 350;
+      setRevealedInventoryLineKey("");
+    }
+  }
+
+  async function previewInventoryChange(task: KitchenTask, lineKey: string, ingredientLabel: string) {
+    setRevealedInventoryLineKey("");
+    setInventoryDialog({
+      task,
+      lineKey,
+      ingredientLabel,
+      inventoryKey: "",
+      targets: [],
+      loading: true,
+      error: ""
+    });
+    const response = await fetch("/api/store/display/kitchen/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "preview",
+        storeId: selectedStoreId,
+        brandId: task.brandId,
+        ingredientLabel
+      })
+    });
+    const body = await response.json().catch(() => ({}));
+    setInventoryDialog((current) => current?.lineKey === lineKey ? {
+      ...current,
+      loading: false,
+      inventoryKey: String(body.inventoryKey ?? ""),
+      ingredientLabel: String(body.ingredientLabel ?? ingredientLabel),
+      targets: Array.isArray(body.targets) ? body.targets : [],
+      error: response.ok ? "" : String(body.error ?? "Uber Eats の対象を確認できませんでした。")
+    } : current);
+  }
+
+  async function applyInventoryChange() {
+    const dialog = inventoryDialog;
+    if (!dialog || dialog.loading || dialog.error) return;
+    setInventorySaving(true);
+    const response = await fetch("/api/store/display/kitchen/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "apply",
+        storeId: selectedStoreId,
+        brandId: dialog.task.brandId,
+        ingredientLabel: dialog.ingredientLabel,
+        isAvailable: false
+      })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok && body.commandId) {
+      const inventoryKey = String(body.inventoryKey || dialog.inventoryKey);
+      setInventorySyncByKey((current) => ({
+        ...current,
+        [inventoryKey]: { commandId: String(body.commandId), status: "pending" }
+      }));
+      setInventoryKeyByLineKey((current) => ({ ...current, [dialog.lineKey]: inventoryKey }));
+      setInventoryDialog(null);
+    } else {
+      setInventoryDialog((current) => current ? {
+        ...current,
+        error: String(body.error ?? "缺貨設定を送信できませんでした。")
+      } : current);
+    }
+    setInventorySaving(false);
   }
 
   async function updateTask(task: KitchenTask, status: "new" | "preparing" | "ready") {
@@ -423,6 +541,23 @@ export default function StoreKitchenPage() {
           bridgeChannel.bind("bridge.status.updated", (event: any) => {
             if (active && event?.status) setBridgeStatus((current) => ({ ...current, ...event.status }));
           });
+          bridgeChannel.bind("bridge.command.updated", (event: any) => {
+            const command = event?.command;
+            if (!active || !command?.id) return;
+            setInventorySyncByKey((current) => Object.fromEntries(
+              Object.entries(current).map(([key, value]) => value.commandId === String(command.id)
+                ? [key, {
+                  ...value,
+                  status: command.status === "succeeded"
+                    ? "succeeded"
+                    : command.status === "pending" || command.status === "processing"
+                      ? "pending"
+                      : "failed",
+                  error: String(command.error ?? "")
+                } satisfies InventorySyncState]
+                : [key, value])
+            ));
+          });
           channels.push(bridgeChannel);
         }
       })
@@ -438,6 +573,7 @@ export default function StoreKitchenPage() {
         channel.unbind("pusher:member_added");
         channel.unbind("pusher:member_removed");
         channel.unbind("bridge.status.updated");
+        channel.unbind("bridge.command.updated");
         pusher?.unsubscribe(channel.name);
       });
       pusher?.disconnect();
@@ -629,21 +765,47 @@ export default function StoreKitchenPage() {
                                 ? simplifyKitchenLine(line, true)
                                 : line;
                               const quantityParts = splitQuantityLabel(displayText);
+                              const inventoryKey = inventoryKeyByLineKey[lineKey] ?? "";
+                              const inventorySync = inventoryKey ? inventorySyncByKey[inventoryKey] : undefined;
                               return (
-                                <button
-                                  className={[
-                                    "store-kitchen-item-line",
-                                    "store-kitchen-item-modifier",
-                                    checkedLineKeys.has(lineKey) ? "is-checked" : ""
-                                  ].filter(Boolean).join(" ")}
+                                <div
+                                  className={`store-kitchen-inventory-swipe${revealedInventoryLineKey === lineKey ? " is-revealed" : ""}`}
                                   key={lineKey}
-                                  type="button"
-                                  aria-pressed={checkedLineKeys.has(lineKey)}
-                                  onClick={() => toggleLineCheck(task, lineKey, true)}
                                 >
-                                  <span>{quantityParts.label}</span>
-                                  {quantityParts.quantity ? <b>{quantityParts.quantity}</b> : null}
-                                </button>
+                                  <button
+                                    className="store-kitchen-inventory-action"
+                                    type="button"
+                                    onClick={() => void previewInventoryChange(task, lineKey, displayText)}
+                                  >
+                                    <span>{task.kitchenLanguage === "zh" ? "库存不足" : "在庫不足"}</span>
+                                    <small>Uber</small>
+                                  </button>
+                                  <button
+                                    className={[
+                                      "store-kitchen-item-line",
+                                      "store-kitchen-item-modifier",
+                                      checkedLineKeys.has(lineKey) ? "is-checked" : ""
+                                    ].filter(Boolean).join(" ")}
+                                    type="button"
+                                    aria-pressed={checkedLineKeys.has(lineKey)}
+                                    onPointerDown={(event) => startInventorySwipe(lineKey, event.clientX, event.clientY)}
+                                    onPointerUp={(event) => finishInventorySwipe(lineKey, event.clientX, event.clientY)}
+                                    onPointerCancel={() => { inventoryPointerRef.current = null; }}
+                                    onClick={() => toggleLineCheck(task, lineKey, true)}
+                                  >
+                                    <span>{quantityParts.label}</span>
+                                    {quantityParts.quantity ? <b>{quantityParts.quantity}</b> : null}
+                                    {inventorySync ? (
+                                      <em className={`store-kitchen-inventory-sync is-${inventorySync.status}`}>
+                                        {inventorySync.status === "pending"
+                                          ? (task.kitchenLanguage === "zh" ? "Uber 待同步" : "Uber 同期待ち")
+                                          : inventorySync.status === "succeeded"
+                                            ? (task.kitchenLanguage === "zh" ? "Uber 已缺货" : "Uber 売切れ済み")
+                                            : (task.kitchenLanguage === "zh" ? "同步失败" : "同期失敗")}
+                                      </em>
+                                    ) : null}
+                                  </button>
+                                </div>
                               );
                             })}
                           </div>
@@ -699,6 +861,57 @@ export default function StoreKitchenPage() {
           </div>
         </aside>
       </section>
+      {inventoryDialog ? (
+        <div className="store-kitchen-inventory-modal-backdrop" role="presentation" onPointerDown={(event) => {
+          if (event.target === event.currentTarget && !inventorySaving) setInventoryDialog(null);
+        }}>
+          <section className="store-kitchen-inventory-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-dialog-title">
+            <header>
+              <span>Uber Eats</span>
+              <button type="button" aria-label="閉じる" disabled={inventorySaving} onClick={() => setInventoryDialog(null)}>×</button>
+            </header>
+            <h2 id="inventory-dialog-title">
+              {inventoryDialog.task.kitchenLanguage === "zh" ? "设为缺货？" : "売り切れにしますか？"}
+            </h2>
+            <strong>{inventoryDialog.ingredientLabel}</strong>
+            {inventoryDialog.loading ? (
+              <p>{inventoryDialog.task.kitchenLanguage === "zh" ? "正在确认关联商品…" : "連動対象を確認しています…"}</p>
+            ) : inventoryDialog.error ? (
+              <p className="is-error">{inventoryDialog.error}</p>
+            ) : (
+              <>
+                <p>
+                  {inventoryDialog.task.kitchenLanguage === "zh"
+                    ? "以下项目会同时设为缺货。当前订单不会受到影响。"
+                    : "次の項目をまとめて売り切れにします。現在の注文には影響しません。"}
+                </p>
+                <ul>
+                  {inventoryDialog.targets.map((target) => (
+                    <li key={target.menuOptionId}>
+                      <span>{target.label}</span>
+                      <small>{/replacement/i.test(target.groupKey)
+                        ? (inventoryDialog.task.kitchenLanguage === "zh" ? "变更面" : "変更麺")
+                        : /noodle/i.test(target.groupKey)
+                          ? (inventoryDialog.task.kitchenLanguage === "zh" ? "选择面" : "選択麺")
+                          : "Uber Eats"}</small>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <footer>
+              <button className="secondary-button" type="button" disabled={inventorySaving} onClick={() => setInventoryDialog(null)}>
+                {inventoryDialog.task.kitchenLanguage === "zh" ? "取消" : "キャンセル"}
+              </button>
+              <button className="danger-button" type="button" disabled={inventorySaving || inventoryDialog.loading || Boolean(inventoryDialog.error)} onClick={() => void applyInventoryChange()}>
+                {inventorySaving
+                  ? (inventoryDialog.task.kitchenLanguage === "zh" ? "正在发送…" : "送信中…")
+                  : (inventoryDialog.task.kitchenLanguage === "zh" ? "全部设为缺货" : "すべて売り切れにする")}
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
