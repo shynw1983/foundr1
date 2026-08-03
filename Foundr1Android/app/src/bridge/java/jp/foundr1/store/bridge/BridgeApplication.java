@@ -8,6 +8,7 @@ public class BridgeApplication extends Application {
         super.onCreate();
         BridgeHealthState.resetRuntimeConnections(this);
         BridgeHealthState.setPendingCount(this, BridgeUploadQueue.get(this).count());
+        UberNotificationListenerService.requestConnection(this);
         BridgeCrashReporter.install(this);
         BridgeCrashReporter.uploadPending(this);
         BridgeCrashReporter.uploadLatestExitReason(this);

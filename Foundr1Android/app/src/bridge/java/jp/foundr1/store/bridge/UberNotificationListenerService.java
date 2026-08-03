@@ -8,6 +8,14 @@ import org.json.JSONObject;
 
 public class UberNotificationListenerService extends NotificationListenerService {
     private static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
+    private static long lastRebindRequestAt = 0L;
+
+    static synchronized void requestConnection(android.content.Context context) {
+        long now = System.currentTimeMillis();
+        if (now - lastRebindRequestAt < 30000L) return;
+        lastRebindRequestAt = now;
+        requestRebind(new android.content.ComponentName(context, UberNotificationListenerService.class));
+    }
 
     @Override
     public void onListenerConnected() {
@@ -19,7 +27,7 @@ public class UberNotificationListenerService extends NotificationListenerService
     @Override
     public void onListenerDisconnected() {
         BridgeHealthState.setNotificationConnected(this, false);
-        requestRebind(new android.content.ComponentName(this, UberNotificationListenerService.class));
+        requestConnection(this);
         super.onListenerDisconnected();
     }
 

@@ -162,7 +162,12 @@ public class BridgeForegroundService extends Service {
         ) return HealthResult.error("店舗の接続設定が未完了です");
         BridgeHealthState.Snapshot state = BridgeHealthState.snapshot(this);
         if (!state.accessibilityConnected) return HealthResult.attention("画面読み取りサービスの接続を確認中です");
-        if (!state.notificationConnected) return HealthResult.attention("通知読み取りサービスの接続を確認中です");
+        if (!state.notificationConnected) {
+            UberNotificationListenerService.requestConnection(this);
+            return System.currentTimeMillis() - createdAt > 90000L
+                ? HealthResult.error("通知読み取りサービスを再接続できません")
+                : HealthResult.attention("通知読み取りサービスの接続を確認中です");
+        }
         if (!state.realtimeConnected) {
             return System.currentTimeMillis() - createdAt > 90000L
                 ? HealthResult.error("Foundr1 OS のリアルタイム接続が切れています")
