@@ -36,9 +36,9 @@ type KitchenTask = {
 };
 
 type InventoryTarget = {
-  menuOptionId: string;
-  groupKey: string;
-  optionKey: string;
+  kind: "item" | "option";
+  targetId: string;
+  groupKey?: string;
   label: string;
   isAvailable: boolean;
 };
@@ -51,6 +51,7 @@ type InventoryDialog = {
   loading: boolean;
   error: string;
   task: KitchenTask;
+  targetKind: "item" | "option";
 };
 
 type InventorySyncState = {
@@ -263,7 +264,12 @@ export default function StoreKitchenPage() {
     }
   }
 
-  async function previewInventoryChange(task: KitchenTask, lineKey: string, ingredientLabel: string) {
+  async function previewInventoryChange(
+    task: KitchenTask,
+    lineKey: string,
+    ingredientLabel: string,
+    targetKind: "item" | "option" = "option"
+  ) {
     setRevealedInventoryLineKey("");
     setInventoryDialog({
       task,
@@ -272,7 +278,8 @@ export default function StoreKitchenPage() {
       inventoryKey: "",
       targets: [],
       loading: true,
-      error: ""
+      error: "",
+      targetKind
     });
     const response = await fetch("/api/store/display/kitchen/inventory", {
       method: "POST",
@@ -281,7 +288,8 @@ export default function StoreKitchenPage() {
         action: "preview",
         storeId: selectedStoreId,
         brandId: task.brandId,
-        ingredientLabel
+        ingredientLabel,
+        targetKind
       })
     });
     const body = await response.json().catch(() => ({}));
@@ -307,6 +315,7 @@ export default function StoreKitchenPage() {
         storeId: selectedStoreId,
         brandId: dialog.task.brandId,
         ingredientLabel: dialog.ingredientLabel,
+        targetKind: dialog.targetKind,
         isAvailable: false
       })
     });
@@ -712,18 +721,44 @@ export default function StoreKitchenPage() {
                   <small>{task.kitchenLanguage === "zh" ? "客人下单内容" : "注文内容"}</small>
                   {(task.itemGroups ?? []).map((group, groupIndex) => {
                     const productLineKey = `${task.id}:order:${groupIndex}:product`;
+                    const productInventoryKey = inventoryKeyByLineKey[productLineKey] ?? "";
+                    const productInventorySync = productInventoryKey
+                      ? inventorySyncByKey[productInventoryKey]
+                      : undefined;
                     return (
                       <section className="store-kitchen-order-group" key={`${task.id}:group:${groupIndex}`}>
                         {kitchenDisplayMode === "order_only" ? (
-                          <button
-                            className={`store-kitchen-order-product store-kitchen-order-action${checkedLineKeys.has(productLineKey) ? " is-checked" : ""}`}
-                            type="button"
-                            aria-pressed={checkedLineKeys.has(productLineKey)}
-                            onClick={() => toggleLineCheck(task, productLineKey, true)}
-                          >
-                            <span>{group.itemName}</span>
-                            {group.quantity > 1 ? <b>× {group.quantity}</b> : null}
-                          </button>
+                          <div className={`store-kitchen-inventory-swipe${revealedInventoryLineKey === productLineKey ? " is-revealed" : ""}`}>
+                            <button
+                              className="store-kitchen-inventory-action"
+                              type="button"
+                              onClick={() => void previewInventoryChange(task, productLineKey, group.itemName, "item")}
+                            >
+                              <span>{task.kitchenLanguage === "zh" ? "商品缺货" : "商品売切れ"}</span>
+                              <small>Uber</small>
+                            </button>
+                            <button
+                              className={`store-kitchen-order-product store-kitchen-order-action${checkedLineKeys.has(productLineKey) ? " is-checked" : ""}`}
+                              type="button"
+                              aria-pressed={checkedLineKeys.has(productLineKey)}
+                              onPointerDown={(event) => startInventorySwipe(productLineKey, event.clientX, event.clientY)}
+                              onPointerUp={(event) => finishInventorySwipe(productLineKey, event.clientX, event.clientY)}
+                              onPointerCancel={() => { inventoryPointerRef.current = null; }}
+                              onClick={() => toggleLineCheck(task, productLineKey, true)}
+                            >
+                              <span>{group.itemName}</span>
+                              {group.quantity > 1 ? <b>× {group.quantity}</b> : null}
+                              {productInventorySync ? (
+                                <em className={`store-kitchen-inventory-sync is-${productInventorySync.status}`}>
+                                  {productInventorySync.status === "pending"
+                                    ? (task.kitchenLanguage === "zh" ? "Uber 待同步" : "Uber 同期待ち")
+                                    : productInventorySync.status === "succeeded"
+                                      ? (task.kitchenLanguage === "zh" ? "Uber 已缺货" : "Uber 売切れ済み")
+                                      : (task.kitchenLanguage === "zh" ? "同步失败" : "同期失敗")}
+                                </em>
+                              ) : null}
+                            </button>
+                          </div>
                         ) : (
                           <div className="store-kitchen-order-product">
                             <span>{group.itemName}</span>
@@ -882,16 +917,18 @@ export default function StoreKitchenPage() {
               <>
                 <p>
                   {inventoryDialog.task.kitchenLanguage === "zh"
-                    ? "以下项目会同时设为缺货。当前订单不会受到影响。"
-                    : "次の項目をまとめて売り切れにします。現在の注文には影響しません。"}
+                    ? "以下项目会永久停售，直到你在 Uber 手动恢复。当前订单不会受到影响。"
+                    : "次の項目を、Uber で手動再開するまで売り切れにします。現在の注文には影響しません。"}
                 </p>
                 <ul>
                   {inventoryDialog.targets.map((target) => (
-                    <li key={target.menuOptionId}>
+                    <li key={target.targetId}>
                       <span>{target.label}</span>
-                      <small>{/replacement/i.test(target.groupKey)
+                      <small>{target.kind === "item"
+                        ? (inventoryDialog.task.kitchenLanguage === "zh" ? "商品" : "商品")
+                        : /replacement/i.test(target.groupKey ?? "")
                         ? (inventoryDialog.task.kitchenLanguage === "zh" ? "变更面" : "変更麺")
-                        : /noodle/i.test(target.groupKey)
+                        : /noodle/i.test(target.groupKey ?? "")
                           ? (inventoryDialog.task.kitchenLanguage === "zh" ? "选择面" : "選択麺")
                           : "Uber Eats"}</small>
                     </li>

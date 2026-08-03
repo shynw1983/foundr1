@@ -4,7 +4,9 @@ import { sql } from "../../../../../../lib/db";
 import { publishBridgeCommandAvailable } from "../../../../../../lib/local-bridge-realtime";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../../lib/store-order-access";
 import {
+  resolveUberInventoryItemTarget,
   resolveUberInventoryTargets,
+  type UberInventoryItemRow,
   type UberInventoryOptionRow
 } from "../../../../../../lib/uber-inventory-targets";
 
@@ -21,7 +23,30 @@ async function authorizeStore(session: NonNullable<Awaited<ReturnType<typeof req
   return storeFilter === "__forbidden__" ? "" : storeFilter;
 }
 
-async function loadTargets(storeId: string, brandId: string, ingredientLabel: string) {
+async function loadTargets(storeId: string, brandId: string, ingredientLabel: string, targetKind: "item" | "option") {
+  if (targetKind === "item") {
+    const rows = await sql`
+      select
+        menu_catalog_items.id::text,
+        menu_catalog_items.brand_id::text as "brandId",
+        coalesce(menu_catalog_items.external_id, '') as "externalId",
+        menu_catalog_items.name,
+        menu_catalog_items.display_names as "displayNames",
+        coalesce(menu_store_settings.is_available, true) as "isAvailable"
+      from menu_catalog_items
+      join store_brands
+        on store_brands.brand_id = menu_catalog_items.brand_id
+        and store_brands.store_id::text = ${storeId}
+      left join menu_store_settings
+        on menu_store_settings.menu_catalog_item_id = menu_catalog_items.id
+        and menu_store_settings.store_id::text = ${storeId}
+      where menu_catalog_items.is_active = true
+        and (menu_catalog_items.store_id is null or menu_catalog_items.store_id::text = ${storeId})
+        and (${brandId} = '' or menu_catalog_items.brand_id::text = ${brandId})
+      order by menu_catalog_items.sort_order
+    `;
+    return resolveUberInventoryItemTarget(ingredientLabel, rows as UberInventoryItemRow[]);
+  }
   const rows = await sql`
     select
       menu_options.id::text,
@@ -75,15 +100,18 @@ export async function POST(request: Request) {
   const ingredientLabel = text(body.ingredientLabel);
   const brandId = text(body.brandId, 80);
   const action = text(body.action, 40) || "preview";
+  const targetKind = body.targetKind === "item" ? "item" : "option";
   const isAvailable = body.isAvailable === true;
   if (!storeId || !ingredientLabel || !["preview", "apply"].includes(action)) {
     return Response.json({ error: "食材と操作内容を確認してください。" }, { status: 400 });
   }
 
-  const resolved = await loadTargets(storeId, brandId, ingredientLabel);
+  const resolved = await loadTargets(storeId, brandId, ingredientLabel, targetKind);
   if (!resolved.targets.length) {
     return Response.json({
-      error: "この食材に対応する Uber Eats の商品・選択肢が見つかりません。メニュー連携設定を確認してください。",
+      error: targetKind === "item"
+        ? "この商品に対応する Uber Eats の商品が一意に見つかりません。メニュー連携設定を確認してください。"
+        : "この食材に対応する Uber Eats の商品・選択肢が見つかりません。メニュー連携設定を確認してください。",
       ...resolved
     }, { status: 409 });
   }
@@ -91,20 +119,37 @@ export async function POST(request: Request) {
 
   const note = `厨房画面: ${resolved.ingredientLabel}${isAvailable ? " 販売再開" : " 在庫切れ"}`;
   for (const target of resolved.targets) {
-    await sql`
-      insert into menu_option_store_settings (
-        brand_id, store_id, menu_option_id, is_available, status_note, updated_by, updated_at
-      )
-      values (
-        ${target.brandId}, ${storeId}, ${target.menuOptionId}, ${isAvailable}, ${note}, ${session.id}, now()
-      )
-      on conflict (store_id, menu_option_id)
-      do update set
-        is_available = excluded.is_available,
-        status_note = excluded.status_note,
-        updated_by = excluded.updated_by,
-        updated_at = now()
-    `;
+    if (target.kind === "item") {
+      await sql`
+        insert into menu_store_settings (
+          brand_id, store_id, menu_catalog_item_id, is_available, status_note, updated_by, updated_at
+        )
+        values (
+          ${target.brandId}, ${storeId}, ${target.menuCatalogItemId}, ${isAvailable}, ${note}, ${session.id}, now()
+        )
+        on conflict (store_id, menu_catalog_item_id)
+        do update set
+          is_available = excluded.is_available,
+          status_note = excluded.status_note,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+      `;
+    } else {
+      await sql`
+        insert into menu_option_store_settings (
+          brand_id, store_id, menu_option_id, is_available, status_note, updated_by, updated_at
+        )
+        values (
+          ${target.brandId}, ${storeId}, ${target.menuOptionId}, ${isAvailable}, ${note}, ${session.id}, now()
+        )
+        on conflict (store_id, menu_option_id)
+        do update set
+          is_available = excluded.is_available,
+          status_note = excluded.status_note,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+      `;
+    }
   }
 
   const commandId = randomUUID();
@@ -123,9 +168,10 @@ export async function POST(request: Request) {
         inventoryKey: resolved.inventoryKey,
         ingredientLabel: resolved.ingredientLabel,
         isAvailable,
+        soldOutMode: "indefinite",
         targets: resolved.targets.map((target) => ({
-          menuOptionId: target.menuOptionId,
-          optionKey: target.optionKey,
+          kind: target.kind,
+          targetId: target.targetId,
           label: target.label,
           aliases: target.aliases
         }))

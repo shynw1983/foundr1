@@ -674,7 +674,10 @@ public class UberAccessibilityService extends AccessibilityService {
 
         AccessibilityNodeInfo dialog = findNodeByClass(root, "android.app.AlertDialog");
         if (dialog != null && commandInventoryStatusClickDispatched) {
-            String choiceLabel = makeAvailable ? "在庫あり" : "本日売り切れ";
+            String soldOutMode = payload.optString("soldOutMode", "indefinite");
+            String choiceLabel = makeAvailable
+                ? "在庫あり"
+                : ("today".equals(soldOutMode) ? "本日売り切れ" : "再販予定なし");
             if (!commandInventoryChoiceClickDispatched) {
                 AccessibilityNodeInfo choice = findChoiceByLabel(dialog, choiceLabel);
                 boolean clicked = choice != null && clickOrderCard(choice);

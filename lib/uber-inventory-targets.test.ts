@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveUberInventoryTargets, type UberInventoryOptionRow } from "./uber-inventory-targets.ts";
+import {
+  resolveUberInventoryItemTarget,
+  resolveUberInventoryTargets,
+  type UberInventoryOptionRow
+} from "./uber-inventory-targets.ts";
 
 function row(input: Partial<UberInventoryOptionRow> & Pick<UberInventoryOptionRow, "id" | "groupKey" | "optionKey" | "name">): UberInventoryOptionRow {
   return {
@@ -33,4 +37,27 @@ test("groups the default wide noodle and the extra wide noodle action", () => {
 
   assert.equal(result.inventoryKey, "wide-harusame");
   assert.equal(result.targets.length, 2);
+});
+
+test("matches a catalog item by its localized customer-facing name", () => {
+  const result = resolveUberInventoryItemTarget("经典麻辣烫套餐", [{
+    id: "item-1",
+    brandId: "brand",
+    externalId: "uber-123",
+    name: "定番マーラータンセット",
+    displayNames: { zh: "经典麻辣烫套餐", en: "Classic Malatang Set" },
+    isAvailable: true
+  }]);
+
+  assert.equal(result.inventoryKey, "item:uber-123");
+  assert.deepEqual(result.targets.map((target) => target.menuCatalogItemId), ["item-1"]);
+});
+
+test("does not guess when two catalog items have the same display name", () => {
+  const result = resolveUberInventoryItemTarget("套餐", [
+    { id: "item-1", brandId: "brand", externalId: "1", name: "套餐", displayNames: {}, isAvailable: true },
+    { id: "item-2", brandId: "brand", externalId: "2", name: "套餐", displayNames: {}, isAvailable: true }
+  ]);
+
+  assert.equal(result.targets.length, 0);
 });

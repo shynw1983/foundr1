@@ -15345,16 +15345,30 @@ body :where(
   touch-action: pan-y;
 }
 
-.store-kitchen-inventory-swipe .store-kitchen-item-line {
+.store-kitchen-inventory-swipe .store-kitchen-item-line,
+.store-kitchen-inventory-swipe .store-kitchen-order-action {
   position: relative;
   z-index: 1;
   width: 100%;
-  padding: 0 12px;
   background: #fff;
   transition: transform 180ms ease;
 }
 
-.store-kitchen-inventory-swipe.is-revealed .store-kitchen-item-line {
+.store-kitchen-inventory-swipe .store-kitchen-item-line {
+  padding: 0 12px;
+}
+
+.store-kitchen-inventory-swipe .store-kitchen-order-action {
+  border-radius: 0;
+  background: #f0f3f1;
+}
+
+.store-kitchen-inventory-swipe .store-kitchen-order-action.is-checked {
+  background: #dff4ed;
+}
+
+.store-kitchen-inventory-swipe.is-revealed .store-kitchen-item-line,
+.store-kitchen-inventory-swipe.is-revealed .store-kitchen-order-action {
   transform: translateX(-116px);
 }
 
@@ -15558,7 +15572,8 @@ body :where(
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .store-kitchen-inventory-swipe .store-kitchen-item-line {
+  .store-kitchen-inventory-swipe .store-kitchen-item-line,
+  .store-kitchen-inventory-swipe .store-kitchen-order-action {
     transition: none;
   }
 }
