@@ -474,10 +474,10 @@
       "options": [
         {
           "optionKey": "replace-extra-wide-harusame",
-          "name": "板春雨に変更",
-          "displayNames": { "zh": "更换为宽粉", "ko": "넓적당면으로 변경", "en": "Change to Wide Sweet Potato Noodles" },
+          "name": "板春雨追加",
+          "displayNames": { "zh": "加宽粉", "ko": "넓적당면 추가", "en": "Extra Wide Sweet Potato Noodles" },
           "websitePrice": 170,
-          "uberName": "板春雨に変更｜更换为宽粉｜넓적당면으로 변경｜Change to Wide Sweet Potato Noodles",
+          "uberName": "板春雨追加｜加宽粉｜넓적당면 추가｜Extra Wide Sweet Potato Noodles",
           "uberPrice": 216,
           "externalId": "replace-extra-wide-harusame",
           "matchedExisting": true

@@ -12,10 +12,20 @@ if (!process.env.DATABASE_URL) {
 
 const sql = neon(process.env.DATABASE_URL);
 const menu = await import(pathToFileURL(maamaaMenuPath).href);
-const options = menu.noodleReplacementOptions ?? [];
+const allOptions = menu.noodleReplacementOptions ?? [];
+const optionArgumentIndex = process.argv.indexOf("--option");
+const selectedOptionKey = optionArgumentIndex >= 0 ? String(process.argv[optionArgumentIndex + 1] ?? "").trim() : "";
 
-if (options.length !== 13) {
-  throw new Error(`Expected 13 noodle replacement options, found ${options.length}`);
+if (allOptions.length !== 13) {
+  throw new Error(`Expected 13 noodle replacement options, found ${allOptions.length}`);
+}
+
+const options = selectedOptionKey
+  ? allOptions.filter((option) => option.id === selectedOptionKey)
+  : allOptions;
+
+if (selectedOptionKey && options.length !== 1) {
+  throw new Error(`Unknown noodle replacement option: ${selectedOptionKey}`);
 }
 
 const optionKeys = options.map((option) => option.id);
@@ -76,7 +86,7 @@ const updated = await sql`
 `;
 
 if (updated.length !== options.length) {
-  throw new Error(`Expected to update 13 options, updated ${updated.length}`);
+  throw new Error(`Expected to update ${options.length} options, updated ${updated.length}`);
 }
 
 console.log(JSON.stringify({ updated: updated.length, options: updated }, null, 2));
