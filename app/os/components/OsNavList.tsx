@@ -421,7 +421,7 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
   }
 
   return (
-    <div className={`nav-shell${openModule ? " is-expanded" : ""}`}>
+    <div className="nav-shell is-expanded">
       <nav className="nav-list" aria-label="OS モジュール">
         {visibleModules.map((module) => {
           const Icon = module.icon;

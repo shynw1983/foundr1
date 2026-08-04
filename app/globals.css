@@ -2558,7 +2558,7 @@ body :where(
 
 @media (min-width: 1121px) {
   .shell.has-voucher-preview {
-    grid-template-columns: 78px minmax(0, 1fr) var(--voucher-preview-width);
+    grid-template-columns: 268px minmax(0, 1fr) var(--voucher-preview-width);
   }
 }
 
@@ -3996,7 +3996,7 @@ body :where(
 
 @media (min-width: 1121px) {
   .shell {
-    grid-template-columns: 78px minmax(0, 1fr);
+    grid-template-columns: 268px minmax(0, 1fr);
   }
 
   .sidebar {
@@ -4209,15 +4209,19 @@ body :where(
 
   .nav-list {
     gap: 4px;
+    height: 100%;
     width: 100%;
     min-width: 0;
     padding-right: 0;
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .nav-shell {
+    height: 100%;
     width: 100%;
     min-width: 0;
+    overflow: hidden;
   }
 
   .nav-module {
@@ -4330,7 +4334,7 @@ body :where(
     top: 0;
     right: 0;
     bottom: 0;
-    left: 232px;
+    left: 268px;
     z-index: 120;
     border: 0;
     background: transparent;
