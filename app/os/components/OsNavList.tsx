@@ -438,7 +438,7 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
 
           if (module.href && module.children.length <= 1) {
             return (
-              <Link href={module.href} className={className} key={module.id}>
+              <Link href={module.href} className={className} aria-label={module.label} title={module.label} key={module.id}>
                 {content}
               </Link>
             );
@@ -446,7 +446,14 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
 
           return (
             <div className={`nav-module${isOpen ? " is-open" : ""}`} key={module.id}>
-              <button className={className} type="button" onClick={() => handleModuleClick(module)} aria-expanded={isOpen}>
+              <button
+                className={className}
+                type="button"
+                aria-label={module.label}
+                aria-expanded={isOpen}
+                title={module.label}
+                onClick={() => handleModuleClick(module)}
+              >
                 {content}
               </button>
               {isOpen ? (
