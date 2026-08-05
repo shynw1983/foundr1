@@ -15305,7 +15305,7 @@ body :where(
 .store-kitchen-order-identity b {
   color: var(--ink);
   font-size: clamp(38px, 4.2vw, 58px);
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.04em;
   line-height: 0.95;
   white-space: nowrap;
@@ -15334,6 +15334,10 @@ body :where(
   font-weight: 650;
   line-height: 1.1;
   white-space: nowrap;
+}
+
+.store-kitchen-order-facts .store-kitchen-order-amount strong {
+  font-weight: 800;
 }
 
 .store-kitchen-order-facts .store-kitchen-fulfillment {
@@ -15481,7 +15485,7 @@ body :where(
 .store-kitchen-order-product {
   color: var(--ink);
   font-size: clamp(26px, 2.4vw, 34px);
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.2;
 }
 

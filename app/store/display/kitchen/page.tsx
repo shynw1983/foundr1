@@ -908,7 +908,7 @@ export default function StoreKitchenPage() {
                     <small>{task.kitchenLanguage === "zh" ? "配送方式" : "受取方法"}</small>
                     <strong>{orderTypeLabels[task.kitchenLanguage][getEffectiveOrderType(task)]}</strong>
                   </div>
-                  <div>
+                  <div className="store-kitchen-order-amount">
                     <small>{task.kitchenLanguage === "zh" ? "订单金额" : "注文金額"}</small>
                     <strong>{formatOrderAmount(task.amount, task.currency)}</strong>
                   </div>
