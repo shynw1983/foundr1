@@ -27,7 +27,7 @@ const [snapshot, mapping, menu] = await Promise.all([
   import(`${pathToFileURL(maamaaMenuPath).href}?sync=${Date.now()}`)
 ]);
 
-const expectedGroupKeys = [
+const snapshotGroupKeys = [
   "medicinal-spice",
   "heat",
   "numb",
@@ -39,9 +39,11 @@ const expectedGroups = new Map([
   ["heat", { name: "辛さ", items: menu.heatLevels }],
   ["numb", { name: "痺れ", items: menu.numbLevels }],
   ["special-flavor", { name: "味変・追加調味", items: menu.specialFlavors }],
+  ["noodle-replacement", { name: "麺の種類を変更する", items: menu.noodleReplacementOptions }],
   ...menu.menuSections.map((section) => [section.id, { name: section.title, items: section.items }])
 ]);
 const supplementalGroupKeys = new Set(["noodle-replacement"]);
+const expectedGroupKeys = [...expectedGroups.keys()];
 const expectedOptionCount = [...expectedGroups.values()]
   .reduce((total, group) => total + group.items.length, 0);
 const snapshotOptionCount = snapshot.groups
@@ -49,8 +51,8 @@ const snapshotOptionCount = snapshot.groups
 const mappingOptionCount = mapping.groups
   .reduce((total, group) => total + group.options.length, 0);
 
-if (snapshot.groups.length !== expectedGroups.size) {
-  throw new Error(`Unexpected Uber snapshot group count: ${snapshot.groups.length}; expected ${expectedGroups.size}.`);
+if (snapshot.groups.length !== snapshotGroupKeys.length) {
+  throw new Error(`Unexpected Uber snapshot group count: ${snapshot.groups.length}; expected ${snapshotGroupKeys.length}.`);
 }
 if (mapping.groups.length !== expectedGroups.size || mappingOptionCount !== expectedOptionCount) {
   throw new Error(`Mapping/menu mismatch: mapping ${mapping.groups.length}/${mappingOptionCount}, menu ${expectedGroups.size}/${expectedOptionCount}.`);
@@ -65,14 +67,16 @@ if (missingSourceKeys.length || unmappedSourceKeys.length) {
 }
 
 const snapshotSourceNames = new Set(snapshot.groups.flatMap((group, index) => (
-  group.rows.map((row) => `${expectedGroupKeys[index]}:${row.name}`)
+  group.rows.map((row) => `${snapshotGroupKeys[index]}:${row.name}`)
 )));
-const mappedSourceNames = new Set(mapping.groups.flatMap((group) => (
-  group.options.map((option) => `${group.groupKey}:${option.uberName}`)
-)));
+const mappedSourceNames = new Set(mapping.groups
+  .filter((group) => !supplementalGroupKeys.has(group.groupKey))
+  .flatMap((group) => (
+    group.options.map((option) => `${group.groupKey}:${option.uberName}`)
+  )));
 const newUberOptions = [...snapshotSourceNames].filter((key) => !mappedSourceNames.has(key));
 const preservedMissingSourceNames = new Set(mapping.groups.flatMap((group) => (
-  group.options
+  supplementalGroupKeys.has(group.groupKey) ? [] : group.options
     .filter((option) => option.preserveWhenMissing === true)
     .map((option) => `${group.groupKey}:${option.uberName}`)
 )));

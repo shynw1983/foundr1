@@ -1,0 +1,62 @@
+{
+  "source": {
+    "platform": "uber_eats",
+    "storeId": "d6205da2-b809-531c-a7b2-d9cf505cf1c0",
+    "capturedAt": "2026-08-05",
+    "pricingRule": { "multiplier": 0.8, "roundingUnit": 10 }
+  },
+  "categories": [
+    { "id": "fb8ca4c4-f4ad-42dd-b741-892eddbb297b", "key": "extreme-cold", "name": "【☀️夏限定】❄️極冷シリーズ❄️", "sortOrder": 10 },
+    { "id": "816c2de1-72dc-4e13-8e7a-c38a150bb79a", "key": "special-broth", "name": "🌶️旨味ベースの特別仕立てスープ", "sortOrder": 20 },
+    { "id": "6d075b39-dfaf-40f4-b999-d98e573ed1f0", "key": "custom-soup", "name": "🍲旨味カスタムスープ", "sortOrder": 30 },
+    { "id": "e4839fee-01c0-4d29-8c0b-4f80b15f8984", "key": "chef-special", "name": "👨‍🍳✨️シェフのスペシャル麻辣湯", "sortOrder": 40 },
+    { "id": "c618d2f2-faf3-4c26-abb1-a9814a7642bc", "key": "recommended-set", "name": "🐉🌟おすすめ麻辣湯セット", "sortOrder": 50 },
+    { "id": "5330bf67-1c6a-47a0-9465-00f79908487d", "key": "side-menu", "name": "🍽️【スペシャリテ⭐️】サイドメニュー", "sortOrder": 60 },
+    { "id": "8b63681c-dec6-42c0-ba7b-71fcc26d9b3c", "key": "pairing-drink", "name": "🍹ペアリングドリンク", "sortOrder": 70 },
+    { "id": "9425a14e-d2ce-43c0-ace4-014b4289cc70", "key": "philosophy", "name": "📖まぁ麻の旨味哲学とは？", "sortOrder": 80 },
+    { "id": "1bbfe35d-5279-4e61-856a-39154e961148", "key": "mini-fruit-set", "name": "ミニ麻辣湯🌶＆旬のフルーツセット🍇🥝🍑", "sortOrder": 90 },
+    { "id": "05ddff4c-5a7b-4b37-8cf9-c440597e03af", "key": "daily-set", "name": "日替わり麻辣湯セット", "sortOrder": 100 },
+    { "id": "6c96ec62-f831-4b00-b486-a9b244a17a1b", "key": "seasonal-ingredients", "name": "旬の厳選食材マーラータン🌶", "sortOrder": 110 },
+    { "id": "95abf204-856d-4ae1-9501-159f81b2c841", "key": "free-item", "name": "気になる一品（無料）", "sortOrder": 120 }
+  ],
+  "products": [
+    { "uberId": "2a376e78-4d47-499e-9d8c-c1035e9763ae", "websiteId": "cold-dry-mala-noodles", "name": "【❄️極冷❄️】汁なしマーラー麺", "uberPrice": 990, "category": "extreme-cold", "groupKeys": ["cold-pack", "cold-noodles", "heat", "numb", "special-flavor", "base", "standard", "premium", "vip", "royal-vip", "request", "drink"] },
+    { "uberId": "e8a92b1d-9dad-433e-a8e0-0f1a8ad400c4", "websiteId": "herbal-beef-bone-broth", "name": "【⏳限定発売】🌿薬膳牛骨スープ｜药膳牛骨汤底｜약선 우골 육수｜Herbal Beef Bone Broth", "uberPrice": 488, "category": "special-broth", "groupKeys": ["heat", "numb", "special-flavor", "noodles", "base", "standard", "premium", "vip", "royal-vip", "request", "drink"] },
+    { "uberId": "d77446f8-a451-4b3e-8958-8d1384a9866c", "websiteId": "spicy-tomato-butter-broth", "name": "【🌶辛くするほど旨い】旨辛トマトバタースープ🍅｜香辣番茄黄油汤底｜매콤한 토마토 버터 육수｜Savory Spicy Tomato Butter Broth", "uberPrice": 600, "category": "special-broth", "groupKeys": ["heat", "noodles", "base", "standard", "premium", "vip", "request", "drink"] },
+    { "uberId": "d0de8191-d77a-4bfa-9766-32f544384e0e", "websiteId": "mala-soup", "name": "【自由にカスタム🤲】旨味マーラータンスープ｜麻辣烫汤底｜마라탕 육수｜Mala Tang Broth", "uberPrice": 415, "category": "special-broth", "kind": "buildable_product", "groupKeys": ["medicinal-spice", "heat", "numb", "special-flavor", "noodles", "base", "standard", "premium", "vip", "royal-vip", "request", "drink", "limited"] },
+    { "uberId": "bf5545b3-f0ab-4c89-9680-24f9e370172a", "websiteId": "temp-hakata-motsunabe-broth", "name": "⚠️仮【特別仕立て】旨味博多もつ鍋スープ", "uberPrice": 600, "category": "special-broth", "groupKeys": [] },
+    { "uberId": "d0a2694b-68fd-4e48-8a60-832fe3ce3bd2", "websiteId": "temp-sundubu-broth", "name": "⚠️仮【高級昆布使用】濃厚旨辛スンドゥブスープ", "uberPrice": 600, "category": "special-broth", "groupKeys": [] },
+    { "uberId": "b9297022-1df6-4cda-97a6-905cb08e8030", "websiteId": "hakata-motsunabe-broth", "name": "【特別仕立て】博多もつ鍋スープ", "uberPrice": 415, "category": "custom-soup", "groupKeys": [] },
+    { "uberId": "0212ec85-5ba0-453d-9f47-6e09ee48fd0b", "websiteId": "sundubu-broth", "name": "【高級昆布使用】濃厚旨辛スンドゥブスープ", "uberPrice": 600, "category": "custom-soup", "groupKeys": [] },
+    { "uberId": "3de9413a-6bd3-40d6-8015-33af3a806838", "websiteId": "set-beef-tendon", "name": "【人気No.1❗️】とろとろ国産牛すじの麻辣湯｜国产牛筋麻辣烫｜일본산 소힘줄 마라탕｜Mala Tang with Japanese Beef Tendon", "uberPrice": 1980, "category": "chef-special", "groupKeys": ["medicinal-spice", "heat", "numb", "special-flavor", "noodle-replacement", "base", "standard", "premium", "vip", "royal-vip", "request", "drink", "limited"] },
+    { "uberId": "f5352c47-c8aa-4a5a-bcf4-1e75118d8ea1", "websiteId": "set-premium-wagyu", "name": "【厳選霜降り黒毛和牛🥩】極上の肉麻辣湯｜极品黑毛和牛麻辣烫｜최고급 흑모와규 마라탕｜Mala Tang with Premium Japanese Black Wagyu", "uberPrice": 3550, "category": "chef-special", "groupKeys": ["medicinal-spice", "heat", "numb", "special-flavor", "noodle-replacement", "base", "standard", "premium", "vip", "royal-vip", "request", "drink", "limited"] },
+    { "uberId": "2934054b-39eb-4435-94a7-db0ce49ca264", "websiteId": "set-whole-camembert", "name": "【旨味の相乗効果🧀】丸ごとカマンベールの麻辣湯｜整颗卡芒贝尔奶酪麻辣烫｜통 카망베르 치즈 마라탕｜Mala Tang with Whole Camembert Cheese", "uberPrice": 2080, "category": "chef-special", "groupKeys": ["medicinal-spice", "heat", "numb", "special-flavor", "noodle-replacement", "base", "standard", "premium", "vip", "royal-vip", "request", "drink", "limited"] },
+    { "uberId": "88b1f7e4-89f1-4ad8-a73e-62e692d45f14", "websiteId": "set-lamb", "name": "【厳選高級ラム肉】ラ厶マーラータン｜羊肉麻辣烫｜양고기 마라탕｜Lamb Mala Tang", "uberPrice": 2580, "category": "recommended-set", "groupKeys": ["medicinal-spice", "heat", "numb", "special-flavor", "noodle-replacement", "base", "standard", "premium", "vip", "royal-vip", "request", "drink", "limited"] },
+    { "uberId": "795ec9c9-b126-486b-8f54-a3d44c6f881a", "websiteId": "set-seafood-trio", "name": "【大海老使用🦐】3種の海鮮マーラータン｜三种海鲜麻辣烫｜3가지 해산물 마라탕｜Mala Tang with 3 Kinds of Seafood", "uberPrice": 2080, "category": "recommended-set", "groupKeys": ["medicinal-spice", "heat", "numb", "special-flavor", "noodle-replacement", "base", "standard", "premium", "vip", "royal-vip", "request", "drink", "limited"] },
+    { "uberId": "e856ae75-b0db-43f7-9a80-bbabbbe384e6", "websiteId": "set-pork", "name": "【超人気🏮】豚肉マーラータン｜猪肉麻辣烫｜돼지고기 마라탕｜Pork Mala Tang", "uberPrice": 1880, "category": "recommended-set", "groupKeys": ["medicinal-spice", "heat", "numb", "special-flavor", "noodle-replacement", "base", "standard", "premium", "vip", "royal-vip", "request", "drink", "limited"] },
+    { "uberId": "ab2752f0-c56a-4501-baf8-7ef4566213b5", "websiteId": "set-chicken-lovers", "name": "【🐔スタミナ】鶏づくしマーラータン｜全鸡盛宴麻辣烫｜닭고기 모둠 마라탕｜Chicken Lover's Mala Tang", "uberPrice": 2180, "category": "recommended-set", "groupKeys": ["heat", "numb", "special-flavor", "noodle-replacement", "base", "standard", "premium", "vip", "royal-vip", "request", "drink", "limited"] },
+    { "uberId": "3c1dec0e-f0ea-48c8-b7b4-9e7f89b4753b", "websiteId": "set-cilantro", "name": "パクチーマーラータン｜香菜麻辣烫｜고수 마라탕｜Cilantro Mala Tang", "uberPrice": 2080, "category": "recommended-set", "groupKeys": ["medicinal-spice", "heat", "numb", "special-flavor", "noodle-replacement", "base", "standard", "premium", "vip", "royal-vip", "request", "drink", "limited"] },
+    { "uberId": "2ad90250-965a-4832-a92a-2082db8478fd", "websiteId": "cold-mala-mix", "name": "夏限定・新定番！クセになる冷やし麻辣拌のピリ辛＆濃厚ハーモニー", "uberPrice": 899, "category": "recommended-set", "deliveryOnly": true, "groupKeys": ["medicinal-spice", "heat", "numb", "special-flavor", "noodle-replacement", "base", "standard", "premium", "vip", "royal-vip", "request", "drink", "limited"] },
+    { "uberId": "2948aa39-5861-41d9-8f24-7f9af01b6cf1", "websiteId": "set-beef", "name": "牛肉マーラータン｜牛肉麻辣烫｜소고기 마라탕｜Beef Mala Tang", "uberPrice": 1880, "category": "recommended-set", "groupKeys": ["medicinal-spice", "heat", "numb", "special-flavor", "noodle-replacement", "base", "standard", "premium", "vip", "royal-vip", "request", "drink", "limited"] },
+    { "uberId": "e185a045-49bd-49d3-a785-9a4ff20905d2", "websiteId": "beef-tendon-dashi-ponzu", "name": "【まぁ麻名物❗️】とろとろ国産牛すじの出汁ポン酢｜高汤柚子醋炖国产牛筋｜일본산 소힘줄 다시 폰즈｜Japanese Beef Tendon with Dashi Ponzu Sauce", "uberPrice": 1080, "category": "side-menu", "groupKeys": [] },
+    { "uberId": "40f973a2-8be2-4fe8-86bf-bd2f22c945a2", "websiteId": "pork-cartilage-dashi-ponzu", "name": "【コラーゲンたっぷり🥰】とろとろ国産豚軟骨の出汁ポン酢｜日式高汤柚子醋炖国产猪软骨｜일본산 돼지연골 다시 폰즈｜Japanese Pork Cartilage with Dashi Ponzu Sauce", "uberPrice": 1020, "category": "side-menu", "groupKeys": [] },
+    { "uberId": "816df54e-e56f-490b-9da9-d8e6ffe023cb", "websiteId": "coffee-jelly", "name": "まぁ麻専用特製珈琲ジェリー", "uberPrice": 599, "category": "side-menu", "groupKeys": [] },
+    { "uberId": "9881774c-20e0-4b07-802c-8f0b3f7b2267", "websiteId": "ice-cold-cola", "name": "キンキンに冷やして飲むコーラ", "uberPrice": 499, "category": "pairing-drink", "groupKeys": [] },
+    { "uberId": "4f49f437-9cde-4286-95f6-673fbb141880", "websiteId": "maamaa-philosophy", "name": "【※こちら商品ではありません】まぁ麻＠旨味研究家の創るデリバリー麻辣湯専門店", "uberPrice": 0, "category": "philosophy", "kind": "information", "websiteEnabled": false, "groupKeys": [] }
+  ],
+  "extraGroups": [
+    { "key": "cold-pack", "uberId": "unknown-cold-pack", "name": "🧊 極冷を保つために", "type": "multiple", "limit": 1, "options": [{ "id": "cold-pack", "name": "🧊 保冷剤（長距離配送におすすめ）", "uberPrice": 200 }] },
+    { "key": "cold-noodles", "uberId": "unknown-cold-noodles", "name": "🍜冷やし麺の種類を選ぶ", "type": "quantity", "limit": 2, "options": [
+      { "id": "cold-glass-noodles", "name": "冷やし春雨100g｜粉丝｜당면｜Glass Noodles", "uberPrice": 176 },
+      { "id": "cold-sweet-potato-noodles", "name": "冷やしさつまいも麺100g｜红薯粉｜고구마당면｜Sweet Potato Noodles", "uberPrice": 176 },
+      { "id": "cold-wide-glass-noodles", "name": "冷やし板春雨100g｜宽粉｜넓적당면｜Wide Sweet Potato Noodles", "uberPrice": 216 },
+      { "id": "cold-corn-noodles", "name": "冷やしトウモロコシ麺100g｜玉米面｜옥수수면｜Corn Noodles", "uberPrice": 216 },
+      { "id": "cold-niujin-noodles", "name": "冷やし牛筋麺100g｜牛筋面｜우근면｜Niujin Noodles", "uberPrice": 276 },
+      { "id": "cold-wide-sweet-potato-noodles", "name": "冷やしさつまいも板春雨100g｜红薯宽粉｜고구마 넓적당면｜Wide Sweet Potato Noodles", "uberPrice": 216 },
+      { "id": "cold-yam-noodles", "name": "冷やし山芋麺100g｜山药粉｜마 산약 당면｜Chinese Yam Noodles", "uberPrice": 176 },
+      { "id": "cold-kishimen", "name": "冷やしきしめん100g｜宽乌冬面｜기시멘｜Kishimen Noodles", "uberPrice": 276 },
+      { "id": "cold-knife-shaved-noodles", "name": "冷やし刀削麺100g｜刀削面｜칼국수면｜Knife-Shaved Noodles", "uberPrice": 276 },
+      { "id": "cold-rice-noodles", "name": "冷やしビーフン100g｜米粉｜쌀국수｜Rice Noodles", "uberPrice": 176 }
+    ] }
+  ]
+}

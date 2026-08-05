@@ -375,7 +375,8 @@
           "uberName": "ビーフン｜米粉｜쌀국수｜Rice Noodles",
           "uberPrice": 176,
           "externalId": "rice-noodle",
-          "matchedExisting": true
+          "matchedExisting": true,
+          "preserveWhenMissing": true
         },
         {
           "optionKey": "beef-noodle",

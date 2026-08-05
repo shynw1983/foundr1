@@ -15,6 +15,7 @@
     "db:data": "node --experimental-strip-types scripts/check-data.mjs",
     "sales:audit": "node scripts/audit-sales-orders.mjs",
     "menu:sync:maamaa-uber": "node scripts/sync-maamaa-uber-menu.mjs",
+    "menu:import:maamaa-uber": "node scripts/import-maamaa-uber-catalog.mjs",
     "apk:store": "node scripts/publish-android-apk.mjs store",
     "apk:os": "node scripts/publish-android-apk.mjs os",
     "apk:member": "node scripts/publish-android-apk.mjs member",
