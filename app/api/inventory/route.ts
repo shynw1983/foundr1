@@ -138,6 +138,8 @@ export async function POST(request: Request) {
     safetyStock?: number | string;
     quantity?: number | string;
     exceptionCode?: string;
+    lowItemIds?: string[];
+    clearLowItemIds?: string[];
     note?: string;
   };
   const action = String(body.action ?? "");
@@ -268,6 +270,87 @@ export async function POST(request: Request) {
         updated_at = now()
     `;
     return Response.json({ ok: true });
+  }
+
+  if (action === "batch_low_stock") {
+    const lowItemIds = Array.from(new Set(
+      (Array.isArray(body.lowItemIds) ? body.lowItemIds : [])
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+    ));
+    const clearLowItemIds = Array.from(new Set(
+      (Array.isArray(body.clearLowItemIds) ? body.clearLowItemIds : [])
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+    ));
+    const requestedItemIds = Array.from(new Set([...lowItemIds, ...clearLowItemIds]));
+    if (requestedItemIds.length > 500) {
+      return Response.json({ error: "一度に更新できる商品は500件までです。" }, { status: 400 });
+    }
+    if (lowItemIds.some((id) => clearLowItemIds.includes(id))) {
+      return Response.json({ error: "同じ商品に複数の状態が指定されています。" }, { status: 400 });
+    }
+
+    const editableRows = await sql`
+      select id::text as id, exception_code as "exceptionCode"
+      from inventory_items
+      where store_id = ${storeId}::uuid
+        and status = 'active'
+        and exception_code in ('', 'low')
+    `;
+    const editableIds = new Set(editableRows.map((row) => String(row.id)));
+    if (requestedItemIds.some((id) => !editableIds.has(id))) {
+      return Response.json({ error: "更新できない在庫商品が含まれています。画面を更新してください。" }, { status: 409 });
+    }
+
+    const selectedIds = new Set(lowItemIds);
+    const clearedIds = new Set(clearLowItemIds);
+    const toLowIds = editableRows
+      .filter((row) => selectedIds.has(String(row.id)) && String(row.exceptionCode) !== "low")
+      .map((row) => String(row.id));
+    const toClearIds = editableRows
+      .filter((row) => clearedIds.has(String(row.id)) && String(row.exceptionCode) === "low")
+      .map((row) => String(row.id));
+
+    const queries = [
+      ...(toLowIds.length ? [
+        sql`
+          update inventory_items
+          set exception_code = 'low', exception_note = '', last_counted_at = now(),
+              last_counted_by = ${session.id}::uuid, updated_at = now()
+          where store_id = ${storeId}::uuid and id::text = any(${toLowIds})
+        `,
+        sql`
+          insert into inventory_checks (
+            inventory_item_id, store_id, product_id, quantity, record_type,
+            exception_code, note, recorded_by
+          )
+          select id, store_id, product_id, current_quantity, 'exception', 'low', 'クイック操作', ${session.id}::uuid
+          from inventory_items
+          where store_id = ${storeId}::uuid and id::text = any(${toLowIds})
+        `
+      ] : []),
+      ...(toClearIds.length ? [
+        sql`
+          update inventory_items
+          set exception_code = '', exception_note = '', last_counted_at = now(),
+              last_counted_by = ${session.id}::uuid, updated_at = now()
+          where store_id = ${storeId}::uuid and id::text = any(${toClearIds})
+        `,
+        sql`
+          insert into inventory_checks (
+            inventory_item_id, store_id, product_id, quantity, record_type,
+            exception_code, note, recorded_by
+          )
+          select id, store_id, product_id, current_quantity, 'exception', '', 'クイック操作', ${session.id}::uuid
+          from inventory_items
+          where store_id = ${storeId}::uuid and id::text = any(${toClearIds})
+        `
+      ] : [])
+    ];
+
+    if (queries.length) await sql.transaction(queries);
+    return Response.json({ ok: true, updatedCount: toLowIds.length + toClearIds.length });
   }
 
   const itemId = String(body.itemId ?? "").trim();
