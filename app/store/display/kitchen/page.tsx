@@ -28,11 +28,14 @@ type KitchenTask = {
   estimatedPrepMinutes: number;
   estimatedReadyAt: string;
   pickupCode: string;
+  amount: number;
+  currency: string;
+  customerName: string;
   tableLabel: string;
   orderSource: string;
   orderType: string;
   note: string;
-  createdTime: string;
+  createdAt: string;
   kitchenLanguage: "ja" | "zh";
 };
 
@@ -106,6 +109,61 @@ const orderTypeLabels: Record<"ja" | "zh", Record<string, string>> = {
   ja: { eat_in: "店内", takeout: "持ち帰り", delivery: "配達", unknown: "受取方法未判定" },
   zh: { eat_in: "堂食", takeout: "自提", delivery: "外送", unknown: "取餐方式未确认" }
 };
+
+const deliveryOrderSources = new Set(["uber_eats", "demae_can", "rocket_now", "wolt"]);
+const pickupOrderSources = new Set(["maamaa_web", "nanacha_web", "web_reservation"]);
+
+function PlatformLogo({ source }: { source: string }) {
+  if (source === "uber_eats") {
+    return <span className="store-kitchen-platform-logo is-uber" aria-label="Uber Eats"><b>UBER</b><em>EATS</em></span>;
+  }
+  if (source === "rocket_now") {
+    return <span className="store-kitchen-platform-logo is-rocket" aria-label="Rocket Now"><b>Rocket</b><em>Now</em></span>;
+  }
+  if (source === "demae_can") {
+    return <span className="store-kitchen-platform-logo is-demae" aria-label="出前館"><b>出前館</b></span>;
+  }
+  if (source === "maamaa_web") {
+    return <span className="store-kitchen-platform-logo is-foundr1"><b>まぁ麻</b><em>Web予約</em></span>;
+  }
+  if (source === "nanacha_web") {
+    return <span className="store-kitchen-platform-logo is-foundr1"><b>nanacha</b><em>Web予約</em></span>;
+  }
+  return <span className="store-kitchen-platform-logo is-foundr1"><b>Foundr1</b><em>POS</em></span>;
+}
+
+function getEffectiveOrderType(task: KitchenTask) {
+  if (["eat_in", "takeout", "delivery"].includes(task.orderType)) return task.orderType;
+  if (deliveryOrderSources.has(task.orderSource)) return "delivery";
+  if (pickupOrderSources.has(task.orderSource)) return "takeout";
+  return "unknown";
+}
+
+function formatOrderAmount(amount: number, currency: string) {
+  const normalizedAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
+  try {
+    return new Intl.NumberFormat("ja-JP", {
+      style: "currency",
+      currency: currency || "JPY",
+      maximumFractionDigits: currency === "JPY" || !currency ? 0 : 2
+    }).format(normalizedAmount);
+  } catch {
+    return `¥${normalizedAmount.toLocaleString("ja-JP")}`;
+  }
+}
+
+function formatOrderDateTime(createdAt: string, language: "ja" | "zh") {
+  const date = new Date(createdAt);
+  if (!createdAt || Number.isNaN(date.getTime())) return language === "zh" ? "时间未记录" : "時刻未記録";
+  return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date);
+}
 
 function splitQuantityLabel(text: string) {
   const multiplierMatch = text.match(/^(.*?)( x\d+)(（.*）)?$/);
@@ -829,13 +887,37 @@ export default function StoreKitchenPage() {
           <div className="store-kitchen-task-grid">
             {visibleTasks.map((task) => (
               <article className={`store-kitchen-task is-${task.status}`} key={task.id}>
-                <div className="store-kitchen-task-head">
-                  <strong>{task.pickupCode}</strong>
-                  <span>
+                <div className="store-kitchen-platform-row">
+                  <PlatformLogo source={task.orderSource} />
+                  <span className={`store-kitchen-status is-${task.status}`}>
                     {task.kitchenLanguage === "zh" && task.productionAreaLabel === "調理" ? "烹饪" : task.productionAreaLabel} / {statusLabels[task.kitchenLanguage][task.status]}
                   </span>
                 </div>
-                <p>{(orderTypeLabels[task.kitchenLanguage][task.orderType] ?? task.orderType) || (task.kitchenLanguage === "zh" ? "取餐" : "受け取り")}{task.tableLabel ? ` / ${task.kitchenLanguage === "zh" ? "座位" : "座席"} ${task.tableLabel}` : ""} / {task.createdTime}</p>
+                <div className="store-kitchen-order-identity">
+                  <div>
+                    <small>{task.kitchenLanguage === "zh" ? "客户" : "お客様"}</small>
+                    <strong>{task.customerName || (task.kitchenLanguage === "zh" ? "姓名未登记" : "お名前未登録")}</strong>
+                  </div>
+                  <div>
+                    <small>{task.kitchenLanguage === "zh" ? "订单编号" : "注文番号"}</small>
+                    <b>{task.pickupCode}</b>
+                  </div>
+                </div>
+                <div className="store-kitchen-order-facts">
+                  <div className="store-kitchen-fulfillment">
+                    <small>{task.kitchenLanguage === "zh" ? "配送方式" : "受取方法"}</small>
+                    <strong>{orderTypeLabels[task.kitchenLanguage][getEffectiveOrderType(task)]}</strong>
+                  </div>
+                  <div>
+                    <small>{task.kitchenLanguage === "zh" ? "订单金额" : "注文金額"}</small>
+                    <strong>{formatOrderAmount(task.amount, task.currency)}</strong>
+                  </div>
+                  <div>
+                    <small>{task.kitchenLanguage === "zh" ? "下单时间" : "注文日時"}</small>
+                    <strong>{formatOrderDateTime(task.createdAt, task.kitchenLanguage)}</strong>
+                  </div>
+                </div>
+                {task.tableLabel ? <p className="store-kitchen-table-label">{task.kitchenLanguage === "zh" ? "座位" : "座席"} {task.tableLabel}</p> : null}
                 <div className={`store-kitchen-timing is-${task.status}`}>
                   <strong>
                     {task.status === "preparing"

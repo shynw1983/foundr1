@@ -30,6 +30,13 @@ async function getKitchenTasks(storeId: string, area = "") {
       coalesce(store_customer_orders.estimated_prep_minutes, 0)::int as "estimatedPrepMinutes",
       coalesce(store_customer_orders.estimated_ready_at::text, '') as "estimatedReadyAt",
       store_customer_orders.pickup_code as "pickupCode",
+      store_customer_orders.amount::int as amount,
+      store_customer_orders.currency,
+      coalesce(
+        store_customer_orders.customer_summary #>> '{customer,name}',
+        store_customer_orders.customer_summary ->> 'name',
+        ''
+      ) as "customerName",
       coalesce(store_customer_orders.customer_summary ->> 'diningSeatLabel', nullif(store_tables.display_name, ''), store_tables.label, '') as "tableLabel",
       store_customer_orders.order_source as "orderSource",
       store_customer_orders.payment_status as "paymentStatus",
@@ -53,8 +60,7 @@ async function getKitchenTasks(storeId: string, area = "") {
             or coalesce(menu_catalog_items.brand_id, store_customer_orders.brand_id) = order_production_tasks.brand_id
           )
       ), '[]'::jsonb) as "orderedItems",
-      store_customer_orders.created_at::text as "createdAt",
-      to_char(store_customer_orders.created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime"
+      store_customer_orders.created_at::text as "createdAt"
     from order_production_tasks
     join store_customer_orders on store_customer_orders.id = order_production_tasks.order_id
     left join store_tables on store_tables.id = store_customer_orders.store_table_id
