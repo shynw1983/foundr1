@@ -13,6 +13,9 @@ const priceRule = catalog.source.pricingRule;
 const websitePrice = (uberPrice) =>
   Math.round((Number(uberPrice) * Number(priceRule.multiplier)) / Number(priceRule.roundingUnit)) * Number(priceRule.roundingUnit);
 
+const productWebsitePrice = (product) =>
+  Number.isFinite(Number(product.websitePrice)) ? Number(product.websitePrice) : websitePrice(product.uberPrice);
+
 const splitLocalizedName = (value) => {
   const [ja = "", zh = "", ko = "", en = ""] = String(value).split("｜").map((part) => part.trim());
   return {
@@ -95,14 +98,16 @@ for (const [index, product] of catalog.products.entries()) {
   `;
   const variableSchema = {
     ...(oldRows[0]?.variableSchema ?? {}),
-    source: "uber-eats-menu-maker",
+    source: product.websiteOnly ? "maamaa-website-exception" : "uber-eats-menu-maker",
     sourceStoreId: catalog.source.storeId,
     sourceProductId: product.uberId,
     sourceCapturedAt: catalog.source.capturedAt,
     categoryKey: product.category,
     customizationGroupKeys: product.groupKeys,
-    uberPrice: product.uberPrice,
-    websitePrice: websitePrice(product.uberPrice),
+    uberPrice: product.uberPrice ?? null,
+    websitePrice: productWebsitePrice(product),
+    websiteOnly: product.websiteOnly === true,
+    preserveOutsideUber: product.preserveOutsideUber === true,
     deliveryOnly: product.deliveryOnly === true,
     websiteEnabled: isActive,
     preset: product.kind !== "buildable_product" && product.kind !== "information",
@@ -111,7 +116,7 @@ for (const [index, product] of catalog.products.entries()) {
   };
   const values = {
     itemKind: product.kind ?? (product.groupKeys.length ? "fixed_product" : "fixed_product"),
-    basePrice: websitePrice(product.uberPrice),
+    basePrice: productWebsitePrice(product),
     sortOrder: (index + 1) * 10,
   };
   let itemId;
@@ -149,6 +154,19 @@ await sql`
     and external_id not in (select jsonb_array_elements_text(${JSON.stringify(activeWebsiteIds)}::jsonb))
     and is_active = true
 `;
+
+const websiteExceptionItemIds = catalog.products
+  .filter((product) => product.websiteOnly === true)
+  .map((product) => itemIdByWebsiteId.get(product.websiteId))
+  .filter(Boolean);
+if (websiteExceptionItemIds.length) {
+  await sql`
+    update menu_store_settings
+    set website_enabled = true, is_available = true, updated_at = now()
+    where brand_id = ${brandId}
+      and menu_catalog_item_id = any(${websiteExceptionItemIds}::uuid[])
+  `;
+}
 
 const coldProductId = itemIdByWebsiteId.get("cold-dry-mala-noodles");
 for (const [groupIndex, group] of catalog.extraGroups.entries()) {
