@@ -1,7 +1,7 @@
 import { sql } from "./db";
 import { resolveCustomerStoreDisplayName } from "./customer-display-names";
 import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "./store-staff-presence";
-import { getStoreReservationWindowsForDate, type ReservationWindow } from "./store-reservation-windows";
+import { getStoreReservationWindowsForCurrentBusinessDay, type ReservationWindow } from "./store-reservation-windows";
 
 export type MaamaaPricedOption = {
   id: string;
@@ -365,14 +365,11 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
       minimumPickupMinutes: null
     }
   );
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(new Date());
   const reservationWindows = selectedStore?.osStoreId
-    ? await getStoreReservationWindowsForDate({ storeId: selectedStore.osStoreId, pickupDate: today })
+    ? await getStoreReservationWindowsForCurrentBusinessDay({
+        storeId: selectedStore.osStoreId,
+        businessHours: storeOperation.businessHours
+      })
     : [];
 
   return {

@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { getStoreCashBusinessDayState } from "./store-business-hours";
 
 export type ReservationWindow = {
   date: string;
@@ -21,10 +22,37 @@ function toMinutes(value: string) {
 }
 
 function formatMinutes(value: number) {
-  const minutes = Math.max(0, Math.min(24 * 60, Math.round(value)));
+  const minutes = Math.max(0, Math.min(24 * 60 - 1, Math.round(value)));
   const hour = Math.floor(minutes / 60);
   const minute = minutes % 60;
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+export async function getStoreReservationWindowsForCurrentBusinessDay(input: {
+  storeId: string;
+  businessHours: unknown;
+  now?: Date;
+}): Promise<ReservationWindow[]> {
+  const businessDay = getStoreCashBusinessDayState(input.businessHours, input.now);
+  if (!businessDay.openAt || !businessDay.closeAt) return [];
+
+  const pickupDates = Array.from(new Set([
+    businessDay.openAt.slice(0, 10),
+    businessDay.closeAt.slice(0, 10)
+  ]));
+  const windows = (await Promise.all(
+    pickupDates.map((pickupDate) => getStoreReservationWindowsForDate({
+      storeId: input.storeId,
+      pickupDate
+    }))
+  )).flat();
+
+  return windows.flatMap((window) => {
+    const start = [`${window.date}T${window.start}`, businessDay.openAt].sort().at(-1) ?? businessDay.openAt;
+    const end = [`${window.date}T${window.end}`, businessDay.closeAt].sort().at(0) ?? businessDay.closeAt;
+    if (end <= start) return [];
+    return [{ date: start.slice(0, 10), start: start.slice(11, 16), end: end.slice(11, 16) }];
+  });
 }
 
 function mergeWindows(windows: Array<{ start: number; end: number }>) {

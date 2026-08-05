@@ -2,7 +2,7 @@ import { createCustomerOrder, createPickupCode, updateCustomerOrder } from "../.
 import { calculateCouponDiscount, getUsableMemberCoupon, resolveMemberForOrder } from "../../../../../../lib/loyalty";
 import { getMaamaaCompatibleMenu, type MaamaaMenuSection, type MaamaaPricedOption } from "../../../../../../lib/maamaa-compatible-menu";
 import { getActiveStorePaymentAccount } from "../../../../../../lib/store-payment-accounts";
-import { isPickupWithinBusinessHours } from "../../../../../../lib/store-business-hours";
+import { getStoreCashBusinessDayState, isPickupWithinBusinessHours } from "../../../../../../lib/store-business-hours";
 import { getStoreReservationWindowsForDate } from "../../../../../../lib/store-reservation-windows";
 import { getTemporaryClosureForPickup } from "../../../../../../lib/store-temporary-closures";
 
@@ -39,18 +39,8 @@ function getTokyoNow() {
   return getTokyoMinimumPickup(0);
 }
 
-function addMinutesToTime(time: string, minutes: number) {
-  const [hour, minute] = time.split(":").map(Number);
-  const total = hour * 60 + minute + minutes;
-  const nextHour = Math.floor(total / 60);
-  const nextMinute = total % 60;
-  return `${String(nextHour).padStart(2, "0")}:${String(nextMinute).padStart(2, "0")}`;
-}
-
 // Conservative launch setting while staffing/opening time is unstable; consider allowing pre-open reservations after operations stabilize.
 const maamaaSameDayReceptionStartTime = "12:00";
-const maamaaSameDayPickupStartTime = "12:00";
-const maamaaSameDayPickupCutoffTime = "23:00";
 
 function findChoice(items: MaamaaPricedOption[], id: string, required = true) {
   if (!id && !required) return null;
@@ -272,21 +262,17 @@ export async function POST(request: Request) {
   const minimumPickupMinutes = normalizeMinimumPickupMinutes(operation.minimumPickupMinutes, 15);
   const tokyoNow = getTokyoNow();
   const minimumPickup = getTokyoMinimumPickup(minimumPickupMinutes);
-  const earliestPickupTime = addMinutesToTime(maamaaSameDayPickupStartTime, minimumPickupMinutes);
-  if (pickupDate !== tokyoNow.date) {
-    return Response.json({ error: "Maamaa web reservations are only available for same-day pickup" }, { status: 400 });
-  }
-  if (tokyoNow.time < maamaaSameDayReceptionStartTime || minimumPickup.date !== tokyoNow.date || minimumPickup.time > maamaaSameDayPickupCutoffTime) {
-    return Response.json({ error: `Maamaa web reservations are available from ${earliestPickupTime} until ${maamaaSameDayPickupCutoffTime}` }, { status: 400 });
-  }
-  if (pickup < earliestPickupTime) {
-    return Response.json({ error: `Maamaa web reservations are available from ${earliestPickupTime}` }, { status: 400 });
-  }
-  if (pickup > maamaaSameDayPickupCutoffTime) {
-    return Response.json({ error: `Maamaa web reservations are available until ${maamaaSameDayPickupCutoffTime}` }, { status: 400 });
+  const businessDay = getStoreCashBusinessDayState(operation.businessHours);
+  const isOvernightContinuation = businessDay.status === "business_open" && businessDay.businessDate !== tokyoNow.date;
+  if (tokyoNow.time < maamaaSameDayReceptionStartTime && !isOvernightContinuation) {
+    return Response.json({ error: `Maamaa web reservations are available from ${maamaaSameDayReceptionStartTime}` }, { status: 400 });
   }
   if (compareDateTime(pickupDate, pickup, minimumPickup.date, minimumPickup.time) < 0) {
     return Response.json({ error: `Pickup time must be at least ${minimumPickupMinutes} minutes from now` }, { status: 400 });
+  }
+  const pickupDateTime = `${pickupDate}T${pickup}`;
+  if (!businessDay.openAt || !businessDay.closeAt || pickupDateTime < businessDay.openAt || pickupDateTime > businessDay.closeAt) {
+    return Response.json({ error: "Pickup time is outside the current business day" }, { status: 409 });
   }
   if (!isPickupWithinBusinessHours(operation.businessHours, pickupDate, pickup)) {
     return Response.json({ error: "Pickup time is outside store business hours" }, { status: 409 });
@@ -333,7 +319,7 @@ export async function POST(request: Request) {
   const couponDiscountAmount = coupon ? Math.min(calculateCouponDiscount(coupon, subtotalAmount), Math.max(0, subtotalAmount - 1)) : 0;
   if (coupon && couponDiscountAmount <= 0) return Response.json({ error: "Selected coupon cannot be applied to this order" }, { status: 400 });
   const amount = Math.max(0, subtotalAmount - couponDiscountAmount);
-  const minimumAllowedTime = [minimumPickup.time, earliestPickupTime].sort().at(-1) ?? minimumPickup.time;
+  const minimumAllowedTime = pickupDate === minimumPickup.date ? minimumPickup.time : "00:00";
   const earliestAvailablePickupTime = reservationWindows
     .filter((window) => window.end >= minimumAllowedTime)
     .map((window) => window.start > minimumAllowedTime ? window.start : minimumAllowedTime)

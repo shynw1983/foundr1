@@ -3,7 +3,7 @@ import { resolveCustomerStoreDisplayName } from "../../../../lib/customer-displa
 import { mergeDuplicateToppingGroups } from "../../../../lib/menu-customization-groups";
 import { publicMenuCacheHeaders } from "../../../../lib/public-cache";
 import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "../../../../lib/store-staff-presence";
-import { getStoreReservationWindowsForDate } from "../../../../lib/store-reservation-windows";
+import { getStoreReservationWindowsForCurrentBusinessDay, getStoreReservationWindowsForDate } from "../../../../lib/store-reservation-windows";
 
 type MenuOption = {
   id: string;
@@ -317,8 +317,14 @@ export async function GET(request: Request) {
     month: "2-digit",
     day: "2-digit"
   }).format(new Date());
+  const isMaamaa = /maamaa|まぁ麻/i.test(String(brand.name ?? ""));
   const reservationWindows = store?.id
-    ? await getStoreReservationWindowsForDate({ storeId: store.id, pickupDate: today })
+    ? isMaamaa
+      ? await getStoreReservationWindowsForCurrentBusinessDay({
+          storeId: store.id,
+          businessHours: storeOperation.businessHours
+        })
+      : await getStoreReservationWindowsForDate({ storeId: store.id, pickupDate: today })
     : [];
   const publicStores = store
     ? [{
