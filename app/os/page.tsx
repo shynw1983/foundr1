@@ -15,7 +15,6 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MobileNavMenu } from "./components/MobileNavMenu";
-import { QuickInventoryDashboard } from "./components/QuickInventoryDashboard";
 import { UserBadge } from "./components/UserBadge";
 import { canonicalNavItems, type OsNavModuleWithChildren, usePermittedNavModules } from "./components/OsNavList";
 import { getCachedCurrentEmployee, loadCurrentEmployee } from "./components/currentEmployeeStore";
@@ -491,8 +490,6 @@ export default function Foundr1OsHome() {
           </div>
         </section>
       ) : null}
-
-      {role && ["owner", "manager", "store_owner", "store_manager"].includes(role) ? <QuickInventoryDashboard /> : null}
 
       <OsHomeDashboard dashboard={dashboard} salesStats={salesStats} loyalty={loyalty} isLoading={dashboardLoading} />
 

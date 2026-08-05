@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { NotificationMenu } from "./NotificationMenu";
 import { OsLanguagePicker } from "./OsTranslationProvider";
 import { OsStoreContextPicker } from "./OsStoreContextPicker";
+import { QuickInventoryDashboard } from "./QuickInventoryDashboard";
 import { getCachedCurrentEmployee, loadCurrentEmployee, type CurrentEmployee } from "./currentEmployeeStore";
 import { useCloseOnOutside } from "./useCloseOnOutside";
 
@@ -25,14 +26,21 @@ function getInitial(name: string) {
 export function UserBadge({
   showNotifications = true,
   showLanguagePicker = true,
+  showQuickActions = true,
   logoutHref = "/os/logout"
 }: {
   showNotifications?: boolean;
   showLanguagePicker?: boolean;
+  showQuickActions?: boolean;
   logoutHref?: string;
 }) {
   const [employee, setEmployee] = useState<CurrentEmployee | null>(() => getCachedCurrentEmployee());
+  const [isOsSurface, setIsOsSurface] = useState(false);
   const accountMenuRef = useRef<HTMLDetailsElement | null>(null);
+
+  useEffect(() => {
+    setIsOsSurface(window.location.pathname === "/os" || window.location.pathname.startsWith("/os/"));
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -69,6 +77,9 @@ export function UserBadge({
   return (
     <div className="user-panel">
       <OsStoreContextPicker />
+      {showQuickActions && isOsSurface && ["owner", "manager", "store_owner", "store_manager"].includes(employee.role)
+        ? <QuickInventoryDashboard />
+        : null}
       <details className="account-menu" ref={accountMenuRef}>
         <summary className="user-badge" title={`ログインID: ${employee.loginId}`}>
           <span className="user-avatar" aria-hidden="true">{getInitial(employee.name)}</span>
