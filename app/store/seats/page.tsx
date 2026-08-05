@@ -2,6 +2,7 @@
 
 import { ArrowLeft, Check, Clock3, RotateCcw, Sparkles, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../lib/store-polling-client";
 
 type SeatStatus = "available" | "selecting" | "cooking" | "dining" | "cleaning";
 
@@ -34,6 +35,7 @@ type SeatBoardTarget = {
 
 type SeatBoardResponse = {
   store?: { id: string; name: string };
+  stores?: Array<{ id: string; businessHours?: unknown }>;
   targets?: SeatBoardTarget[];
   sharedTables?: string[];
   error?: string;
@@ -90,6 +92,7 @@ export default function StoreSeatsPage() {
   }
 
   function applyBoard(data: SeatBoardResponse) {
+    rememberStoreBusinessHours(data.stores);
     if (data.store) {
       setStoreId(data.store.id);
       setStoreName(data.store.name);
@@ -108,7 +111,6 @@ export default function StoreSeatsPage() {
     let active = true;
     let pusher: any;
     let channels: any[] = [];
-    let timer = 0;
     async function load(showLoading = false) {
       if (showLoading) setLoading(true);
       try {
@@ -125,17 +127,9 @@ export default function StoreSeatsPage() {
         if (active) setLoading(false);
       }
     }
-    const stopPolling = () => {
-      if (!timer) return;
-      window.clearInterval(timer);
-      timer = 0;
-    };
-    const startPolling = (intervalMs = 10000) => {
-      stopPolling();
-      timer = window.setInterval(() => {
-        if (document.visibilityState === "visible") void load();
-      }, intervalMs);
-    };
+    const poller = createStoreFallbackPoller(() => load(), { baseIntervalMs: 60_000 });
+    const stopPolling = () => poller.stop();
+    const startPolling = () => poller.start();
 
     void load(true);
     startPolling();

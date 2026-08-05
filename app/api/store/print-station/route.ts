@@ -1,6 +1,6 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
-import { localizeMaamaaProductionSummary, refreshActiveProductionTasksForStore } from "../../../../lib/order-production";
+import { localizeMaamaaProductionSummary } from "../../../../lib/order-production";
 import { normalizePosPrinterSettings, resolvePosKitchenTicketTemplate } from "../../../../lib/pos-printer";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 import { scheduledOrderReminderLeadMinutes } from "../../../../lib/store-order-alert-timing";
@@ -22,10 +22,9 @@ export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
 
-  const { selectedStoreId, forbidden } = await resolveStoreId(request, session);
+  const { access, selectedStoreId, forbidden } = await resolveStoreId(request, session);
   if (forbidden || !selectedStoreId) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  await refreshActiveProductionTasksForStore(selectedStoreId);
 
   const rows = await sql`
     select
@@ -108,6 +107,7 @@ export async function GET(request: Request) {
 
   return Response.json({
     selectedStoreId,
+    stores: access.stores.map((store) => ({ id: store.id, businessHours: store.businessHours })),
     printerSettings,
     jobs
   }, { headers: { "Cache-Control": "no-store" } });

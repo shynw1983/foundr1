@@ -1,6 +1,5 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
-import { refreshActiveProductionTasksForStore } from "../../../../../lib/order-production";
 import { scheduledOrderReminderLeadMinutes } from "../../../../../lib/store-order-alert-timing";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
@@ -28,7 +27,6 @@ export async function GET(request: Request) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 
-  await refreshActiveProductionTasksForStore(storeFilter, 100);
 
   const [rows, storeBrandRows] = await Promise.all([
     sql`

@@ -3,7 +3,7 @@ import { findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
 import { buildKitchenDisplayItemGroups } from "../../../../../lib/kitchen-display-groups";
 import { reconcileUberReadyCommand } from "../../../../../lib/local-bridge-commands";
-import { localizeMaamaaProductionSummary, refreshActiveProductionTasksForStore, setProductionTaskStatus } from "../../../../../lib/order-production";
+import { localizeMaamaaProductionSummary, setProductionTaskStatus } from "../../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
 import { normalizePosPrinterSettings, resolvePosKitchenTicketTemplate } from "../../../../../lib/pos-printer";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
@@ -134,7 +134,6 @@ export async function GET(request: Request) {
   const storeFilter = getScopedStoreFilter(access, params.get("storeId")) ?? access.stores[0]?.id ?? "";
   if (storeFilter === "__forbidden__" || !storeFilter) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  await refreshActiveProductionTasksForStore(storeFilter);
 
   const [{ tasks, areas, displayLanguage }, preferenceRows, bridgeRows] = await Promise.all([
     getKitchenTasks(storeFilter, normalizeText(params.get("area"))),

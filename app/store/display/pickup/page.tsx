@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
 import { useVisibleRefresh } from "../../components/useVisibleRefresh";
+import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../../lib/store-polling-client";
 
 type PickupOrder = {
   pickupCode: string;
@@ -58,6 +59,7 @@ export default function StorePickupDisplayPage() {
     const body = await response.json();
     const nextStoreId = String(body.selectedStoreId || storeId || "");
     setStores(body.access?.stores ?? []);
+    rememberStoreBusinessHours(body.access?.stores);
     setSelectedStoreId(nextStoreId);
     selectedStoreIdRef.current = nextStoreId;
     if (nextStoreId) setStoredStoreSelection(nextStoreId);
@@ -127,13 +129,12 @@ export default function StorePickupDisplayPage() {
   useEffect(() => {
     void load();
     if (realtimeStatus === "connected") return;
-    const timer = window.setInterval(
-      () => {
-        if (document.visibilityState === "visible") void load(selectedStoreIdRef.current);
-      },
-      8000
+    const poller = createStoreFallbackPoller(
+      () => load(selectedStoreIdRef.current),
+      { baseIntervalMs: 60_000, storeIds: () => [selectedStoreIdRef.current].filter(Boolean) }
     );
-    return () => window.clearInterval(timer);
+    poller.start();
+    return () => poller.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realtimeStatus]);
 

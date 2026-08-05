@@ -16,6 +16,7 @@ import {
   suppliers as initialSuppliers
 } from "../../../lib/mock-data";
 import { normalizeDecimalInput } from "../../../lib/number-input";
+import { createStoreFallbackPoller } from "../../../lib/store-polling-client";
 
 type Product = typeof initialProducts[number] & {
   id?: string;
@@ -1185,14 +1186,17 @@ export default function ProcurementPage() {
     };
 
     syncPendingItems();
-    const visibleRefreshTimer = window.setInterval(refreshDashboardWhenVisible, procurementLiveRefreshIntervalMs);
+    const dashboardPoller = createStoreFallbackPoller(refreshDashboardWhenVisible, {
+      baseIntervalMs: procurementLiveRefreshIntervalMs
+    });
+    dashboardPoller.start();
     window.addEventListener("online", syncWhenVisible);
     window.addEventListener("focus", refreshDashboardWhenVisible);
     window.addEventListener("pageshow", refreshDashboardWhenVisible);
     document.addEventListener("visibilitychange", syncWhenVisible);
 
     return () => {
-      window.clearInterval(visibleRefreshTimer);
+      dashboardPoller.stop();
       window.removeEventListener("online", syncWhenVisible);
       window.removeEventListener("focus", refreshDashboardWhenVisible);
       window.removeEventListener("pageshow", refreshDashboardWhenVisible);

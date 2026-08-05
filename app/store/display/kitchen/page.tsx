@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
 import { useVisibleRefresh } from "../../components/useVisibleRefresh";
+import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../../lib/store-polling-client";
 
 type KitchenTask = {
   id: string;
@@ -210,6 +211,7 @@ export default function StoreKitchenPage() {
     syncServerTime(body.serverNow);
     const nextStoreId = String(body.selectedStoreId || storeId || "");
     setStores(body.access?.stores ?? []);
+    rememberStoreBusinessHours(body.access?.stores);
     setSelectedStoreId(nextStoreId);
     selectedStoreIdRef.current = nextStoreId;
     if (nextStoreId) setStoredStoreSelection(nextStoreId);
@@ -563,13 +565,12 @@ export default function StoreKitchenPage() {
   useEffect(() => {
     void load();
     if (realtimeStatus === "connected") return;
-    const timer = window.setInterval(
-      () => {
-        if (document.visibilityState === "visible") void load(selectedStoreIdRef.current, selectedArea);
-      },
-      8000
+    const poller = createStoreFallbackPoller(
+      () => load(selectedStoreIdRef.current, selectedArea),
+      { baseIntervalMs: 60_000, storeIds: () => [selectedStoreIdRef.current].filter(Boolean) }
     );
-    return () => window.clearInterval(timer);
+    poller.start();
+    return () => poller.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realtimeStatus, selectedArea]);
 

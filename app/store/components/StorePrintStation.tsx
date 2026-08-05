@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getKitchenPrinterForBrand, hasPosPrinterDestination, printWithAndroidBridge, resolvePosKitchenTicketTemplate, type PosPrintPayload, type PosPrinterSettings } from "../../../lib/pos-printer";
+import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../lib/store-polling-client";
 import { getStoredStoreSelection } from "./store-selection";
 
 type PrintJob = {
@@ -19,6 +20,7 @@ type PrintJob = {
 
 type PrintStationResponse = {
   selectedStoreId: string;
+  stores?: Array<{ id: string; businessHours?: unknown }>;
   printerSettings: PosPrinterSettings;
   jobs: PrintJob[];
 };
@@ -84,9 +86,9 @@ export function StorePrintStation() {
 
   useEffect(() => {
     let active = true;
-    let timer = 0;
     let pusher: any;
     let channels: any[] = [];
+    let printingConfigured: boolean | null = null;
 
     async function updatePrintStatus(storeId: string, taskId: string, printStatus: "printing" | "printed" | "failed") {
       const response = await fetch("/api/store/print-station", {
@@ -108,8 +110,19 @@ export function StorePrintStation() {
         const response = await fetch(`/api/store/print-station${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
         if (!response.ok || !active) return;
         const body = await response.json() as PrintStationResponse;
-        if (!body.printerSettings?.enabled || !body.printerSettings.kitchenEnabled) {
+        rememberStoreBusinessHours(body.stores);
+        const hasConfiguredKitchenPrinter = Boolean(
+          body.printerSettings?.enabled
+          && body.printerSettings.kitchenEnabled
+          && (
+            hasPosPrinterDestination(body.printerSettings.kitchenPrinter)
+            || body.printerSettings.brandKitchenPrinters.some((item) => hasPosPrinterDestination(item.printer))
+          )
+        );
+        printingConfigured = hasConfiguredKitchenPrinter;
+        if (!hasConfiguredKitchenPrinter) {
           setStatus("");
+          stopPolling();
           return;
         }
         for (const job of body.jobs ?? []) {
@@ -140,14 +153,14 @@ export function StorePrintStation() {
       }
     }
 
-    const startPolling = (intervalMs = 8000) => {
-      if (timer) window.clearInterval(timer);
-      timer = window.setInterval(poll, intervalMs);
+    const poller = createStoreFallbackPoller(poll, {
+      baseIntervalMs: 60_000,
+      storeIds: () => [getStoredStoreSelection()].filter(Boolean)
+    });
+    const startPolling = () => {
+      if (printingConfigured !== false) poller.start();
     };
-    const stopPolling = () => {
-      if (timer) window.clearInterval(timer);
-      timer = 0;
-    };
+    const stopPolling = () => poller.stop();
 
     void poll();
     startPolling();
@@ -179,7 +192,7 @@ export function StorePrintStation() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      poller.stop();
       channels.forEach((channel) => {
         channel.unbind("order.created", poll);
         channel.unbind("order.updated", poll);

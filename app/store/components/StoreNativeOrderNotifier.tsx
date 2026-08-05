@@ -3,6 +3,11 @@
 import { useEffect, useRef } from "react";
 import { showNativeNotification } from "../../../lib/native-notifications";
 import { getStoreOrderAlertPhase, isStoreOrderAlertAcknowledged } from "../../../lib/store-order-alert-timing";
+import {
+  createStoreFallbackPoller,
+  rememberStoreBusinessHours,
+  storeOrderAlertEventName
+} from "../../../lib/store-polling-client";
 
 type StoreOrderRealtimePayload = {
   order?: {
@@ -36,6 +41,7 @@ type StoreOrdersResponse = {
     initialAlertAcknowledgedAt?: string;
     reminderAlertAcknowledgedAt?: string;
   }>;
+  stores?: Array<{ id: string; businessHours?: unknown }>;
 };
 
 function shouldNotifyOrder(order: StoreOrderRealtimePayload["order"]) {
@@ -73,7 +79,6 @@ export function StoreNativeOrderNotifier() {
     let active = true;
     let pusher: any;
     let channels: any[] = [];
-    let pollingTimer = 0;
 
     const notifyOrder = (order?: StoreOrderRealtimePayload["order"]) => {
       if (!active || isOrdersPage()) return;
@@ -90,11 +95,18 @@ export function StoreNativeOrderNotifier() {
       });
     };
 
+    const announceOrder = (order?: StoreOrderRealtimePayload["order"]) => {
+      if (!active || !order?.id) return;
+      window.dispatchEvent(new CustomEvent(storeOrderAlertEventName, { detail: { order } }));
+      notifyOrder(order);
+    };
+
     const checkOrdersByPolling = async () => {
       try {
-        const response = await fetch("/api/store/orders?watch=1", { cache: "no-store" });
+        const response = await fetch("/api/store/orders/watch", { cache: "no-store" });
         if (!response.ok || !active) return;
         const body = await response.json() as StoreOrdersResponse;
+        rememberStoreBusinessHours(body.stores);
         const alertableOrders = (body.orders ?? []).filter((order) => shouldNotifyOrder(order));
         const activeOrderKeys = new Set(alertableOrders.map(getOrderKey));
         if (!initializedRef.current) {
@@ -103,29 +115,23 @@ export function StoreNativeOrderNotifier() {
           return;
         }
         const incomingOrder = alertableOrders.find((order) => !knownOrderKeysRef.current.has(getOrderKey(order)));
-        if (incomingOrder) notifyOrder(incomingOrder);
+        if (incomingOrder) announceOrder(incomingOrder);
         knownOrderKeysRef.current = activeOrderKeys;
-      } catch {
+      } catch (error) {
         // The Store app should stay usable even if notification polling fails.
+        throw error;
       }
     };
 
-    const startPolling = () => {
-      if (pollingTimer) return;
-      void checkOrdersByPolling();
-      pollingTimer = window.setInterval(checkOrdersByPolling, 15000);
-    };
-    const stopPolling = () => {
-      if (!pollingTimer) return;
-      window.clearInterval(pollingTimer);
-      pollingTimer = 0;
-    };
+    const poller = createStoreFallbackPoller(checkOrdersByPolling, { baseIntervalMs: 60_000 });
+    const startPolling = () => poller.start({ immediate: true });
+    const stopPolling = () => poller.stop();
 
     const handleOrderEvent = ({ order }: StoreOrderRealtimePayload) => {
       if (!shouldNotifyOrder(order) || !order?.id || !order.status || !order.paymentStatus) return;
       knownOrderKeysRef.current.add(getOrderKey(order));
       initializedRef.current = true;
-      notifyOrder(order);
+      announceOrder(order);
     };
 
     startPolling();

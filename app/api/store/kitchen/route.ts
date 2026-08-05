@@ -1,7 +1,7 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { findCustomerOrderById } from "../../../../lib/customer-orders";
 import { sql } from "../../../../lib/db";
-import { refreshActiveProductionTasksForStore, setProductionTaskStatus } from "../../../../lib/order-production";
+import { setProductionTaskStatus } from "../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
@@ -64,7 +64,6 @@ export async function GET(request: Request) {
   const storeFilter = getScopedStoreFilter(access, params.get("storeId")) ?? access.stores[0]?.id ?? "";
   if (storeFilter === "__forbidden__" || !storeFilter) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  await refreshActiveProductionTasksForStore(storeFilter);
 
   const { tasks, areas } = await getKitchenTasks(storeFilter, normalizeText(params.get("area")));
   return Response.json({ access, selectedStoreId: storeFilter, tasks, areas }, { headers: { "Cache-Control": "no-store" } });

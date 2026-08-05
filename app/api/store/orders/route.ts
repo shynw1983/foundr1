@@ -3,8 +3,7 @@ import { sql } from "../../../../lib/db";
 import { findCustomerOrderById } from "../../../../lib/customer-orders";
 import {
   ensureOrderProductionEstimate,
-  ensureProductionTasksForOrder,
-  refreshActiveProductionTasksForStore
+  ensureProductionTasksForOrder
 } from "../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
@@ -23,8 +22,6 @@ export async function GET(request: Request) {
     ? getScopedStoreFilter(access, params.get("storeId"))
     : getScopedStoreFilter(access, params.get("storeId")) ?? access.stores[0]?.id ?? null;
   if (storeFilter === "__forbidden__") return Response.json({ error: "権限がありません。" }, { status: 403 });
-  if (storeFilter) await refreshActiveProductionTasksForStore(storeFilter);
-
   const orders = await sql`
     select
       store_customer_orders.id::text,
@@ -105,79 +102,8 @@ export async function GET(request: Request) {
     order by store_customer_orders.pickup_date desc, store_customer_orders.pickup_time desc, store_customer_orders.created_at desc
   `;
 
-  const ordersNeedingTasks = (orders as Array<{ id: string; status: string; paymentStatus: string; productionTasks?: unknown[] }>)
-    .filter((order) => order.paymentStatus === "paid" && ["new", "preparing", "ready"].includes(order.status) && !(Array.isArray(order.productionTasks) && order.productionTasks.length))
-    .slice(0, 30);
-  for (const order of ordersNeedingTasks) {
-    await ensureProductionTasksForOrder(order.id);
-  }
-  const responseOrders = ordersNeedingTasks.length ? await sql`
-    select
-      store_customer_orders.id::text,
-      coalesce(store_customer_orders.store_id::text, '') as "storeId",
-      coalesce(stores.name, '') as "storeName",
-      store_customer_orders.order_source as "orderSource",
-      store_customer_orders.pickup_code as "pickupCode",
-      store_customer_orders.status,
-      store_customer_orders.payment_status as "paymentStatus",
-      store_customer_orders.pickup_date::text as "pickupDate",
-      store_customer_orders.pickup_time as "pickupTime",
-      coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') as "pickupTiming",
-      coalesce(store_customer_orders.paid_at::text, '') as "paidAt",
-      case
-        when store_customer_orders.order_source <> 'maamaa_web'
-          or coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') <> 'scheduled' then 'immediate'
-        when store_customer_orders.paid_at > now() - interval '2 minutes' then 'scheduled_initial'
-        when ((store_customer_orders.pickup_date::text || ' ' || store_customer_orders.pickup_time)::timestamp at time zone 'Asia/Tokyo') <= now() + interval '20 minutes' then 'scheduled_reminder'
-        else 'scheduled_waiting'
-      end as "alertPhase",
-      coalesce(store_customer_orders.customer_summary ->> 'initialAlertAcknowledgedAt', '') as "initialAlertAcknowledgedAt",
-      coalesce(store_customer_orders.customer_summary ->> 'reminderAlertAcknowledgedAt', '') as "reminderAlertAcknowledgedAt",
-      store_customer_orders.amount,
-      store_customer_orders.currency,
-      store_customer_orders.drink,
-      store_customer_orders.size,
-      store_customer_orders.temperature,
-      store_customer_orders.sweetness,
-      store_customer_orders.ice,
-      store_customer_orders.option_text as "option",
-      store_customer_orders.toppings,
-      coalesce(store_customer_orders.customer_summary #>> '{customer,name}', store_customer_orders.customer_summary ->> 'name', '') as "customerName",
-      coalesce(store_customer_orders.customer_summary #>> '{customer,phone}', store_customer_orders.customer_summary ->> 'phone', '') as "customerPhone",
-      coalesce(store_customer_orders.customer_summary #>> '{customer,note}', store_customer_orders.customer_summary ->> 'note', '') as "customerNote",
-      coalesce(nullif(store_tables.display_name, ''), store_tables.label, '') as "storeTableLabel",
-      coalesce(store_customer_orders.customer_summary ->> 'tableSessionKey', store_customer_orders.table_session_key, '') as "tableSessionKey",
-      coalesce(store_customer_orders.customer_summary ->> 'checkoutStatus', '') as "checkoutStatus",
-      coalesce(store_customer_orders.customer_summary ->> 'checkoutRequestType', '') as "checkoutRequestType",
-      coalesce(store_customer_orders.customer_summary ->> 'checkoutRequestedAt', '') as "checkoutRequestedAt",
-      coalesce(store_customer_orders.customer_summary ->> 'checkoutHandledAt', '') as "checkoutHandledAt",
-      coalesce(store_customer_orders.customer_summary ->> 'orderType', '') as "orderType",
-      coalesce(production_tasks.tasks, '[]'::json) as "productionTasks",
-      store_customer_orders.created_at as "createdAt",
-      coalesce(store_customer_orders.payment_receipt_url, store_customer_orders.square_receipt_url, '') as "squareReceiptUrl"
-    from store_customer_orders
-    left join stores on stores.id = store_customer_orders.store_id
-    left join store_tables on store_tables.id = store_customer_orders.store_table_id
-    left join lateral (
-      select json_agg(json_build_object(
-        'id', order_production_tasks.id::text,
-        'productionArea', order_production_tasks.production_area,
-        'productionAreaLabel', order_production_tasks.production_area_label,
-        'status', order_production_tasks.status,
-        'printStatus', order_production_tasks.print_status,
-        'itemSummary', order_production_tasks.item_summary
-      ) order by order_production_tasks.production_area_label) as tasks
-      from order_production_tasks
-      where order_production_tasks.order_id = store_customer_orders.id
-    ) production_tasks on true
-    where (${access.allStores} or store_customer_orders.store_id::text = any(${access.storeIds}))
-      and (${storeFilter}::text is null or store_customer_orders.store_id::text = ${storeFilter})
-      and store_customer_orders.created_at > now() - interval '14 days'
-    order by store_customer_orders.pickup_date desc, store_customer_orders.pickup_time desc, store_customer_orders.created_at desc
-  ` : orders;
-
   return Response.json({
-    orders: responseOrders,
+    orders,
     access: { ...access, canUseAllStoreView: false },
     selectedStoreId: storeFilter
   }, { headers: { "Cache-Control": "no-store" } });

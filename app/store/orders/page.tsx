@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { defaultStoreModuleSettings, storeOrderAlertSoundOptions, type StoreModuleSettings, type StoreOrderAlertSound } from "../../../lib/module-setting-defaults";
 import { playStoreOrderAlertSound } from "../../../lib/store-order-alert-sounds";
 import { getStoreOrderAlertPhase, isStoreOrderAlertAcknowledged, shouldRepeatStoreOrderAlert, type StoreOrderAlertPhase } from "../../../lib/store-order-alert-timing";
+import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../lib/store-polling-client";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { clearStoredStoreSelection, getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
@@ -68,7 +69,7 @@ type StoreOrderAccess = {
   canViewSalesStats: boolean;
   canCancelOrders: boolean;
   canUseAllStoreView: boolean;
-  stores: Array<{ id: string; name: string }>;
+  stores: Array<{ id: string; name: string; businessHours?: unknown }>;
   storeIds: string[];
 };
 
@@ -287,7 +288,7 @@ export default function StoreOrdersPage() {
   const ordersRef = useRef<StoreOrder[]>([]);
   const repeatAlertTimersRef = useRef<number[]>([]);
   const selectedStoreIdRef = useRef("");
-  const lastResumeRefreshAtRef = useRef(0);
+  const refreshInFlightRef = useRef(false);
 
   useEffect(() => {
     ordersRef.current = orders;
@@ -452,107 +453,111 @@ export default function StoreOrdersPage() {
   };
 
   const refresh = async () => {
+    if (refreshInFlightRef.current) return;
+
+    refreshInFlightRef.current = true;
     setIsRefreshing(true);
-    const params = new URLSearchParams();
-    const requestedStoreId = selectedStoreIdRef.current;
-    if (requestedStoreId) params.set("storeId", requestedStoreId);
-    params.set("ts", String(Date.now()));
-    const response = await fetch(`/api/store/orders${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
-    if (!response.ok) {
-      if (response.status === 403 && requestedStoreId) {
-        selectedStoreIdRef.current = "";
-        setSelectedStoreId("");
-        clearStoredStoreSelection();
-        setIsRefreshing(false);
-        void refresh();
-        return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    let retryWithoutStore = false;
+
+    try {
+      const params = new URLSearchParams();
+      const requestedStoreId = selectedStoreIdRef.current;
+      if (requestedStoreId) params.set("storeId", requestedStoreId);
+      params.set("ts", String(Date.now()));
+      const response = await fetch(`/api/store/orders${params.size ? `?${params.toString()}` : ""}`, {
+        cache: "no-store",
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        if (response.status === 403 && requestedStoreId) {
+          selectedStoreIdRef.current = "";
+          setSelectedStoreId("");
+          clearStoredStoreSelection();
+          retryWithoutStore = true;
+          return;
+        }
+        throw new Error(`orders refresh failed: ${response.status}`);
       }
+      const body = await response.json();
+      const nextAccess = body.access as StoreOrderAccess | undefined;
+      const responseStoreId = String(body.selectedStoreId || requestedStoreId || nextAccess?.stores[0]?.id || "");
+      const currentStoreId = selectedStoreIdRef.current;
+      if (currentStoreId && responseStoreId && currentStoreId !== responseStoreId) return;
+      if (nextAccess) {
+        setAccess(nextAccess);
+        rememberStoreBusinessHours(nextAccess.stores);
+        if (!selectedStoreIdRef.current && responseStoreId) {
+          selectedStoreIdRef.current = responseStoreId;
+          setSelectedStoreId(responseStoreId);
+          setStoredStoreSelection(responseStoreId);
+        }
+      }
+      if (responseStoreId && responseStoreId !== "__forbidden__") setStoredStoreSelection(responseStoreId);
+      if (nextAccess?.canViewSalesStats) {
+        const statsParams = new URLSearchParams({ days: String(statsDays) });
+        const statsStoreId = selectedStoreIdRef.current || responseStoreId;
+        if (statsStoreId) statsParams.set("storeId", statsStoreId);
+        statsParams.set("ts", String(Date.now()));
+        const statsResponse = await fetch(`/api/store/order-stats?${statsParams.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal
+        });
+        if (statsResponse.ok) setStats(await statsResponse.json());
+      } else {
+        setStats(null);
+      }
+      const nextOrders = body.orders ?? [];
+      setOrders((current) => {
+        const currentById = new Map(current.map((order) => [order.id, order]));
+        const incomingIds = nextOrders
+          .filter((order: StoreOrder) => shouldNotifyNewOrder(currentById.get(order.id), order) || shouldNotifyCheckoutRequest(currentById.get(order.id), order))
+          .map((order: StoreOrder) => order.id);
+
+        if (incomingIds.length) {
+          setNewOrderIds(incomingIds);
+          setSelectedId((currentSelected) => currentSelected || incomingIds[0]);
+          playArrivalAlert(incomingIds);
+          const incomingPhase = getStoreOrderAlertPhase(nextOrders.find((order: StoreOrder) => incomingIds.includes(order.id)) ?? {});
+          scheduleRepeatAlert(incomingIds, incomingPhase);
+          window.setTimeout(() => setNewOrderIds([]), 10000);
+        }
+
+        return nextOrders;
+      });
+      setSelectedId((current) => current || nextOrders[0]?.id || "");
+      setLastUpdatedAt(
+        new Intl.DateTimeFormat("ja-JP", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit"
+        }).format(new Date())
+      );
+      setLoading(false);
+      setError("");
+    } catch {
       setError("注文を読み込めませんでした。");
       setLoading(false);
+    } finally {
+      window.clearTimeout(timeout);
+      refreshInFlightRef.current = false;
       setIsRefreshing(false);
-      return;
-    }
-    const body = await response.json();
-    const nextAccess = body.access as StoreOrderAccess | undefined;
-    const responseStoreId = String(body.selectedStoreId || requestedStoreId || nextAccess?.stores[0]?.id || "");
-    const currentStoreId = selectedStoreIdRef.current;
-    if (currentStoreId && responseStoreId && currentStoreId !== responseStoreId) {
-      setIsRefreshing(false);
-      return;
-    }
-    if (nextAccess) {
-      setAccess(nextAccess);
-      if (!selectedStoreIdRef.current && responseStoreId) {
-        selectedStoreIdRef.current = responseStoreId;
-        setSelectedStoreId(responseStoreId);
-        setStoredStoreSelection(responseStoreId);
+      if (retryWithoutStore) {
+        void refresh();
       }
     }
-    if (responseStoreId && responseStoreId !== "__forbidden__") setStoredStoreSelection(responseStoreId);
-    if (nextAccess?.canViewSalesStats) {
-      const statsParams = new URLSearchParams({ days: String(statsDays) });
-      const statsStoreId = selectedStoreIdRef.current || responseStoreId;
-      if (statsStoreId) statsParams.set("storeId", statsStoreId);
-      statsParams.set("ts", String(Date.now()));
-      const statsResponse = await fetch(`/api/store/order-stats?${statsParams.toString()}`, { cache: "no-store" });
-      if (statsResponse.ok) setStats(await statsResponse.json());
-    } else {
-      setStats(null);
-    }
-    const nextOrders = body.orders ?? [];
-    setOrders((current) => {
-      const currentById = new Map(current.map((order) => [order.id, order]));
-      const incomingIds = nextOrders
-        .filter((order: StoreOrder) => shouldNotifyNewOrder(currentById.get(order.id), order) || shouldNotifyCheckoutRequest(currentById.get(order.id), order))
-        .map((order: StoreOrder) => order.id);
-
-      if (incomingIds.length) {
-        setNewOrderIds(incomingIds);
-        setSelectedId((currentSelected) => currentSelected || incomingIds[0]);
-        playArrivalAlert(incomingIds);
-        const incomingPhase = getStoreOrderAlertPhase(nextOrders.find((order: StoreOrder) => incomingIds.includes(order.id)) ?? {});
-        scheduleRepeatAlert(incomingIds, incomingPhase);
-        window.setTimeout(() => setNewOrderIds([]), 10000);
-      }
-
-      return nextOrders;
-    });
-    setSelectedId((current) => current || nextOrders[0]?.id || "");
-    setLastUpdatedAt(
-      new Intl.DateTimeFormat("ja-JP", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit"
-      }).format(new Date())
-    );
-    setLoading(false);
-    setIsRefreshing(false);
-    setError("");
   };
 
   useEffect(() => {
-    lastResumeRefreshAtRef.current = Date.now();
-    refresh();
-    const refreshFromResume = () => {
-      const now = Date.now();
-      if (now - lastResumeRefreshAtRef.current < 5000) return;
-      lastResumeRefreshAtRef.current = now;
-      void refresh();
-    };
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") refreshFromResume();
-    };
-    window.addEventListener("focus", refreshFromResume);
-    window.addEventListener("pageshow", refreshFromResume);
-    if (realtimeStatus !== "connected") window.addEventListener("pointerdown", refreshFromResume);
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-    const timer = realtimeStatus === "connected" ? 0 : window.setInterval(refresh, 8000);
+    void refresh();
+    const poller = createStoreFallbackPoller(refresh, {
+      baseIntervalMs: 60_000,
+      storeIds: () => [selectedStoreIdRef.current].filter(Boolean)
+    });
+    if (realtimeStatus !== "connected") poller.start();
     return () => {
-      window.removeEventListener("focus", refreshFromResume);
-      window.removeEventListener("pageshow", refreshFromResume);
-      if (realtimeStatus !== "connected") window.removeEventListener("pointerdown", refreshFromResume);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-      if (timer) window.clearInterval(timer);
+      poller.stop();
     };
   }, [realtimeStatus, statsDays, selectedStoreId]);
 

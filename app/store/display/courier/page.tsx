@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
 import { useVisibleRefresh } from "../../components/useVisibleRefresh";
+import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../../lib/store-polling-client";
 
 type PickupOrder = {
   id: string;
@@ -116,6 +117,7 @@ export default function StorePickupStatusDisplayPage() {
       setNow(serverNow);
     }
     setStores(body.access?.stores ?? []);
+    rememberStoreBusinessHours(body.access?.stores);
     setSelectedStoreId(nextStoreId);
     selectedStoreIdRef.current = nextStoreId;
     if (nextStoreId) setStoredStoreSelection(nextStoreId);
@@ -134,10 +136,12 @@ export default function StorePickupStatusDisplayPage() {
   useEffect(() => {
     void load();
     if (realtimeStatus === "connected") return;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void load(selectedStoreIdRef.current);
-    }, 5000);
-    return () => window.clearInterval(timer);
+    const poller = createStoreFallbackPoller(
+      () => load(selectedStoreIdRef.current),
+      { baseIntervalMs: 60_000, storeIds: () => [selectedStoreIdRef.current].filter(Boolean) }
+    );
+    poller.start();
+    return () => poller.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realtimeStatus]);
 

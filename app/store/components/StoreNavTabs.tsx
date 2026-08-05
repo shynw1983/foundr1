@@ -6,45 +6,13 @@ import { UserBadge } from "../../os/components/UserBadge";
 import { useCloseOnOutside } from "../../os/components/useCloseOnOutside";
 import { defaultStoreModuleSettings, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
 import { getStoredStoreSelection, setStoredStoreSelection } from "./store-selection";
-import { getStoreOrderAlertPhase, isStoreOrderAlertAcknowledged } from "../../../lib/store-order-alert-timing";
-
-type StoreOrderRealtimePayload = {
-  order?: {
-    id?: string;
-    status?: string;
-    paymentStatus?: string;
-    orderSource?: string;
-    pickupTiming?: string;
-    pickupDate?: string;
-    pickupTime?: string;
-    paidAt?: string;
-    alertPhase?: string;
-    initialAlertAcknowledgedAt?: string;
-    reminderAlertAcknowledgedAt?: string;
-  };
-};
-
-type StoreOrdersResponse = {
-  orders?: Array<{
-    id: string;
-    status: string;
-    paymentStatus: string;
-    orderSource?: string;
-    pickupTiming?: string;
-    pickupDate?: string;
-    pickupTime?: string;
-    paidAt?: string;
-    alertPhase?: string;
-    initialAlertAcknowledgedAt?: string;
-    reminderAlertAcknowledgedAt?: string;
-  }>;
-};
+import { rememberStoreBusinessHours, storeOrderAlertEventName } from "../../../lib/store-polling-client";
 
 type StoreContextResponse = {
   access?: {
     role: string;
     canUseAllStoreView: boolean;
-    stores: Array<{ id: string; name: string }>;
+    stores: Array<{ id: string; name: string; businessHours?: unknown }>;
   };
   selectedStoreId?: string;
 };
@@ -86,23 +54,6 @@ function formatStoreClock(date: Date) {
   return { dateText, timeText };
 }
 
-function isNewPaidOrder(order: StoreOrderRealtimePayload["order"]) {
-  return order?.paymentStatus === "paid" &&
-    order.status === "new" &&
-    order.orderSource !== "store_pos" &&
-    Boolean(order.id);
-}
-
-function shouldAlertOrder(order: StoreOrderRealtimePayload["order"]) {
-  return isNewPaidOrder(order) &&
-    getStoreOrderAlertPhase(order ?? {}) !== "scheduled_waiting" &&
-    !isStoreOrderAlertAcknowledged(order ?? {});
-}
-
-function getAlertOrderKey(order: NonNullable<StoreOrderRealtimePayload["order"]>) {
-  return `${order.id}:${order.status}:${order.paymentStatus}:${getStoreOrderAlertPhase(order)}`;
-}
-
 export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "receiving" | "feedback" }) {
   const activeHref = active === "home"
     ? "/store"
@@ -120,8 +71,6 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
   const [hasPendingOrderAlert, setHasPendingOrderAlert] = useState(false);
   const [displayMenuOpen, setDisplayMenuOpen] = useState(false);
   const [mobileDisplayMenuOpen, setMobileDisplayMenuOpen] = useState(false);
-  const knownActiveOrderKeysRef = useRef<Set<string>>(new Set());
-  const hasInitializedOrderWatchRef = useRef(false);
   const storeMenuRef = useRef<HTMLDetailsElement | null>(null);
   const displayMenuRef = useRef<HTMLDivElement | null>(null);
   const mobileDisplayMenuRef = useRef<HTMLDivElement | null>(null);
@@ -178,6 +127,7 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
       const body = await response.json() as StoreContextResponse;
       if (!isMounted) return;
       setStoreContext(body);
+      rememberStoreBusinessHours(body.access?.stores);
       if (body.selectedStoreId) setStoredStoreSelection(body.selectedStoreId);
     }
     void loadStoreContext();
@@ -226,88 +176,10 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
 
   useEffect(() => {
     if (active === "orders") return;
-
-    hasInitializedOrderWatchRef.current = false;
-    let pusher: any;
-    let channels: any[] = [];
-    let activeListener = true;
-    let pollingTimer = 0;
-
-    const checkOrdersByPolling = async () => {
-      try {
-        const response = await fetch("/api/store/orders?watch=1", { cache: "no-store" });
-        if (!response.ok || !activeListener) return;
-        const body = await response.json() as StoreOrdersResponse;
-        const activeOrderIds = new Set(
-          (body.orders ?? [])
-            .filter(shouldAlertOrder)
-            .map(getAlertOrderKey)
-        );
-        if (!hasInitializedOrderWatchRef.current) {
-          knownActiveOrderKeysRef.current = activeOrderIds;
-          hasInitializedOrderWatchRef.current = true;
-          return;
-        }
-        const hasIncomingOrder = Array.from(activeOrderIds).some((orderId) => !knownActiveOrderKeysRef.current.has(orderId));
-        if (hasIncomingOrder) markOrderAlert();
-        knownActiveOrderKeysRef.current = activeOrderIds;
-      } catch {
-        // Keep the navigation usable even if the fallback poll fails.
-      }
-    };
-
-    const startPolling = () => {
-      if (pollingTimer) return;
-      void checkOrdersByPolling();
-      pollingTimer = window.setInterval(checkOrdersByPolling, 15000);
-    };
-    const stopPolling = () => {
-      if (!pollingTimer) return;
-      window.clearInterval(pollingTimer);
-      pollingTimer = 0;
-    };
-
-    const handleOrderCreated = ({ order }: StoreOrderRealtimePayload) => {
-      if (!shouldAlertOrder(order) || !order?.id || !order.status || !order.paymentStatus) return;
-      knownActiveOrderKeysRef.current.add(getAlertOrderKey(order));
-      hasInitializedOrderWatchRef.current = true;
-      markOrderAlert();
-    };
-
-    startPolling();
-    fetch("/api/store/realtime-config", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then(async (config) => {
-        if (!activeListener) return;
-        if (!config?.key || !config?.cluster || !config?.channels?.length) {
-          return;
-        }
-        const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
-        if (!activeListener) return;
-        pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
-        pusher.connection.bind("unavailable", startPolling);
-        pusher.connection.bind("failed", startPolling);
-        pusher.connection.bind("disconnected", startPolling);
-        channels = config.channels.map((channelName: string) => {
-          const channel = pusher.subscribe(channelName);
-          channel.bind("pusher:subscription_succeeded", stopPolling);
-          channel.bind("pusher:subscription_error", startPolling);
-          channel.bind("order.created", handleOrderCreated);
-          channel.bind("order.updated", handleOrderCreated);
-          return channel;
-        });
-      })
-      .catch(startPolling);
-
+    const handleOrderAlert = () => markOrderAlert();
+    window.addEventListener(storeOrderAlertEventName, handleOrderAlert);
     return () => {
-      activeListener = false;
-      stopPolling();
-      channels.forEach((channel) => {
-        channel.unbind("order.created", handleOrderCreated);
-        channel.unbind("order.updated", handleOrderCreated);
-        pusher?.unsubscribe(channel.name);
-      });
-      pusher?.disconnect();
+      window.removeEventListener(storeOrderAlertEventName, handleOrderAlert);
     };
   }, [active]);
 

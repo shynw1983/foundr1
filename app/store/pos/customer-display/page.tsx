@@ -5,6 +5,7 @@ import jsQR from "jsqr";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
+import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../../lib/store-polling-client";
 
 type StoreOption = {
   id: string;
@@ -662,11 +663,14 @@ export default function CustomerDisplayPage() {
       setMemberScannerOpen(true);
     }
 
-    void checkMemberScanCommand();
-    const interval = window.setInterval(checkMemberScanCommand, 5000);
+    const poller = createStoreFallbackPoller(checkMemberScanCommand, {
+      baseIntervalMs: 60_000,
+      storeIds: () => [selectedStoreIdRef.current].filter(Boolean)
+    });
+    poller.start({ immediate: true });
     return () => {
       active = false;
-      window.clearInterval(interval);
+      poller.stop();
     };
   }, [memberScannerOpen, realtimeStatus]);
 
@@ -682,6 +686,7 @@ export default function CustomerDisplayPage() {
     }
     const nextStoreId = body.selectedStoreId ?? storeId ?? "";
     setStores(body.access?.stores ?? []);
+    rememberStoreBusinessHours(body.access?.stores);
     setSelectedStoreId(nextStoreId);
     selectedStoreIdRef.current = nextStoreId;
     if (nextStoreId) setStoredStoreSelection(nextStoreId);
@@ -697,11 +702,12 @@ export default function CustomerDisplayPage() {
     selectedStoreIdRef.current = storeId;
     void load(storeId);
     if (realtimeStatus === "connected") return;
-    const interval = window.setInterval(() => {
+    const poller = createStoreFallbackPoller(() => {
       const currentStoreId = new URLSearchParams(window.location.search).get("storeId") || selectedStoreIdRef.current || getStoredStoreSelection();
-      void load(currentStoreId);
-    }, 15000);
-    return () => window.clearInterval(interval);
+      return load(currentStoreId);
+    }, { baseIntervalMs: 60_000, storeIds: () => [selectedStoreIdRef.current].filter(Boolean) });
+    poller.start();
+    return () => poller.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realtimeStatus]);
 

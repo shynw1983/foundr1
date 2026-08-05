@@ -12,7 +12,7 @@ export type StoreOrderAccess = {
   canViewSalesStats: boolean;
   canCancelOrders: boolean;
   canUseAllStoreView: boolean;
-  stores: Array<{ id: string; name: string }>;
+  stores: Array<{ id: string; name: string; businessHours: unknown }>;
   storeIds: string[];
 };
 
@@ -20,14 +20,14 @@ export async function getStoreOrderAccess(session: EmployeeSession): Promise<Sto
   const scope = await getSessionStoreScope(session);
   const stores = scope.allStores
     ? await sql`
-        select id::text, name
+        select id::text, name, business_hours as "businessHours"
         from stores
         where status = 'active'
         order by name
       `
     : scope.storeIds.length
       ? await sql`
-          select id::text, name
+          select id::text, name, business_hours as "businessHours"
           from stores
           where status = 'active'
             and id::text = any(${scope.storeIds})
@@ -41,7 +41,7 @@ export async function getStoreOrderAccess(session: EmployeeSession): Promise<Sto
     canViewSalesStats: salesStatsRoles.has(session.role),
     canCancelOrders: await roleHasPermission(session.role, "pos.refund"),
     canUseAllStoreView: allStoreViewRoles.has(session.role),
-    stores: stores as Array<{ id: string; name: string }>,
+    stores: stores as Array<{ id: string; name: string; businessHours: unknown }>,
     storeIds: scope.allStores ? [] : scope.storeIds
   };
 }
