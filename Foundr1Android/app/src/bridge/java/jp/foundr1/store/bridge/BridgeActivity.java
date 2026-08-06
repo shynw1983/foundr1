@@ -533,23 +533,31 @@ public class BridgeActivity extends Activity {
     }
 
     private void openUberOrders() {
-        Intent intent = getPackageManager().getLaunchIntentForPackage("com.uber.restaurants");
-        if (intent == null) {
-            Toast.makeText(this, "Uber Orders が見つかりません", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(intent);
+        openOrderApp("Uber Orders", "com.uber.restaurants");
     }
 
     private void openRocketNow() {
-        Intent intent = getPackageManager().getLaunchIntentForPackage("com.cpone.merchant");
+        openOrderApp("Rocket Now", "com.cpone.merchant");
+    }
+
+    private void openOrderApp(String label, String packageName) {
+        PackageManager packageManager = getPackageManager();
+        Intent intent = packageManager.getLaunchIntentForPackage(packageName);
         if (intent == null) {
-            Toast.makeText(this, "Rocket Now が見つかりません", Toast.LENGTH_SHORT).show();
-            return;
+            intent = new Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+                .setPackage(packageName);
+            if (intent.resolveActivity(packageManager) == null) {
+                Toast.makeText(this, label + " が見つかりません", Toast.LENGTH_SHORT).show();
+                return;
+            }
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(intent);
+        try {
+            startActivity(intent);
+        } catch (Exception error) {
+            Toast.makeText(this, label + " を開けませんでした", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void openBatterySettings() {
