@@ -24,6 +24,14 @@ final class BridgeConfig {
         return context.getString(R.string.bridge_default_endpoint);
     }
 
+    static String endpoint(Context context, String platform) {
+        String configured = endpoint(context);
+        if ("rocket_now".equals(platform)) {
+            return configured.replace("/uber-eats/events", "/rocket-now/events");
+        }
+        return configured;
+    }
+
     static String token(Context context) {
         String value = prefs(context).getString(KEY_TOKEN, "");
         return value == null ? "" : value.trim();

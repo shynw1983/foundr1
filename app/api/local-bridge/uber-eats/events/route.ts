@@ -10,6 +10,10 @@ import {
   toUberBridgeOperationalItem,
   type UberBridgeNode
 } from "../../../../../lib/uber-bridge";
+import {
+  parseRocketNowBridgeSnapshot,
+  toRocketNowBridgeOperationalItem
+} from "../../../../../lib/rocket-now-bridge";
 
 export const runtime = "nodejs";
 
@@ -44,13 +48,17 @@ function hasExactDuplicateBridgeItems(value: unknown) {
   return false;
 }
 
-async function resolveStoreBrand(storeId: string, parsedItemNames: string[]) {
+async function resolveStoreBrand(
+  storeId: string,
+  parsedItemNames: string[],
+  platform: "uber_eats" | "rocket_now"
+) {
   const sourceRows = await sql`
     select brands.id::text as "brandId", brands.name as "brandName"
     from store_sales_sources
     join brands on brands.name = store_sales_sources.brand_name
     where store_sales_sources.store_id::text = ${storeId}
-      and store_sales_sources.source_platform = 'uber_eats'
+      and store_sales_sources.source_platform = ${platform}
       and store_sales_sources.is_enabled = true
     order by store_sales_sources.sort_order
   `;
@@ -75,8 +83,11 @@ async function upsertOperationalOrder(input: {
   eventId: string;
   capturedAt: Date;
   nodes: UberBridgeNode[];
+  platform: "uber_eats" | "rocket_now";
 }) {
-  const parsed = parseUberBridgeSnapshot(input.nodes, input.capturedAt);
+  const parsed = input.platform === "rocket_now"
+    ? parseRocketNowBridgeSnapshot(input.nodes, input.capturedAt)
+    : parseUberBridgeSnapshot(input.nodes, input.capturedAt);
   if (!parsed || parsed.items.length === 0) {
     return { status: "incomplete", orderId: "", orderNo: parsed?.orderNo ?? "" };
   }
@@ -96,7 +107,11 @@ async function upsertOperationalOrder(input: {
 
   const { pickupDate, pickupTime } = dateParts(parsed.orderedAt);
   const sourceExternalId = `bridge:${input.storeId}:${pickupDate}:${parsed.orderNo}`;
-  const brand = await resolveStoreBrand(input.storeId, parsed.items.map((item) => item.name));
+  const brand = await resolveStoreBrand(
+    input.storeId,
+    parsed.items.map((item) => item.name),
+    input.platform
+  );
   const existingRows = await sql`
     select
       id::text,
@@ -105,7 +120,7 @@ async function upsertOperationalOrder(input: {
       coalesce((customer_summary #>> '{bridge,completeness}')::int, 0) as completeness,
       coalesce(customer_summary #> '{bridge,items}', '[]'::jsonb) as "bridgeItems"
     from store_customer_orders
-    where order_source = 'uber_eats'
+    where order_source = ${input.platform}
       and source_external_id = ${sourceExternalId}
     limit 1
   `;
@@ -128,7 +143,7 @@ async function upsertOperationalOrder(input: {
   const summary = {
     customer: { name: parsed.customerName },
     orderType: nextOrderType,
-    sourcePlatform: "uber_eats",
+    sourcePlatform: input.platform,
     sourceOrderNo: parsed.orderNo,
     bridge: {
       eventId: input.eventId,
@@ -163,12 +178,12 @@ async function upsertOperationalOrder(input: {
     values (
       ${brand?.brandId || null},
       ${input.storeId},
-      'uber_eats',
+      ${input.platform},
       ${sourceExternalId},
       ${parsed.orderNo},
       ${nextStatus},
       'paid',
-      'uber_eats',
+      ${input.platform},
       ${pickupDate},
       ${pickupTime},
       ${parsed.total},
@@ -212,7 +227,9 @@ async function upsertOperationalOrder(input: {
       order by sort_order, created_at
     `;
     for (let index = 0; index < parsed.items.length; index += 1) {
-      const item = toUberBridgeOperationalItem(parsed.items[index]);
+      const item = input.platform === "rocket_now"
+        ? toRocketNowBridgeOperationalItem(parsed.items[index] as Parameters<typeof toRocketNowBridgeOperationalItem>[0])
+        : toUberBridgeOperationalItem(parsed.items[index] as Parameters<typeof toUberBridgeOperationalItem>[0]);
       const existingItemId = existingItems[index]?.id ? String(existingItems[index].id) : "";
       if (existingItemId) {
         await sql`
@@ -394,7 +411,12 @@ export async function POST(request: Request) {
   const payload = source.payload && typeof source.payload === "object" ? source.payload : {};
   const capturedAtValue = Number(source.capturedAt);
   const capturedAt = Number.isFinite(capturedAtValue) ? new Date(capturedAtValue) : new Date();
-  const authorization = await authorizeLocalBridge(request, storeId);
+  let authorization = await authorizeLocalBridge(request, storeId, platform);
+  // The same physical tablet can run both channels. Existing Uber-enrolled devices
+  // remain valid for Rocket Now events from the same signed Bridge installation.
+  if (!authorization.authorized && platform === "rocket_now") {
+    authorization = await authorizeLocalBridge(request, storeId, "uber_eats");
+  }
   if (!authorization.authorized) {
     return Response.json({ error: "Unauthorized bridge token." }, { status: 401 });
   }
@@ -470,7 +492,8 @@ export async function POST(request: Request) {
     storeId,
     eventId,
     capturedAt,
-    nodes
+    nodes,
+    platform: platform === "rocket_now" ? "rocket_now" : "uber_eats"
   }).catch((error) => ({
     status: "error",
     orderId: "",

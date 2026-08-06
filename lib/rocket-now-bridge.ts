@@ -1,0 +1,210 @@
+import type {
+  UberBridgeNode,
+  UberBridgeOperationalItem
+} from "./uber-bridge";
+
+export type RocketNowBridgeModifier = {
+  name: string;
+  quantity: number;
+  price: number;
+};
+
+export type RocketNowBridgeItem = {
+  name: string;
+  quantity: number;
+  lineTotal: number;
+  modifiers: RocketNowBridgeModifier[];
+};
+
+export type ParsedRocketNowBridgeOrder = {
+  orderNo: string;
+  customerName: string;
+  orderedAt: Date;
+  status: "new" | "preparing" | "ready" | "completed" | "cancelled";
+  orderType: "delivery";
+  items: RocketNowBridgeItem[];
+  total: number;
+  completeness: number;
+};
+
+function clean(value: unknown) {
+  return String(value ?? "").replace(/[\t\r]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function sourceLabel(value: string) {
+  return value.split(/[｜|]/)[0]?.trim() || value.trim();
+}
+
+function parseMoney(value: unknown) {
+  const normalized = clean(value).replace(/[,，\s]/g, "");
+  const match = normalized.match(/(?:￥|¥)?(-?\d+)円?/);
+  return match ? Number(match[1]) : 0;
+}
+
+function parseQuantity(value: unknown) {
+  const match = clean(value).match(/(?:数量\s*)?(\d+)\s*(?:個|点|×|x|X)/);
+  return match ? Math.max(1, Number(match[1])) : 1;
+}
+
+function extractOrderNo(values: string[]) {
+  for (const value of values) {
+    const explicit = value.match(/(?:注文(?:管理)?番号|注文番号)\s*[:：#]?\s*([A-Z0-9]{6,12})/i);
+    if (explicit) return explicit[1].toUpperCase();
+  }
+  for (const value of values) {
+    const candidates = value.toUpperCase().match(/\b[A-Z0-9]{6}\b/g) ?? [];
+    const candidate = candidates.find((entry) => /[A-Z]/.test(entry) && /\d/.test(entry));
+    if (candidate) return candidate;
+  }
+  return "";
+}
+
+function parseOrderedAt(values: string[], capturedAt: Date) {
+  for (const value of values) {
+    const full = value.match(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日[^\d]*(午前|午後)?\s*(\d{1,2}):([0-5]\d)/);
+    if (!full) continue;
+    const year = Number(full[1] || capturedAt.getFullYear());
+    let hour = Number(full[5]);
+    if (full[4] === "午後" && hour < 12) hour += 12;
+    if (full[4] === "午前" && hour === 12) hour = 0;
+    const parsed = new Date(Date.UTC(year, Number(full[2]) - 1, Number(full[3]), hour - 9, Number(full[6])));
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  for (const value of values) {
+    const time = value.match(/(午前|午後)\s*(\d{1,2}):([0-5]\d)/);
+    if (!time) continue;
+    let hour = Number(time[2]);
+    if (time[1] === "午後" && hour < 12) hour += 12;
+    if (time[1] === "午前" && hour === 12) hour = 0;
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(capturedAt);
+    return new Date(`${parts}T${String(hour).padStart(2, "0")}:${time[3]}:00+09:00`);
+  }
+  return capturedAt;
+}
+
+const ignoredLine = /^(?:注文管理|処理中|完了|最新順|過去順|注文受諾|準備完了|準備遅延|注文キャンセル|調理時間変更|レシート出力|合計|小計|決済金額|お客様のご要望|店舗へのリクエスト|配達パートナー|ドライバー|お客様|注文番号|注文管理番号|税込)$/;
+
+function isMoneyLine(value: string) {
+  return /(?:￥|¥)\s*[\d,，]+|[\d,，]+\s*円/.test(value);
+}
+
+function isQuantityLine(value: string) {
+  return /^(?:数量\s*)?\d+\s*(?:個|点|×|x|X)$/.test(value);
+}
+
+function isCandidateName(value: string, orderNo: string) {
+  return value.length > 1
+    && value !== orderNo
+    && !ignoredLine.test(value)
+    && !isMoneyLine(value)
+    && !isQuantityLine(value)
+    && !/(?:午前|午後)?\s*\d{1,2}:\d{2}|\d{1,2}月\d{1,2}日/.test(value)
+    && !/^(?:あと)?\s*\d+\s*分/.test(value)
+    && !/^(?:注文|商品)\s*\d+\s*(?:件|点)$/.test(value)
+    && !/^(?:電話|印刷|閉じる|戻る)$/.test(value);
+}
+
+function parseItems(lines: string[], orderNo: string) {
+  const items: RocketNowBridgeItem[] = [];
+  const usedNames = new Set<string>();
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!isMoneyLine(lines[index])) continue;
+    if (lines.slice(Math.max(0, index - 2), index).some((line) => (
+      /^(?:合計|決済金額|注文金額|総額|小計)/.test(line)
+    ))) continue;
+    const amount = parseMoney(lines[index]);
+    if (amount <= 0) continue;
+    let quantityIndex = -1;
+    for (let cursor = index - 1; cursor >= Math.max(0, index - 3); cursor -= 1) {
+      if (isQuantityLine(lines[cursor])) {
+        quantityIndex = cursor;
+        break;
+      }
+    }
+    let nameIndex = quantityIndex >= 0 ? quantityIndex - 1 : index - 1;
+    while (nameIndex >= Math.max(0, index - 5) && !isCandidateName(lines[nameIndex], orderNo)) {
+      nameIndex -= 1;
+    }
+    if (nameIndex < 0) continue;
+    const name = lines[nameIndex];
+    if (usedNames.has(`${nameIndex}:${name}:${amount}`)) continue;
+    usedNames.add(`${nameIndex}:${name}:${amount}`);
+    const quantity = quantityIndex >= 0 ? parseQuantity(lines[quantityIndex]) : 1;
+    const previous = items.at(-1);
+    const looksLikeModifier = Boolean(previous)
+      && quantityIndex >= 0
+      && nameIndex > 0
+      && /追加|変更|選択|トッピング|辛さ|痺れ|しびれ|薬膳|カスタム/i.test(name);
+    if (looksLikeModifier && previous) {
+      previous.modifiers.push({ name, quantity, price: amount });
+      previous.lineTotal += amount;
+    } else {
+      items.push({ name, quantity, lineTotal: amount, modifiers: [] });
+    }
+  }
+  return items;
+}
+
+export function parseRocketNowBridgeSnapshot(
+  rawNodes: UberBridgeNode[],
+  capturedAt: Date
+): ParsedRocketNowBridgeOrder | null {
+  const lines = rawNodes.flatMap((node) => {
+    const raw = String(node.text || node.contentDescription || "");
+    return raw.split(/\n+/).map(clean).filter(Boolean);
+  });
+  const orderNo = extractOrderNo(lines);
+  if (!orderNo) return null;
+  const joined = lines.join("\n");
+  const items = parseItems(lines, orderNo);
+  const displayedTotalIndex = lines.findLastIndex((line) => /^(?:合計|決済金額|注文金額|総額)/.test(line));
+  const displayedTotal = displayedTotalIndex >= 0
+    ? lines.slice(displayedTotalIndex + 1, displayedTotalIndex + 4).map(parseMoney).find((value) => value > 0) ?? 0
+    : 0;
+  const derivedTotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
+  const total = displayedTotal || derivedTotal;
+  const status: ParsedRocketNowBridgeOrder["status"] = /キャンセル済み|注文キャンセル完了/.test(joined)
+    ? "cancelled"
+    : /配達完了|受け渡し完了|完了した注文/.test(joined)
+      ? "completed"
+      : /準備完了済み|配達パートナー.{0,12}(?:到着|待機)|受け渡し待ち/.test(joined)
+        ? "ready"
+        : /準備完了|準備遅延|調理中|配達パートナー.{0,12}(?:検索|割り当て)/.test(joined)
+          ? "preparing"
+          : "new";
+  const customerNameLine = lines.find((line) => /(?:様|さん)$/.test(line) && isCandidateName(line, orderNo));
+  const modifierCount = items.reduce((sum, item) => sum + item.modifiers.length, 0);
+  return {
+    orderNo,
+    customerName: customerNameLine?.replace(/(?:様|さん)$/, "").trim() ?? "",
+    orderedAt: parseOrderedAt(lines, capturedAt),
+    status,
+    orderType: "delivery",
+    items,
+    total,
+    completeness: (items.length * 100) + (modifierCount * 10) + (total > 0 ? 5 : 0) + 2
+  };
+}
+
+export function toRocketNowBridgeOperationalItem(
+  item: RocketNowBridgeItem
+): UberBridgeOperationalItem {
+  const toppingLabels = item.modifiers.flatMap((modifier) => (
+    Array.from({ length: Math.max(1, modifier.quantity) }, () => sourceLabel(modifier.name))
+  ));
+  const isMaamaa = /マーラータン|麻辣[烫湯燙]/.test(item.name)
+    || item.modifiers.some((modifier) => /辛さ|痺れ|薬膳|麺/.test(modifier.name));
+  return {
+    itemName: sourceLabel(item.name),
+    quantity: Math.max(1, Math.round(item.quantity)),
+    amount: Math.max(0, Math.round(item.lineTotal)),
+    sizeKey: isMaamaa ? "maamaa_buildable" : "",
+    optionLabel: toppingLabels.join(", "),
+    toppingLabels
+  };
+}

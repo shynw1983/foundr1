@@ -58,8 +58,12 @@ const readAccessibilityHealth = () => {
   const crashedLine = dump.match(/Crashed services:\{([^\n]*)/i)?.[1] || "";
   return {
     enabled: readEnabledComponents().includes(component),
-    bound: boundLine.includes("Foundr1 Bridge") || boundLine.includes("jp.foundr1.bridge"),
-    crashed: crashedLine.includes("Foundr1 Bridge") || crashedLine.includes("jp.foundr1.bridge"),
+    bound: boundLine.includes("Foundr1 Bridge")
+      || boundLine.includes("Foundr1 Delivery Bridge")
+      || boundLine.includes("jp.foundr1.bridge"),
+    crashed: crashedLine.includes("Foundr1 Bridge")
+      || crashedLine.includes("Foundr1 Delivery Bridge")
+      || crashedLine.includes("jp.foundr1.bridge"),
   };
 };
 

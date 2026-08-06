@@ -30,6 +30,7 @@ import java.util.Set;
 public class UberAccessibilityService extends AccessibilityService {
     private static final String TAG = "Foundr1BridgeRecovery";
     private static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
+    private static final String ROCKET_NOW_PACKAGE = "com.cpone.merchant";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String pendingPackageName = "";
     private String pendingText = "";
@@ -52,6 +53,15 @@ public class UberAccessibilityService extends AccessibilityService {
     private final Runnable inventoryCaptureRunnable = () -> runGuarded(
         "inventory_capture",
         this::capturePendingInventoryCurrentState
+    );
+    private final Map<String, JSONObject> rocketAccumulatedNodes = new LinkedHashMap<>();
+    private String rocketActiveOrderCode = "";
+    private String rocketLastUploadedSignature = "";
+    private long rocketLastUploadedAt = 0L;
+    private int rocketScrollSteps = 0;
+    private final Runnable rocketUploadRunnable = () -> runGuarded(
+        "rocket_order_upload",
+        this::uploadRocketOrder
     );
     private String activeCommandId = "";
     private int commandAttempts = 0;
@@ -142,6 +152,10 @@ public class UberAccessibilityService extends AccessibilityService {
     private void handleAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
         String packageName = event.getPackageName().toString();
+        if (looksLikeRocketNow(packageName)) {
+            handleRocketNowAccessibilityEvent(packageName);
+            return;
+        }
         if (overlayController != null) {
             if (looksLikeUber(packageName)) {
                 overlayController.setUberVisible(true);
@@ -519,6 +533,7 @@ public class UberAccessibilityService extends AccessibilityService {
         handler.removeCallbacks(commandRunnable);
         handler.removeCallbacks(commandPollRunnable);
         handler.removeCallbacks(inventoryCaptureRunnable);
+        handler.removeCallbacks(rocketUploadRunnable);
         if (recoveryReceiverRegistered) {
             try {
                 unregisterReceiver(recoveryReceiver);
@@ -2129,5 +2144,138 @@ public class UberAccessibilityService extends AccessibilityService {
 
     private boolean looksLikeUber(String packageName) {
         return UBER_ORDERS_PACKAGE.equals(packageName);
+    }
+
+    private boolean looksLikeRocketNow(String packageName) {
+        return ROCKET_NOW_PACKAGE.equals(packageName);
+    }
+
+    private void handleRocketNowAccessibilityEvent(String packageName) {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null || !looksLikeRocketNow(value(root.getPackageName()))) {
+            if (root != null) root.recycle();
+            return;
+        }
+        StringBuilder builder = new StringBuilder();
+        JSONArray nodes = new JSONArray();
+        collectNodes(root, "0", builder, nodes, new HashSet<>());
+        root.recycle();
+        String orderCode = extractRocketOrderCode(nodes);
+        if (orderCode.isEmpty() || !containsRocketOrderDetails(nodes)) return;
+        if (!orderCode.equals(rocketActiveOrderCode)) {
+            rocketActiveOrderCode = orderCode;
+            rocketAccumulatedNodes.clear();
+            rocketScrollSteps = 0;
+            rocketLastUploadedSignature = "";
+        }
+        mergeRocketNodes(nodes);
+        handler.removeCallbacks(rocketUploadRunnable);
+        handler.postDelayed(rocketUploadRunnable, 1200L);
+    }
+
+    private boolean containsRocketOrderDetails(JSONArray nodes) {
+        StringBuilder combined = new StringBuilder();
+        for (int index = 0; index < nodes.length(); index += 1) {
+            JSONObject node = nodes.optJSONObject(index);
+            if (node == null) continue;
+            combined.append(node.optString("text"));
+            combined.append('\n');
+            combined.append(node.optString("contentDescription"));
+            combined.append('\n');
+        }
+        String value = combined.toString();
+        return value.contains("注文受諾")
+            || value.contains("調理時間変更")
+            || value.contains("準備完了")
+            || value.contains("準備遅延")
+            || value.contains("注文キャンセル")
+            || value.contains("決済金額")
+            || value.contains("お客様のご要望");
+    }
+
+    private String extractRocketOrderCode(JSONArray nodes) {
+        for (int index = 0; index < nodes.length(); index += 1) {
+            JSONObject node = nodes.optJSONObject(index);
+            if (node == null) continue;
+            String candidate = node.optString("text") + "\n" + node.optString("contentDescription");
+            java.util.regex.Matcher explicit = java.util.regex.Pattern.compile(
+                "(?:注文(?:管理)?番号|注文番号)\\s*[:：#]?\\s*([A-Z0-9]{6,12})",
+                java.util.regex.Pattern.CASE_INSENSITIVE
+            ).matcher(candidate);
+            if (explicit.find()) return explicit.group(1).toUpperCase(java.util.Locale.US);
+            java.util.regex.Matcher compact = java.util.regex.Pattern.compile("\\b[A-Z0-9]{6}\\b")
+                .matcher(candidate.toUpperCase(java.util.Locale.US));
+            while (compact.find()) {
+                String value = compact.group();
+                if (value.matches(".*[A-Z].*") && value.matches(".*[0-9].*")) return value;
+            }
+        }
+        return "";
+    }
+
+    private void mergeRocketNodes(JSONArray nodes) {
+        for (int index = 0; index < nodes.length(); index += 1) {
+            JSONObject node = nodes.optJSONObject(index);
+            if (node == null) continue;
+            String signature = node.optString("path")
+                + "|" + node.optString("text")
+                + "|" + node.optString("contentDescription");
+            rocketAccumulatedNodes.put(signature, node);
+        }
+    }
+
+    private JSONArray rocketAccumulatedNodeArray() {
+        JSONArray result = new JSONArray();
+        for (JSONObject node : rocketAccumulatedNodes.values()) result.put(node);
+        return result;
+    }
+
+    private void uploadRocketOrder() {
+        if (rocketActiveOrderCode.isEmpty() || rocketAccumulatedNodes.isEmpty()) return;
+        JSONArray nodes = rocketAccumulatedNodeArray();
+        String signature = rocketActiveOrderCode + ":" + nodes.length();
+        long now = System.currentTimeMillis();
+        if (!signature.equals(rocketLastUploadedSignature) || now - rocketLastUploadedAt > 30000L) {
+            try {
+                JSONObject payload = new JSONObject();
+                payload.put("orderCode", rocketActiveOrderCode);
+                payload.put("nodes", nodes);
+                payload.put("nodeCount", nodes.length());
+                BridgeUploader.upload(
+                    this,
+                    "rocket_now",
+                    "accessibility_order",
+                    ROCKET_NOW_PACKAGE,
+                    payload
+                );
+                rocketLastUploadedSignature = signature;
+                rocketLastUploadedAt = now;
+            } catch (Exception ignored) {
+            }
+        }
+        if (rocketScrollSteps >= 6) return;
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null || !looksLikeRocketNow(value(root.getPackageName()))) {
+            if (root != null) root.recycle();
+            return;
+        }
+        boolean scrolled = scrollRocketOrderForward(root);
+        root.recycle();
+        if (scrolled) rocketScrollSteps += 1;
+    }
+
+    private boolean scrollRocketOrderForward(AccessibilityNodeInfo node) {
+        if (node == null) return false;
+        if (node.isScrollable() && node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) {
+            return true;
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            boolean scrolled = scrollRocketOrderForward(child);
+            child.recycle();
+            if (scrolled) return true;
+        }
+        return false;
     }
 }

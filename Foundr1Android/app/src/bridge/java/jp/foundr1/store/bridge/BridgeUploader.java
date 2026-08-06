@@ -27,11 +27,32 @@ final class BridgeUploader {
     }
 
     static void upload(Context context, String kind, String packageName, JSONObject payload) {
-        upload(context, kind, packageName, payload, null);
+        upload(context, "uber_eats", kind, packageName, payload, null);
     }
 
     static void upload(
         Context context,
+        String kind,
+        String packageName,
+        JSONObject payload,
+        UploadCallback callback
+    ) {
+        upload(context, "uber_eats", kind, packageName, payload, callback);
+    }
+
+    static void upload(
+        Context context,
+        String platform,
+        String kind,
+        String packageName,
+        JSONObject payload
+    ) {
+        upload(context, platform, kind, packageName, payload, null);
+    }
+
+    static void upload(
+        Context context,
+        String platform,
         String kind,
         String packageName,
         JSONObject payload,
@@ -42,8 +63,8 @@ final class BridgeUploader {
             boolean success = false;
             try {
                 flushPending(appContext);
-                JSONObject body = buildBody(appContext, kind, packageName, payload);
-                SendResult result = send(appContext, body);
+                JSONObject body = buildBody(appContext, platform, kind, packageName, payload);
+                SendResult result = send(appContext, platform, body);
                 success = result == SendResult.SUCCESS;
                 if (result == SendResult.RETRY && shouldQueue(kind)) {
                     BridgeUploadQueue.get(appContext).enqueue(body);
@@ -70,10 +91,16 @@ final class BridgeUploader {
         });
     }
 
-    private static JSONObject buildBody(Context context, String kind, String packageName, JSONObject payload) throws Exception {
+    private static JSONObject buildBody(
+        Context context,
+        String platform,
+        String kind,
+        String packageName,
+        JSONObject payload
+    ) throws Exception {
         JSONObject body = new JSONObject();
         body.put("clientEventId", UUID.randomUUID().toString());
-        body.put("platform", "uber_eats");
+        body.put("platform", platform);
         body.put("kind", kind);
         body.put("packageName", packageName == null ? "" : packageName);
         body.put("storeId", BridgeConfig.storeId(context));
@@ -83,11 +110,11 @@ final class BridgeUploader {
         return body;
     }
 
-    private static SendResult send(Context context, JSONObject body) {
+    private static SendResult send(Context context, String platform, JSONObject body) {
         HttpURLConnection connection = null;
         try {
             byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
-            URL url = new URL(BridgeConfig.endpoint(context));
+            URL url = new URL(BridgeConfig.endpoint(context, platform));
             connection = (HttpURLConnection) url.openConnection();
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(15000);
@@ -125,7 +152,7 @@ final class BridgeUploader {
         BridgeUploadQueue queue = BridgeUploadQueue.get(context);
         for (BridgeUploadQueue.Item item : queue.items()) {
             queue.noteAttempt(item.id);
-            SendResult result = send(context, item.body);
+            SendResult result = send(context, item.body.optString("platform", "uber_eats"), item.body);
             if (result == SendResult.SUCCESS) {
                 queue.delete(item.id);
                 BridgeHealthState.recordUploadSuccess(context);

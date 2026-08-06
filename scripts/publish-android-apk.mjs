@@ -26,7 +26,7 @@ const appConfigs = {
     legacyFileName: "foundr1-staff-latest.apk"
   },
   bridge: {
-    title: "Foundr1 Bridge for Uber Eats",
+    title: "Foundr1 Delivery Bridge",
     packageName: "jp.foundr1.bridge",
     legacyFileName: "foundr1-bridge-latest.apk",
     initialVersionName: "1.0.0"

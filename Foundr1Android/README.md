@@ -6,7 +6,7 @@ This Android project builds four WebView shell apps and one local integration br
 - `os`: `Foundr1 OS`, opens `https://www.foundr1.jp/os`
 - `member`: `Foundr1 Member`, opens `https://www.foundr1.jp/member`
 - `staff`: `Foundr1 Staff`, opens `https://www.foundr1.jp/staff`
-- `bridge`: `Foundr1 Bridge for Uber Eats`, listens to Uber Eats Orders on the same tablet and uploads structured order snapshots to Foundr1 OS
+- `bridge`: `Foundr1 Delivery Bridge`, listens to Uber Eats Orders and Rocket Now on the same tablet and uploads structured order snapshots to Foundr1 OS
 
 All variants expose this JavaScript bridge to the web app:
 
@@ -53,24 +53,26 @@ Command-line builds:
 ./gradlew assembleBridgeDebug
 ```
 
-## Foundr1 Bridge for Uber Eats
+## Foundr1 Delivery Bridge
 
 The `bridge` variant runs independently on the Android tablet after initial setup. A computer and USB connection are not required during normal operation.
 
 1. Install `app/build/outputs/apk/bridge/debug/app-bridge-debug.apk` or a signed release build.
-2. Open `Foundr1 Bridge for Uber Eats`.
+2. Open `Foundr1 Delivery Bridge`.
 3. Keep the default endpoint:
    `https://www.foundr1.jp/api/local-bridge/uber-eats/events`
 4. Enter the server-side `LOCAL_BRIDGE_TOKEN`.
 5. Enter the Foundr1 OS store UUID and a recognizable device name.
-6. Save, then enable notification access and the Foundr1 Bridge for Uber Eats accessibility service.
-7. Exclude Foundr1 Bridge for Uber Eats and Uber Eats Orders from battery optimization.
+6. Save, then enable notification access and the Foundr1 Delivery Bridge accessibility service.
+7. Exclude Foundr1 Delivery Bridge, Uber Eats Orders, and Rocket Now from battery optimization.
 
 The bridge never presses Uber accept, deny, or cancellation actions. It can press the ready action only for a matching order after Foundr1 OS explicitly issues a kitchen-completion command. A new-order notification opens Uber Eats Orders and directly signals the accessibility recovery worker; it does not depend on Android showing a visible notification banner or creating a new window event. While recovery is pending, the foreground service repeats that internal signal every two seconds. The accessibility service returns to the order overview, opens each unread active-order card, scrolls its detail area to collect off-screen modifiers, uploads the structured snapshot, and returns to the overview. Multiple simultaneous orders are processed one at a time and tracked by order number so the same active card is not reopened during the recovery batch. Failed order uploads are retained locally and retried when connectivity returns.
 
 Bridge releases are published with `npm run apk:bridge`. The first managed release is `1.0.0` with Android `versionCode` 1. Each later publication increments `versionCode` and the semantic patch version, keeps the versioned APK, and refreshes the latest download links and metadata under `public/downloads/bridge`.
 
 Foundr1 OS deduplicates bridge orders by store, local order date, and Uber order number. Only recent order-detail screens are imported, so browsing older order history does not create operational orders.
+
+Rocket Now notifications open the matching merchant-app order screen. The same accessibility service reads the six-character Rocket Now order number, items, options, quantities, customer request, amount, and operational status, then imports the order with `order_source = 'rocket_now'`. It never accepts or cancels a Rocket Now order automatically.
 
 ## Test Printer
 

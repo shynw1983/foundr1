@@ -135,7 +135,7 @@ public class BridgeActivity extends Activity {
         headingParams.leftMargin = dp(12);
         header.addView(heading, headingParams);
         heading.addView(text("Foundr1 Bridge", 23, COLOR_INK, Typeface.BOLD));
-        heading.addView(text("for Uber Eats  ·  v" + BridgeStatusReporter.versionName(this), 13, COLOR_MUTED, Typeface.NORMAL));
+        heading.addView(text("Uber Eats + Rocket Now  ·  v" + BridgeStatusReporter.versionName(this), 13, COLOR_MUTED, Typeface.NORMAL));
         page.addView(header);
 
         statusCard = new LinearLayout(this);
@@ -154,7 +154,7 @@ public class BridgeActivity extends Activity {
         LinearLayout chain = section(page, "注文連携");
         LinearLayout chainRow = new LinearLayout(this);
         chainRow.setGravity(Gravity.CENTER_VERTICAL);
-        uberStage = chainStage("Uber Orders");
+        uberStage = chainStage("注文チャネル");
         bridgeStage = chainStage("Bridge");
         osStage = chainStage("Foundr1 OS");
         chainRow.addView(uberStage, weighted());
@@ -166,7 +166,7 @@ public class BridgeActivity extends Activity {
 
         LinearLayout checks = section(page, "システム状態");
         accessibilityRow = statusRow(checks, "画面読み取り");
-        notificationRow = statusRow(checks, "Uber 通知読み取り");
+        notificationRow = statusRow(checks, "注文通知読み取り");
         realtimeRow = statusRow(checks, "Foundr1 OS 接続");
         batteryRow = statusRow(checks, "バックグラウンド保護");
 
@@ -178,6 +178,7 @@ public class BridgeActivity extends Activity {
         activity.addView(queueSummary);
 
         addPrimaryButton(page, "Uber Orders を開く", view -> openUberOrders());
+        addSecondaryButton(page, "Rocket Now を開く", view -> openRocketNow());
         selfTestButton = addSecondaryButton(page, "接続を診断", view -> runSelfTest());
 
         Button advancedButton = addTextButton(page, "管理者設定を表示", null);
@@ -243,7 +244,7 @@ public class BridgeActivity extends Activity {
             problem = "画面読み取りを有効にしてください";
         } else if (!notificationAuthorized) {
             level = "error";
-            problem = "Uber の通知アクセスを有効にしてください";
+            problem = "注文通知の読み取りを有効にしてください";
         } else if (!configured) {
             level = "error";
             problem = "店舗の接続設定が未完了です";
@@ -258,7 +259,7 @@ public class BridgeActivity extends Activity {
             : "attention".equals(level) ? Color.rgb(251, 246, 233) : Color.rgb(253, 237, 240);
         overallTitle.setText("healthy".equals(level) ? "✓ 注文連携は正常です" : "attention".equals(level) ? "△ 確認中の項目があります" : "！注文連携を確認してください");
         overallTitle.setTextColor(accent);
-        overallDetail.setText("healthy".equals(level) ? "Uber Orders から Foundr1 OS まで接続されています" : problem);
+        overallDetail.setText("healthy".equals(level) ? "Uber Eats / Rocket Now から Foundr1 OS まで接続されています" : problem);
         statusCard.setBackground(cardBackground(soft, accent, 14));
         getWindow().setStatusBarColor(accent);
         getWindow().setNavigationBarColor(accent);
@@ -307,7 +308,7 @@ public class BridgeActivity extends Activity {
         repairButton.setVisibility(View.VISIBLE);
         if (!notificationsAllowed) repairButton.setText("Bridge の通知を許可する");
         else if (!accessibilityAuthorized) repairButton.setText("画面読み取りを有効にする");
-        else if (!notificationAuthorized) repairButton.setText("Uber 通知読み取りを有効にする");
+        else if (!notificationAuthorized) repairButton.setText("注文通知読み取りを有効にする");
         else if (!health.notificationConnected && isXiaomi()) repairButton.setText("Xiaomi の自動起動を確認する");
         else if (!health.notificationConnected) repairButton.setText("通知読み取りを再接続する");
         else if (!batteryProtected) repairButton.setText("バックグラウンド制限を解除する");
@@ -535,6 +536,16 @@ public class BridgeActivity extends Activity {
         Intent intent = getPackageManager().getLaunchIntentForPackage("com.uber.restaurants");
         if (intent == null) {
             Toast.makeText(this, "Uber Orders が見つかりません", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+    }
+
+    private void openRocketNow() {
+        Intent intent = getPackageManager().getLaunchIntentForPackage("com.cpone.merchant");
+        if (intent == null) {
+            Toast.makeText(this, "Rocket Now が見つかりません", Toast.LENGTH_SHORT).show();
             return;
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);

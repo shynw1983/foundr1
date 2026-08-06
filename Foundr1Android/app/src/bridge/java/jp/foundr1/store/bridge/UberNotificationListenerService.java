@@ -8,6 +8,7 @@ import org.json.JSONObject;
 
 public class UberNotificationListenerService extends NotificationListenerService {
     private static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
+    private static final String ROCKET_NOW_PACKAGE = "com.cpone.merchant";
     private static long lastRebindRequestAt = 0L;
 
     static synchronized void requestConnection(android.content.Context context) {
@@ -48,21 +49,31 @@ public class UberNotificationListenerService extends NotificationListenerService
 
     private void handleNotificationPosted(StatusBarNotification sbn) {
         String packageName = sbn == null ? "" : sbn.getPackageName();
-        if (!looksLikeUber(packageName)) return;
+        boolean isUber = looksLikeUber(packageName);
+        boolean isRocketNow = ROCKET_NOW_PACKAGE.equals(packageName);
+        if (!isUber && !isRocketNow) return;
         Notification notification = sbn.getNotification();
         if (notification == null || notification.extras == null) return;
         String title = stringExtra(notification, Notification.EXTRA_TITLE);
         String text = stringExtra(notification, Notification.EXTRA_TEXT);
         String bigText = stringExtra(notification, Notification.EXTRA_BIG_TEXT);
-        int recoveryRequestedOrders = UberRecoveryState.requestFromNotification(
-            this,
-            sbn.getKey(),
-            sbn.getPostTime(),
-            title,
-            text,
-            bigText,
-            notification
-        );
+        int recoveryRequestedOrders = 0;
+        if (isUber) {
+            recoveryRequestedOrders = UberRecoveryState.requestFromNotification(
+                this,
+                sbn.getKey(),
+                sbn.getPostTime(),
+                title,
+                text,
+                bigText,
+                notification
+            );
+        } else if (looksLikeRocketOrderNotification(title, text, bigText)) {
+            try {
+                if (notification.contentIntent != null) notification.contentIntent.send();
+            } catch (Exception ignored) {
+            }
+        }
         try {
             JSONObject payload = new JSONObject();
             payload.put("title", title);
@@ -71,7 +82,13 @@ public class UberNotificationListenerService extends NotificationListenerService
             payload.put("subText", stringExtra(notification, Notification.EXTRA_SUB_TEXT));
             payload.put("postTime", sbn.getPostTime());
             payload.put("recoveryRequestedOrders", recoveryRequestedOrders);
-            BridgeUploader.upload(this, "notification", packageName, payload);
+            BridgeUploader.upload(
+                this,
+                isRocketNow ? "rocket_now" : "uber_eats",
+                "notification",
+                packageName,
+                payload
+            );
         } catch (Exception ignored) {
         }
     }
@@ -83,5 +100,12 @@ public class UberNotificationListenerService extends NotificationListenerService
 
     private boolean looksLikeUber(String packageName) {
         return UBER_ORDERS_PACKAGE.equals(packageName);
+    }
+
+    private boolean looksLikeRocketOrderNotification(String title, String text, String bigText) {
+        String combined = (title + "\n" + text + "\n" + bigText).toLowerCase();
+        return combined.contains("注文")
+            || combined.contains("order")
+            || combined.contains("rocket nowから");
     }
 }
