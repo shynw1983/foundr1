@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { NotificationMenu } from "./NotificationMenu";
 import { OsLanguagePicker } from "./OsTranslationProvider";
 import { OsStoreContextPicker } from "./OsStoreContextPicker";
-import { QuickInventoryDashboard } from "./QuickInventoryDashboard";
+import { QuickOperationsDashboard } from "./QuickOperationsDashboard";
 import { getCachedCurrentEmployee, loadCurrentEmployee, type CurrentEmployee } from "./currentEmployeeStore";
 import { useCloseOnOutside } from "./useCloseOnOutside";
 
@@ -78,7 +78,7 @@ export function UserBadge({
     <div className="user-panel">
       <OsStoreContextPicker />
       {showQuickActions && isOsSurface && ["owner", "manager", "store_owner", "store_manager"].includes(employee.role)
-        ? <QuickInventoryDashboard />
+        ? <QuickOperationsDashboard />
         : null}
       <details className="account-menu" ref={accountMenuRef}>
         <summary className="user-badge" title={`ログインID: ${employee.loginId}`}>
