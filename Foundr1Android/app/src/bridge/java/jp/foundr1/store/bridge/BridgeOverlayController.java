@@ -14,7 +14,7 @@ import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** A small, non-interactive status mark shown only over Uber Orders. */
+/** A small, non-interactive status mark shown over supported delivery apps. */
 final class BridgeOverlayController {
     private static final String TAG = "Foundr1BridgeOverlay";
     private static final int COLOR_SURFACE = Color.argb(224, 28, 31, 30);
@@ -28,19 +28,19 @@ final class BridgeOverlayController {
     private TextView dot;
     private TextView label;
     private boolean attached = false;
-    private boolean uberVisible = false;
+    private boolean orderAppVisible = false;
 
     BridgeOverlayController(AccessibilityService service) {
         this.service = service;
         this.windowManager = (WindowManager) service.getSystemService(Context.WINDOW_SERVICE);
     }
 
-    void setUberVisible(boolean visible) {
-        if (uberVisible == visible && attached == visible) {
+    void setOrderAppVisible(boolean visible) {
+        if (orderAppVisible == visible && attached == visible) {
             if (visible) updateHealth();
             return;
         }
-        uberVisible = visible;
+        orderAppVisible = visible;
         if (visible) show();
         else hide();
     }
@@ -62,7 +62,7 @@ final class BridgeOverlayController {
     }
 
     void destroy() {
-        uberVisible = false;
+        orderAppVisible = false;
         hide();
     }
 

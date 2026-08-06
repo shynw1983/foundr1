@@ -152,22 +152,22 @@ public class UberAccessibilityService extends AccessibilityService {
     private void handleAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
         String packageName = event.getPackageName().toString();
+        if (overlayController != null) {
+            if (looksLikeOrderApp(packageName)) {
+                overlayController.setOrderAppVisible(true);
+            } else if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                boolean orderAppActive = false;
+                AccessibilityNodeInfo activeRoot = getRootInActiveWindow();
+                if (activeRoot != null) {
+                    orderAppActive = looksLikeOrderApp(value(activeRoot.getPackageName()));
+                    activeRoot.recycle();
+                }
+                overlayController.setOrderAppVisible(orderAppActive);
+            }
+        }
         if (looksLikeRocketNow(packageName)) {
             handleRocketNowAccessibilityEvent(packageName);
             return;
-        }
-        if (overlayController != null) {
-            if (looksLikeUber(packageName)) {
-                overlayController.setUberVisible(true);
-            } else if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-                boolean uberActive = false;
-                AccessibilityNodeInfo activeRoot = getRootInActiveWindow();
-                if (activeRoot != null) {
-                    uberActive = looksLikeUber(value(activeRoot.getPackageName()));
-                    activeRoot.recycle();
-                }
-                overlayController.setUberVisible(uberActive);
-            }
         }
         if (!looksLikeUber(packageName)) return;
         boolean commandActive = BridgeCommandState.current(this) != null;
@@ -499,7 +499,7 @@ public class UberAccessibilityService extends AccessibilityService {
         overlayController = new BridgeOverlayController(this);
         AccessibilityNodeInfo activeRoot = getRootInActiveWindow();
         if (activeRoot != null) {
-            overlayController.setUberVisible(looksLikeUber(value(activeRoot.getPackageName())));
+            overlayController.setOrderAppVisible(looksLikeOrderApp(value(activeRoot.getPackageName())));
             activeRoot.recycle();
         }
         if (!recoveryReceiverRegistered) {
@@ -2148,6 +2148,10 @@ public class UberAccessibilityService extends AccessibilityService {
 
     private boolean looksLikeRocketNow(String packageName) {
         return ROCKET_NOW_PACKAGE.equals(packageName);
+    }
+
+    private boolean looksLikeOrderApp(String packageName) {
+        return looksLikeUber(packageName) || looksLikeRocketNow(packageName);
     }
 
     private void handleRocketNowAccessibilityEvent(String packageName) {
