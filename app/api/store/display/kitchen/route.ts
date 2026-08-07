@@ -26,7 +26,7 @@ type KitchenMenuCandidate = MenuDisplayNameCandidate & {
   optionKey?: string;
 };
 
-async function getKitchenTasks(storeId: string, area = "", businessHours: unknown = {}) {
+async function getKitchenTasks(storeId: string, area: string, businessHours: unknown) {
   const businessDay = getKitchenBusinessDayWindow(businessHours);
   const [rows, areas, settingsRows] = await Promise.all([sql`
     select
@@ -284,6 +284,7 @@ export async function PATCH(request: Request) {
   const access = await getStoreOrderAccess(session);
   const storeFilter = getScopedStoreFilter(access, body.storeId) ?? access.stores[0]?.id ?? "";
   if (storeFilter === "__forbidden__" || !storeFilter) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const selectedStore = access.stores.find((store) => store.id === storeFilter);
 
   const taskId = normalizeText(body.taskId);
   const requestedOrderId = normalizeText(body.orderId);
@@ -313,7 +314,11 @@ export async function PATCH(request: Request) {
     `;
     if (!extendedRows[0]) return Response.json({ error: "時間を調整できる注文が見つかりません。" }, { status: 409 });
     await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(requestedOrderId));
-    const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(body.area));
+    const { tasks, areas, displayLanguage } = await getKitchenTasks(
+      storeFilter,
+      normalizeText(body.area),
+      selectedStore?.businessHours
+    );
     return Response.json({
       ok: true,
       tasks,
@@ -333,7 +338,11 @@ export async function PATCH(request: Request) {
     `;
     if (!completedRows[0]) return Response.json({ error: "受け渡し可能な注文が見つかりません。" }, { status: 409 });
     await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(requestedOrderId));
-    const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(body.area));
+    const { tasks, areas, displayLanguage } = await getKitchenTasks(
+      storeFilter,
+      normalizeText(body.area),
+      selectedStore?.businessHours
+    );
     return Response.json({ ok: true, tasks, areas, displayLanguage, serverNow: new Date().toISOString() });
   }
   if (!taskId || !["new", "preparing", "ready"].includes(status)) return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
@@ -351,6 +360,10 @@ export async function PATCH(request: Request) {
     await reconcileUberReadyCommand(orderId);
     await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(orderId));
   }
-  const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(body.area));
+  const { tasks, areas, displayLanguage } = await getKitchenTasks(
+    storeFilter,
+    normalizeText(body.area),
+    selectedStore?.businessHours
+  );
   return Response.json({ ok: true, tasks, areas, displayLanguage, serverNow: new Date().toISOString() });
 }
