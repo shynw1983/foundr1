@@ -1,16 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/loyalty/birthday-coupons",
+      "path": "/api/cron/daily-maintenance",
       "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/cron/system-usage",
-      "schedule": "20 1 * * *"
-    },
-    {
-      "path": "/api/cron/sales-audit",
-      "schedule": "10 1 * * *"
     },
     {
       "path": "/api/cron/business-calendar",

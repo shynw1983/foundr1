@@ -56,7 +56,7 @@ export async function requireOsSession(): Promise<EmployeeSession | null> {
       where employee_sessions.id = active_session.session_id
         and (
           employee_sessions.last_seen_at is null
-          or employee_sessions.last_seen_at < now() - interval '1 minute'
+          or employee_sessions.last_seen_at < now() - interval '5 minutes'
         )
       returning employee_sessions.id
     ), touched_employee as (
@@ -66,7 +66,7 @@ export async function requireOsSession(): Promise<EmployeeSession | null> {
       where employees.id = active_session.id
         and (
           employees.last_seen_at is null
-          or employees.last_seen_at < now() - interval '1 minute'
+          or employees.last_seen_at < now() - interval '5 minutes'
         )
       returning employees.id
     )
@@ -90,7 +90,7 @@ export async function touchEmployeeLastSeen(employeeId: string) {
     where id = ${employeeId}
       and (
         last_seen_at is null
-        or last_seen_at < now() - interval '1 minute'
+        or last_seen_at < now() - interval '5 minutes'
       )
   `;
 }

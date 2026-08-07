@@ -3,6 +3,7 @@
 import { Bell } from "lucide-react";
 import type { MouseEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createStoreFallbackPoller } from "../../../lib/store-polling-client";
 import { useCloseOnOutside } from "./useCloseOnOutside";
 
 type OsNotification = {
@@ -66,18 +67,14 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
     let active = true;
     let pusher: any;
     let channel: any;
-    let fallbackTimer = 0;
-
-    const startFallback = () => {
-      if (fallbackTimer) window.clearInterval(fallbackTimer);
-      fallbackTimer = window.setInterval(() => {
-        if (document.visibilityState === "visible") void loadNotifications();
-      }, 10 * 60_000);
-    };
-    const stopFallback = () => {
-      if (fallbackTimer) window.clearInterval(fallbackTimer);
-      fallbackTimer = 0;
-    };
+    const fallbackPoller = createStoreFallbackPoller(loadNotifications, {
+      baseIntervalMs: 10 * 60_000,
+      maxIntervalMs: 60 * 60_000,
+      outageBackoff: "standard",
+      respectBusinessHours: false
+    });
+    const startFallback = () => fallbackPoller.start();
+    const stopFallback = () => fallbackPoller.stop();
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") void loadNotifications();
     };

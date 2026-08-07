@@ -7,6 +7,7 @@ import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/numbe
 import { addOfflinePosOrder, getOfflinePosSnapshot, listOfflinePosOrders, removeOfflinePosOrder, saveOfflinePosSnapshot, updateOfflinePosOrderError, type OfflinePosOrder } from "../../../lib/offline-pos";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
 import { createAutoStarBluetoothPrinter, createPhysicalCustomerDisplayPayload, defaultPosPrinterSettings, displayWithAndroidBridge, getKitchenPrinterForBrand, getReceiptPrinter, hasPosPrinterDestination, normalizePosPrinterSettings, printWithAndroidBridge, resolvePosKitchenTicketTemplate, resolvePosReceiptTemplate, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
+import { createStoreFallbackPoller } from "../../../lib/store-polling-client";
 import { ModalHistoryScope } from "../../os/components/useModalHistory";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
@@ -1256,7 +1257,6 @@ export default function StorePosPage() {
     let active = true;
     let pusher: any;
     let channels: any[] = [];
-    let pollingTimer = 0;
 
     const handleScanRequest = (scanRequest?: { id?: string; code?: string } | null) => {
       const requestId = String(scanRequest?.id ?? "").trim();
@@ -1277,19 +1277,14 @@ export default function StorePosPage() {
       handleScanRequest(body.scanRequest);
     }
 
-    const stopPolling = () => {
-      if (!pollingTimer) return;
-      window.clearInterval(pollingTimer);
-      pollingTimer = 0;
-    };
-    const startPolling = () => {
-      if (pollingTimer) return;
-      void checkCustomerDisplayMemberScan();
-      pollingTimer = window.setInterval(
-        checkCustomerDisplayMemberScan,
-        customerDisplayScanPending ? 3000 : 60000
-      );
-    };
+    const fallbackPoller = createStoreFallbackPoller(checkCustomerDisplayMemberScan, {
+      baseIntervalMs: customerDisplayScanPending ? 3000 : 60000,
+      minIntervalMs: 3000,
+      respectBusinessHours: false,
+      storeIds: () => [selectedStoreIdRef.current].filter(Boolean)
+    });
+    const stopPolling = () => fallbackPoller.stop();
+    const startPolling = () => fallbackPoller.start({ immediate: true });
 
     startPolling();
     fetch(`/api/store/realtime-config?storeId=${encodeURIComponent(selectedStoreId)}`, { cache: "no-store" })

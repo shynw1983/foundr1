@@ -1,6 +1,8 @@
+import { after } from "next/server";
 import { requireOsSession } from "../../../lib/api-auth";
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
+import { publishPublicMenuUpdatedEvent } from "../../../lib/order-realtime";
 import { roleHasPermission } from "../../../lib/role-permissions";
 
 const defaultExternalPlatforms = [
@@ -349,16 +351,19 @@ export async function POST(request: Request) {
   const kind = String(body.kind ?? "");
 
   try {
-    if (kind === "source") return Response.json(await upsertSource(body));
-    if (kind === "category") return Response.json(await upsertCategory(body, session.id));
-    if (kind === "item") return Response.json(await upsertItem(body, session.id));
-    if (kind === "group") return Response.json(await upsertGroup(body, session.id));
-    if (kind === "option") return Response.json(await upsertOption(body, session.id));
-    if (kind === "storeSetting") return Response.json(await upsertStoreSetting(body, session.id));
-    if (kind === "sortOrder") return Response.json(await updateSortOrder(body, session.id));
-    if (kind === "externalPlatform") return Response.json(await upsertExternalPlatform(body));
-    if (kind === "completeSyncTask") return Response.json(await completeSyncTask(body, session.id));
-    return Response.json({ error: "保存対象が不正です。" }, { status: 400 });
+    let result: unknown;
+    if (kind === "source") result = await upsertSource(body);
+    else if (kind === "category") result = await upsertCategory(body, session.id);
+    else if (kind === "item") result = await upsertItem(body, session.id);
+    else if (kind === "group") result = await upsertGroup(body, session.id);
+    else if (kind === "option") result = await upsertOption(body, session.id);
+    else if (kind === "storeSetting") result = await upsertStoreSetting(body, session.id);
+    else if (kind === "sortOrder") result = await updateSortOrder(body, session.id);
+    else if (kind === "externalPlatform") result = await upsertExternalPlatform(body);
+    else if (kind === "completeSyncTask") result = await completeSyncTask(body, session.id);
+    else return Response.json({ error: "保存対象が不正です。" }, { status: 400 });
+    if (!["externalPlatform", "completeSyncTask"].includes(kind)) publishAllPublicMenuUpdatesAfterResponse();
+    return Response.json(result);
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "保存できませんでした。" }, { status: 400 });
   }
@@ -382,7 +387,17 @@ export async function DELETE(request: Request) {
   else if (body.kind === "storeSetting") await sql`delete from menu_store_settings where id = ${id}`;
   else return Response.json({ error: "削除対象が不正です。" }, { status: 400 });
 
+  publishAllPublicMenuUpdatesAfterResponse();
   return Response.json({ ok: true });
+}
+
+function publishAllPublicMenuUpdatesAfterResponse() {
+  after(async () => {
+    const stores = await sql`select id::text from stores where status = 'active'`;
+    await Promise.all(stores.map((store) => (
+      publishPublicMenuUpdatedEvent(String(store.id)).catch(() => undefined)
+    )));
+  });
 }
 
 async function ensureDefaultExternalPlatforms(brandIds: string[]) {

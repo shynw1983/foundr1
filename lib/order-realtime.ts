@@ -59,6 +59,24 @@ export async function publishPosCustomerDisplayEvent(storeId: string, state: Rec
   });
 }
 
+export async function publishPublicMenuUpdatedEvent(storeId: string) {
+  const pusher = getPusher();
+  if (!pusher || !storeId) return;
+
+  await pusher.trigger(`menu-${storeId}`, "menu.updated", {
+    storeId,
+    updatedAt: new Date().toISOString()
+  });
+  await recordExternalServiceUsage({
+    serviceKey: "pusher",
+    metricKey: "messages",
+    quantity: 1,
+    unit: "count",
+    source: "public_menu_updated",
+    metadata: { storeId }
+  });
+}
+
 export async function publishStoreOperationalEvent(
   storeId: string,
   eventName: "store.seats.updated" | "procurement.updated" | "pos.reconciliation.updated"

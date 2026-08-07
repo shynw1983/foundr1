@@ -2,7 +2,7 @@ import { findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
 import { authorizeLocalBridge } from "../../../../../lib/local-bridge-auth";
 import { ensureProductionTasksForOrder } from "../../../../../lib/order-production";
-import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
+import { publishCustomerOrderEvent, publishPublicMenuUpdatedEvent } from "../../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import { publishBridgeInventoryUpdated } from "../../../../../lib/local-bridge-realtime";
 import {
@@ -531,6 +531,7 @@ export async function POST(request: Request) {
     `;
     if (result.status === "inventory_synced" && "changed" in result && result.changed && result.target) {
       await publishBridgeInventoryUpdated(storeId, result.target).catch(() => undefined);
+      await publishPublicMenuUpdatedEvent(storeId).catch(() => undefined);
     }
     return Response.json({
       ok: result.status !== "error",

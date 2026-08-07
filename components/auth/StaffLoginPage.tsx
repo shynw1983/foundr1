@@ -68,6 +68,7 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
     let isActive = true;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let refreshDue = false;
 
     async function createQr() {
       setIsQrLoading(true);
@@ -90,6 +91,7 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
 
       if (pollTimer) clearInterval(pollTimer);
       pollTimer = setInterval(async () => {
+        if (document.visibilityState !== "visible") return;
         const statusResponse = await fetch(`/api/store/terminal-login/status?token=${encodeURIComponent(body.token ?? "")}`, { cache: "no-store" });
         const statusBody = await statusResponse.json().catch(() => ({})) as { status?: string; error?: string };
         if (!isActive) return;
@@ -105,16 +107,26 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
 
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => {
-        if (isActive) void createQr();
+        if (!isActive) return;
+        if (document.visibilityState === "visible") void createQr();
+        else refreshDue = true;
       }, 4 * 60 * 1000);
     }
 
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== "visible" || !refreshDue) return;
+      refreshDue = false;
+      void createQr();
+    };
+
     void createQr();
+    document.addEventListener("visibilitychange", refreshWhenVisible);
 
     return () => {
       isActive = false;
       if (pollTimer) clearInterval(pollTimer);
       if (refreshTimer) clearTimeout(refreshTimer);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [mode, surface, qrRefreshNonce, storeAuthChecked]);
 

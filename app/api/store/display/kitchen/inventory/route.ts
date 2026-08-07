@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { requireOsSession } from "../../../../../../lib/api-auth";
 import { sql } from "../../../../../../lib/db";
 import { publishBridgeCommandAvailable } from "../../../../../../lib/local-bridge-realtime";
+import { publishPublicMenuUpdatedEvent } from "../../../../../../lib/order-realtime";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../../lib/store-order-access";
 import {
   resolveUberInventoryItemTarget,
@@ -398,6 +399,7 @@ export async function POST(request: Request) {
     returning id::text
   `;
   await publishBridgeCommandAvailable(storeId).catch(() => undefined);
+  await publishPublicMenuUpdatedEvent(storeId).catch(() => undefined);
   return Response.json({
     ok: true,
     commandId: String(commandRows[0]?.id ?? commandId),

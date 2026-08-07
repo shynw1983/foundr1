@@ -44,23 +44,45 @@ export function getStoreFallbackPollDelay(options: {
   baseIntervalMs?: number;
   disconnectedForMs?: number;
   failureCount?: number;
+  maxIntervalMs?: number;
+  minIntervalMs?: number;
+  outageBackoff?: "critical" | "standard";
+  respectBusinessHours?: boolean;
   storeIds?: string[];
 } = {}) {
-  if (!isAnyStoreOpen(options.storeIds)) return 60 * 60_000;
-  const baseIntervalMs = Math.max(30_000, options.baseIntervalMs ?? 60_000);
+  if (options.respectBusinessHours !== false && !isAnyStoreOpen(options.storeIds)) return 60 * 60_000;
+  const baseIntervalMs = Math.max(options.minIntervalMs ?? 30_000, options.baseIntervalMs ?? 60_000);
   const failureCount = Math.max(0, Math.min(4, options.failureCount ?? 0));
   const disconnectedForMs = Math.max(0, options.disconnectedForMs ?? 0);
-  const outageFloorMs = disconnectedForMs >= 15 * 60_000
-    ? 5 * 60_000
-    : disconnectedForMs >= 5 * 60_000
-      ? 2 * 60_000
-      : baseIntervalMs;
-  return Math.min(5 * 60_000, Math.max(outageFloorMs, baseIntervalMs * (2 ** failureCount)));
+  const standardBackoff = options.outageBackoff === "standard";
+  const outageFloorMs = standardBackoff
+    ? disconnectedForMs >= 60 * 60_000
+      ? 60 * 60_000
+      : disconnectedForMs >= 15 * 60_000
+        ? 30 * 60_000
+        : disconnectedForMs >= 5 * 60_000
+          ? 15 * 60_000
+          : baseIntervalMs
+    : disconnectedForMs >= 15 * 60_000
+      ? 5 * 60_000
+      : disconnectedForMs >= 5 * 60_000
+        ? 2 * 60_000
+        : baseIntervalMs;
+  const defaultMaximumMs = standardBackoff ? 60 * 60_000 : 5 * 60_000;
+  const maxIntervalMs = Math.max(baseIntervalMs, options.maxIntervalMs ?? defaultMaximumMs);
+  return Math.min(maxIntervalMs, Math.max(outageFloorMs, baseIntervalMs * (2 ** failureCount)));
 }
 
 export function createStoreFallbackPoller(
   task: () => Promise<unknown> | unknown,
-  options: { baseIntervalMs?: number; storeIds?: () => string[] } = {}
+  options: {
+    baseIntervalMs?: number | (() => number);
+    maxIntervalMs?: number;
+    minIntervalMs?: number;
+    outageBackoff?: "critical" | "standard";
+    respectBusinessHours?: boolean;
+    storeIds?: () => string[];
+  } = {}
 ) {
   let active = false;
   let timer = 0;
@@ -76,10 +98,17 @@ export function createStoreFallbackPoller(
   const schedule = () => {
     clear();
     if (!active || document.visibilityState !== "visible") return;
+    const configuredBaseIntervalMs = typeof options.baseIntervalMs === "function"
+      ? options.baseIntervalMs()
+      : options.baseIntervalMs;
     timer = window.setTimeout(run, getStoreFallbackPollDelay({
-      baseIntervalMs: options.baseIntervalMs,
+      baseIntervalMs: Math.max(options.minIntervalMs ?? 30_000, configuredBaseIntervalMs ?? 60_000),
       disconnectedForMs: startedAt ? Date.now() - startedAt : 0,
       failureCount,
+      maxIntervalMs: options.maxIntervalMs,
+      minIntervalMs: options.minIntervalMs,
+      outageBackoff: options.outageBackoff,
+      respectBusinessHours: options.respectBusinessHours,
       storeIds: options.storeIds?.()
     }));
   };

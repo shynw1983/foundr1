@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { publishPublicMenuUpdatedEvent } from "../../../../lib/order-realtime";
 import { getCurrentBusinessDayClosing, getStoreReceptionState } from "../../../../lib/store-business-hours";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
@@ -175,6 +176,10 @@ export async function PATCH(request: Request) {
       updated_by = excluded.updated_by,
       updated_at = now()
   `;
+
+  after(async () => {
+    await publishPublicMenuUpdatedEvent(storeId).catch(() => undefined);
+  });
 
   return NextResponse.json({ ok: true });
 }
