@@ -18,6 +18,7 @@ type KitchenTask = {
   printStatus: string;
   itemSummary: string;
   itemCount: number;
+  isHistorical: boolean;
   itemGroups: Array<{
     itemName: string;
     quantity: number;
@@ -238,6 +239,8 @@ export default function StoreKitchenPage() {
   const [statusFilter, setStatusFilter] = useState<KitchenStatusFilter>("active");
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [selectedArea, setSelectedArea] = useState("");
+  const [businessDayOffset, setBusinessDayOffset] = useState<0 | -1>(0);
+  const [displayedBusinessDate, setDisplayedBusinessDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
   const [reprintQueuedId, setReprintQueuedId] = useState("");
@@ -361,11 +364,12 @@ export default function StoreKitchenPage() {
     void playNewOrderAlert();
   }
 
-  async function load(storeId = selectedStoreIdRef.current, area = selectedArea) {
+  async function load(storeId = selectedStoreIdRef.current, area = selectedArea, dayOffset = businessDayOffset) {
     const loadSequence = ++loadSequenceRef.current;
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
     if (area) params.set("area", area);
+    if (dayOffset === -1) params.set("dayOffset", "-1");
     params.set("ts", String(Date.now()));
     const response = await fetch(`/api/store/display/kitchen?${params.toString()}`, { cache: "no-store" });
     if (!response.ok) {
@@ -385,6 +389,7 @@ export default function StoreKitchenPage() {
     announceNewOrders(nextTasks);
     setTasks(nextTasks);
     setAreas(body.areas ?? []);
+    setDisplayedBusinessDate(String(body.businessDay?.businessDate ?? ""));
     setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
     setKitchenDisplayMode(
       body.kitchenDisplayMode === "order_only" || body.kitchenDisplayMode === "simple"
@@ -757,6 +762,7 @@ export default function StoreKitchenPage() {
 
   useEffect(() => {
     void load();
+    if (businessDayOffset === -1) return;
     if (realtimeStatus === "connected") return;
     const poller = createStoreFallbackPoller(
       () => load(selectedStoreIdRef.current, selectedArea),
@@ -765,7 +771,7 @@ export default function StoreKitchenPage() {
     poller.start();
     return () => poller.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [realtimeStatus, selectedArea]);
+  }, [businessDayOffset, realtimeStatus, selectedArea]);
 
   useEffect(() => {
     if (selectedStoreId) void loadUnavailableInventory(selectedStoreId);
@@ -778,6 +784,12 @@ export default function StoreKitchenPage() {
     let channels: any[] = [];
     let active = true;
     const storeId = selectedStoreIdRef.current;
+    if (businessDayOffset === -1) {
+      setRealtimeStatus("history");
+      return () => {
+        active = false;
+      };
+    }
     if (!storeId) {
       setRealtimeStatus("polling");
       return () => {
@@ -919,17 +931,19 @@ export default function StoreKitchenPage() {
       pusher?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedArea, selectedStoreId]);
+  }, [businessDayOffset, selectedArea, selectedStoreId]);
 
   const taskCounts = useMemo(() => ({
-    active: tasks.filter((task) => task.status !== "ready").length,
+    active: businessDayOffset === -1 ? tasks.length : tasks.filter((task) => task.status !== "ready").length,
     new: tasks.filter((task) => task.status === "new").length,
     preparing: tasks.filter((task) => task.status === "preparing").length,
     ready: tasks.filter((task) => task.status === "ready").length
-  }), [tasks]);
+  }), [businessDayOffset, tasks]);
   const filteredTasks = useMemo(() => tasks.filter((task) => (
-    statusFilter === "active" ? task.status !== "ready" : task.status === statusFilter
-  )), [statusFilter, tasks]);
+    statusFilter === "active"
+      ? (businessDayOffset === -1 || task.status !== "ready")
+      : task.status === statusFilter
+  )), [businessDayOffset, statusFilter, tasks]);
   const selectedTask = filteredTasks.find((task) => task.id === selectedTaskId) ?? filteredTasks[0] ?? null;
   const isChinese = displayLanguage === "zh";
   const bridgeOnline = bridgePresence === "online"
@@ -984,6 +998,18 @@ export default function StoreKitchenPage() {
             {areas.map((area) => <option key={area.value} value={area.value}>{isChinese && area.label === "調理" ? "烹饪" : area.label}</option>)}
           </select>
           <label className="store-context-selector is-compact">
+            <span>{isChinese ? "营业日" : "営業日"}</span>
+            <select value={businessDayOffset} onChange={(event) => {
+              const nextOffset = event.target.value === "-1" ? -1 : 0;
+              resetNewOrderBaseline();
+              setStatusFilter("active");
+              setBusinessDayOffset(nextOffset);
+            }}>
+              <option value="0">{isChinese ? "当前营业日" : "現在の営業日"}</option>
+              <option value="-1">{isChinese ? "上一个营业日（只读）" : "前の営業日（閲覧のみ）"}</option>
+            </select>
+          </label>
+          <label className="store-context-selector is-compact">
             <span>{isChinese ? "内容显示" : "内容表示"}</span>
             <select
               value={kitchenDisplayMode}
@@ -1027,7 +1053,9 @@ export default function StoreKitchenPage() {
               ? (isChinese ? "新订单提示音 ON" : "新規注文音 ON")
               : (isChinese ? "开启新订单提示音" : "新規注文音を有効にする")}
           </button>
-          <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
+          <small>{businessDayOffset === -1
+            ? (isChinese ? "历史查看模式" : "履歴表示モード")
+            : realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
           <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>
@@ -1070,7 +1098,7 @@ export default function StoreKitchenPage() {
       <section className="store-kitchen-board">
         <nav className="store-kitchen-status-tabs" aria-label={isChinese ? "按状态筛选" : "状態で絞り込み"}>
           {([
-            ["active", isChinese ? "进行中" : "進行中"],
+            ["active", businessDayOffset === -1 ? (isChinese ? "全部" : "すべて") : (isChinese ? "进行中" : "進行中")],
             ["new", isChinese ? "待制作" : "制作待ち"],
             ["preparing", isChinese ? "制作中" : "制作中"],
             ["ready", isChinese ? "已完成" : "完成"]
@@ -1092,7 +1120,7 @@ export default function StoreKitchenPage() {
           <aside className="store-kitchen-queue" aria-label={isChinese ? "订单队列" : "注文キュー"}>
             <header>
               <div>
-                <small>{isChinese ? "按时间排序" : "時刻順"}</small>
+                <small>{displayedBusinessDate ? `${displayedBusinessDate} · ` : ""}{isChinese ? "按时间排序" : "時刻順"}</small>
                 <strong>{isChinese ? "订单队列" : "注文キュー"}</strong>
               </div>
               <b>{filteredTasks.length}</b>
@@ -1140,7 +1168,12 @@ export default function StoreKitchenPage() {
             {selectedTask ? (() => {
               const task = selectedTask;
               return (
-              <article className={`store-kitchen-task is-${task.status}`} key={task.id}>
+              <article className={`store-kitchen-task is-${task.status}${task.isHistorical ? " is-historical" : ""}`} key={task.id}>
+                {task.isHistorical ? (
+                  <p className="store-kitchen-note">
+                    {task.kitchenLanguage === "zh" ? "历史订单 · 仅供查看，不会更改制作状态" : "過去の注文 · 閲覧のみ（制作状態は変更されません）"}
+                  </p>
+                ) : null}
                 <div className="store-kitchen-platform-row">
                   <PlatformLogo source={task.orderSource} />
                   <span className={`store-kitchen-status is-${task.status}`}>
@@ -1208,7 +1241,7 @@ export default function StoreKitchenPage() {
                     </div>
                   ) : null}
                 </div>
-                <div className={`store-kitchen-order-summary${kitchenDisplayMode === "order_only" ? " is-order-only" : ""}`}>
+                <div className={`store-kitchen-order-summary${kitchenDisplayMode === "order_only" ? " is-order-only" : ""}${task.isHistorical ? " is-read-only" : ""}`}>
                   <small>{task.kitchenLanguage === "zh" ? "客人下单内容" : "注文内容"}</small>
                   {(task.itemGroups ?? []).map((group, groupIndex) => {
                     const productLineKey = `${task.id}:order:${groupIndex}:product`;
@@ -1419,7 +1452,7 @@ export default function StoreKitchenPage() {
                   })}
                 </div>
                 {task.note ? <p className="store-kitchen-note">{task.note}</p> : null}
-                <div className="store-kitchen-actions">
+                {!task.isHistorical ? <div className="store-kitchen-actions">
                   <button className="secondary-button store-kitchen-reprint-button" type="button" disabled={savingId === task.id} onClick={() => void requestReprint(task)}>
                     {reprintQueuedId === task.id
                       ? (task.kitchenLanguage === "zh" ? "已加入补打队列" : "再印刷を予約しました")
@@ -1445,7 +1478,7 @@ export default function StoreKitchenPage() {
                       {task.kitchenLanguage === "zh" ? "交付完成" : "受渡完了"}
                     </button>
                   ) : null}
-                </div>
+                </div> : null}
               </article>
               );
             })() : (

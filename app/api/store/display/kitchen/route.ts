@@ -26,8 +26,17 @@ type KitchenMenuCandidate = MenuDisplayNameCandidate & {
   optionKey?: string;
 };
 
-async function getKitchenTasks(storeId: string, area: string, businessHours: unknown) {
-  const businessDay = getKitchenBusinessDayWindow(businessHours);
+function getPreviousBusinessDayReference(businessDate: string) {
+  const [year, month, day] = businessDate.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day - 1, 3));
+}
+
+async function getKitchenTasks(storeId: string, area: string, businessHours: unknown, dayOffset: 0 | -1 = 0) {
+  const currentBusinessDay = getKitchenBusinessDayWindow(businessHours);
+  const businessDay = dayOffset === -1
+    ? getKitchenBusinessDayWindow(businessHours, getPreviousBusinessDayReference(currentBusinessDay.businessDate))
+    : currentBusinessDay;
+  const includeCompleted = dayOffset === -1;
   const [rows, areas, settingsRows] = await Promise.all([sql`
     select
       order_production_tasks.id::text,
@@ -93,7 +102,11 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
     left join brands on brands.id = order_production_tasks.brand_id
     where order_production_tasks.store_id::text = ${storeId}
       and store_customer_orders.payment_status = 'paid'
-      and store_customer_orders.status not in ('completed', 'cancelled', 'refund_pending')
+      and (
+        ${includeCompleted} = true
+        or store_customer_orders.status not in ('completed', 'cancelled', 'refund_pending')
+      )
+      and store_customer_orders.status not in ('cancelled', 'refund_pending')
       and order_production_tasks.status in ('new', 'preparing', 'ready')
       and (
         concat(
@@ -198,6 +211,7 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
       : [];
     return {
       ...task,
+      isHistorical: includeCompleted,
       kitchenLanguage,
       itemSummary: localizedItemSummary,
       itemGroups: buildKitchenDisplayItemGroups(localizedOrderedItems, localizedItemSummary)
@@ -221,6 +235,7 @@ export async function GET(request: Request) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const params = new URL(request.url).searchParams;
+  const dayOffset = params.get("dayOffset") === "-1" ? -1 : 0;
   const access = await getStoreOrderAccess(session);
   const storeFilter = getScopedStoreFilter(access, params.get("storeId")) ?? access.stores[0]?.id ?? "";
   if (storeFilter === "__forbidden__" || !storeFilter) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -228,7 +243,7 @@ export async function GET(request: Request) {
 
   const selectedStore = access.stores.find((store) => store.id === storeFilter);
   const [{ tasks, areas, businessDay, displayLanguage }, preferenceRows, bridgeRows] = await Promise.all([
-    getKitchenTasks(storeFilter, normalizeText(params.get("area")), selectedStore?.businessHours),
+    getKitchenTasks(storeFilter, normalizeText(params.get("area")), selectedStore?.businessHours, dayOffset),
     sql`
       select coalesce(ui_preferences ->> 'kitchenDisplayMode', 'detailed') as "kitchenDisplayMode"
       from employees

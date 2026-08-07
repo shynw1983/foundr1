@@ -16654,6 +16654,10 @@ body :where(
   gap: 10px;
 }
 
+.store-kitchen-order-summary.is-read-only {
+  pointer-events: none;
+}
+
 .store-kitchen-order-action {
   width: 100%;
   min-height: 62px;
