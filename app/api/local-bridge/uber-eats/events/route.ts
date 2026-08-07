@@ -6,6 +6,10 @@ import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import { publishBridgeInventoryUpdated } from "../../../../../lib/local-bridge-realtime";
 import {
+  findMenuDisplayNameCandidate,
+  type MenuDisplayNameCandidate
+} from "../../../../../lib/menu-display-name-matcher";
+import {
   parseUberBridgeSnapshot,
   toUberBridgeOperationalItem,
   type UberBridgeNode
@@ -78,6 +82,41 @@ async function resolveStoreBrand(
   }) ?? brandRows[0] ?? null;
 }
 
+type RocketMenuReferences = {
+  items: MenuDisplayNameCandidate[];
+  options: Array<MenuDisplayNameCandidate & { optionKey: string }>;
+};
+
+async function loadRocketMenuReferences(brandId: string): Promise<RocketMenuReferences> {
+  if (!brandId) return { items: [], options: [] };
+  const [itemRows, optionRows] = await Promise.all([sql`
+    select
+      id::text,
+      name,
+      display_names as "displayNames",
+      coalesce(external_id, '') as "externalId"
+    from menu_catalog_items
+    where brand_id::text = ${brandId}
+      and is_active = true
+  `, sql`
+    select
+      menu_options.id::text,
+      menu_options.name,
+      menu_options.display_names as "displayNames",
+      coalesce(menu_options.external_id, '') as "externalId",
+      menu_options.option_key as "optionKey"
+    from menu_options
+    join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
+    where menu_option_groups.brand_id::text = ${brandId}
+      and menu_option_groups.is_active = true
+      and menu_options.is_active = true
+  `]);
+  return {
+    items: itemRows as MenuDisplayNameCandidate[],
+    options: optionRows as Array<MenuDisplayNameCandidate & { optionKey: string }>
+  };
+}
+
 async function upsertOperationalOrder(input: {
   storeId: string;
   eventId: string;
@@ -112,12 +151,16 @@ async function upsertOperationalOrder(input: {
     parsed.items.map((item) => item.name),
     input.platform
   );
+  const rocketMenuReferences = input.platform === "rocket_now"
+    ? await loadRocketMenuReferences(String(brand?.brandId ?? ""))
+    : { items: [], options: [] };
   const existingRows = await sql`
     select
       id::text,
       status,
       coalesce(customer_summary ->> 'orderType', '') as "orderType",
       coalesce((customer_summary #>> '{bridge,completeness}')::int, 0) as completeness,
+      coalesce((customer_summary #>> '{bridge,parserVersion}')::int, 0) as "parserVersion",
       coalesce(customer_summary #> '{bridge,items}', '[]'::jsonb) as "bridgeItems"
     from store_customer_orders
     where order_source = ${input.platform}
@@ -127,6 +170,7 @@ async function upsertOperationalOrder(input: {
   const existing = existingRows[0];
   const shouldReplaceItems = !existing
     || parsed.completeness > Number(existing.completeness ?? 0)
+    || (input.platform === "rocket_now" && Number(existing.parserVersion ?? 0) < 2)
     || hasExactDuplicateBridgeItems(existing.bridgeItems);
   const nextStatus = existing
     && parsed.status === "new"
@@ -149,6 +193,7 @@ async function upsertOperationalOrder(input: {
       eventId: input.eventId,
       capturedAt: input.capturedAt.toISOString(),
       completeness: parsed.completeness,
+      parserVersion: input.platform === "rocket_now" ? 2 : 1,
       sourceExternalId,
       items: parsed.items
     }
@@ -230,14 +275,25 @@ async function upsertOperationalOrder(input: {
       const item = input.platform === "rocket_now"
         ? toRocketNowBridgeOperationalItem(parsed.items[index] as Parameters<typeof toRocketNowBridgeOperationalItem>[0])
         : toUberBridgeOperationalItem(parsed.items[index] as Parameters<typeof toUberBridgeOperationalItem>[0]);
+      const matchedMenuItem = input.platform === "rocket_now"
+        ? findMenuDisplayNameCandidate(item.itemName, rocketMenuReferences.items)
+        : null;
+      const matchedOptions = input.platform === "rocket_now"
+        ? item.toppingLabels.map((label) => (
+            findMenuDisplayNameCandidate(label, rocketMenuReferences.options)
+          ))
+        : [];
+      const toppingKeys = matchedOptions.map((option) => option?.optionKey ?? "");
       const existingItemId = existingItems[index]?.id ? String(existingItems[index].id) : "";
       if (existingItemId) {
         await sql`
           update store_customer_order_items
           set
+            menu_catalog_item_id = ${matchedMenuItem?.id || null},
             item_name = ${item.itemName},
             size_key = ${item.sizeKey},
             option_label = ${item.optionLabel},
+            topping_keys = ${toppingKeys},
             topping_labels = ${item.toppingLabels},
             quantity = ${item.quantity},
             amount = ${item.amount},
@@ -248,9 +304,11 @@ async function upsertOperationalOrder(input: {
         await sql`
           insert into store_customer_order_items (
             order_id,
+            menu_catalog_item_id,
             item_name,
             size_key,
             option_label,
+            topping_keys,
             topping_labels,
             quantity,
             amount,
@@ -258,9 +316,11 @@ async function upsertOperationalOrder(input: {
           )
           values (
             ${orderId},
+            ${matchedMenuItem?.id || null},
             ${item.itemName},
             ${item.sizeKey},
             ${item.optionLabel},
+            ${toppingKeys},
             ${item.toppingLabels},
             ${item.quantity},
             ${item.amount},

@@ -40,3 +40,39 @@ test("requires a stable Rocket Now order number", () => {
     { contentDescription: "注文管理\n進行中の注文がありません。" }
   ], new Date()), null);
 });
+
+test("groups Rocket buildable options including zero-price seasoning", () => {
+  const parsed = parseRocketNowBridgeSnapshot([
+    { contentDescription: "処理中 1" },
+    { contentDescription: "1DRTG1\n午前 01:11\n[メニュー 1個] 3,355円\n自由にカスタム 旨味マーラータンスープx1" },
+    { contentDescription: "メニュー" },
+    { contentDescription: "数量" },
+    { contentDescription: "金額" },
+    { contentDescription: "自由にカスタム 旨味マーラータンスープ" },
+    { contentDescription: "1" },
+    { contentDescription: "415円" },
+    { contentDescription: "薬膳スパイスあり【超おすすめ】" },
+    { contentDescription: "0円" },
+    { contentDescription: "普通辛" },
+    { contentDescription: "0円" },
+    { contentDescription: "微シビレ" },
+    { contentDescription: "0円" },
+    { contentDescription: "【別添容器】香酢超おすすめです" },
+    { contentDescription: "+150円" },
+    { contentDescription: "春雨" },
+    { contentDescription: "+176円" }
+  ], new Date("2026-08-08T01:18:00+09:00"));
+
+  assert.ok(parsed);
+  assert.equal(parsed.items.length, 1);
+  assert.equal(parsed.items[0].name, "自由にカスタム 旨味マーラータンスープ");
+  assert.deepEqual(parsed.items[0].modifiers.map((modifier) => modifier.name), [
+    "薬膳スパイスあり【超おすすめ】",
+    "普通辛",
+    "微シビレ",
+    "【別添容器】香酢超おすすめです",
+    "春雨"
+  ]);
+  assert.equal(parsed.items[0].lineTotal, 741);
+  assert.equal(parsed.total, 3355);
+});

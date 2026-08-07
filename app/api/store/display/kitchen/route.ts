@@ -3,6 +3,11 @@ import { findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
 import { buildKitchenDisplayItemGroups } from "../../../../../lib/kitchen-display-groups";
 import { reconcileUberReadyCommand } from "../../../../../lib/local-bridge-commands";
+import {
+  existingMenuDisplayName,
+  findMenuDisplayNameCandidate,
+  type MenuDisplayNameCandidate
+} from "../../../../../lib/menu-display-name-matcher";
 import { localizeMaamaaProductionSummary, setProductionTaskStatus } from "../../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
 import { normalizePosPrinterSettings, resolvePosKitchenTicketTemplate } from "../../../../../lib/pos-printer";
@@ -13,6 +18,12 @@ export const dynamic = "force-dynamic";
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
+
+type KitchenMenuCandidate = MenuDisplayNameCandidate & {
+  brandId: string;
+  kind: "item" | "option";
+  optionKey?: string;
+};
 
 async function getKitchenTasks(storeId: string, area = "") {
   const [rows, areas, settingsRows] = await Promise.all([sql`
@@ -47,7 +58,9 @@ async function getKitchenTasks(storeId: string, area = "") {
         select jsonb_agg(
           jsonb_build_object(
             'itemName', store_customer_order_items.item_name,
+            'menuItemId', store_customer_order_items.menu_catalog_item_id,
             'quantity', store_customer_order_items.quantity,
+            'toppingKeys', store_customer_order_items.topping_keys,
             'toppingLabels', store_customer_order_items.topping_labels
           )
           order by store_customer_order_items.sort_order, store_customer_order_items.created_at
@@ -86,6 +99,38 @@ async function getKitchenTasks(storeId: string, area = "") {
     where store_id::text = ${storeId}
     limit 1
   `]);
+  const brandIds = Array.from(new Set(rows.map((row) => normalizeText(row.brandId)).filter(Boolean)));
+  const menuCandidates = brandIds.length ? await sql`
+    select
+      'item' as kind,
+      menu_catalog_items.id::text,
+      menu_catalog_items.brand_id::text as "brandId",
+      menu_catalog_items.name,
+      menu_catalog_items.display_names as "displayNames",
+      coalesce(menu_catalog_items.external_id, '') as "externalId",
+      '' as "optionKey"
+    from menu_catalog_items
+    where menu_catalog_items.brand_id::text in (
+      select jsonb_array_elements_text(${JSON.stringify(brandIds)}::jsonb)
+    )
+      and menu_catalog_items.is_active = true
+    union all
+    select
+      'option' as kind,
+      menu_options.id::text,
+      menu_option_groups.brand_id::text as "brandId",
+      menu_options.name,
+      menu_options.display_names as "displayNames",
+      coalesce(menu_options.external_id, '') as "externalId",
+      menu_options.option_key as "optionKey"
+    from menu_options
+    join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
+    where menu_option_groups.brand_id::text in (
+      select jsonb_array_elements_text(${JSON.stringify(brandIds)}::jsonb)
+    )
+      and menu_option_groups.is_active = true
+      and menu_options.is_active = true
+  ` as KitchenMenuCandidate[] : [];
   const printerSettings = normalizePosPrinterSettings(settingsRows[0]?.printerSettings);
   const tasks = rows.map((rawRow) => {
     const row = rawRow as Record<string, unknown>;
@@ -94,6 +139,8 @@ async function getKitchenTasks(storeId: string, area = "") {
     const kitchenLanguage = /maamaa|まぁ麻|麻辣/i.test(brandName)
       ? resolvePosKitchenTicketTemplate(printerSettings, brandId || null).language
       : "ja";
+    const brandMenuItems = menuCandidates.filter((candidate) => candidate.brandId === brandId && candidate.kind === "item");
+    const brandMenuOptions = menuCandidates.filter((candidate) => candidate.brandId === brandId && candidate.kind === "option");
     const { customerSummary, orderedItems, ...task } = row;
     const localizedItemSummary = localizeMaamaaProductionSummary(
       normalizeText(row.itemSummary),
@@ -103,12 +150,24 @@ async function getKitchenTasks(storeId: string, area = "") {
     const localizedOrderedItems = Array.isArray(orderedItems)
       ? orderedItems.map((rawItem) => {
         const item = rawItem && typeof rawItem === "object" ? rawItem as Record<string, unknown> : {};
+        const menuItemId = normalizeText(item.menuItemId);
+        const itemCandidate = brandMenuItems.find((candidate) => candidate.id === menuItemId)
+          ?? findMenuDisplayNameCandidate(item.itemName, brandMenuItems);
+        const toppingKeys = Array.isArray(item.toppingKeys) ? item.toppingKeys.map(normalizeText) : [];
+        const toppingLabels = Array.isArray(item.toppingLabels) ? item.toppingLabels : [];
         return {
           ...item,
-          itemName: localizeMaamaaProductionSummary(normalizeText(item.itemName), customerSummary, kitchenLanguage),
-          toppingLabels: Array.isArray(item.toppingLabels)
-            ? item.toppingLabels.map((label) => localizeMaamaaProductionSummary(normalizeText(label), customerSummary, kitchenLanguage))
-            : []
+          itemName: kitchenLanguage === "zh"
+            ? existingMenuDisplayName(item.itemName, itemCandidate, "zh")
+            : normalizeText(item.itemName),
+          toppingLabels: toppingLabels.map((label, index) => {
+            if (kitchenLanguage !== "zh") return normalizeText(label);
+            const optionKey = toppingKeys[index] ?? "";
+            const optionCandidate = brandMenuOptions.find((candidate) => (
+              optionKey && candidate.optionKey === optionKey
+            )) ?? findMenuDisplayNameCandidate(label, brandMenuOptions);
+            return existingMenuDisplayName(label, optionCandidate, "zh");
+          })
         };
       })
       : [];

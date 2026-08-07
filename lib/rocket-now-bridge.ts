@@ -42,7 +42,7 @@ function parseMoney(value: unknown) {
 }
 
 function parseQuantity(value: unknown) {
-  const match = clean(value).match(/(?:数量\s*)?(\d+)\s*(?:個|点|×|x|X)/);
+  const match = clean(value).match(/^(?:数量\s*)?(\d+)\s*(?:個|点|×|x|X)?$/);
   return match ? Math.max(1, Number(match[1])) : 1;
 }
 
@@ -94,7 +94,7 @@ function isMoneyLine(value: string) {
 }
 
 function isQuantityLine(value: string) {
-  return /^(?:数量\s*)?\d+\s*(?:個|点|×|x|X)$/.test(value);
+  return /^(?:数量\s*)?\d+\s*(?:個|点|×|x|X)?$/.test(value);
 }
 
 function isCandidateName(value: string, orderNo: string) {
@@ -118,14 +118,7 @@ function parseItems(lines: string[], orderNo: string) {
       /^(?:合計|決済金額|注文金額|総額|小計)/.test(line)
     ))) continue;
     const amount = parseMoney(lines[index]);
-    if (amount <= 0) continue;
-    let quantityIndex = -1;
-    for (let cursor = index - 1; cursor >= Math.max(0, index - 3); cursor -= 1) {
-      if (isQuantityLine(lines[cursor])) {
-        quantityIndex = cursor;
-        break;
-      }
-    }
+    const quantityIndex = index > 0 && isQuantityLine(lines[index - 1]) ? index - 1 : -1;
     let nameIndex = quantityIndex >= 0 ? quantityIndex - 1 : index - 1;
     while (nameIndex >= Math.max(0, index - 5) && !isCandidateName(lines[nameIndex], orderNo)) {
       nameIndex -= 1;
@@ -136,10 +129,10 @@ function parseItems(lines: string[], orderNo: string) {
     usedNames.add(`${nameIndex}:${name}:${amount}`);
     const quantity = quantityIndex >= 0 ? parseQuantity(lines[quantityIndex]) : 1;
     const previous = items.at(-1);
+    const looksLikeNamedModifier = /追加|変更|選択|トッピング|辛さ|痺れ|しびれ|シビ|薬膳|カスタム/i.test(name);
     const looksLikeModifier = Boolean(previous)
-      && quantityIndex >= 0
       && nameIndex > 0
-      && /追加|変更|選択|トッピング|辛さ|痺れ|しびれ|薬膳|カスタム/i.test(name);
+      && (quantityIndex < 0 || looksLikeNamedModifier);
     if (looksLikeModifier && previous) {
       previous.modifiers.push({ name, quantity, price: amount });
       previous.lineTotal += amount;
@@ -161,13 +154,19 @@ export function parseRocketNowBridgeSnapshot(
   const orderNo = extractOrderNo(lines);
   if (!orderNo) return null;
   const joined = lines.join("\n");
-  const items = parseItems(lines, orderNo);
+  const detailMenuIndex = lines.findLastIndex((line) => line === "メニュー");
+  const detailLines = detailMenuIndex >= 0 ? lines.slice(detailMenuIndex + 1) : lines;
+  const items = parseItems(detailLines, orderNo);
   const displayedTotalIndex = lines.findLastIndex((line) => /^(?:合計|決済金額|注文金額|総額)/.test(line));
   const displayedTotal = displayedTotalIndex >= 0
     ? lines.slice(displayedTotalIndex + 1, displayedTotalIndex + 4).map(parseMoney).find((value) => value > 0) ?? 0
     : 0;
+  const overviewTotal = lines
+    .map((line) => line.match(/\[メニュー\s*\d+個\]\s*(?:￥|¥)?([\d,，]+)円?/))
+    .map((match) => match ? Number(match[1].replace(/[,，]/g, "")) : 0)
+    .find((value) => value > 0) ?? 0;
   const derivedTotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
-  const total = displayedTotal || derivedTotal;
+  const total = displayedTotal || overviewTotal || derivedTotal;
   const status: ParsedRocketNowBridgeOrder["status"] = /キャンセル済み|注文キャンセル完了/.test(joined)
     ? "cancelled"
     : /配達完了|受け渡し完了|完了した注文/.test(joined)
