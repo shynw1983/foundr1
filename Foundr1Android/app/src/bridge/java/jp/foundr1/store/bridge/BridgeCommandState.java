@@ -53,6 +53,7 @@ final class BridgeCommandState {
                 "",
                 result
             );
+            BridgePlatformState.requestPrimaryReturn(context);
         } catch (Exception ignored) {
         }
     }
@@ -68,6 +69,7 @@ final class BridgeCommandState {
             error,
             new JSONObject()
         );
+        BridgePlatformState.requestPrimaryReturn(context);
     }
 
     private static SharedPreferences preferences(Context context) {

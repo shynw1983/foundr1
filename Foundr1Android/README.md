@@ -63,8 +63,9 @@ The `bridge` variant runs independently on the Android tablet after initial setu
    `https://www.foundr1.jp/api/local-bridge/uber-eats/events`
 4. Enter the server-side `LOCAL_BRIDGE_TOKEN`.
 5. Enter the Foundr1 OS store UUID and a recognizable device name.
-6. Save, then enable notification access and the Foundr1 Delivery Bridge accessibility service.
-7. Exclude Foundr1 Delivery Bridge, Uber Eats Orders, and Rocket Now from battery optimization.
+6. Choose the tablet platform mode: `Uber Eats only`, `Rocket Now only`, or `Uber Eats + Rocket Now`. Dual-platform tablets also choose one primary foreground app.
+7. Save, then enable notification access and the Foundr1 Delivery Bridge accessibility service.
+8. Exclude Foundr1 Delivery Bridge and the selected order apps from battery optimization.
 
 The bridge never presses Uber accept, deny, or cancellation actions. It can press the ready action only for a matching order after Foundr1 OS explicitly issues a kitchen-completion command. A new-order notification opens Uber Eats Orders and directly signals the accessibility recovery worker; it does not depend on Android showing a visible notification banner or creating a new window event. While recovery is pending, the foreground service repeats that internal signal every two seconds. The accessibility service returns to the order overview, opens each unread active-order card, scrolls its detail area to collect off-screen modifiers, uploads the structured snapshot, and returns to the overview. Multiple simultaneous orders are processed one at a time and tracked by order number so the same active card is not reopened during the recovery batch. Failed order uploads are retained locally and retried when connectivity returns.
 
@@ -73,6 +74,8 @@ Bridge releases are published with `npm run apk:bridge`. The first managed relea
 Foundr1 OS deduplicates bridge orders by store, local order date, and Uber order number. Only recent order-detail screens are imported, so browsing older order history does not create operational orders.
 
 Rocket Now notifications open the matching merchant-app order screen. The same accessibility service reads the six-character Rocket Now order number, items, options, quantities, customer request, amount, and operational status, then imports the order with `order_source = 'rocket_now'`. It never accepts or cancels a Rocket Now order automatically.
+
+Platform mode is enforced by notification capture, accessibility parsing, Uber command polling, and foreground recovery. In dual-platform mode, only the configured primary app is guarded as the normal foreground. Explicit work in the secondary app temporarily owns the foreground, and Uber commands use a single controlled launch with a loading grace period instead of repeatedly launching and backing out of the app.
 
 ## Test Printer
 

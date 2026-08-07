@@ -31,7 +31,9 @@ final class BridgeStatusReporter {
         String problem = problem(health);
         String signature = level + "|" + problem + "|" + health.pendingCount + "|"
             + health.lastOrderCode + "|" + health.realtimeConnected + "|"
-            + health.accessibilityConnected + "|" + health.notificationConnected;
+            + health.accessibilityConnected + "|" + health.notificationConnected + "|"
+            + BridgeConfig.platformMode(appContext) + "|"
+            + BridgeConfig.primaryPlatform(appContext);
         long now = System.currentTimeMillis();
         if (!force && signature.equals(lastSignature) && now - lastSentAt < MAX_SILENCE_MS) return;
         boolean changed = force || !signature.equals(lastSignature);
@@ -77,6 +79,8 @@ final class BridgeStatusReporter {
             body.put("realtimeConnected", health.realtimeConnected);
             body.put("accessibilityConnected", health.accessibilityConnected);
             body.put("notificationConnected", health.notificationConnected);
+            body.put("platformMode", BridgeConfig.platformMode(context));
+            body.put("primaryPlatform", BridgeConfig.primaryPlatform(context));
             body.put("changed", changed);
             byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
             connection = (HttpURLConnection) new URL(

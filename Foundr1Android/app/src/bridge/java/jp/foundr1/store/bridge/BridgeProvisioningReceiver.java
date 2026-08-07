@@ -17,6 +17,8 @@ public class BridgeProvisioningReceiver extends BroadcastReceiver {
         putIfPresent(editor, BridgeConfig.KEY_TOKEN, intent.getStringExtra("bridgeToken"));
         putIfPresent(editor, BridgeConfig.KEY_STORE_ID, intent.getStringExtra("storeId"));
         putIfPresent(editor, BridgeConfig.KEY_DEVICE_NAME, intent.getStringExtra("deviceName"));
+        putIfPresent(editor, BridgeConfig.KEY_PLATFORM_MODE, intent.getStringExtra("platformMode"));
+        putIfPresent(editor, BridgeConfig.KEY_PRIMARY_PLATFORM, intent.getStringExtra("primaryPlatform"));
         editor.commit();
 
         BridgeServiceStarter.ensureStarted(context, "provisioning");

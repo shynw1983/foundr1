@@ -52,6 +52,10 @@ public class UberNotificationListenerService extends NotificationListenerService
         boolean isUber = looksLikeUber(packageName);
         boolean isRocketNow = ROCKET_NOW_PACKAGE.equals(packageName);
         if (!isUber && !isRocketNow) return;
+        String platform = isRocketNow
+            ? BridgeConfig.PLATFORM_ROCKET_NOW
+            : BridgeConfig.PLATFORM_UBER_EATS;
+        if (!BridgeConfig.supportsPlatform(this, platform)) return;
         Notification notification = sbn.getNotification();
         if (notification == null || notification.extras == null) return;
         String title = stringExtra(notification, Notification.EXTRA_TITLE);
@@ -84,7 +88,7 @@ public class UberNotificationListenerService extends NotificationListenerService
             payload.put("recoveryRequestedOrders", recoveryRequestedOrders);
             BridgeUploader.upload(
                 this,
-                isRocketNow ? "rocket_now" : "uber_eats",
+                platform,
                 "notification",
                 packageName,
                 payload

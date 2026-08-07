@@ -58,6 +58,13 @@ public class BridgeForegroundService extends Service {
             handler.postDelayed(this, 2000);
         }
     };
+    private final Runnable platformForegroundWatchdog = new Runnable() {
+        @Override
+        public void run() {
+            BridgePlatformState.runForegroundGuard(BridgeForegroundService.this);
+            handler.postDelayed(this, 5000L);
+        }
+    };
     @Override
     public void onCreate() {
         super.onCreate();
@@ -75,6 +82,7 @@ public class BridgeForegroundService extends Service {
         refreshBridgeStatus();
         handler.post(healthRefresh);
         handler.post(recoveryWatchdog);
+        handler.postDelayed(platformForegroundWatchdog, 5000L);
     }
 
     @Override
@@ -89,6 +97,7 @@ public class BridgeForegroundService extends Service {
     public void onTimeout(int startId, int fgsType) {
         handler.removeCallbacks(healthRefresh);
         handler.removeCallbacks(recoveryWatchdog);
+        handler.removeCallbacks(platformForegroundWatchdog);
         stopSelf(startId);
     }
 
@@ -96,6 +105,7 @@ public class BridgeForegroundService extends Service {
     public void onDestroy() {
         handler.removeCallbacks(healthRefresh);
         handler.removeCallbacks(recoveryWatchdog);
+        handler.removeCallbacks(platformForegroundWatchdog);
         if (healthReceiverRegistered) {
             try { unregisterReceiver(healthReceiver); } catch (Exception ignored) {}
             healthReceiverRegistered = false;

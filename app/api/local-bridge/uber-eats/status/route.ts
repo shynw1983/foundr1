@@ -29,6 +29,12 @@ export async function POST(request: Request) {
     lastOrderCode: cleanText(source.lastOrderCode, 40),
     lastOrderAt: cleanText(source.lastOrderAt, 80),
     versionName: cleanText(source.versionName, 40),
+    platformMode: ["uber_eats", "rocket_now", "dual"].includes(cleanText(source.platformMode, 20))
+      ? cleanText(source.platformMode, 20)
+      : "dual",
+    primaryPlatform: cleanText(source.primaryPlatform, 20) === "rocket_now"
+      ? "rocket_now"
+      : "uber_eats",
     realtimeConnected: source.realtimeConnected === true,
     accessibilityConnected: source.accessibilityConnected === true,
     notificationConnected: source.notificationConnected === true

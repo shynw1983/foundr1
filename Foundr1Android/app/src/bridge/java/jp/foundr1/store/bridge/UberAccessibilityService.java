@@ -31,6 +31,8 @@ public class UberAccessibilityService extends AccessibilityService {
     private static final String TAG = "Foundr1BridgeRecovery";
     private static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
     private static final String ROCKET_NOW_PACKAGE = "com.cpone.merchant";
+    private static final long COMMAND_APP_RELAUNCH_COOLDOWN_MS = 15_000L;
+    private static final long COMMAND_UNKNOWN_PAGE_GRACE_MS = 10_000L;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String pendingPackageName = "";
     private String pendingText = "";
@@ -78,6 +80,8 @@ public class UberAccessibilityService extends AccessibilityService {
     private long commandInventoryHostClickedAt = 0L;
     private JSONArray commandInventoryAuditResults = new JSONArray();
     private long commandNextAttemptAt = 0L;
+    private long commandLastAppLaunchAt = 0L;
+    private long commandUnknownPageSince = 0L;
     private final Runnable commandRunnable = () -> runGuarded("command", this::processPendingCommand);
     private final Runnable commandPollRunnable = new Runnable() {
         @Override
@@ -152,24 +156,31 @@ public class UberAccessibilityService extends AccessibilityService {
     private void handleAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
         String packageName = event.getPackageName().toString();
+        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            BridgePlatformState.noteActivePackage(this, packageName);
+        }
         if (overlayController != null) {
-            if (looksLikeOrderApp(packageName)) {
+            if (looksLikeOrderApp(packageName) && BridgeConfig.supportsPackage(this, packageName)) {
                 overlayController.setOrderAppVisible(true);
             } else if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
                 boolean orderAppActive = false;
                 AccessibilityNodeInfo activeRoot = getRootInActiveWindow();
                 if (activeRoot != null) {
-                    orderAppActive = looksLikeOrderApp(value(activeRoot.getPackageName()));
+                    String activePackage = value(activeRoot.getPackageName());
+                    orderAppActive = looksLikeOrderApp(activePackage)
+                        && BridgeConfig.supportsPackage(this, activePackage);
                     activeRoot.recycle();
                 }
                 overlayController.setOrderAppVisible(orderAppActive);
             }
         }
         if (looksLikeRocketNow(packageName)) {
+            if (!BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_ROCKET_NOW)) return;
             handleRocketNowAccessibilityEvent(packageName);
             return;
         }
         if (!looksLikeUber(packageName)) return;
+        if (!BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_UBER_EATS)) return;
         boolean commandActive = BridgeCommandState.current(this) != null;
         if (!commandActive) trackInventoryStatusClick(event);
         AccessibilityNodeInfo root = getRootInActiveWindow();
@@ -563,11 +574,23 @@ public class UberAccessibilityService extends AccessibilityService {
             commandInventorySearchStartedAt = 0L;
             commandInventoryHostClickedAt = 0L;
             commandInventoryAuditResults = new JSONArray();
+            commandLastAppLaunchAt = 0L;
+            commandUnknownPageSince = 0L;
+        }
+        if (!BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_UBER_EATS)) {
+            BridgeCommandState.fail(this, "この端末は Uber Eats 担当に設定されていません。");
+            resetCommandAttempt();
+            return;
         }
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null || !looksLikeUber(value(root.getPackageName()))) {
             if (root != null) root.recycle();
-            UberRecoveryState.launchUber(this);
+            long now = SystemClock.uptimeMillis();
+            if (commandLastAppLaunchAt == 0L
+                || now - commandLastAppLaunchAt >= COMMAND_APP_RELAUNCH_COOLDOWN_MS) {
+                UberRecoveryState.launchUber(this);
+                commandLastAppLaunchAt = now;
+            }
             retryPendingCommand(1400L, "Uber Orders を開けませんでした。");
             return;
         }
@@ -605,6 +628,7 @@ public class UberAccessibilityService extends AccessibilityService {
         }
 
         if (containsOrderDetails(nodes)) {
+            commandUnknownPageSince = 0L;
             String visibleCode = extractOrderCode(extractOrderKey(nodes));
             if (!targetCode.equals(visibleCode)) {
                 performGlobalAction(GLOBAL_ACTION_BACK);
@@ -633,6 +657,7 @@ public class UberAccessibilityService extends AccessibilityService {
         }
 
         if (containsOrderOverview(nodes)) {
+            commandUnknownPageSince = 0L;
             AccessibilityNodeInfo activeCard = findActiveOrderCardByCode(root, targetCode, false);
             if (activeCard != null) {
                 if (commandReadyClickDispatched) {
@@ -658,8 +683,14 @@ public class UberAccessibilityService extends AccessibilityService {
             return;
         }
 
-        performGlobalAction(GLOBAL_ACTION_BACK);
-        retryPendingCommand(1200L, "Uber の注文一覧へ戻れませんでした。");
+        long now = SystemClock.uptimeMillis();
+        if (commandUnknownPageSince == 0L) commandUnknownPageSince = now;
+        if (now - commandUnknownPageSince < COMMAND_UNKNOWN_PAGE_GRACE_MS) {
+            retryPendingCommand(1200L, "Uber の注文画面を読み込み中です。");
+        } else {
+            BridgeCommandState.fail(this, "Uber の注文画面を確認できませんでした。");
+            resetCommandAttempt();
+        }
     }
 
     private void retryPendingCommand(long delayMs, String finalError) {
@@ -704,6 +735,8 @@ public class UberAccessibilityService extends AccessibilityService {
         commandInventoryHostClickedAt = 0L;
         commandInventoryAuditResults = new JSONArray();
         commandNextAttemptAt = 0L;
+        commandLastAppLaunchAt = 0L;
+        commandUnknownPageSince = 0L;
         handler.removeCallbacks(commandRunnable);
     }
 

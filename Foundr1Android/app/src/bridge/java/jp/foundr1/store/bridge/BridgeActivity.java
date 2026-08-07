@@ -28,6 +28,8 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.ArrayAdapter;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -52,8 +54,11 @@ public class BridgeActivity extends Activity {
     private EditText tokenInput;
     private EditText storeIdInput;
     private EditText deviceNameInput;
+    private Spinner platformModeInput;
+    private Spinner primaryPlatformInput;
     private TextView overallTitle;
     private TextView overallDetail;
+    private TextView platformSummary;
     private TextView uberStage;
     private TextView bridgeStage;
     private TextView osStage;
@@ -67,6 +72,8 @@ public class BridgeActivity extends Activity {
     private LinearLayout advancedLayout;
     private Button repairButton;
     private Button selfTestButton;
+    private Button openUberButton;
+    private Button openRocketButton;
     private boolean healthReceiverRegistered = false;
     private final BroadcastReceiver healthReceiver = new BroadcastReceiver() {
         @Override
@@ -100,6 +107,7 @@ public class BridgeActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        BridgePlatformState.pauseForegroundGuard(this, 2 * 60 * 1000L);
         BridgeServiceStarter.ensureStarted(this, "activity_resume");
         BridgeRealtimeClient.start(this);
         updateStatus();
@@ -177,8 +185,20 @@ public class BridgeActivity extends Activity {
         activity.addView(recentOrder);
         activity.addView(queueSummary);
 
-        addPrimaryButton(page, "Uber Orders を開く", view -> openUberOrders());
-        addSecondaryButton(page, "Rocket Now を開く", view -> openRocketNow());
+        LinearLayout platformSection = section(page, "この端末のプラットフォーム");
+        platformSummary = text("端末モード：" + BridgeConfig.platformSummary(this), 15, COLOR_INK, Typeface.BOLD);
+        TextView platformHint = text(
+            "指定したプラットフォームだけを監視し、両方の場合は主画面へ安全に戻します。",
+            13,
+            COLOR_MUTED,
+            Typeface.NORMAL
+        );
+        platformHint.setPadding(0, dp(7), 0, 0);
+        platformSection.addView(platformSummary);
+        platformSection.addView(platformHint);
+
+        openUberButton = addPrimaryButton(page, "Uber Orders を開く", view -> openUberOrders());
+        openRocketButton = addSecondaryButton(page, "Rocket Now を開く", view -> openRocketNow());
         selfTestButton = addSecondaryButton(page, "接続を診断", view -> runSelfTest());
 
         Button advancedButton = addTextButton(page, "管理者設定を表示", null);
@@ -210,6 +230,18 @@ public class BridgeActivity extends Activity {
         tokenInput = addInput(layout, "Bridge Token", BridgeConfig.token(this), true);
         storeIdInput = addInput(layout, "店舗 ID（必須）", BridgeConfig.storeId(this), false);
         deviceNameInput = addInput(layout, "端末名", BridgeConfig.deviceName(this), false);
+        platformModeInput = addSpinner(
+            layout,
+            "担当プラットフォーム",
+            new String[] { "Uber Eats 専用", "Rocket Now 専用", "Uber Eats + Rocket Now" },
+            platformModePosition(BridgeConfig.platformMode(this))
+        );
+        primaryPlatformInput = addSpinner(
+            layout,
+            "両方を使う場合の主画面",
+            new String[] { "Uber Eats", "Rocket Now" },
+            BridgeConfig.PLATFORM_ROCKET_NOW.equals(BridgeConfig.primaryPlatform(this)) ? 1 : 0
+        );
         addPrimaryButton(layout, "設定を保存して再接続", view -> {
             saveConfig();
             BridgeRealtimeClient.disconnect(this);
@@ -259,7 +291,9 @@ public class BridgeActivity extends Activity {
             : "attention".equals(level) ? Color.rgb(251, 246, 233) : Color.rgb(253, 237, 240);
         overallTitle.setText("healthy".equals(level) ? "✓ 注文連携は正常です" : "attention".equals(level) ? "△ 確認中の項目があります" : "！注文連携を確認してください");
         overallTitle.setTextColor(accent);
-        overallDetail.setText("healthy".equals(level) ? "Uber Eats / Rocket Now から Foundr1 OS まで接続されています" : problem);
+        overallDetail.setText("healthy".equals(level)
+            ? BridgeConfig.platformSummary(this) + " から Foundr1 OS まで接続されています"
+            : problem);
         statusCard.setBackground(cardBackground(soft, accent, 14));
         getWindow().setStatusBarColor(accent);
         getWindow().setNavigationBarColor(accent);
@@ -279,6 +313,23 @@ public class BridgeActivity extends Activity {
         }
         queueSummary.setText(health.pendingCount == 0 ? "未送信：0件" : "未送信：" + health.pendingCount + "件（自動再送中）");
         queueSummary.setTextColor(health.pendingCount == 0 ? COLOR_MUTED : COLOR_ATTENTION);
+        if (platformSummary != null) {
+            platformSummary.setText("端末モード：" + BridgeConfig.platformSummary(this));
+        }
+        if (openUberButton != null) {
+            openUberButton.setVisibility(
+                BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_UBER_EATS)
+                    ? View.VISIBLE
+                    : View.GONE
+            );
+        }
+        if (openRocketButton != null) {
+            openRocketButton.setVisibility(
+                BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_ROCKET_NOW)
+                    ? View.VISIBLE
+                    : View.GONE
+            );
+        }
 
         updateRepairButton(
             level,
@@ -432,6 +483,30 @@ public class BridgeActivity extends Activity {
         return editText;
     }
 
+    private Spinner addSpinner(
+        LinearLayout layout,
+        String label,
+        String[] values,
+        int selectedPosition
+    ) {
+        TextView textView = text(label, 13, COLOR_MUTED, Typeface.BOLD);
+        textView.setPadding(0, dp(11), 0, dp(4));
+        layout.addView(textView);
+        Spinner spinner = new Spinner(this);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+            this,
+            android.R.layout.simple_spinner_item,
+            values
+        );
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+        spinner.setSelection(Math.max(0, Math.min(values.length - 1, selectedPosition)));
+        spinner.setBackground(cardBackground(Color.WHITE, COLOR_LINE, 8));
+        spinner.setPadding(dp(8), dp(6), dp(8), dp(6));
+        layout.addView(spinner, matchWidth(0));
+        return spinner;
+    }
+
     private Button addPrimaryButton(LinearLayout layout, String label, View.OnClickListener listener) {
         Button button = button(label, Color.WHITE, COLOR_INK, listener);
         layout.addView(button, matchWidth(dp(12)));
@@ -529,7 +604,24 @@ public class BridgeActivity extends Activity {
         editor.putString(BridgeConfig.KEY_TOKEN, tokenInput.getText().toString().trim());
         editor.putString(BridgeConfig.KEY_STORE_ID, storeIdInput.getText().toString().trim());
         editor.putString(BridgeConfig.KEY_DEVICE_NAME, deviceNameInput.getText().toString().trim());
+        String platformMode = platformModeInput.getSelectedItemPosition() == 0
+            ? BridgeConfig.PLATFORM_UBER_EATS
+            : platformModeInput.getSelectedItemPosition() == 1
+                ? BridgeConfig.PLATFORM_ROCKET_NOW
+                : BridgeConfig.PLATFORM_DUAL;
+        String primaryPlatform = primaryPlatformInput.getSelectedItemPosition() == 1
+            ? BridgeConfig.PLATFORM_ROCKET_NOW
+            : BridgeConfig.PLATFORM_UBER_EATS;
+        editor.putString(BridgeConfig.KEY_PLATFORM_MODE, platformMode);
+        editor.putString(BridgeConfig.KEY_PRIMARY_PLATFORM, primaryPlatform);
         editor.apply();
+        BridgePlatformState.pauseForegroundGuard(this, 15_000L);
+    }
+
+    private int platformModePosition(String mode) {
+        if (BridgeConfig.PLATFORM_UBER_EATS.equals(mode)) return 0;
+        if (BridgeConfig.PLATFORM_ROCKET_NOW.equals(mode)) return 1;
+        return 2;
     }
 
     private void openUberOrders() {

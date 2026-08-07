@@ -25,6 +25,7 @@ final class BridgeCommandClient {
 
     static void poll(Context context) {
         Context appContext = context.getApplicationContext();
+        if (!BridgeConfig.supportsPlatform(appContext, BridgeConfig.PLATFORM_UBER_EATS)) return;
         if (!POLLING.compareAndSet(false, true)) return;
         EXECUTOR.execute(() -> {
             try {

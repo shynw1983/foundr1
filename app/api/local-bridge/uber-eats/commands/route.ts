@@ -278,14 +278,20 @@ export async function POST(request: Request) {
   ` : await sql`
     update local_bridge_commands
     set
-      status = case when attempts >= 5 then 'failed' else 'pending' end,
+      status = case
+        when command_type = 'mark_order_ready' or attempts >= 5 then 'failed'
+        else 'pending'
+      end,
       available_at = now() + interval '15 seconds',
       result = ${JSON.stringify(result)}::jsonb,
       last_error = ${error || "Bridge command failed."},
       claimed_by_device_id = null,
       claimed_at = null,
       claim_expires_at = null,
-      completed_at = case when attempts >= 5 then now() else null end,
+      completed_at = case
+        when command_type = 'mark_order_ready' or attempts >= 5 then now()
+        else null
+      end,
       updated_at = now()
     where id::text = ${commandId}
       and store_id::text = ${authorization.storeId}
