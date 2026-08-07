@@ -82,12 +82,26 @@ public class UberAccessibilityService extends AccessibilityService {
     private long commandNextAttemptAt = 0L;
     private long commandLastAppLaunchAt = 0L;
     private long commandUnknownPageSince = 0L;
+    private long commandRealtimeDisconnectedAt = 0L;
+    private boolean commandRealtimeConnected = false;
     private final Runnable commandRunnable = () -> runGuarded("command", this::processPendingCommand);
     private final Runnable commandPollRunnable = new Runnable() {
         @Override
         public void run() {
+            BridgeHealthState.Snapshot health = BridgeHealthState.snapshot(UberAccessibilityService.this);
+            if (health.realtimeConnected) {
+                commandRealtimeConnected = true;
+                commandRealtimeDisconnectedAt = 0L;
+                return;
+            }
+            commandRealtimeConnected = false;
+            long now = SystemClock.elapsedRealtime();
+            if (commandRealtimeDisconnectedAt == 0L) commandRealtimeDisconnectedAt = now;
             runGuarded("command_poll", () -> BridgeCommandClient.poll(UberAccessibilityService.this));
-            handler.postDelayed(this, 5 * 60 * 1000L);
+            handler.postDelayed(
+                this,
+                BridgeCommandPollPolicy.nextDelayMs(false, now - commandRealtimeDisconnectedAt)
+            );
         }
     };
     private final Runnable recoveryRunnable = () -> {
@@ -110,6 +124,7 @@ public class UberAccessibilityService extends AccessibilityService {
                     handler.postDelayed(commandRunnable, 150L);
                 } else if (BridgeHealthState.ACTION_CHANGED.equals(intent.getAction())) {
                     if (overlayController != null) overlayController.updateHealth();
+                    refreshCommandFallbackPolling();
                 }
             }
         }
@@ -526,9 +541,22 @@ public class UberAccessibilityService extends AccessibilityService {
             recoveryReceiverRegistered = true;
         }
         if (BridgeCommandState.current(this) != null) handler.postDelayed(commandRunnable, 150L);
-        handler.removeCallbacks(commandPollRunnable);
-        handler.post(commandPollRunnable);
+        commandRealtimeConnected = !BridgeHealthState.snapshot(this).realtimeConnected;
+        refreshCommandFallbackPolling();
         if (UberRecoveryState.isPending(this)) scheduleRecovery(250L);
+    }
+
+    private void refreshCommandFallbackPolling() {
+        boolean realtimeConnected = BridgeHealthState.snapshot(this).realtimeConnected;
+        if (realtimeConnected == commandRealtimeConnected) return;
+        commandRealtimeConnected = realtimeConnected;
+        handler.removeCallbacks(commandPollRunnable);
+        if (realtimeConnected) {
+            commandRealtimeDisconnectedAt = 0L;
+            return;
+        }
+        commandRealtimeDisconnectedAt = SystemClock.elapsedRealtime();
+        handler.post(commandPollRunnable);
     }
 
     @Override

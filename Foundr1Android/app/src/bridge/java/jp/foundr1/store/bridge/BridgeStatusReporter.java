@@ -16,7 +16,9 @@ import java.util.concurrent.Executors;
 
 final class BridgeStatusReporter {
     private static final String TAG = "Foundr1BridgeStatus";
-    private static final long MAX_SILENCE_MS = 5 * 60 * 1000L;
+    // Realtime presence is the live online signal. This is only a sparse database audit
+    // record, so a healthy stable bridge must not wake Postgres every few minutes.
+    private static final long MAX_SILENCE_MS = 6 * 60 * 60 * 1000L;
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
     private static String lastSignature = "";
     private static long lastSentAt = 0L;

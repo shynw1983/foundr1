@@ -121,8 +121,12 @@ final class BridgeRealtimeClient {
                 @Override
                 public void onConnectionStateChange(ConnectionStateChange change) {
                     boolean connected = change.getCurrentState() == ConnectionState.CONNECTED;
-                    BridgeHealthState.setRealtimeConnected(context, connected);
-                    if (!connected) BridgeStatusReporter.reportIfNeeded(context, false);
+                    // A socket connection is not enough: commands are safe to stop polling
+                    // only after the private presence-channel subscription succeeds.
+                    if (!connected) {
+                        BridgeHealthState.setRealtimeConnected(context, false);
+                        BridgeStatusReporter.reportIfNeeded(context, false);
+                    }
                 }
 
                 @Override

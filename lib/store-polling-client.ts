@@ -42,13 +42,20 @@ function isAnyStoreOpen(storeIds?: string[]) {
 
 export function getStoreFallbackPollDelay(options: {
   baseIntervalMs?: number;
+  disconnectedForMs?: number;
   failureCount?: number;
   storeIds?: string[];
 } = {}) {
-  if (!isAnyStoreOpen(options.storeIds)) return 15 * 60_000;
+  if (!isAnyStoreOpen(options.storeIds)) return 60 * 60_000;
   const baseIntervalMs = Math.max(30_000, options.baseIntervalMs ?? 60_000);
   const failureCount = Math.max(0, Math.min(4, options.failureCount ?? 0));
-  return Math.min(5 * 60_000, baseIntervalMs * (2 ** failureCount));
+  const disconnectedForMs = Math.max(0, options.disconnectedForMs ?? 0);
+  const outageFloorMs = disconnectedForMs >= 15 * 60_000
+    ? 5 * 60_000
+    : disconnectedForMs >= 5 * 60_000
+      ? 2 * 60_000
+      : baseIntervalMs;
+  return Math.min(5 * 60_000, Math.max(outageFloorMs, baseIntervalMs * (2 ** failureCount)));
 }
 
 export function createStoreFallbackPoller(
@@ -59,6 +66,7 @@ export function createStoreFallbackPoller(
   let timer = 0;
   let failureCount = 0;
   let running = false;
+  let startedAt = 0;
 
   const clear = () => {
     if (timer) window.clearTimeout(timer);
@@ -70,6 +78,7 @@ export function createStoreFallbackPoller(
     if (!active || document.visibilityState !== "visible") return;
     timer = window.setTimeout(run, getStoreFallbackPollDelay({
       baseIntervalMs: options.baseIntervalMs,
+      disconnectedForMs: startedAt ? Date.now() - startedAt : 0,
       failureCount,
       storeIds: options.storeIds?.()
     }));
@@ -101,6 +110,7 @@ export function createStoreFallbackPoller(
     start(options: { immediate?: boolean } = {}) {
       if (active) return;
       active = true;
+      startedAt = Date.now();
       window.addEventListener("online", handleVisible);
       window.addEventListener("focus", handleVisible);
       document.addEventListener("visibilitychange", handleVisible);
@@ -109,6 +119,7 @@ export function createStoreFallbackPoller(
     },
     stop() {
       active = false;
+      startedAt = 0;
       clear();
       window.removeEventListener("online", handleVisible);
       window.removeEventListener("focus", handleVisible);
