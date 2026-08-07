@@ -43,6 +43,12 @@ async function getKitchenTasks(storeId: string, area = "", businessHours: unknow
       coalesce(store_customer_orders.estimated_prep_minutes, 0)::int as "estimatedPrepMinutes",
       coalesce(store_customer_orders.estimated_ready_at::text, '') as "estimatedReadyAt",
       store_customer_orders.pickup_code as "pickupCode",
+      concat(
+        store_customer_orders.pickup_date::text,
+        'T',
+        left(store_customer_orders.pickup_time, 5),
+        ':00+09:00'
+      ) as "scheduledAt",
       store_customer_orders.amount::int as amount,
       store_customer_orders.currency,
       coalesce(
@@ -96,8 +102,10 @@ async function getKitchenTasks(storeId: string, area = "", businessHours: unknow
       )
       and (${area} = '' or order_production_tasks.production_area = ${area})
     order by
-      case order_production_tasks.status when 'preparing' then 0 when 'new' then 1 else 2 end,
-      store_customer_orders.created_at asc
+      store_customer_orders.pickup_date asc,
+      left(store_customer_orders.pickup_time, 5) asc,
+      store_customer_orders.created_at asc,
+      order_production_tasks.created_at asc
     limit 120
   `, sql`
     select distinct production_area as value, production_area_label as label

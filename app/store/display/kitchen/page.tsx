@@ -28,6 +28,7 @@ type KitchenTask = {
   estimatedPrepMinutes: number;
   estimatedReadyAt: string;
   pickupCode: string;
+  scheduledAt: string;
   amount: number;
   currency: string;
   customerName: string;
@@ -874,7 +875,6 @@ export default function StoreKitchenPage() {
 
       <div className={`store-kitchen-bridge-status is-${bridgeLevel}`} title={bridgeStatus?.problem || bridgeLabel}>
         <span aria-hidden="true" />
-        <strong>Uber</strong>
         <b>{bridgeLabel}</b>
         {Number(bridgeStatus?.pendingCount ?? 0) > 0 ? (
           <small>{isChinese ? `待发送 ${bridgeStatus?.pendingCount}` : `未送信 ${bridgeStatus?.pendingCount}`}</small>
@@ -913,8 +913,12 @@ export default function StoreKitchenPage() {
                     <strong>{formatOrderAmount(task.amount, task.currency)}</strong>
                   </div>
                   <div>
-                    <small>{task.kitchenLanguage === "zh" ? "下单时间" : "注文日時"}</small>
-                    <strong>{formatOrderDateTime(task.createdAt, task.kitchenLanguage)}</strong>
+                    <small>
+                      {pickupOrderSources.has(task.orderSource)
+                        ? (task.kitchenLanguage === "zh" ? "取餐时间" : "受取日時")
+                        : (task.kitchenLanguage === "zh" ? "下单时间" : "注文日時")}
+                    </small>
+                    <strong>{formatOrderDateTime(task.scheduledAt || task.createdAt, task.kitchenLanguage)}</strong>
                   </div>
                 </div>
                 {task.tableLabel ? <p className="store-kitchen-table-label">{task.kitchenLanguage === "zh" ? "座位" : "座席"} {task.tableLabel}</p> : null}
