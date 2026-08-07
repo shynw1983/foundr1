@@ -1,6 +1,7 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
+import { getKitchenBusinessDayWindow } from "../../../../../lib/kitchen-business-day";
 import { buildKitchenDisplayItemGroups } from "../../../../../lib/kitchen-display-groups";
 import { reconcileUberReadyCommand } from "../../../../../lib/local-bridge-commands";
 import {
@@ -25,7 +26,8 @@ type KitchenMenuCandidate = MenuDisplayNameCandidate & {
   optionKey?: string;
 };
 
-async function getKitchenTasks(storeId: string, area = "") {
+async function getKitchenTasks(storeId: string, area = "", businessHours: unknown = {}) {
+  const businessDay = getKitchenBusinessDayWindow(businessHours);
   const [rows, areas, settingsRows] = await Promise.all([sql`
     select
       order_production_tasks.id::text,
@@ -82,6 +84,16 @@ async function getKitchenTasks(storeId: string, area = "") {
       and store_customer_orders.payment_status = 'paid'
       and store_customer_orders.status not in ('completed', 'cancelled', 'refund_pending')
       and order_production_tasks.status in ('new', 'preparing', 'ready')
+      and (
+        concat(
+          store_customer_orders.pickup_date::text,
+          'T',
+          left(store_customer_orders.pickup_time, 5)
+        ) between ${businessDay.startAt} and ${businessDay.endAt}
+        or (
+          store_customer_orders.created_at at time zone 'Asia/Tokyo'
+        ) between ${businessDay.startAt}::timestamp and ${businessDay.endAt}::timestamp
+      )
       and (${area} = '' or order_production_tasks.production_area = ${area})
     order by
       case order_production_tasks.status when 'preparing' then 0 when 'new' then 1 else 2 end,
@@ -184,6 +196,7 @@ async function getKitchenTasks(storeId: string, area = "") {
   return {
     tasks,
     areas,
+    businessDay,
     displayLanguage: taskLanguages.size === 1
       ? (taskLanguages.has("zh") ? "zh" : "ja")
       : (tasks.length === 0 && configuredMaamaaLanguage === "zh" ? "zh" : "ja")
@@ -200,8 +213,9 @@ export async function GET(request: Request) {
   if (storeFilter === "__forbidden__" || !storeFilter) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
 
-  const [{ tasks, areas, displayLanguage }, preferenceRows, bridgeRows] = await Promise.all([
-    getKitchenTasks(storeFilter, normalizeText(params.get("area"))),
+  const selectedStore = access.stores.find((store) => store.id === storeFilter);
+  const [{ tasks, areas, businessDay, displayLanguage }, preferenceRows, bridgeRows] = await Promise.all([
+    getKitchenTasks(storeFilter, normalizeText(params.get("area")), selectedStore?.businessHours),
     sql`
       select coalesce(ui_preferences ->> 'kitchenDisplayMode', 'detailed') as "kitchenDisplayMode"
       from employees
@@ -229,6 +243,7 @@ export async function GET(request: Request) {
     selectedStoreId: storeFilter,
     tasks,
     areas,
+    businessDay,
     displayLanguage,
     kitchenDisplayMode: ["order_only", "simple"].includes(String(preferenceRows[0]?.kitchenDisplayMode))
       ? preferenceRows[0]?.kitchenDisplayMode
