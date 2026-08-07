@@ -5,6 +5,8 @@ import { getStoredStoreSelection, setStoredStoreSelection } from "../../componen
 import { useDisplayMode } from "../../components/useDisplayMode";
 import { useVisibleRefresh } from "../../components/useVisibleRefresh";
 import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../../lib/store-polling-client";
+import { playStoreOrderAlertSound } from "../../../../lib/store-order-alert-sounds";
+import { defaultStoreModuleSettings, type StoreModuleSettings, type StoreOrderAlertSound } from "../../../../lib/module-setting-defaults";
 
 type KitchenTask = {
   id: string;
@@ -15,6 +17,7 @@ type KitchenTask = {
   status: string;
   printStatus: string;
   itemSummary: string;
+  itemCount: number;
   itemGroups: Array<{
     itemName: string;
     quantity: number;
@@ -102,6 +105,13 @@ type BridgeStatus = {
   deviceName?: string;
 };
 
+type NewOrderNotice = {
+  taskId: string;
+  pickupCode: string;
+  itemCount: number;
+  orderCount: number;
+};
+
 const statusLabels: Record<"ja" | "zh", Record<string, string>> = {
   ja: { new: "制作待ち", preparing: "制作中", ready: "完成" },
   zh: { new: "待制作", preparing: "制作中", ready: "已完成" }
@@ -114,6 +124,24 @@ const orderTypeLabels: Record<"ja" | "zh", Record<string, string>> = {
 
 const deliveryOrderSources = new Set(["uber_eats", "demae_can", "rocket_now", "wolt"]);
 const pickupOrderSources = new Set(["maamaa_web", "nanacha_web", "web_reservation"]);
+
+function isFoundr1NativeShell() {
+  if (typeof window === "undefined") return false;
+  const nativeWindow = window as typeof window & {
+    Foundr1NativeNotifications?: unknown;
+    Foundr1Printer?: unknown;
+  };
+  return Boolean(nativeWindow.Foundr1NativeNotifications || nativeWindow.Foundr1Printer);
+}
+
+function getKitchenItemCount(task: KitchenTask) {
+  const orderItemCount = Number(task.itemCount);
+  if (Number.isFinite(orderItemCount) && orderItemCount >= 0) return orderItemCount;
+  return (task.itemGroups ?? []).reduce((total, group) => {
+    const quantity = Number(group.quantity);
+    return total + (Number.isFinite(quantity) ? Math.max(0, quantity) : 0);
+  }, 0);
+}
 
 function PlatformLogo({ source }: { source: string }) {
   if (source === "uber_eats") {
@@ -230,6 +258,10 @@ export default function StoreKitchenPage() {
   const [inventoryListError, setInventoryListError] = useState("");
   const [inventoryRestoringKey, setInventoryRestoringKey] = useState("");
   const [inventoryAudit, setInventoryAudit] = useState<InventoryAuditState | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundReady, setSoundReady] = useState(false);
+  const [newOrderNotice, setNewOrderNotice] = useState<NewOrderNotice | null>(null);
+  const [newArrivalOrderIds, setNewArrivalOrderIds] = useState<string[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const selectedStoreIdRef = useRef(selectedStoreId);
   const serverOffsetRef = useRef(0);
@@ -239,6 +271,12 @@ export default function StoreKitchenPage() {
   const inventoryPointerRef = useRef<{ lineKey: string; x: number; y: number; handled: boolean } | null>(null);
   const inventoryCommandKeyByIdRef = useRef<Record<string, string>>({});
   const suppressIngredientClickUntilRef = useRef(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const soundEnabledRef = useRef(false);
+  const orderAlertSoundRef = useRef<StoreOrderAlertSound>(defaultStoreModuleSettings.orderAlerts.sound);
+  const seenOrderIdsRef = useRef<Set<string>>(new Set());
+  const hasNewOrderBaselineRef = useRef(false);
+  const newOrderNoticeTimerRef = useRef<number | null>(null);
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   useEffect(() => {
@@ -255,6 +293,72 @@ export default function StoreKitchenPage() {
     if (!Number.isFinite(timestamp)) return;
     serverOffsetRef.current = timestamp - Date.now();
     setNow(timestamp);
+  }
+
+  async function ensureAudioReady() {
+    const AudioContextClass = window.AudioContext
+      || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) {
+      setSoundReady(false);
+      return false;
+    }
+    if (!audioContextRef.current) audioContextRef.current = new AudioContextClass();
+    if (audioContextRef.current.state === "suspended") await audioContextRef.current.resume();
+    const ready = audioContextRef.current.state === "running";
+    setSoundReady(ready);
+    return ready;
+  }
+
+  async function playNewOrderAlert() {
+    if (!soundEnabledRef.current) return;
+    try {
+      if (!await ensureAudioReady() || !audioContextRef.current) return;
+      playStoreOrderAlertSound(audioContextRef.current, orderAlertSoundRef.current);
+    } catch {
+      setSoundReady(false);
+    }
+  }
+
+  function resetNewOrderBaseline() {
+    seenOrderIdsRef.current = new Set();
+    hasNewOrderBaselineRef.current = false;
+    setNewOrderNotice(null);
+    setNewArrivalOrderIds([]);
+    if (newOrderNoticeTimerRef.current) window.clearTimeout(newOrderNoticeTimerRef.current);
+    newOrderNoticeTimerRef.current = null;
+  }
+
+  function announceNewOrders(nextTasks: KitchenTask[]) {
+    const nextOrderIds = new Set(nextTasks.map((task) => task.orderId).filter(Boolean));
+    if (!hasNewOrderBaselineRef.current) {
+      seenOrderIdsRef.current = nextOrderIds;
+      hasNewOrderBaselineRef.current = true;
+      return;
+    }
+    const newOrders = nextTasks.filter((task, index, all) => (
+      task.status === "new"
+      && !seenOrderIdsRef.current.has(task.orderId)
+      && all.findIndex((candidate) => candidate.orderId === task.orderId) === index
+    ));
+    nextOrderIds.forEach((orderId) => seenOrderIdsRef.current.add(orderId));
+    if (!newOrders.length) return;
+
+    const first = newOrders[0];
+    setNewOrderNotice({
+      taskId: first.id,
+      pickupCode: first.pickupCode,
+      itemCount: getKitchenItemCount(first),
+      orderCount: newOrders.length
+    });
+    setNewArrivalOrderIds(newOrders.map((task) => task.orderId));
+    if (newOrderNoticeTimerRef.current) window.clearTimeout(newOrderNoticeTimerRef.current);
+    newOrderNoticeTimerRef.current = window.setTimeout(() => {
+      setNewOrderNotice(null);
+      setNewArrivalOrderIds([]);
+      newOrderNoticeTimerRef.current = null;
+    }, 15_000);
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.([180, 80, 180]);
+    void playNewOrderAlert();
   }
 
   async function load(storeId = selectedStoreIdRef.current, area = selectedArea) {
@@ -277,7 +381,9 @@ export default function StoreKitchenPage() {
     setSelectedStoreId(nextStoreId);
     selectedStoreIdRef.current = nextStoreId;
     if (nextStoreId) setStoredStoreSelection(nextStoreId);
-    setTasks(body.tasks ?? []);
+    const nextTasks = (body.tasks ?? []) as KitchenTask[];
+    announceNewOrders(nextTasks);
+    setTasks(nextTasks);
     setAreas(body.areas ?? []);
     setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
     setKitchenDisplayMode(
@@ -308,6 +414,31 @@ export default function StoreKitchenPage() {
   useVisibleRefresh(() => {
     void load();
   });
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/settings?module=store", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { settings?: StoreModuleSettings } | null) => {
+        if (active && body?.settings?.orderAlerts?.sound) {
+          orderAlertSoundRef.current = body.settings.orderAlerts.sound;
+        }
+      })
+      .catch(() => {
+        // Kitchen alerts keep the default bell if settings are unavailable.
+      });
+    if (isFoundr1NativeShell()) {
+      soundEnabledRef.current = true;
+      setSoundEnabled(true);
+      void ensureAudioReady();
+    }
+    return () => {
+      active = false;
+      if (newOrderNoticeTimerRef.current) window.clearTimeout(newOrderNoticeTimerRef.current);
+      void audioContextRef.current?.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function toggleLineCheck(task: KitchenTask, key: string, isIngredient: boolean) {
     if (Date.now() < suppressIngredientClickUntilRef.current) return;
@@ -835,6 +966,7 @@ export default function StoreKitchenPage() {
               <span>{isChinese ? "显示门店" : "表示店舗"}</span>
               <select value={selectedStoreId} onChange={(event) => {
                 const storeId = event.target.value;
+                resetNewOrderBaseline();
                 setSelectedStoreId(storeId);
                 selectedStoreIdRef.current = storeId;
                 setStoredStoreSelection(storeId);
@@ -844,7 +976,10 @@ export default function StoreKitchenPage() {
               </select>
             </label>
           ) : null}
-          <select value={selectedArea} onChange={(event) => setSelectedArea(event.target.value)} aria-label="制作区">
+          <select value={selectedArea} onChange={(event) => {
+            resetNewOrderBaseline();
+            setSelectedArea(event.target.value);
+          }} aria-label="制作区">
             <option value="">{isChinese ? "全部" : "全部"}</option>
             {areas.map((area) => <option key={area.value} value={area.value}>{isChinese && area.label === "調理" ? "烹饪" : area.label}</option>)}
           </select>
@@ -876,6 +1011,22 @@ export default function StoreKitchenPage() {
           <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
             {isChinese ? "全屏・保持亮屏 ON" : "全画面・常時点灯 ON"}
           </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={async () => {
+              const next = !soundEnabledRef.current;
+              soundEnabledRef.current = next;
+              setSoundEnabled(next);
+              if (next && await ensureAudioReady() && audioContextRef.current) {
+                playStoreOrderAlertSound(audioContextRef.current, orderAlertSoundRef.current);
+              }
+            }}
+          >
+            {soundEnabled && soundReady
+              ? (isChinese ? "新订单提示音 ON" : "新規注文音 ON")
+              : (isChinese ? "开启新订单提示音" : "新規注文音を有効にする")}
+          </button>
           <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
           <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>
@@ -891,6 +1042,30 @@ export default function StoreKitchenPage() {
           <small>{isChinese ? `待发送 ${bridgeStatus?.pendingCount}` : `未送信 ${bridgeStatus?.pendingCount}`}</small>
         ) : null}
       </div>
+
+      {newOrderNotice ? (
+        <button
+          className="store-kitchen-new-order-alert"
+          type="button"
+          role="alert"
+          aria-live="assertive"
+          onClick={() => {
+            setStatusFilter("active");
+            setSelectedTaskId(newOrderNotice.taskId);
+            setNewOrderNotice(null);
+            setNewArrivalOrderIds([]);
+          }}
+        >
+          <span aria-hidden="true">!</span>
+          <strong>{isChinese ? "新订单" : "新規注文"}</strong>
+          <b>{newOrderNotice.orderCount > 1
+            ? (isChinese ? `${newOrderNotice.orderCount} 单` : `${newOrderNotice.orderCount}件`)
+            : `#${newOrderNotice.pickupCode}`}</b>
+          {newOrderNotice.orderCount === 1 ? (
+            <small>{isChinese ? `共 ${newOrderNotice.itemCount} 件商品` : `商品 合計${newOrderNotice.itemCount}点`}</small>
+          ) : null}
+        </button>
+      ) : null}
 
       <section className="store-kitchen-board">
         <nav className="store-kitchen-status-tabs" aria-label={isChinese ? "按状态筛选" : "状態で絞り込み"}>
@@ -925,7 +1100,7 @@ export default function StoreKitchenPage() {
             <div className="store-kitchen-queue-list">
               {filteredTasks.map((task, index) => (
                 <button
-                  className={`store-kitchen-queue-item is-${task.status}${selectedTask?.id === task.id ? " is-selected" : ""}`}
+                  className={`store-kitchen-queue-item is-${task.status}${selectedTask?.id === task.id ? " is-selected" : ""}${newArrivalOrderIds.includes(task.orderId) ? " is-arriving" : ""}`}
                   type="button"
                   key={task.id}
                   aria-pressed={selectedTask?.id === task.id}
@@ -933,7 +1108,12 @@ export default function StoreKitchenPage() {
                 >
                   <span className="store-kitchen-queue-position">{String(index + 1).padStart(2, "0")}</span>
                   <span className="store-kitchen-queue-main">
-                    <span className="store-kitchen-queue-code">{task.pickupCode}</span>
+                    <span className="store-kitchen-queue-code-row">
+                      <span className="store-kitchen-queue-code">{task.pickupCode}</span>
+                      <span className="store-kitchen-item-count">
+                        {task.kitchenLanguage === "zh" ? `共 ${getKitchenItemCount(task)} 件` : `合計 ${getKitchenItemCount(task)}点`}
+                      </span>
+                    </span>
                     <span className="store-kitchen-queue-meta">
                       {formatOrderDateTime(task.scheduledAt || task.createdAt, task.kitchenLanguage)}
                       <em>{statusLabels[task.kitchenLanguage][task.status]}</em>
@@ -974,7 +1154,12 @@ export default function StoreKitchenPage() {
                   </div>
                   <div>
                     <small>{task.kitchenLanguage === "zh" ? "订单编号" : "注文番号"}</small>
-                    <b>{task.pickupCode}</b>
+                    <span className="store-kitchen-order-code-line">
+                      <b>{task.pickupCode}</b>
+                      <span className="store-kitchen-item-count is-detail">
+                        {task.kitchenLanguage === "zh" ? `共 ${getKitchenItemCount(task)} 件商品` : `商品 合計${getKitchenItemCount(task)}点`}
+                      </span>
+                    </span>
                   </div>
                 </div>
                 <div className="store-kitchen-order-facts">

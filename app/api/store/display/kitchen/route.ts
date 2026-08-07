@@ -63,6 +63,11 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
       coalesce(store_customer_orders.customer_summary ->> 'note', '') as note,
       store_customer_orders.customer_summary as "customerSummary",
       coalesce((
+        select sum(store_customer_order_items.quantity)::int
+        from store_customer_order_items
+        where store_customer_order_items.order_id = store_customer_orders.id
+      ), 0)::int as "itemCount",
+      coalesce((
         select jsonb_agg(
           jsonb_build_object(
             'itemName', store_customer_order_items.item_name,
