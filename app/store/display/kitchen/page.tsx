@@ -84,6 +84,7 @@ type InventoryAuditState = {
 };
 
 type KitchenDisplayMode = "order_only" | "simple" | "detailed";
+type KitchenStatusFilter = "active" | "new" | "preparing" | "ready";
 
 type StoreOption = {
   id: string;
@@ -206,6 +207,8 @@ export default function StoreKitchenPage() {
   const [areas, setAreas] = useState<Array<{ value: string; label: string }>>([]);
   const [displayLanguage, setDisplayLanguage] = useState<"ja" | "zh">("ja");
   const [kitchenDisplayMode, setKitchenDisplayMode] = useState<KitchenDisplayMode>("detailed");
+  const [statusFilter, setStatusFilter] = useState<KitchenStatusFilter>("active");
+  const [selectedTaskId, setSelectedTaskId] = useState("");
   const [selectedArea, setSelectedArea] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
@@ -787,8 +790,16 @@ export default function StoreKitchenPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedArea, selectedStoreId]);
 
-  const visibleTasks = useMemo(() => tasks.filter((task) => task.status !== "ready"), [tasks]);
-  const readyTasks = useMemo(() => tasks.filter((task) => task.status === "ready"), [tasks]);
+  const taskCounts = useMemo(() => ({
+    active: tasks.filter((task) => task.status !== "ready").length,
+    new: tasks.filter((task) => task.status === "new").length,
+    preparing: tasks.filter((task) => task.status === "preparing").length,
+    ready: tasks.filter((task) => task.status === "ready").length
+  }), [tasks]);
+  const filteredTasks = useMemo(() => tasks.filter((task) => (
+    statusFilter === "active" ? task.status !== "ready" : task.status === statusFilter
+  )), [statusFilter, tasks]);
+  const selectedTask = filteredTasks.find((task) => task.id === selectedTaskId) ?? filteredTasks[0] ?? null;
   const isChinese = displayLanguage === "zh";
   const bridgeOnline = bridgePresence === "online"
     || (bridgePresence === "connecting" && bridgeStatus?.recentlyOnline === true);
@@ -882,10 +893,73 @@ export default function StoreKitchenPage() {
       </div>
 
       <section className="store-kitchen-board">
-        <div>
-          <h2>{isChinese ? "待制作 / 制作中" : "制作待ち / 制作中"}</h2>
-          <div className="store-kitchen-task-grid">
-            {visibleTasks.map((task) => (
+        <nav className="store-kitchen-status-tabs" aria-label={isChinese ? "按状态筛选" : "状態で絞り込み"}>
+          {([
+            ["active", isChinese ? "进行中" : "進行中"],
+            ["new", isChinese ? "待制作" : "制作待ち"],
+            ["preparing", isChinese ? "制作中" : "制作中"],
+            ["ready", isChinese ? "已完成" : "完成"]
+          ] as Array<[KitchenStatusFilter, string]>).map(([value, label]) => (
+            <button
+              className={statusFilter === value ? "is-active" : ""}
+              type="button"
+              key={value}
+              aria-pressed={statusFilter === value}
+              onClick={() => setStatusFilter(value)}
+            >
+              <span>{label}</span>
+              <b>{taskCounts[value]}</b>
+            </button>
+          ))}
+        </nav>
+
+        <div className="store-kitchen-workspace">
+          <aside className="store-kitchen-queue" aria-label={isChinese ? "订单队列" : "注文キュー"}>
+            <header>
+              <div>
+                <small>{isChinese ? "按时间排序" : "時刻順"}</small>
+                <strong>{isChinese ? "订单队列" : "注文キュー"}</strong>
+              </div>
+              <b>{filteredTasks.length}</b>
+            </header>
+            <div className="store-kitchen-queue-list">
+              {filteredTasks.map((task, index) => (
+                <button
+                  className={`store-kitchen-queue-item is-${task.status}${selectedTask?.id === task.id ? " is-selected" : ""}`}
+                  type="button"
+                  key={task.id}
+                  aria-pressed={selectedTask?.id === task.id}
+                  onClick={() => setSelectedTaskId(task.id)}
+                >
+                  <span className="store-kitchen-queue-position">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="store-kitchen-queue-main">
+                    <span className="store-kitchen-queue-code">{task.pickupCode}</span>
+                    <span className="store-kitchen-queue-meta">
+                      {formatOrderDateTime(task.scheduledAt || task.createdAt, task.kitchenLanguage)}
+                      <em>{statusLabels[task.kitchenLanguage][task.status]}</em>
+                    </span>
+                    <span className="store-kitchen-queue-items">
+                      {(task.itemGroups ?? []).map((group) => group.itemName).filter(Boolean).join(" / ") || (isChinese ? "内容未登记" : "内容未登録")}
+                    </span>
+                  </span>
+                  <span className="store-kitchen-queue-side">
+                    <PlatformLogo source={task.orderSource} />
+                    <strong>{formatOrderAmount(task.amount, task.currency)}</strong>
+                  </span>
+                </button>
+              ))}
+              {!filteredTasks.length ? (
+                <p className="store-kitchen-empty">
+                  {isChinese ? "当前筛选条件下没有订单。" : "この状態の注文はありません。"}
+                </p>
+              ) : null}
+            </div>
+          </aside>
+
+          <div className="store-kitchen-detail">
+            {selectedTask ? (() => {
+              const task = selectedTask;
+              return (
               <article className={`store-kitchen-task is-${task.status}`} key={task.id}>
                 <div className="store-kitchen-platform-row">
                   <PlatformLogo source={task.orderSource} />
@@ -1174,37 +1248,29 @@ export default function StoreKitchenPage() {
                       {task.kitchenLanguage === "zh" ? "撤销开始" : "開始を取り消す"}
                     </button>
                   ) : null}
-                  <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "ready")}>{task.kitchenLanguage === "zh" ? (task.orderType === "eat_in" ? "出餐完成" : "完成") : (task.orderType === "eat_in" ? "提供完了" : "完成")}</button>
+                  {task.status === "ready" ? (
+                    <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => void rollbackTask(task, "preparing")}>
+                      {task.kitchenLanguage === "zh" ? "返回制作中" : "制作中に戻す"}
+                    </button>
+                  ) : (
+                    <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "ready")}>{task.kitchenLanguage === "zh" ? (task.orderType === "eat_in" ? "出餐完成" : "完成") : (task.orderType === "eat_in" ? "提供完了" : "完成")}</button>
+                  )}
+                  {task.status === "ready" && tasks.every((candidate) => candidate.orderId !== task.orderId || candidate.status === "ready") ? (
+                    <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => void completeHandoff(task)}>
+                      {task.kitchenLanguage === "zh" ? "交付完成" : "受渡完了"}
+                    </button>
+                  ) : null}
                 </div>
               </article>
-            ))}
-            {!visibleTasks.length ? <p className="store-kitchen-empty">{isChinese ? "当前没有待制作任务。" : "制作待ちの制作タスクはありません。"}</p> : null}
+              );
+            })() : (
+              <div className="store-kitchen-detail-empty">
+                <strong>{isChinese ? "请选择订单" : "注文を選択してください"}</strong>
+                <p>{isChinese ? "当前筛选条件下没有可显示的订单。" : "この状態の注文はありません。"}</p>
+              </div>
+            )}
           </div>
         </div>
-
-        <aside>
-          <h2>{isChinese ? "已完成" : "完成"}</h2>
-          <div className="store-kitchen-ready-list">
-            {readyTasks.map((task, taskIndex) => (
-              <div key={task.id}>
-                <strong>{task.pickupCode}</strong>
-                <span>{task.productionAreaLabel}</span>
-                <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => void requestReprint(task)}>
-                  {reprintQueuedId === task.id
-                    ? (task.kitchenLanguage === "zh" ? "已排队" : "予約済み")
-                    : (task.kitchenLanguage === "zh" ? "补打一张" : "再印刷")}
-                </button>
-                <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => void rollbackTask(task, "preparing")}>
-                  {task.kitchenLanguage === "zh" ? "返回制作中" : "制作中に戻す"}
-                </button>
-                {readyTasks.findIndex((candidate) => candidate.orderId === task.orderId) === taskIndex && tasks.every((candidate) => candidate.orderId !== task.orderId || candidate.status === "ready") ? (
-                  <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => void completeHandoff(task)}>{task.kitchenLanguage === "zh" ? "交付完成" : "受渡完了"}</button>
-                ) : null}
-              </div>
-            ))}
-            {!readyTasks.length ? <p>{isChinese ? "暂无已完成订单。" : "完成待ちです。"}</p> : null}
-          </div>
-        </aside>
       </section>
       {inventoryDialog ? (
         <div className="store-kitchen-inventory-modal-backdrop" role="presentation" onPointerDown={(event) => {

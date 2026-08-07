@@ -15933,7 +15933,7 @@ body :where(
 .store-kitchen-bridge-status {
   position: fixed;
   top: 10px;
-  left: 50%;
+  left: 14px;
   z-index: 135;
   display: flex;
   align-items: center;
@@ -15946,7 +15946,6 @@ body :where(
   color: #202522;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 5px 18px rgba(20, 28, 24, 0.1);
-  transform: translateX(-50%);
   backdrop-filter: blur(10px);
   pointer-events: none;
 }
@@ -16020,17 +16019,16 @@ body :where(
 
 .store-kitchen-board {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.28fr);
-  gap: 14px;
-  align-items: start;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
 }
 
 .store-kitchen-display .store-kitchen-board {
-  min-height: calc(100dvh - 28px);
+  height: calc(100dvh - 72px);
+  margin-top: 44px;
 }
 
-.store-kitchen-board > div,
-.store-kitchen-board > aside,
 .store-pickup-column {
   min-width: 0;
   border: 1px solid var(--line);
@@ -16039,9 +16037,279 @@ body :where(
   background: white;
 }
 
-.store-kitchen-board h2,
 .store-pickup-column h2 {
   margin: 0 0 12px;
+}
+
+.store-kitchen-status-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  border: 1px solid #d7dcd9;
+  border-radius: 8px;
+  padding: 5px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.store-kitchen-status-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 7px 12px;
+  background: transparent;
+  color: #525b56;
+  cursor: pointer;
+  font: inherit;
+}
+
+.store-kitchen-status-tabs button span {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.store-kitchen-status-tabs button b {
+  display: grid;
+  min-width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0 7px;
+  background: #e9eeeb;
+  color: #303733;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.store-kitchen-status-tabs button.is-active {
+  border-color: rgba(31, 111, 85, 0.24);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.store-kitchen-status-tabs button.is-active b {
+  background: var(--green);
+  color: white;
+}
+
+.store-kitchen-status-tabs button:focus-visible,
+.store-kitchen-queue-item:focus-visible {
+  outline: 3px solid rgba(31, 111, 85, 0.26);
+  outline-offset: 2px;
+}
+
+.store-kitchen-workspace {
+  display: grid;
+  grid-template-columns: minmax(290px, 0.34fr) minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+}
+
+.store-kitchen-queue,
+.store-kitchen-detail {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  overscroll-behavior: contain;
+}
+
+.store-kitchen-queue {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.store-kitchen-queue > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+}
+
+.store-kitchen-queue > header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.store-kitchen-queue > header small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.store-kitchen-queue > header strong {
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.store-kitchen-queue > header > b {
+  display: grid;
+  min-width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: #202522;
+  color: white;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.store-kitchen-queue-list {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.store-kitchen-queue-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  min-height: 106px;
+  border: 1px solid #d9dedb;
+  border-left: 4px solid #b8c0bb;
+  border-radius: 7px;
+  padding: 11px 10px 11px 8px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.store-kitchen-queue-item.is-preparing {
+  border-left-color: var(--green);
+}
+
+.store-kitchen-queue-item.is-ready {
+  border-left-color: #202522;
+}
+
+.store-kitchen-queue-item.is-selected {
+  border-color: rgba(31, 111, 85, 0.42);
+  border-left-color: var(--green);
+  background: var(--green-soft);
+  box-shadow: 0 0 0 2px rgba(31, 111, 85, 0.08);
+}
+
+.store-kitchen-queue-position {
+  align-self: start;
+  color: #8a938e;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.store-kitchen-queue-main,
+.store-kitchen-queue-side {
+  display: grid;
+  min-width: 0;
+}
+
+.store-kitchen-queue-main {
+  align-content: start;
+  gap: 5px;
+}
+
+.store-kitchen-queue-code {
+  font-size: clamp(25px, 2.3vw, 34px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  line-height: 1;
+}
+
+.store-kitchen-queue-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: #4d5651;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.store-kitchen-queue-meta em {
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: #edf1ef;
+  color: #46504a;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.store-kitchen-queue-items {
+  overflow: hidden;
+  color: #6a736e;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.store-kitchen-queue-side {
+  align-content: space-between;
+  justify-items: end;
+  gap: 8px;
+}
+
+.store-kitchen-queue-side .store-kitchen-platform-logo b,
+.store-kitchen-queue-side .store-kitchen-platform-logo em {
+  font-size: 12px;
+}
+
+.store-kitchen-queue-side .store-kitchen-platform-logo.is-rocket em {
+  padding: 2px 4px;
+}
+
+.store-kitchen-queue-side > strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.store-kitchen-detail {
+  padding: 10px;
+}
+
+.store-kitchen-detail > .store-kitchen-task {
+  min-height: 100%;
+}
+
+.store-kitchen-detail-empty {
+  display: grid;
+  min-height: 100%;
+  place-content: center;
+  justify-items: center;
+  color: var(--muted);
+  text-align: center;
+}
+
+.store-kitchen-detail-empty strong {
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 650;
+}
+
+.store-kitchen-detail-empty p {
+  margin: 6px 0 0;
+  font-weight: 500;
 }
 
 .store-kitchen-task-grid {
@@ -38655,6 +38923,27 @@ body:has(.store-courier-display) .floating-feedback {
   .store-kitchen-board,
   .store-pickup-board {
     grid-template-columns: 1fr;
+  }
+
+  .store-kitchen-display .store-kitchen-board {
+    height: auto;
+    min-height: calc(100dvh - 72px);
+  }
+
+  .store-kitchen-status-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .store-kitchen-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .store-kitchen-queue {
+    max-height: 46dvh;
+  }
+
+  .store-kitchen-detail {
+    overflow: visible;
   }
 
   .store-kitchen-task-grid,
