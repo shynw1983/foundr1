@@ -86,6 +86,7 @@ public class UberAccessibilityService extends AccessibilityService {
     private int commandRocketPhase = 0;
     private boolean commandRocketActionDispatched = false;
     private boolean commandRocketHideModeSelected = false;
+    private long commandRocketPickerOpenedAt = 0L;
     private long commandRocketMutationAt = 0L;
     private int commandRocketMissingAttempts = 0;
     private int commandRocketSelectedCount = 0;
@@ -620,6 +621,7 @@ public class UberAccessibilityService extends AccessibilityService {
             commandRocketPhase = 0;
             commandRocketActionDispatched = false;
             commandRocketHideModeSelected = false;
+            commandRocketPickerOpenedAt = 0L;
             commandRocketMutationAt = 0L;
             commandRocketMissingAttempts = 0;
             commandRocketSelectedCount = 0;
@@ -800,6 +802,7 @@ public class UberAccessibilityService extends AccessibilityService {
         commandRocketPhase = 0;
         commandRocketActionDispatched = false;
         commandRocketHideModeSelected = false;
+        commandRocketPickerOpenedAt = 0L;
         commandRocketMutationAt = 0L;
         commandRocketMissingAttempts = 0;
         commandRocketSelectedCount = 0;
@@ -1529,6 +1532,22 @@ public class UberAccessibilityService extends AccessibilityService {
             AccessibilityNodeInfo child = node.getChild(index);
             if (child == null) continue;
             AccessibilityNodeInfo match = findNodeByClass(child, className);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findEditableNode(AccessibilityNodeInfo node) {
+        if (node == null) return null;
+        if (
+            node.isEditable()
+            || (node.getActions() & AccessibilityNodeInfo.ACTION_SET_TEXT) != 0
+        ) return AccessibilityNodeInfo.obtain(node);
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findEditableNode(child);
             child.recycle();
             if (match != null) return match;
         }
@@ -2388,7 +2407,7 @@ public class UberAccessibilityService extends AccessibilityService {
             AccessibilityNodeInfo selectedApply = findRocketNodeByOwnLabel(
                 root,
                 new String[] { "適用" },
-                true,
+                false,
                 true
             );
             boolean selectionVisible = selectedApply != null;
@@ -2407,7 +2426,11 @@ public class UberAccessibilityService extends AccessibilityService {
                 retryPendingCommand(500L, "Rocket Now の商品選択を確認しています。");
                 return;
             }
+            commandRocketSelectedCount = Math.max(commandRocketSelectedCount + 1, selectedCount);
+            commandInventoryTargetIndex += 1;
             commandRocketSelectionTapAt = 0L;
+            retryPendingCommand(250L, "Rocket Now の次の商品を確認できませんでした。");
+            return;
         }
         if (
             !commandRocketActiveTargetKind.isEmpty()
@@ -2421,16 +2444,32 @@ public class UberAccessibilityService extends AccessibilityService {
         if (commandRocketPhase == 0) {
             AccessibilityNodeInfo allTab = findRocketTopTab(root, "全体");
             if (allTab != null) {
-                tapNodeCenter(allTab);
+                tapRocketNode(root, allTab);
                 allTab.recycle();
             }
             commandRocketPhase = 1;
             retryPendingCommand(800L, "Rocket Now の全商品一覧を開けませんでした。");
             return;
         }
-        if (prepareRocketTargetSearch(root, target)) return;
         AccessibilityNodeInfo label = findRocketTargetLabel(root, target, true);
         if (label == null) {
+            if (prepareRocketTargetSearch(root, target)) return;
+            label = findRocketTargetLabel(root, target, true);
+        }
+        if (label == null) {
+            if (commandRocketSearchTargetIndex == commandInventoryTargetIndex) {
+                commandRocketMissingAttempts += 1;
+                if (commandRocketMissingAttempts < 8) {
+                    retryPendingCommand(700L, "Rocket Now の検索結果を待っています。");
+                    return;
+                }
+                BridgeCommandState.fail(
+                    this,
+                    "Rocket Now に対象商品が見つかりません: " + rocketTargetName(target)
+                );
+                resetCommandAttempt();
+                return;
+            }
             AccessibilityNodeInfo hidden = findRocketTargetLabel(root, target, false);
             boolean targetAboveViewport = false;
             if (hidden != null) {
@@ -2464,6 +2503,7 @@ public class UberAccessibilityService extends AccessibilityService {
             resetCommandAttempt();
             return;
         }
+        commandRocketMissingAttempts = 0;
         if (rocketRowHasLabel(root, label, "非表示")) {
             label.recycle();
             commandInventoryTargetIndex += 1;
@@ -2506,11 +2546,11 @@ public class UberAccessibilityService extends AccessibilityService {
             AccessibilityNodeInfo confirm = findRocketNodeByOwnLabel(
                 root,
                 new String[] { "確認", "確定", "保存" },
-                true,
+                false,
                 true
             );
             if (confirm != null) {
-                boolean clicked = clickOrderCard(confirm);
+                boolean clicked = tapRocketNode(root, confirm);
                 confirm.recycle();
                 if (clicked) commandRocketMutationAt = SystemClock.uptimeMillis();
                 retryPendingCommand(1300L, "Rocket Now の非表示操作を確定できませんでした。");
@@ -2534,6 +2574,7 @@ public class UberAccessibilityService extends AccessibilityService {
             && subtreeContainsText(root, "販売中");
         if (!commandRocketHideModeSelected) {
             if (actionPickerVisible) {
+                commandRocketPickerOpenedAt = 0L;
                 AccessibilityNodeInfo hideOption = findRocketTextInVerticalRange(
                     root,
                     "非表示",
@@ -2544,10 +2585,18 @@ public class UberAccessibilityService extends AccessibilityService {
                     retryPendingCommand(700L, "Rocket Now の「非表示」選択肢が見つかりませんでした。");
                     return;
                 }
-                boolean clicked = tapNodeCenter(hideOption);
                 hideOption.recycle();
+                int screenHeight = Math.max(1, getResources().getDisplayMetrics().heightPixels);
+                boolean clicked = tapRocketPoint(root, 0.15f, screenHeight * 0.825f);
                 if (clicked) commandRocketHideModeSelected = true;
                 retryPendingCommand(650L, "Rocket Now の「非表示」を選択できませんでした。");
+                return;
+            }
+            if (
+                commandRocketPickerOpenedAt > 0L
+                && SystemClock.uptimeMillis() - commandRocketPickerOpenedAt < 3000L
+            ) {
+                retryPendingCommand(500L, "Rocket Now の提供状況選択を待っています。");
                 return;
             }
             AccessibilityNodeInfo currentAction = findRocketNodeContaining(
@@ -2561,20 +2610,21 @@ public class UberAccessibilityService extends AccessibilityService {
             }
             boolean clicked = tapNodeCenter(currentAction);
             currentAction.recycle();
+            if (clicked) commandRocketPickerOpenedAt = SystemClock.uptimeMillis();
             retryPendingCommand(clicked ? 650L : 700L, "Rocket Now の提供状況選択を開けませんでした。");
             return;
         }
         AccessibilityNodeInfo apply = findRocketNodeByOwnLabel(
             root,
             new String[] { "適用" },
-            true,
+            false,
             true
         );
         if (apply == null) {
             retryPendingCommand(700L, "Rocket Now の「適用」ボタンが見つかりませんでした。");
             return;
         }
-        boolean clicked = clickOrderCard(apply);
+        boolean clicked = tapRocketNode(root, apply);
         apply.recycle();
         if (clicked) {
             commandRocketActionDispatched = true;
@@ -2604,15 +2654,17 @@ public class UberAccessibilityService extends AccessibilityService {
                 retryPendingCommand(700L, "Rocket Now の非表示一覧が見つかりませんでした。");
                 return;
             }
-            boolean clicked = tapNodeCenter(hiddenTab);
+            boolean clicked = tapRocketNode(root, hiddenTab);
             hiddenTab.recycle();
             if (clicked) commandRocketPhase = 1;
             retryPendingCommand(900L, "Rocket Now の非表示一覧を開けませんでした。");
             return;
         }
-        if (prepareRocketTargetSearch(root, target)) return;
-
         AccessibilityNodeInfo label = findRocketTargetLabel(root, target, true);
+        if (label == null) {
+            if (prepareRocketTargetSearch(root, target)) return;
+            label = findRocketTargetLabel(root, target, true);
+        }
         if (label != null) {
             AccessibilityNodeInfo release = findRocketButtonNear(root, label, "解除");
             label.recycle();
@@ -2626,6 +2678,21 @@ public class UberAccessibilityService extends AccessibilityService {
                 retryPendingCommand(1000L, "Rocket Now の非表示を解除できませんでした。");
                 return;
             }
+        }
+        if (label == null && commandRocketSearchTargetIndex == commandInventoryTargetIndex) {
+            commandRocketMissingAttempts += 1;
+            if (commandRocketMissingAttempts < 8) {
+                retryPendingCommand(700L, "Rocket Now の解除対象を再確認しています。");
+                return;
+            }
+            // The hidden-only search returned no exact match. The item is
+            // already available, so finish idempotently and release the queue.
+            commandInventoryTargetIndex += 1;
+            commandRocketPhase = 0;
+            commandRocketMissingAttempts = 0;
+            commandRocketSearchTargetIndex = -1;
+            retryPendingCommand(250L, "Rocket Now の次の解除対象を準備できませんでした。");
+            return;
         }
         AccessibilityNodeInfo offscreen = findRocketTargetLabel(root, target, false);
         boolean targetAboveViewport = false;
@@ -2689,7 +2756,7 @@ public class UberAccessibilityService extends AccessibilityService {
             retryPendingCommand(700L, "Rocket Now の「" + tabLabel + "」ページが見つかりませんでした。");
             return true;
         }
-        boolean clicked = tapNodeCenter(tab);
+        boolean clicked = tapRocketNode(root, tab);
         tab.recycle();
         if (clicked) {
             commandRocketActiveTargetKind = targetKind;
@@ -2704,6 +2771,7 @@ public class UberAccessibilityService extends AccessibilityService {
         commandRocketPhase = 0;
         commandRocketActionDispatched = false;
         commandRocketHideModeSelected = false;
+        commandRocketPickerOpenedAt = 0L;
         commandRocketMutationAt = 0L;
         commandRocketSelectedCount = 0;
         commandRocketSelectionTapAt = 0L;
@@ -2711,9 +2779,16 @@ public class UberAccessibilityService extends AccessibilityService {
     }
 
     private boolean prepareRocketTargetSearch(AccessibilityNodeInfo root, JSONObject target) {
-        if (commandRocketSearchTargetIndex == commandInventoryTargetIndex) return false;
-        String query = rocketTargetName(target);
-        AccessibilityNodeInfo searchField = findNodeByClass(root, "android.widget.EditText");
+        if (commandRocketSearchTargetIndex == commandInventoryTargetIndex) {
+            AccessibilityNodeInfo currentSearchField = findEditableNode(root);
+            boolean searchStillApplied = currentSearchField == null
+                || !value(currentSearchField.getText()).trim().isEmpty();
+            if (currentSearchField != null) currentSearchField.recycle();
+            if (searchStillApplied) return false;
+            commandRocketSearchTargetIndex = -1;
+        }
+        String query = rocketTargetSearchText(target);
+        AccessibilityNodeInfo searchField = findEditableNode(root);
         if (searchField != null) {
             Bundle arguments = new Bundle();
             arguments.putCharSequence(
@@ -2745,9 +2820,13 @@ public class UberAccessibilityService extends AccessibilityService {
     }
 
     private boolean isRocketInventoryScreen(AccessibilityNodeInfo root) {
-        return subtreeContainsText(root, "売り切れ ・ 非表示")
-            && subtreeContainsText(root, "全体")
-            && subtreeContainsText(root, "非表示");
+        if (!subtreeContainsText(root, "売り切れ ・ 非表示")) return false;
+        AccessibilityNodeInfo allTab = findRocketTopTab(root, "全体");
+        AccessibilityNodeInfo hiddenTab = findRocketTopTab(root, "非表示");
+        boolean ready = allTab != null && hiddenTab != null;
+        if (allTab != null) allTab.recycle();
+        if (hiddenTab != null) hiddenTab.recycle();
+        return ready;
     }
 
     private boolean isRocketInventoryLoading(AccessibilityNodeInfo root) {
@@ -2769,7 +2848,9 @@ public class UberAccessibilityService extends AccessibilityService {
         if (
             own.startsWith(prefix)
             && bounds.top >= Math.round(screenHeight * 0.07f)
-            && bounds.bottom <= Math.round(screenHeight * 0.24f)
+            // The option inventory adds a menu/option switcher and search row,
+            // so its status tabs sit lower than the product inventory tabs.
+            && bounds.bottom <= Math.round(screenHeight * 0.30f)
             && bounds.width() > 40
         ) {
             return AccessibilityNodeInfo.obtain(node);
@@ -2787,6 +2868,15 @@ public class UberAccessibilityService extends AccessibilityService {
     private String rocketTargetName(JSONObject target) {
         if (target == null) return "";
         return target.optString("label").split("[｜|]", 2)[0].trim();
+    }
+
+    private String rocketTargetSearchText(JSONObject target) {
+        String label = rocketTargetName(target)
+            .replaceFirst("^(?:【[^】]+】\\s*)+", "")
+            .trim();
+        String coreName = label.replaceFirst("[\\p{So}\\p{Sk}].*$", "").trim();
+        if (!coreName.isEmpty()) return coreName;
+        return label.replaceAll("[\\p{So}\\p{Sk}]", "").trim();
     }
 
     private AccessibilityNodeInfo findRocketTargetLabel(
@@ -2808,6 +2898,10 @@ public class UberAccessibilityService extends AccessibilityService {
             AccessibilityNodeInfo result = findRocketExactMenuTextNode(root, candidate, visibleOnly);
             if (result != null) return result;
         }
+        String searchText = rocketTargetSearchText(target);
+        if (!searchText.isEmpty()) {
+            return findRocketExactMenuTextNode(root, searchText, visibleOnly);
+        }
         return null;
     }
 
@@ -2823,9 +2917,14 @@ public class UberAccessibilityService extends AccessibilityService {
         String normalizedExpected = normalizeRocketMenuLabel(expected);
         Rect bounds = new Rect();
         node.getBoundsInScreen(bounds);
-        boolean visible = !bounds.isEmpty() && bounds.width() > 0 && bounds.height() > 0;
+        int screenHeight = Math.max(1, getResources().getDisplayMetrics().heightPixels);
+        boolean visible = bounds.height() > 1
+            && bounds.bottom > Math.round(screenHeight * 0.16f)
+            && bounds.top < Math.round(screenHeight * 0.90f);
         if (
             !"android.widget.EditText".equals(className)
+            && !node.isEditable()
+            && (node.getActions() & AccessibilityNodeInfo.ACTION_SET_TEXT) == 0
             && (
                 normalizedExpected.equals(normalizeRocketMenuLabel(ownText))
                 || normalizedExpected.equals(normalizeRocketMenuLabel(ownDescription))
@@ -2884,6 +2983,7 @@ public class UberAccessibilityService extends AccessibilityService {
         return value
             .trim()
             .replaceFirst("^(?:【[^】]+】\\s*)+", "")
+            .replaceAll("[\\p{So}\\p{Sk}\\uFE0E\\uFE0F]", "")
             .replaceAll("\\s+", " ")
             .trim();
     }
@@ -3097,15 +3197,25 @@ public class UberAccessibilityService extends AccessibilityService {
 
     private boolean tapRocketPoint(AccessibilityNodeInfo root, float xFraction, float y) {
         if (root == null) return false;
-        Rect bounds = new Rect();
-        root.getBoundsInScreen(bounds);
-        if (bounds.width() < 300 || y <= bounds.top || y >= bounds.bottom) return false;
+        int screenWidth = Math.max(1, getResources().getDisplayMetrics().widthPixels);
+        int screenHeight = Math.max(1, getResources().getDisplayMetrics().heightPixels);
+        if (screenWidth < 300 || y <= 0f || y >= screenHeight) return false;
         Path path = new Path();
-        path.moveTo(bounds.left + (bounds.width() * xFraction), y);
+        path.moveTo(screenWidth * xFraction, y);
         GestureDescription gesture = new GestureDescription.Builder()
             .addStroke(new GestureDescription.StrokeDescription(path, 0L, 80L))
             .build();
         return dispatchGesture(gesture, null, null);
+    }
+
+    private boolean tapRocketNode(AccessibilityNodeInfo root, AccessibilityNodeInfo node) {
+        if (root == null || node == null) return false;
+        Rect nodeBounds = new Rect();
+        node.getBoundsInScreen(nodeBounds);
+        int screenWidth = Math.max(1, getResources().getDisplayMetrics().widthPixels);
+        if (screenWidth < 300 || nodeBounds.isEmpty()) return false;
+        float xFraction = nodeBounds.exactCenterX() / screenWidth;
+        return tapRocketPoint(root, xFraction, nodeBounds.exactCenterY());
     }
 
     private boolean looksLikeUber(String packageName) {
