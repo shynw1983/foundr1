@@ -103,3 +103,30 @@ test("keeps zero-price modifiers and ignores Rocket overview counters", () => {
   assert.equal(parsed.items[0].lineTotal, 1053);
   assert.equal(parsed.total, 1053);
 });
+
+test("parses Rocket inline x quantities on buildable options", () => {
+  const parsed = parseRocketNowBridgeSnapshot([
+    { contentDescription: "新規注文\n10NCC7\n注文時間 : 午後 04:33" },
+    { contentDescription: "メニュー\n数量\n金額" },
+    { contentDescription: "【自由にカスタム】旨味マーラータンスープ\n1\n415円" },
+    { contentDescription: "うずらの卵1個 x2\n+240円" },
+    { contentDescription: "ベビーコーン1本 × 2\n+532円" },
+    { contentDescription: "白きくらげ Ｘ２\n+652円" },
+    { contentDescription: "注文金額\n1,839円" }
+  ], new Date("2026-08-08T16:37:00+09:00"));
+
+  assert.ok(parsed);
+  assert.deepEqual(parsed.items[0].modifiers, [
+    { name: "うずらの卵1個", quantity: 2, price: 240 },
+    { name: "ベビーコーン1本", quantity: 2, price: 532 },
+    { name: "白きくらげ", quantity: 2, price: 652 }
+  ]);
+  assert.deepEqual(toRocketNowBridgeOperationalItem(parsed.items[0]).toppingLabels, [
+    "うずらの卵1個",
+    "うずらの卵1個",
+    "ベビーコーン1本",
+    "ベビーコーン1本",
+    "白きくらげ",
+    "白きくらげ"
+  ]);
+});

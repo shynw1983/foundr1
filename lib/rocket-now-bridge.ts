@@ -46,6 +46,16 @@ function parseQuantity(value: unknown) {
   return match ? Math.max(1, Number(match[1])) : 1;
 }
 
+function parseInlineQuantity(value: string) {
+  const match = clean(value).match(/^(.*?)\s*[xX×ｘＸ]\s*([\d０-９]+)\s*$/u);
+  if (!match || !match[1].trim()) return { name: clean(value), quantity: 1 };
+  const normalizedQuantity = match[2].replace(/[０-９]/g, (digit) => String("０１２３４５６７８９".indexOf(digit)));
+  return {
+    name: match[1].trim(),
+    quantity: Math.max(1, Number(normalizedQuantity))
+  };
+}
+
 function extractOrderNo(values: string[]) {
   for (const value of values) {
     const explicit = value.match(/(?:注文(?:管理)?番号|注文番号)\s*[:：#]?\s*([A-Z0-9]{6,12})/i);
@@ -133,21 +143,25 @@ function parseItems(lines: string[], orderNo: string) {
     const previous = items.at(-1);
     if (previous && previousMoneyIndex >= 0) {
       for (let pendingIndex = previousMoneyIndex + 1; pendingIndex < nameIndex; pendingIndex += 1) {
-        const pendingName = lines[pendingIndex];
-        if (!isCandidateName(pendingName, orderNo)) continue;
-        const alreadyParsed = previous.modifiers.some((modifier) => modifier.name === pendingName);
-        if (!alreadyParsed) previous.modifiers.push({ name: pendingName, quantity: 1, price: 0 });
+        const pendingLine = lines[pendingIndex];
+        if (!isCandidateName(pendingLine, orderNo)) continue;
+        const pending = parseInlineQuantity(pendingLine);
+        const alreadyParsed = previous.modifiers.some((modifier) => modifier.name === pending.name);
+        if (!alreadyParsed) previous.modifiers.push({ name: pending.name, quantity: pending.quantity, price: 0 });
       }
     }
-    const looksLikeNamedModifier = /追加|変更|選択|トッピング|辛さ|痺れ|しびれ|シビ|薬膳|カスタム/i.test(name);
+    const inline = parseInlineQuantity(name);
+    const parsedQuantity = quantityIndex >= 0 ? quantity : inline.quantity;
+    const parsedName = inline.name;
+    const looksLikeNamedModifier = /追加|変更|選択|トッピング|辛さ|痺れ|しびれ|シビ|薬膳|カスタム/i.test(parsedName);
     const looksLikeModifier = Boolean(previous)
       && nameIndex > 0
       && (quantityIndex < 0 || looksLikeNamedModifier);
     if (looksLikeModifier && previous) {
-      previous.modifiers.push({ name, quantity, price: amount });
+      previous.modifiers.push({ name: parsedName, quantity: parsedQuantity, price: amount });
       previous.lineTotal += amount;
     } else {
-      items.push({ name, quantity, lineTotal: amount, modifiers: [] });
+      items.push({ name: parsedName, quantity: parsedQuantity, lineTotal: amount, modifiers: [] });
     }
     previousMoneyIndex = index;
   }

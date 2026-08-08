@@ -45,6 +45,24 @@ test("derives the Rocket base item amount from its exact line prices", () => {
   });
 });
 
+test("keeps Rocket x2 modifier prices as displayed line totals", () => {
+  assert.deepEqual(resolveKitchenDisplayAmounts({
+    storedAmount: 1067,
+    quantity: 1,
+    basePrice: 415,
+    optionPriceDeltas: [],
+    bridgeItem: {
+      quantity: 1,
+      lineTotal: 1067,
+      modifiers: [{ quantity: 2, price: 652 }]
+    },
+    toppingCount: 2
+  }), {
+    itemAmount: 415,
+    toppingAmounts: [326, 326]
+  });
+});
+
 test("falls back to menu master prices for non-bridge orders", () => {
   assert.deepEqual(resolveKitchenDisplayAmounts({
     storedAmount: 1400,

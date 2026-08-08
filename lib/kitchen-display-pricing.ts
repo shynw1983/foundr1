@@ -20,10 +20,17 @@ export function resolveKitchenDisplayAmounts(input: KitchenDisplayPricingInput) 
   const quantity = Math.max(1, Math.floor(Number(input.quantity ?? 1) || 1));
   const bridgeItem = asRecord(input.bridgeItem);
   const bridgeModifiers = Array.isArray(bridgeItem.modifiers) ? bridgeItem.modifiers.map(asRecord) : [];
+  const bridgeUnitPrice = finiteAmount(bridgeItem.unitPrice);
   const bridgeToppingAmounts = bridgeModifiers.flatMap((modifier) => {
     const modifierQuantity = Math.max(1, Math.floor(Number(modifier.quantity ?? 1) || 1));
     const price = finiteAmount(modifier.price) ?? 0;
-    return Array.from({ length: modifierQuantity }, () => price * quantity);
+    // Uber exposes a per-option unit price, while Rocket exposes the displayed
+    // modifier line total (for example, "x2 +240円"). Split Rocket's total
+    // across the repeated labels so the grouped kitchen amount remains +240円.
+    const repeatedAmount = bridgeUnitPrice !== null
+      ? price * quantity
+      : price / modifierQuantity;
+    return Array.from({ length: modifierQuantity }, () => repeatedAmount);
   });
   const toppingAmounts = Array.from({ length: input.toppingCount }, (_, index) => (
     bridgeToppingAmounts.length === input.toppingCount
@@ -32,7 +39,6 @@ export function resolveKitchenDisplayAmounts(input: KitchenDisplayPricingInput) 
   ));
   const optionAmountTotal = toppingAmounts.reduce((sum, amount) => sum + amount, 0);
   const bridgeLineTotal = finiteAmount(bridgeItem.lineTotal);
-  const bridgeUnitPrice = finiteAmount(bridgeItem.unitPrice);
   const basePrice = finiteAmount(input.basePrice);
   const storedAmount = finiteAmount(input.storedAmount) ?? 0;
   const itemAmount = bridgeUnitPrice !== null
