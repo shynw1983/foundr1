@@ -95,4 +95,6 @@ test("uses the Uber-provided Chinese labels for kitchen heat and numbness", () =
 
   assert.equal(localizeMaamaaCustomerLabel("辛さ：中辛🔥🔥", customerSummary, "zh"), "辣度：中辣");
   assert.equal(localizeMaamaaCustomerLabel("痺れ：ちょいシビ⚡️", customerSummary, "zh"), "麻度：微麻");
+  assert.equal(localizeMaamaaCustomerLabel("中辣", customerSummary, "zh", "辛さ：中辛🔥🔥"), "辣度：中辣");
+  assert.equal(localizeMaamaaCustomerLabel("微麻", customerSummary, "zh", "痺れ：ちょいシビ⚡️"), "麻度：微麻");
 });

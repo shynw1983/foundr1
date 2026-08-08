@@ -208,7 +208,8 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
             return localizeMaamaaCustomerLabel(
               existingMenuDisplayName(label, optionCandidate, "zh"),
               customerSummary,
-              "zh"
+              "zh",
+              label
             );
           })
         };
