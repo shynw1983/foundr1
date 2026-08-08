@@ -33,7 +33,7 @@ public class UberAccessibilityService extends AccessibilityService {
     private static final String ROCKET_NOW_PACKAGE = "com.cpone.merchant";
     private static final long COMMAND_APP_RELAUNCH_COOLDOWN_MS = 15_000L;
     private static final long COMMAND_UNKNOWN_PAGE_GRACE_MS = 10_000L;
-    private static final long ROCKET_INVENTORY_LOAD_TIMEOUT_MS = 120_000L;
+    private static final long ROCKET_INVENTORY_LOAD_TIMEOUT_MS = 300_000L;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String pendingPackageName = "";
     private String pendingText = "";
@@ -2280,7 +2280,7 @@ public class UberAccessibilityService extends AccessibilityService {
                 if (now - commandRocketInventoryOpenedAt < ROCKET_INVENTORY_LOAD_TIMEOUT_MS) {
                     retryPendingCommand(5000L, "Rocket Now の売り切れ・非表示画面を読み込み中です。");
                 } else {
-                    BridgeCommandState.fail(this, "Rocket Now の売り切れ・非表示画面が2分以内に読み込まれませんでした。");
+                    BridgeCommandState.fail(this, "Rocket Now の売り切れ・非表示画面が5分以内に読み込まれませんでした。");
                     resetCommandAttempt();
                 }
                 return;
