@@ -1175,12 +1175,7 @@ export default function StoreKitchenPage() {
                   </p>
                 ) : null}
                 <div className="store-kitchen-platform-row">
-                  <span className="store-kitchen-platform-block is-detail">
-                    <PlatformLogo source={task.orderSource} />
-                    <span className="store-kitchen-item-count is-detail">
-                      {task.kitchenLanguage === "zh" ? `共 ${getKitchenItemCount(task)} 件商品` : `商品 合計${getKitchenItemCount(task)}点`}
-                    </span>
-                  </span>
+                  <PlatformLogo source={task.orderSource} />
                   <span className={`store-kitchen-status is-${task.status}`}>
                     {task.kitchenLanguage === "zh" && task.productionAreaLabel === "調理" ? "烹饪" : task.productionAreaLabel} / {statusLabels[task.kitchenLanguage][task.status]}
                   </span>
@@ -1189,6 +1184,10 @@ export default function StoreKitchenPage() {
                   <div>
                     <small>{task.kitchenLanguage === "zh" ? "客户" : "お客様"}</small>
                     <strong>{task.customerName || (task.kitchenLanguage === "zh" ? "姓名未登记" : "お名前未登録")}</strong>
+                  </div>
+                  <div className="store-kitchen-order-item-total">
+                    <small>{task.kitchenLanguage === "zh" ? "商品数量" : "商品点数"}</small>
+                    <strong>{task.kitchenLanguage === "zh" ? `${getKitchenItemCount(task)} 件` : `${getKitchenItemCount(task)}点`}</strong>
                   </div>
                   <div>
                     <small>{task.kitchenLanguage === "zh" ? "订单编号" : "注文番号"}</small>

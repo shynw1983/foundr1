@@ -16384,13 +16384,6 @@ body :where(
   white-space: nowrap;
 }
 
-.store-kitchen-item-count.is-detail {
-  padding: 8px 11px;
-  background: #e6eee9;
-  color: #155f46;
-  font-size: clamp(13px, 1.2vw, 16px);
-}
-
 .store-kitchen-queue-meta {
   display: flex;
   flex-wrap: wrap;
@@ -16433,11 +16426,6 @@ body :where(
   justify-items: end;
   gap: 7px;
   min-width: 0;
-}
-
-.store-kitchen-platform-block.is-detail {
-  justify-items: start;
-  gap: 8px;
 }
 
 .store-kitchen-queue-side .store-kitchen-platform-logo b,
@@ -16571,7 +16559,7 @@ body :where(
 
 .store-kitchen-order-identity {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: end;
   gap: 18px;
 }
@@ -16597,6 +16585,17 @@ body :where(
   font-size: clamp(24px, 2.4vw, 34px);
   font-weight: 650;
   line-height: 1.12;
+}
+
+.store-kitchen-order-item-total {
+  border-right: 1px solid #d9dedb;
+  border-left: 1px solid #d9dedb;
+  padding: 0 18px;
+}
+
+.store-kitchen-order-item-total strong {
+  color: #155f46;
+  white-space: nowrap;
 }
 
 .store-kitchen-order-identity b {
@@ -39131,7 +39130,7 @@ body:has(.store-courier-display) .floating-feedback {
   }
 
   .store-kitchen-order-identity {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
 
   .store-kitchen-order-facts {
@@ -42381,6 +42380,11 @@ a:focus-visible {
   .store-kitchen-order-identity {
     grid-template-columns: 1fr;
     align-items: start;
+  }
+
+  .store-kitchen-order-item-total {
+    border: 0;
+    padding: 0;
   }
 
   .store-kitchen-order-identity b {
