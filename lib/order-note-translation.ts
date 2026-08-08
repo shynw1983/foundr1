@@ -36,7 +36,7 @@ export async function translateOrderNoteToChinese(note: unknown) {
               text: [
                 "Translate a restaurant delivery customer's Japanese note into concise Simplified Chinese for kitchen staff.",
                 "Preserve allergy, omission, spice, timing, and safety instructions exactly.",
-                "Translate bracketed platform markers such as カトラリーX clearly; do not omit them.",
+                "The input contains only the customer's cooking request; do not add cutlery information.",
                 "Return only the translated Chinese text, with no label, explanation, quotation marks, or markdown."
               ].join("\n")
             }]

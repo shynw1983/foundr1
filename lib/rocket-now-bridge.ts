@@ -169,15 +169,23 @@ function parseItems(lines: string[], orderNo: string) {
   return items;
 }
 
+export function stripRocketCutleryMarker(value: unknown) {
+  return clean(value).replace(
+    /^\[(?:カトラリー|使い捨て(?:カトラリー|用品))[^\]]*\]\s*/i,
+    ""
+  ).trim();
+}
+
 function extractCustomerNote(lines: string[], orderNo: string) {
   const menuIndex = lines.findIndex((line) => line === "メニュー");
   const headerLines = menuIndex >= 0 ? lines.slice(0, menuIndex) : lines;
   const labeledIndex = headerLines.findIndex((line) => /^(?:お客様のご要望|店舗へのリクエスト|備考|注文メモ)$/.test(line));
   if (labeledIndex >= 0) {
     const labeledNote = headerLines.slice(labeledIndex + 1).find((line) => isCandidateName(line, orderNo));
-    if (labeledNote) return labeledNote;
+    if (labeledNote) return stripRocketCutleryMarker(labeledNote);
   }
-  return headerLines.find((line) => /^\[(?:カトラリー|使い捨て(?:カトラリー|用品))[^\]]*\]\s*.+/i.test(line)) ?? "";
+  const bracketedNote = headerLines.find((line) => /^\[(?:カトラリー|使い捨て(?:カトラリー|用品))[^\]]*\]\s*.+/i.test(line));
+  return stripRocketCutleryMarker(bracketedNote);
 }
 
 export function parseRocketNowBridgeSnapshot(

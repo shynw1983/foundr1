@@ -51,7 +51,7 @@ test("extracts the Rocket customer request before the menu", () => {
   assert.ok(parsed);
   assert.equal(
     parsed.customerNote,
-    "[カトラリーX] 辛いのが少し苦手なので可能であればできるだけ辛くないようにお願いします！"
+    "辛いのが少し苦手なので可能であればできるだけ辛くないようにお願いします！"
   );
 });
 

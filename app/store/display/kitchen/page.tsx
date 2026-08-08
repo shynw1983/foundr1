@@ -1302,6 +1302,13 @@ export default function StoreKitchenPage() {
                     </div>
                   ) : null}
                 </div>
+                {task.note ? (
+                  <div className="store-kitchen-customer-note">
+                    <strong>{task.kitchenLanguage === "zh" ? "客人备注" : "お客様のご要望"}</strong>
+                    <p>{task.note}</p>
+                    {task.noteOriginal ? <small>日语原文：{task.noteOriginal}</small> : null}
+                  </div>
+                ) : null}
                 <div className={`store-kitchen-order-summary${kitchenDisplayMode === "order_only" ? " is-order-only" : ""}${task.isHistorical ? " is-read-only" : ""}`}>
                   <small>{task.kitchenLanguage === "zh" ? "客人下单内容" : "注文内容"}</small>
                   {(task.itemGroups ?? []).map((group, groupIndex) => {
@@ -1496,13 +1503,6 @@ export default function StoreKitchenPage() {
                     );
                   })}
                 </div>
-                {task.note ? (
-                  <div className="store-kitchen-customer-note">
-                    <strong>{task.kitchenLanguage === "zh" ? "客人备注" : "お客様のご要望"}</strong>
-                    <p>{task.note}</p>
-                    {task.noteOriginal ? <small>日语原文：{task.noteOriginal}</small> : null}
-                  </div>
-                ) : null}
                 {!task.isHistorical ? <div className="store-kitchen-actions">
                   <button className="secondary-button store-kitchen-reprint-button" type="button" disabled={savingId === task.id} onClick={() => void requestReprint(task)}>
                     {reprintQueuedId === task.id
