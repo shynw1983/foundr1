@@ -1,9 +1,11 @@
 export type KitchenDisplayItemGroup = {
   itemName: string;
   quantity: number;
+  amount: number;
   options: Array<{
     label: string;
     count: number;
+    amount: number;
   }>;
   productionLines: string[];
 };
@@ -11,21 +13,27 @@ export type KitchenDisplayItemGroup = {
 type OrderedKitchenItem = {
   itemName?: unknown;
   quantity?: unknown;
+  itemAmount?: unknown;
   toppingLabels?: unknown;
+  toppingAmounts?: unknown;
 };
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
 
-function countLabels(value: unknown) {
+function countLabels(value: unknown, amountValue: unknown) {
   if (!Array.isArray(value)) return [];
-  const counts = new Map<string, { label: string; count: number }>();
-  for (const rawLabel of value) {
+  const amounts = Array.isArray(amountValue) ? amountValue : [];
+  const counts = new Map<string, { label: string; count: number; amount: number }>();
+  for (let index = 0; index < value.length; index += 1) {
+    const rawLabel = value[index];
     const label = normalizeText(rawLabel);
     if (!label) continue;
-    const current = counts.get(label) ?? { label, count: 0 };
+    const current = counts.get(label) ?? { label, count: 0, amount: 0 };
     current.count += 1;
+    const amount = Number(amounts[index] ?? 0);
+    if (Number.isFinite(amount)) current.amount += amount;
     counts.set(label, current);
   }
   return Array.from(counts.values());
@@ -62,6 +70,7 @@ export function buildKitchenDisplayItemGroups(
     return productionGroups.map((group) => ({
       itemName: group.itemName,
       quantity: 1,
+      amount: 0,
       options: [],
       productionLines: group.productionLines
     }));
@@ -73,7 +82,8 @@ export function buildKitchenDisplayItemGroups(
     return [{
       itemName,
       quantity: Math.max(1, Math.floor(Number(item.quantity ?? 1) || 1)),
-      options: countLabels(item.toppingLabels),
+      amount: Number.isFinite(Number(item.itemAmount)) ? Number(item.itemAmount) : 0,
+      options: countLabels(item.toppingLabels, item.toppingAmounts),
       productionLines: productionGroups[index]?.productionLines ?? []
     }];
   });

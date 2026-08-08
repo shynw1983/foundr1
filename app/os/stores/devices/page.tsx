@@ -998,7 +998,7 @@ export default function StoreDeviceSettingsPage() {
                   </label>
                   <label className="pos-admin-discount-check">
                     <input type="checkbox" checked={activeKitchenTemplate.showAmounts} onChange={(event) => updateKitchenTicketTemplate({ showAmounts: event.target.checked })} disabled={!canManage} />
-                    <span>金額を表示</span>
+                    <span>厨房画面・伝票に金額を表示</span>
                   </label>
                 </div>
                 <label className="store-kitchen-message-field">

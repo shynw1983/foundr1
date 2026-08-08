@@ -16778,8 +16778,26 @@ body :where(
 
 .store-kitchen-order-product span,
 .store-kitchen-order-option span {
+  flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.store-kitchen-line-amount {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #303733;
+  font-size: 0.72em;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.store-kitchen-order-option .store-kitchen-line-amount {
+  color: #59625d;
+  font-size: 0.82em;
+  font-weight: 700;
 }
 
 .store-kitchen-order-product {
@@ -42398,5 +42416,29 @@ a:focus-visible {
 
   .store-kitchen-order-facts > div:last-child {
     grid-column: 1 / -1;
+  }
+}
+
+/* iPad mini 7 reports a 744px portrait viewport; keep the kitchen queue and detail side by side. */
+@media (min-width: 700px) and (max-width: 760px) {
+  .store-kitchen-display .store-kitchen-board {
+    height: calc(100dvh - 72px);
+    min-height: 0;
+  }
+
+  .store-kitchen-status-tabs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .store-kitchen-workspace {
+    grid-template-columns: minmax(250px, 0.36fr) minmax(0, 1fr);
+  }
+
+  .store-kitchen-queue {
+    max-height: none;
+  }
+
+  .store-kitchen-detail {
+    overflow: auto;
   }
 }

@@ -3,6 +3,7 @@ import { findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
 import { getKitchenBusinessDayWindow } from "../../../../../lib/kitchen-business-day";
 import { buildKitchenDisplayItemGroups } from "../../../../../lib/kitchen-display-groups";
+import { resolveKitchenDisplayAmounts } from "../../../../../lib/kitchen-display-pricing";
 import { reconcileUberReadyCommand } from "../../../../../lib/local-bridge-commands";
 import {
   existingMenuDisplayName,
@@ -25,7 +26,13 @@ type KitchenMenuCandidate = MenuDisplayNameCandidate & {
   brandId: string;
   kind: "item" | "option";
   optionKey?: string;
+  basePrice?: number | null;
+  priceDelta?: number | null;
 };
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
 
 function getPreviousBusinessDayReference(businessDate: string) {
   const [year, month, day] = businessDate.split("-").map(Number);
@@ -83,6 +90,7 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
             'itemName', store_customer_order_items.item_name,
             'menuItemId', store_customer_order_items.menu_catalog_item_id,
             'quantity', store_customer_order_items.quantity,
+            'amount', store_customer_order_items.amount,
             'toppingKeys', store_customer_order_items.topping_keys,
             'toppingLabels', store_customer_order_items.topping_labels
           )
@@ -147,7 +155,9 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
       menu_catalog_items.name,
       menu_catalog_items.display_names as "displayNames",
       coalesce(menu_catalog_items.external_id, '') as "externalId",
-      '' as "optionKey"
+      '' as "optionKey",
+      menu_catalog_items.base_price::float as "basePrice",
+      null::float as "priceDelta"
     from menu_catalog_items
     where menu_catalog_items.brand_id::text in (
       select jsonb_array_elements_text(${JSON.stringify(brandIds)}::jsonb)
@@ -161,7 +171,9 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
       menu_options.name,
       menu_options.display_names as "displayNames",
       coalesce(menu_options.external_id, '') as "externalId",
-      menu_options.option_key as "optionKey"
+      menu_options.option_key as "optionKey",
+      null::float as "basePrice",
+      menu_options.price_delta::float as "priceDelta"
     from menu_options
     join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
     where menu_option_groups.brand_id::text in (
@@ -175,8 +187,9 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
     const row = rawRow as Record<string, unknown>;
     const brandId = normalizeText(row.brandId);
     const brandName = normalizeText(row.brandName);
+    const kitchenTemplate = resolvePosKitchenTicketTemplate(printerSettings, brandId || null);
     const kitchenLanguage = /maamaa|まぁ麻|麻辣/i.test(brandName)
-      ? resolvePosKitchenTicketTemplate(printerSettings, brandId || null).language
+      ? kitchenTemplate.language
       : "ja";
     const brandMenuItems = menuCandidates.filter((candidate) => candidate.brandId === brandId && candidate.kind === "item");
     const brandMenuOptions = menuCandidates.filter((candidate) => candidate.brandId === brandId && candidate.kind === "option");
@@ -186,27 +199,43 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
       customerSummary,
       kitchenLanguage
     );
+    const bridgeItems = Array.isArray(asRecord(asRecord(customerSummary).bridge).items)
+      ? asRecord(asRecord(customerSummary).bridge).items as unknown[]
+      : [];
     const localizedOrderedItems = Array.isArray(orderedItems)
-      ? orderedItems.map((rawItem) => {
+      ? orderedItems.map((rawItem, itemIndex) => {
         const item = rawItem && typeof rawItem === "object" ? rawItem as Record<string, unknown> : {};
         const menuItemId = normalizeText(item.menuItemId);
+        const quantity = Math.max(1, Math.floor(Number(item.quantity ?? 1) || 1));
         const itemCandidate = brandMenuItems.find((candidate) => candidate.id === menuItemId)
           ?? findMenuDisplayNameCandidate(item.itemName, brandMenuItems);
         const toppingKeys = Array.isArray(item.toppingKeys) ? item.toppingKeys.map(normalizeText) : [];
         const toppingLabels = Array.isArray(item.toppingLabels) ? item.toppingLabels : [];
+        const bridgeItem = asRecord(bridgeItems[itemIndex]);
+        const matchedOptions = toppingLabels.map((label, index) => {
+          const optionKey = toppingKeys[index] ?? "";
+          return brandMenuOptions.find((candidate) => optionKey && candidate.optionKey === optionKey)
+            ?? findMenuDisplayNameCandidate(label, brandMenuOptions);
+        });
+        const { itemAmount, toppingAmounts } = resolveKitchenDisplayAmounts({
+          storedAmount: item.amount,
+          quantity,
+          basePrice: itemCandidate?.basePrice,
+          optionPriceDeltas: matchedOptions.map((option) => option?.priceDelta),
+          bridgeItem,
+          toppingCount: toppingLabels.length
+        });
         return {
           ...item,
+          itemAmount,
+          toppingAmounts,
           itemName: kitchenLanguage === "zh"
             ? existingMenuDisplayName(item.itemName, itemCandidate, "zh")
             : normalizeText(item.itemName),
           toppingLabels: toppingLabels.map((label, index) => {
             if (kitchenLanguage !== "zh") return normalizeText(label);
-            const optionKey = toppingKeys[index] ?? "";
-            const optionCandidate = brandMenuOptions.find((candidate) => (
-              optionKey && candidate.optionKey === optionKey
-            )) ?? findMenuDisplayNameCandidate(label, brandMenuOptions);
             return localizeMaamaaCustomerLabel(
-              existingMenuDisplayName(label, optionCandidate, "zh"),
+              existingMenuDisplayName(label, matchedOptions[index], "zh"),
               customerSummary,
               "zh",
               label
@@ -219,6 +248,7 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
       ...task,
       isHistorical: includeCompleted,
       kitchenLanguage,
+      showAmounts: kitchenTemplate.showAmounts,
       itemSummary: localizedItemSummary,
       itemGroups: buildKitchenDisplayItemGroups(localizedOrderedItems, localizedItemSummary)
     };

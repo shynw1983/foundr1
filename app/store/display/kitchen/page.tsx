@@ -22,9 +22,11 @@ type KitchenTask = {
   itemGroups: Array<{
     itemName: string;
     quantity: number;
+    amount: number;
     options: Array<{
       label: string;
       count: number;
+      amount: number;
     }>;
     productionLines: string[];
   }>;
@@ -42,6 +44,7 @@ type KitchenTask = {
   note: string;
   createdAt: string;
   kitchenLanguage: "ja" | "zh";
+  showAmounts: boolean;
 };
 
 type InventoryTarget = {
@@ -1274,6 +1277,7 @@ export default function StoreKitchenPage() {
                               onClick={() => toggleLineCheck(task, productLineKey, true)}
                             >
                               <span>{group.itemName}</span>
+                              {task.showAmounts ? <em className="store-kitchen-line-amount">{formatOrderAmount(group.amount, task.currency)}</em> : null}
                               {group.quantity > 1 ? <b>× {group.quantity}</b> : null}
                               {productInventorySync ? (
                                 <em className={`store-kitchen-inventory-sync is-${productInventorySync.status}`}>
@@ -1297,6 +1301,7 @@ export default function StoreKitchenPage() {
                               onPointerCancel={() => { inventoryPointerRef.current = null; }}
                             >
                               <span>{group.itemName}</span>
+                              {task.showAmounts ? <em className="store-kitchen-line-amount">{formatOrderAmount(group.amount, task.currency)}</em> : null}
                               {group.quantity > 1 ? <b>× {group.quantity}</b> : null}
                               {productInventorySync ? (
                                 <em className={`store-kitchen-inventory-sync is-${productInventorySync.status}`}>
@@ -1345,6 +1350,7 @@ export default function StoreKitchenPage() {
                                     onClick={() => toggleLineCheck(task, optionLineKey, true)}
                                   >
                                     <span>{option.label}</span>
+                                    {task.showAmounts ? <em className="store-kitchen-line-amount">{formatOrderAmount(option.amount, task.currency)}</em> : null}
                                     {option.count > 1 ? <b>× {option.count}</b> : null}
                                     {optionInventorySync ? (
                                       <em className={`store-kitchen-inventory-sync is-${optionInventorySync.status}`}>
@@ -1368,6 +1374,7 @@ export default function StoreKitchenPage() {
                                     onPointerCancel={() => { inventoryPointerRef.current = null; }}
                                   >
                                     <span>{option.label}</span>
+                                    {task.showAmounts ? <em className="store-kitchen-line-amount">{formatOrderAmount(option.amount, task.currency)}</em> : null}
                                     {option.count > 1 ? <b>× {option.count}</b> : null}
                                     {optionInventorySync ? (
                                       <em className={`store-kitchen-inventory-sync is-${optionInventorySync.status}`}>
