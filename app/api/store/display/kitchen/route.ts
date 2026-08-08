@@ -194,6 +194,9 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
     const brandMenuItems = menuCandidates.filter((candidate) => candidate.brandId === brandId && candidate.kind === "item");
     const brandMenuOptions = menuCandidates.filter((candidate) => candidate.brandId === brandId && candidate.kind === "option");
     const { customerSummary, orderedItems, ...task } = row;
+    const summary = asRecord(customerSummary);
+    const noteOriginal = normalizeText(summary.note);
+    const noteZh = normalizeText(asRecord(summary.noteTranslations).zh);
     const localizedItemSummary = localizeMaamaaProductionSummary(
       normalizeText(row.itemSummary),
       customerSummary,
@@ -246,6 +249,8 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
       : [];
     return {
       ...task,
+      note: kitchenLanguage === "zh" ? (noteZh || noteOriginal) : noteOriginal,
+      noteOriginal: kitchenLanguage === "zh" && noteZh && noteZh !== noteOriginal ? noteOriginal : "",
       isHistorical: includeCompleted,
       kitchenLanguage,
       showAmounts: kitchenTemplate.showAmounts,

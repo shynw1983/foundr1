@@ -11,6 +11,10 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 async function resolveStoreId(request: Request, session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>) {
   const access = await getStoreOrderAccess(session);
   const requestedStoreId = new URL(request.url).searchParams.get("storeId");
@@ -95,8 +99,14 @@ export async function GET(request: Request) {
       ? resolvePosKitchenTicketTemplate(printerSettings, brandId || null).language
       : "ja";
     const { customerSummary, ...job } = row;
+    const summary = asRecord(customerSummary);
+    const noteOriginal = normalizeText(summary.note);
+    const noteZh = normalizeText(asRecord(summary.noteTranslations).zh);
     return {
       ...job,
+      note: language === "zh" && noteZh
+        ? `${noteZh}　日语原文：${noteOriginal}`
+        : noteOriginal,
       itemSummary: localizeMaamaaProductionSummary(
         normalizeText(row.itemSummary),
         customerSummary,

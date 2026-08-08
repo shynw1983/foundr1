@@ -23,6 +23,7 @@ test("parses a Rocket Now new-order accessibility snapshot", () => {
   assert.ok(parsed);
   assert.equal(parsed.orderNo, "B9103A");
   assert.equal(parsed.status, "new");
+  assert.equal(parsed.customerNote, "");
   assert.equal(parsed.total, 6000);
   assert.equal(parsed.items.length, 2);
   assert.deepEqual(toRocketNowBridgeOperationalItem(parsed.items[0]), {
@@ -33,6 +34,25 @@ test("parses a Rocket Now new-order accessibility snapshot", () => {
     optionLabel: "スイスチーズ追加, スイスチーズ追加",
     toppingLabels: ["スイスチーズ追加", "スイスチーズ追加"]
   });
+});
+
+test("extracts the Rocket customer request before the menu", () => {
+  const parsed = parseRocketNowBridgeSnapshot([
+    { contentDescription: "新規注文" },
+    { contentDescription: "26SE6W" },
+    { contentDescription: "注文時間 : 午後 11:55" },
+    { contentDescription: "[カトラリーX] 辛いのが少し苦手なので可能であればできるだけ辛くないようにお願いします！" },
+    { contentDescription: "メニュー" },
+    { contentDescription: "旨味マーラータンスープ" },
+    { contentDescription: "1" },
+    { contentDescription: "415円" }
+  ], new Date("2026-08-09T00:07:00+09:00"));
+
+  assert.ok(parsed);
+  assert.equal(
+    parsed.customerNote,
+    "[カトラリーX] 辛いのが少し苦手なので可能であればできるだけ辛くないようにお願いします！"
+  );
 });
 
 test("requires a stable Rocket Now order number", () => {

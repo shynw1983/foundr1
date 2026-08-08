@@ -5,6 +5,7 @@ import { ensureProductionTasksForOrder } from "../../../../../lib/order-producti
 import { publishCustomerOrderEvent, publishPublicMenuUpdatedEvent } from "../../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import { publishBridgeInventoryUpdated } from "../../../../../lib/local-bridge-realtime";
+import { translateOrderNoteToChinese } from "../../../../../lib/order-note-translation";
 import {
   findMenuDisplayNameCandidate,
   type MenuDisplayNameCandidate
@@ -161,16 +162,27 @@ async function upsertOperationalOrder(input: {
       coalesce(customer_summary ->> 'orderType', '') as "orderType",
       coalesce((customer_summary #>> '{bridge,completeness}')::int, 0) as completeness,
       coalesce((customer_summary #>> '{bridge,parserVersion}')::int, 0) as "parserVersion",
-      coalesce(customer_summary #> '{bridge,items}', '[]'::jsonb) as "bridgeItems"
+      coalesce(customer_summary #> '{bridge,items}', '[]'::jsonb) as "bridgeItems",
+      coalesce(customer_summary ->> 'note', '') as note,
+      coalesce(customer_summary #>> '{noteTranslations,zh}', '') as "noteZh"
     from store_customer_orders
     where order_source = ${input.platform}
       and source_external_id = ${sourceExternalId}
     limit 1
   `;
   const existing = existingRows[0];
+  const existingNote = cleanText(existing?.note, 1200);
+  const existingNoteZh = cleanText(existing?.noteZh, 1200);
+  const customerNote = cleanText("customerNote" in parsed ? parsed.customerNote : "", 1200);
+  const noteChanged = Boolean(customerNote && customerNote !== existingNote);
+  const noteZh = customerNote
+    ? (customerNote === existingNote && existingNoteZh
+        ? existingNoteZh
+        : await translateOrderNoteToChinese(customerNote))
+    : "";
   const shouldReplaceItems = !existing
     || parsed.completeness > Number(existing.completeness ?? 0)
-    || (input.platform === "rocket_now" && Number(existing.parserVersion ?? 0) < 4)
+    || (input.platform === "rocket_now" && Number(existing.parserVersion ?? 0) < 5)
     || hasExactDuplicateBridgeItems(existing.bridgeItems);
   const nextStatus = existing
     && parsed.status === "new"
@@ -182,10 +194,14 @@ async function upsertOperationalOrder(input: {
     : String(existing?.orderType ?? "") || "unknown";
   const shouldPublishOrderEvent = !existing
     || shouldReplaceItems
+    || noteChanged
+    || Boolean(noteZh && !existingNoteZh)
     || nextStatus !== String(existing.status ?? "")
     || nextOrderType !== String(existing.orderType ?? "");
   const summary = {
     customer: { name: parsed.customerName },
+    ...(customerNote ? { note: customerNote } : {}),
+    ...(noteZh ? { noteTranslations: { zh: noteZh } } : {}),
     orderType: nextOrderType,
     sourcePlatform: input.platform,
     sourceOrderNo: parsed.orderNo,
@@ -193,7 +209,7 @@ async function upsertOperationalOrder(input: {
       eventId: input.eventId,
       capturedAt: input.capturedAt.toISOString(),
       completeness: parsed.completeness,
-      parserVersion: input.platform === "rocket_now" ? 4 : 1,
+      parserVersion: input.platform === "rocket_now" ? 5 : 1,
       sourceExternalId,
       items: parsed.items
     }
@@ -248,7 +264,7 @@ async function upsertOperationalOrder(input: {
       payment_status = 'paid',
       amount = case when ${shouldReplaceItems} then excluded.amount else store_customer_orders.amount end,
       customer_summary = case
-        when ${shouldReplaceItems} then store_customer_orders.customer_summary || excluded.customer_summary
+        when ${shouldReplaceItems || noteChanged || Boolean(noteZh && !existingNoteZh)} then store_customer_orders.customer_summary || excluded.customer_summary
         else jsonb_set(
           store_customer_orders.customer_summary,
           '{orderType}',

@@ -16533,6 +16533,24 @@ body :where(
 .store-kitchen-platform-logo.is-uber em { color: #06a357; }
 .store-kitchen-platform-logo.is-rocket { gap: 3px; color: #1268d7; letter-spacing: -0.04em; }
 .store-kitchen-platform-logo.is-rocket em { border-radius: 4px; padding: 4px 6px; background: #1268d7; color: white; }
+
+.store-kitchen-customer-note {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 2px solid #b42318;
+  border-radius: 12px;
+  background: #fff4f2;
+  color: #7a271a;
+}
+
+.store-kitchen-customer-note strong,
+.store-kitchen-customer-note p,
+.store-kitchen-customer-note small { margin: 0; }
+
+.store-kitchen-customer-note p { font-size: 1.08rem; font-weight: 650; line-height: 1.55; }
+.store-kitchen-customer-note small { color: #6b3a32; line-height: 1.5; }
 .store-kitchen-platform-logo.is-demae b { border-radius: 5px; padding: 8px 12px; background: #d8432f; color: white; letter-spacing: 0.04em; }
 .store-kitchen-platform-logo.is-foundr1 { color: var(--green); }
 .store-kitchen-platform-logo.is-foundr1 em { color: var(--muted); font-size: 14px; }

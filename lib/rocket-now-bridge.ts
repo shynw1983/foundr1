@@ -19,6 +19,7 @@ export type RocketNowBridgeItem = {
 export type ParsedRocketNowBridgeOrder = {
   orderNo: string;
   customerName: string;
+  customerNote: string;
   orderedAt: Date;
   status: "new" | "preparing" | "ready" | "completed" | "cancelled";
   orderType: "delivery";
@@ -168,6 +169,17 @@ function parseItems(lines: string[], orderNo: string) {
   return items;
 }
 
+function extractCustomerNote(lines: string[], orderNo: string) {
+  const menuIndex = lines.findIndex((line) => line === "メニュー");
+  const headerLines = menuIndex >= 0 ? lines.slice(0, menuIndex) : lines;
+  const labeledIndex = headerLines.findIndex((line) => /^(?:お客様のご要望|店舗へのリクエスト|備考|注文メモ)$/.test(line));
+  if (labeledIndex >= 0) {
+    const labeledNote = headerLines.slice(labeledIndex + 1).find((line) => isCandidateName(line, orderNo));
+    if (labeledNote) return labeledNote;
+  }
+  return headerLines.find((line) => /^\[(?:カトラリー|使い捨て(?:カトラリー|用品))[^\]]*\]\s*.+/i.test(line)) ?? "";
+}
+
 export function parseRocketNowBridgeSnapshot(
   rawNodes: UberBridgeNode[],
   capturedAt: Date
@@ -206,6 +218,7 @@ export function parseRocketNowBridgeSnapshot(
   return {
     orderNo,
     customerName: customerNameLine?.replace(/(?:様|さん)$/, "").trim() ?? "",
+    customerNote: extractCustomerNote(lines, orderNo),
     orderedAt: parseOrderedAt(lines, capturedAt),
     status,
     orderType: "delivery",

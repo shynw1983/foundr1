@@ -42,6 +42,7 @@ type KitchenTask = {
   orderSource: string;
   orderType: string;
   note: string;
+  noteOriginal: string;
   createdAt: string;
   kitchenLanguage: "ja" | "zh";
   showAmounts: boolean;
@@ -1495,7 +1496,13 @@ export default function StoreKitchenPage() {
                     );
                   })}
                 </div>
-                {task.note ? <p className="store-kitchen-note">{task.note}</p> : null}
+                {task.note ? (
+                  <div className="store-kitchen-customer-note">
+                    <strong>{task.kitchenLanguage === "zh" ? "客人备注" : "お客様のご要望"}</strong>
+                    <p>{task.note}</p>
+                    {task.noteOriginal ? <small>日语原文：{task.noteOriginal}</small> : null}
+                  </div>
+                ) : null}
                 {!task.isHistorical ? <div className="store-kitchen-actions">
                   <button className="secondary-button store-kitchen-reprint-button" type="button" disabled={savingId === task.id} onClick={() => void requestReprint(task)}>
                     {reprintQueuedId === task.id
