@@ -33,6 +33,7 @@ public class UberAccessibilityService extends AccessibilityService {
     private static final String ROCKET_NOW_PACKAGE = "com.cpone.merchant";
     private static final long COMMAND_APP_RELAUNCH_COOLDOWN_MS = 15_000L;
     private static final long COMMAND_UNKNOWN_PAGE_GRACE_MS = 10_000L;
+    private static final long ROCKET_INVENTORY_LOAD_TIMEOUT_MS = 120_000L;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String pendingPackageName = "";
     private String pendingText = "";
@@ -88,6 +89,7 @@ public class UberAccessibilityService extends AccessibilityService {
     private int commandRocketMissingAttempts = 0;
     private int commandRocketSelectedCount = 0;
     private int commandRocketSearchTargetIndex = -1;
+    private long commandRocketInventoryOpenedAt = 0L;
     private long commandRealtimeDisconnectedAt = 0L;
     private boolean commandRealtimeConnected = false;
     private final Runnable commandRunnable = () -> runGuarded("command", this::processPendingCommand);
@@ -616,6 +618,7 @@ public class UberAccessibilityService extends AccessibilityService {
             commandRocketMissingAttempts = 0;
             commandRocketSelectedCount = 0;
             commandRocketSearchTargetIndex = -1;
+            commandRocketInventoryOpenedAt = 0L;
         }
         String commandPlatform = command.optString("platform", BridgeConfig.PLATFORM_UBER_EATS);
         if (!BridgeConfig.supportsPlatform(this, commandPlatform)) {
@@ -789,6 +792,7 @@ public class UberAccessibilityService extends AccessibilityService {
         commandRocketMissingAttempts = 0;
         commandRocketSelectedCount = 0;
         commandRocketSearchTargetIndex = -1;
+        commandRocketInventoryOpenedAt = 0L;
         handler.removeCallbacks(commandRunnable);
     }
 
@@ -2270,11 +2274,23 @@ public class UberAccessibilityService extends AccessibilityService {
         }
 
         if (!isRocketInventoryScreen(root)) {
+            if (isRocketInventoryLoading(root)) {
+                long now = SystemClock.uptimeMillis();
+                if (commandRocketInventoryOpenedAt == 0L) commandRocketInventoryOpenedAt = now;
+                if (now - commandRocketInventoryOpenedAt < ROCKET_INVENTORY_LOAD_TIMEOUT_MS) {
+                    retryPendingCommand(5000L, "Rocket Now の売り切れ・非表示画面を読み込み中です。");
+                } else {
+                    BridgeCommandState.fail(this, "Rocket Now の売り切れ・非表示画面が2分以内に読み込まれませんでした。");
+                    resetCommandAttempt();
+                }
+                return;
+            }
             AccessibilityNodeInfo entry = findRocketNodeContaining(root, "売り切れ ・ 非表示", true);
             if (entry != null) {
                 boolean clicked = clickOrderCard(entry);
                 entry.recycle();
-                retryPendingCommand(clicked ? 1800L : 900L, "Rocket Now の売り切れ・非表示画面を開けませんでした。");
+                if (clicked) commandRocketInventoryOpenedAt = SystemClock.uptimeMillis();
+                retryPendingCommand(clicked ? 5000L : 1200L, "Rocket Now の売り切れ・非表示画面を開けませんでした。");
                 return;
             }
             AccessibilityNodeInfo selfService = findRocketNodeContaining(root, "セルフサービス", true);
@@ -2490,6 +2506,16 @@ public class UberAccessibilityService extends AccessibilityService {
         return subtreeContainsText(root, "売り切れ ・ 非表示")
             && subtreeContainsText(root, "全体")
             && subtreeContainsText(root, "非表示");
+    }
+
+    private boolean isRocketInventoryLoading(AccessibilityNodeInfo root) {
+        AccessibilityNodeInfo title = findRocketExactTextNode(root, "売り切れ ・ 非表示", false);
+        if (title == null) return false;
+        Rect bounds = new Rect();
+        title.getBoundsInScreen(bounds);
+        title.recycle();
+        int screenHeight = Math.max(1, getResources().getDisplayMetrics().heightPixels);
+        return bounds.bottom <= Math.round(screenHeight * 0.14f);
     }
 
     private AccessibilityNodeInfo findRocketTopTab(AccessibilityNodeInfo node, String prefix) {
