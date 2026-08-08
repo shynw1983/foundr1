@@ -294,7 +294,9 @@ export async function POST(request: Request) {
   if (!isPickupWithinBusinessHours(operation.businessHours, pickupDate, pickup)) {
     return Response.json({ error: "Pickup time is outside store business hours" }, { status: 409 });
   }
-  const temporaryClosure = await getTemporaryClosureForPickup(publicStore.osStoreId, pickupDate, pickup);
+  const temporaryClosure = operation.acceptanceMode === "force_open"
+    ? null
+    : await getTemporaryClosureForPickup(publicStore.osStoreId, pickupDate, pickup);
   if (temporaryClosure) {
     return Response.json({ error: temporaryClosure.publicMessage || temporaryClosure.reason || "Selected pickup time is temporarily unavailable" }, { status: 409 });
   }

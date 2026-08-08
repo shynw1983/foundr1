@@ -4,6 +4,8 @@ import { sql } from "../../../../lib/db";
 import { publishPublicMenuUpdatedEvent } from "../../../../lib/order-realtime";
 import { getCurrentBusinessDayClosing, getStoreReceptionState } from "../../../../lib/store-business-hours";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
+import { normalizeStoreReceptionMode, type StoreReceptionMode } from "../../../../lib/store-reception-mode";
+import { notifyStoreReceptionModeChange } from "../../../../lib/store-reception-reminders";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,7 @@ type StoreOperationPatch = {
   action?: string;
   storeId?: string;
   reservationsEnabled?: boolean;
+  acceptanceMode?: StoreReceptionMode;
   minimumPickupMinutes?: number;
   minimumPickupResetPolicy?: string;
   statusNote?: string;
@@ -64,15 +67,24 @@ export async function GET(request: Request) {
       end as "minimumPickupResetAt",
       case
         when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then true
+        when store_operations.reservation_acceptance_mode = 'force_open' then true
+        when store_operations.reservation_acceptance_mode = 'force_closed' then false
         else coalesce(store_operations.reservations_enabled, true)
       end as "reservationsEnabled",
       case
         when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then ''
         else coalesce(store_operations.status_note, '')
       end as "statusNote",
-      store_operations.temporary_status_until as "temporaryStatusUntil"
+      store_operations.temporary_status_until as "temporaryStatusUntil",
+      case
+        when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then 'auto'
+        else coalesce(store_operations.reservation_acceptance_mode, 'auto')
+      end as "acceptanceMode",
+      store_operations.acceptance_mode_changed_at as "acceptanceModeChangedAt",
+      coalesce(mode_changer.name, '') as "acceptanceModeChangedByName"
     from stores
     left join store_operations on store_operations.store_id = stores.id
+    left join employees mode_changer on mode_changer.id = store_operations.acceptance_mode_changed_by
     where stores.id = ${storeId}
     limit 1
   `;
@@ -84,6 +96,7 @@ export async function GET(request: Request) {
     reservationsEnabled?: boolean;
     statusNote?: string;
     temporaryStatusUntil?: string | Date | null;
+    acceptanceMode?: StoreReceptionMode;
   }) | undefined;
 
   const brandRows = await sql`
@@ -140,6 +153,8 @@ export async function PATCH(request: Request) {
   }
 
   const reservationsEnabled = body?.reservationsEnabled !== false;
+  const hasAcceptanceMode = Object.prototype.hasOwnProperty.call(body ?? {}, "acceptanceMode");
+  const acceptanceMode = normalizeStoreReceptionMode(body?.acceptanceMode);
   const hasMinimumPickupMinutes = Object.prototype.hasOwnProperty.call(body ?? {}, "minimumPickupMinutes");
   const minimumPickupMinutes = normalizeMinimumPickupMinutes(body?.minimumPickupMinutes);
   const statusNote = String(body?.statusNote ?? "").trim();
@@ -150,7 +165,10 @@ export async function PATCH(request: Request) {
     limit 1
   `;
   const businessHours = storeRows[0]?.businessHours;
-  const temporaryStatusUntil = !reservationsEnabled && statusNote === "本日休業"
+  const effectiveReservationsEnabled = acceptanceMode === "force_open"
+    ? true
+    : acceptanceMode === "force_closed" ? false : reservationsEnabled;
+  const temporaryStatusUntil = acceptanceMode === "force_closed" && statusNote === "本日休業"
     ? getCurrentBusinessDayClosing(businessHours)
     : null;
   const minimumPickupResetAt = minimumPickupMinutes !== null && body?.minimumPickupResetPolicy === "business_day_end"
@@ -158,11 +176,24 @@ export async function PATCH(request: Request) {
     : null;
 
   await sql`
-    insert into store_operations (store_id, reservations_enabled, minimum_pickup_minutes, minimum_pickup_reset_at, status_note, temporary_status_until, updated_by, updated_at)
-    values (${storeId}, ${reservationsEnabled}, ${minimumPickupMinutes}, ${minimumPickupResetAt?.toISOString() ?? null}, ${statusNote}, ${temporaryStatusUntil?.toISOString() ?? null}, ${session.id}, now())
+    insert into store_operations (
+      store_id, reservations_enabled, reservation_acceptance_mode, acceptance_mode_changed_at,
+      acceptance_mode_changed_by, acceptance_mode_reason, acceptance_mode_last_reminded_at,
+      minimum_pickup_minutes, minimum_pickup_reset_at, status_note, temporary_status_until, updated_by, updated_at
+    )
+    values (
+      ${storeId}, ${effectiveReservationsEnabled}, ${acceptanceMode}, now(),
+      ${session.id}, ${statusNote}, null,
+      ${minimumPickupMinutes}, ${minimumPickupResetAt?.toISOString() ?? null}, ${statusNote}, ${temporaryStatusUntil?.toISOString() ?? null}, ${session.id}, now()
+    )
     on conflict (store_id)
     do update set
-      reservations_enabled = excluded.reservations_enabled,
+      reservations_enabled = case when ${hasAcceptanceMode} then excluded.reservations_enabled else store_operations.reservations_enabled end,
+      reservation_acceptance_mode = case when ${hasAcceptanceMode} then excluded.reservation_acceptance_mode else store_operations.reservation_acceptance_mode end,
+      acceptance_mode_changed_at = case when ${hasAcceptanceMode} then now() else store_operations.acceptance_mode_changed_at end,
+      acceptance_mode_changed_by = case when ${hasAcceptanceMode} then excluded.acceptance_mode_changed_by else store_operations.acceptance_mode_changed_by end,
+      acceptance_mode_reason = case when ${hasAcceptanceMode} then excluded.acceptance_mode_reason else store_operations.acceptance_mode_reason end,
+      acceptance_mode_last_reminded_at = case when ${hasAcceptanceMode} then null else store_operations.acceptance_mode_last_reminded_at end,
       minimum_pickup_minutes = case
         when ${hasMinimumPickupMinutes} then excluded.minimum_pickup_minutes
         else store_operations.minimum_pickup_minutes
@@ -171,8 +202,8 @@ export async function PATCH(request: Request) {
         when ${hasMinimumPickupMinutes} then excluded.minimum_pickup_reset_at
         else store_operations.minimum_pickup_reset_at
       end,
-      status_note = excluded.status_note,
-      temporary_status_until = excluded.temporary_status_until,
+      status_note = case when ${hasAcceptanceMode} then excluded.status_note else store_operations.status_note end,
+      temporary_status_until = case when ${hasAcceptanceMode} then excluded.temporary_status_until else store_operations.temporary_status_until end,
       updated_by = excluded.updated_by,
       updated_at = now()
   `;
@@ -180,6 +211,16 @@ export async function PATCH(request: Request) {
   after(async () => {
     await publishPublicMenuUpdatedEvent(storeId).catch(() => undefined);
   });
+
+  if (hasAcceptanceMode) {
+    after(async () => {
+      await notifyStoreReceptionModeChange({
+        storeId,
+        mode: acceptanceMode,
+        changedByEmployeeId: session.id
+      }).catch(() => undefined);
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

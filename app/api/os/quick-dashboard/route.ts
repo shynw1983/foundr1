@@ -68,12 +68,19 @@ export async function GET(request: Request) {
         stores.business_hours as "businessHours",
         case
           when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then true
+          when store_operations.reservation_acceptance_mode = 'force_open' then true
+          when store_operations.reservation_acceptance_mode = 'force_closed' then false
           else coalesce(store_operations.reservations_enabled, true)
         end as "reservationsEnabled",
         case
           when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then ''
           else coalesce(store_operations.status_note, '')
         end as "statusNote",
+        case
+          when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then 'auto'
+          else coalesce(store_operations.reservation_acceptance_mode, 'auto')
+        end as "acceptanceMode",
+        store_operations.acceptance_mode_changed_at as "acceptanceModeChangedAt",
         case
           when store_operations.minimum_pickup_reset_at is not null and store_operations.minimum_pickup_reset_at <= now() then null
           else store_operations.minimum_pickup_minutes
@@ -133,6 +140,8 @@ export async function GET(request: Request) {
   const operationPayload = operation ? {
     reservationsEnabled: operation.reservationsEnabled !== false,
     statusNote: String(operation.statusNote ?? ""),
+    acceptanceMode: String(operation.acceptanceMode ?? "auto"),
+    acceptanceModeChangedAt: operation.acceptanceModeChangedAt ? new Date(String(operation.acceptanceModeChangedAt)).toISOString() : null,
     minimumPickupMinutes: operation.minimumPickupMinutes === null ? null : Number(operation.minimumPickupMinutes),
     receptionState: getStoreReceptionState({
       businessHours: operation.businessHours,

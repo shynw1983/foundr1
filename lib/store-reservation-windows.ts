@@ -31,10 +31,23 @@ function formatMinutes(value: number) {
 export async function getStoreReservationWindowsForCurrentBusinessDay(input: {
   storeId: string;
   businessHours: unknown;
+  ignoreStaffSchedule?: boolean;
   now?: Date;
 }): Promise<ReservationWindow[]> {
   const businessDay = getStoreCashBusinessDayState(input.businessHours, input.now);
   if (!businessDay.openAt || !businessDay.closeAt) return [];
+
+  if (input.ignoreStaffSchedule) {
+    const startDate = businessDay.openAt.slice(0, 10);
+    const endDate = businessDay.closeAt.slice(0, 10);
+    if (startDate === endDate) {
+      return [{ date: startDate, start: businessDay.openAt.slice(11, 16), end: businessDay.closeAt.slice(11, 16) }];
+    }
+    return [
+      { date: startDate, start: businessDay.openAt.slice(11, 16), end: "23:59" },
+      { date: endDate, start: "00:00", end: businessDay.closeAt.slice(11, 16) }
+    ];
+  }
 
   const pickupDates = Array.from(new Set([
     businessDay.openAt.slice(0, 10),
@@ -74,9 +87,18 @@ function mergeWindows(windows: Array<{ start: number; end: number }>) {
 export async function getStoreReservationWindowsForDate(input: {
   storeId: string;
   pickupDate: string;
+  businessHours?: unknown;
+  ignoreStaffSchedule?: boolean;
   startBufferMinutes?: number;
   endBufferMinutes?: number;
 }): Promise<ReservationWindow[]> {
+  if (input.ignoreStaffSchedule && input.businessHours) {
+    return getStoreReservationWindowsForCurrentBusinessDay({
+      storeId: input.storeId,
+      businessHours: input.businessHours,
+      ignoreStaffSchedule: true
+    }).then((windows) => windows.filter((window) => window.date === input.pickupDate));
+  }
   const startBuffer = input.startBufferMinutes ?? defaultShiftStartBufferMinutes;
   const endBuffer = input.endBufferMinutes ?? defaultShiftEndBufferMinutes;
   const previousDate = addDays(input.pickupDate, -1);

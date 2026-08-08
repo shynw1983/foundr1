@@ -63,6 +63,8 @@ type QuickDashboardPayload = {
   staff: PresenceStaff[];
   operation: {
     reservationsEnabled: boolean;
+    acceptanceMode: "auto" | "force_open" | "force_closed";
+    acceptanceModeChangedAt: string | null;
     statusNote: string;
     minimumPickupMinutes: number | null;
     receptionState?: { isAcceptingNow?: boolean; isWithinBusinessHours?: boolean };
@@ -328,7 +330,11 @@ export function QuickOperationsDashboard() {
           </div>
           <div className="os-quick-presence-heading">
             <strong>{staff.length}人勤務中</strong>
-            <small>{dashboard?.operation?.reservationsEnabled === false ? dashboard.operation.statusNote || "Web予約停止中" : "Web予約受付中"}</small>
+            <small>{dashboard?.operation?.acceptanceMode === "force_open"
+              ? "Web予約 手動受付中"
+              : dashboard?.operation?.acceptanceMode === "force_closed"
+                ? dashboard.operation.statusNote || "Web予約 手動停止中"
+                : dashboard?.operation?.reservationsEnabled === false ? dashboard.operation.statusNote || "Web予約停止中" : "Web予約 自動受付中"}</small>
           </div>
           <div className="os-quick-presence-list">
             {staff.slice(0, 6).map((person) => (
@@ -357,10 +363,11 @@ export function QuickOperationsDashboard() {
 
     if (widget.type === "web_reservation") {
       const enabled = dashboard?.operation?.reservationsEnabled !== false;
+      const mode = dashboard?.operation?.acceptanceMode ?? "auto";
       return (
         <article className={`os-quick-widget${widget.size === "wide" ? " is-wide" : ""}`} key={widget.id}>
           <header><span><Icon size={17} />{definition.label}</span>{editControls}</header>
-          <div className="os-quick-widget-status"><strong>{enabled ? "受付中" : "停止中"}</strong><span className={enabled ? "is-on" : "is-off"} /></div>
+          <div className="os-quick-widget-status"><strong>{mode === "force_open" ? "手動受付中" : mode === "force_closed" ? "手動停止中" : enabled ? "自動受付中" : "自動停止中"}</strong><span className={enabled ? "is-on" : "is-off"} /></div>
           <p>{dashboard?.operation?.minimumPickupMinutes ? `最短 ${dashboard.operation.minimumPickupMinutes}分後` : "ブランド初期時間で受付"}</p>
           {!isEditing ? <a href="/store/orders">受付設定を開く <ChevronRight size={15} /></a> : null}
         </article>

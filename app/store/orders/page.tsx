@@ -97,7 +97,16 @@ type StoreOperation = {
     minimumPickupMinutes: number;
   }>;
   reservationsEnabled: boolean;
+  acceptanceMode: "auto" | "force_open" | "force_closed";
+  acceptanceModeChangedAt?: string | null;
+  acceptanceModeChangedByName?: string;
   statusNote: string;
+};
+
+const receptionModeLabels: Record<StoreOperation["acceptanceMode"], string> = {
+  auto: "自動受付",
+  force_open: "手動受付",
+  force_closed: "手動停止"
 };
 
 const statusLabels: Record<string, string> = {
@@ -325,7 +334,8 @@ export default function StoreOrdersPage() {
     const response = await fetch(`/api/store/operations?${params.toString()}`, { cache: "no-store" });
     if (!response.ok) return;
     const body = await response.json();
-    const nextOperation = body.operation as StoreOperation | null;
+    const rawOperation = body.operation as StoreOperation | null;
+    const nextOperation = rawOperation ? { ...rawOperation, acceptanceMode: rawOperation.acceptanceMode || "auto" as const } : null;
     setOperation(nextOperation);
     const defaultMinutes = nextOperation?.defaultMinimumPickupMinutes ?? 15;
     const currentMinutes = nextOperation?.minimumPickupMinutes ?? defaultMinutes;
@@ -350,6 +360,7 @@ export default function StoreOrdersPage() {
         body: JSON.stringify({
           storeId: selectedStoreId,
           reservationsEnabled: nextOperation.reservationsEnabled,
+          ...(Object.prototype.hasOwnProperty.call(patch, "acceptanceMode") ? { acceptanceMode: nextOperation.acceptanceMode } : {}),
           statusNote: nextOperation.statusNote,
           minimumPickupMinutes: minutes === defaultMinutes ? null : minutes,
           minimumPickupResetPolicy
@@ -363,6 +374,22 @@ export default function StoreOrdersPage() {
     } finally {
       setOperationSaving(false);
     }
+  };
+
+  const changeReceptionMode = (acceptanceMode: StoreOperation["acceptanceMode"], statusNote = "") => {
+    if (!operation || (operation.acceptanceMode === acceptanceMode && operation.statusNote === statusNote)) return;
+    if (acceptanceMode !== "auto") {
+      const modeLabel = receptionModeLabels[acceptanceMode];
+      const warning = acceptanceMode === "force_open"
+        ? "スタッフが打刻していない場合、シフト時間外、臨時休業中でもWeb予約を優先して受け付けます。この状態は自動では解除されません。"
+        : "Web予約を直ちに停止します。この状態は自動では解除されません。";
+      if (!window.confirm(`${modeLabel}に切り替えますか？\n\n${warning}`)) return;
+    }
+    const reservationsEnabled = acceptanceMode !== "force_closed";
+    void saveOperationSettings(
+      { acceptanceMode, reservationsEnabled, statusNote },
+      `${receptionModeLabels[acceptanceMode]}に切り替えました。`
+    );
   };
 
   const changeMinimumPickupOffset = (delta: number) => {
@@ -919,7 +946,7 @@ export default function StoreOrdersPage() {
             </section>
           ) : null}
           {access?.stores.length ? (
-            <section className="store-pickup-setting" aria-label="最短受け取り準備時間">
+            <section className="store-pickup-setting" id="reception-settings" aria-label="最短受け取り準備時間">
               <div>
                 <span>受付設定</span>
                 <small>受付状態と最短準備時間</small>
@@ -928,30 +955,46 @@ export default function StoreOrdersPage() {
                 <>
                   <div className="store-reception-buttons" aria-label="受付状態">
                     <button
-                      className={operation.reservationsEnabled ? "store-reception-button is-on" : "store-reception-button"}
+                      className={operation.acceptanceMode === "auto" ? "store-reception-button is-on" : "store-reception-button"}
                       type="button"
                       disabled={operationSaving}
-                      onClick={() => void saveOperationSettings({ reservationsEnabled: true, statusNote: "" }, "通常受付にしました。")}
+                      onClick={() => changeReceptionMode("auto")}
                     >
-                      通常受付
+                      自動受付
                     </button>
                     <button
-                      className={!operation.reservationsEnabled && operation.statusNote !== "本日休業" ? "store-reception-button is-off" : "store-reception-button"}
+                      className={operation.acceptanceMode === "force_open" ? "store-reception-button is-manual" : "store-reception-button"}
                       type="button"
                       disabled={operationSaving}
-                      onClick={() => void saveOperationSettings({ reservationsEnabled: false, statusNote: "一時休止" }, "一時休止にしました。")}
+                      onClick={() => changeReceptionMode("force_open", "手動受付中")}
                     >
-                      一時休止
+                      手動受付
                     </button>
                     <button
-                      className={!operation.reservationsEnabled && operation.statusNote === "本日休業" ? "store-reception-button is-off" : "store-reception-button"}
+                      className={operation.acceptanceMode === "force_closed" && operation.statusNote !== "本日休業" ? "store-reception-button is-off" : "store-reception-button"}
                       type="button"
                       disabled={operationSaving}
-                      onClick={() => void saveOperationSettings({ reservationsEnabled: false, statusNote: "本日休業" }, "本日休業にしました。")}
+                      onClick={() => changeReceptionMode("force_closed", "手動停止中")}
+                    >
+                      手動停止
+                    </button>
+                    <button
+                      className={operation.acceptanceMode === "force_closed" && operation.statusNote === "本日休業" ? "store-reception-button is-off" : "store-reception-button"}
+                      type="button"
+                      disabled={operationSaving}
+                      onClick={() => changeReceptionMode("force_closed", "本日休業")}
                     >
                       本日休業
                     </button>
                   </div>
+                  {operation.acceptanceMode !== "auto" ? (
+                    <div className={`store-reception-manual-banner is-${operation.acceptanceMode}`}>
+                      <strong>{receptionModeLabels[operation.acceptanceMode]}中</strong>
+                      <span>自動では解除されません。{operation.acceptanceModeChangedByName ? ` ${operation.acceptanceModeChangedByName}が変更しました。` : ""}</span>
+                      {operation.acceptanceModeChangedAt ? <small>{new Date(operation.acceptanceModeChangedAt).toLocaleString("ja-JP")}</small> : null}
+                      <button type="button" disabled={operationSaving} onClick={() => changeReceptionMode("auto")}>自動受付に戻す</button>
+                    </div>
+                  ) : null}
                   <div className="store-pickup-stepper">
                     <span>
                       初期値 {operation.defaultMinimumPickupMinutes ?? 15}分

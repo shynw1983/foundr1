@@ -264,7 +264,7 @@ export async function POST(request: Request) {
   const minimumPickup = getTokyoMinimumPickup(minimumPickupMinutes);
   const businessDay = getStoreCashBusinessDayState(operation.businessHours);
   const isOvernightContinuation = businessDay.status === "business_open" && businessDay.businessDate !== tokyoNow.date;
-  if (tokyoNow.time < maamaaSameDayReceptionStartTime && !isOvernightContinuation) {
+  if (operation.acceptanceMode !== "force_open" && tokyoNow.time < maamaaSameDayReceptionStartTime && !isOvernightContinuation) {
     return Response.json({ error: `Maamaa web reservations are available from ${maamaaSameDayReceptionStartTime}` }, { status: 400 });
   }
   if (compareDateTime(pickupDate, pickup, minimumPickup.date, minimumPickup.time) < 0) {
@@ -277,11 +277,18 @@ export async function POST(request: Request) {
   if (!isPickupWithinBusinessHours(operation.businessHours, pickupDate, pickup)) {
     return Response.json({ error: "Pickup time is outside store business hours" }, { status: 409 });
   }
-  const reservationWindows = await getStoreReservationWindowsForDate({ storeId: publicStore.osStoreId, pickupDate });
+  const reservationWindows = await getStoreReservationWindowsForDate({
+    storeId: publicStore.osStoreId,
+    pickupDate,
+    businessHours: operation.businessHours,
+    ignoreStaffSchedule: operation.acceptanceMode === "force_open"
+  });
   if (!reservationWindows.some((window) => pickup >= window.start && pickup <= window.end)) {
     return Response.json({ error: "Pickup time is outside confirmed staff schedule" }, { status: 409 });
   }
-  const temporaryClosure = await getTemporaryClosureForPickup(publicStore.osStoreId, pickupDate, pickup);
+  const temporaryClosure = operation.acceptanceMode === "force_open"
+    ? null
+    : await getTemporaryClosureForPickup(publicStore.osStoreId, pickupDate, pickup);
   if (temporaryClosure) {
     return Response.json({ error: temporaryClosure.publicMessage || temporaryClosure.reason || "Selected pickup time is temporarily unavailable" }, { status: 409 });
   }

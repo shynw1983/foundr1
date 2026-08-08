@@ -1,5 +1,6 @@
 import { sql } from "./db";
 import { getTokyoDateTimeParts, isPickupWithinBusinessHours } from "./store-business-hours";
+import { normalizeStoreReceptionMode, type StoreReceptionMode } from "./store-reception-mode";
 
 export type StoreOperationForPublicMenu = {
   reservationsEnabled: boolean;
@@ -7,6 +8,8 @@ export type StoreOperationForPublicMenu = {
   businessHours: unknown;
   reservationNote: string;
   minimumPickupMinutes?: number | null;
+  acceptanceMode?: StoreReceptionMode;
+  acceptanceModeChangedAt?: string | Date | null;
 };
 
 type StaffPresenceRow = {
@@ -15,6 +18,15 @@ type StaffPresenceRow = {
 };
 
 const staffNotClockedInStatusNote = "一時休止";
+const manualReceptionBusinessHours = {
+  mon: { open: "00:00", close: "23:59", closed: false },
+  tue: { open: "00:00", close: "23:59", closed: false },
+  wed: { open: "00:00", close: "23:59", closed: false },
+  thu: { open: "00:00", close: "23:59", closed: false },
+  fri: { open: "00:00", close: "23:59", closed: false },
+  sat: { open: "00:00", close: "23:59", closed: false },
+  sun: { open: "00:00", close: "23:59", closed: false }
+};
 
 function toCount(value: unknown) {
   const count = Number(value ?? 0);
@@ -49,6 +61,19 @@ export async function applyStaffPresenceGateToPublicOperation(
   storeId: string | null | undefined,
   operation: StoreOperationForPublicMenu
 ): Promise<StoreOperationForPublicMenu> {
+  const acceptanceMode = normalizeStoreReceptionMode(operation.acceptanceMode);
+  if (acceptanceMode === "force_open") {
+    return {
+      ...operation,
+      acceptanceMode,
+      reservationsEnabled: true,
+      statusNote: "手動受付中",
+      businessHours: manualReceptionBusinessHours
+    };
+  }
+  if (acceptanceMode === "force_closed") {
+    return { ...operation, acceptanceMode, reservationsEnabled: false, statusNote: operation.statusNote || "手動停止中" };
+  }
   if (!storeId || operation.reservationsEnabled === false) return operation;
 
   const current = getTokyoDateTimeParts();

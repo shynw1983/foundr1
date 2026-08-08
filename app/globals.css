@@ -11843,7 +11843,7 @@ body :where(
 
 .store-reception-buttons {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -11868,6 +11868,50 @@ body :where(
   border-color: rgba(188, 54, 54, 0.28);
   background: #fff4f4;
   color: #a72f2f;
+}
+
+.store-reception-button.is-manual {
+  border-color: rgba(33, 116, 91, 0.42);
+  background: var(--green);
+  color: white;
+}
+
+.store-reception-manual-banner {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(33, 116, 91, 0.32);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: var(--green-soft);
+  color: var(--ink);
+}
+
+.store-reception-manual-banner.is-force_closed {
+  border-color: rgba(188, 54, 54, 0.28);
+  background: #fff4f4;
+}
+
+.store-reception-manual-banner button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .store-reception-buttons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .store-reception-manual-banner {
+    grid-template-columns: 1fr;
+  }
 }
 
 .store-reception-button:disabled {

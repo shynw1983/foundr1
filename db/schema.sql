@@ -2138,6 +2138,11 @@ alter table menu_options add column if not exists image_url text;
 create table if not exists store_operations (
   store_id uuid primary key references stores(id) on delete cascade,
   reservations_enabled boolean not null default true,
+  reservation_acceptance_mode text not null default 'auto',
+  acceptance_mode_changed_at timestamptz,
+  acceptance_mode_changed_by uuid references employees(id) on delete set null,
+  acceptance_mode_reason text not null default '',
+  acceptance_mode_last_reminded_at timestamptz,
   minimum_pickup_minutes integer,
   minimum_pickup_reset_at timestamptz,
   status_note text not null default '',
@@ -2150,6 +2155,14 @@ create table if not exists store_operations (
 alter table store_operations add column if not exists temporary_status_until timestamptz;
 alter table store_operations add column if not exists minimum_pickup_minutes integer;
 alter table store_operations add column if not exists minimum_pickup_reset_at timestamptz;
+alter table store_operations add column if not exists reservation_acceptance_mode text not null default 'auto';
+alter table store_operations add column if not exists acceptance_mode_changed_at timestamptz;
+alter table store_operations add column if not exists acceptance_mode_changed_by uuid references employees(id) on delete set null;
+alter table store_operations add column if not exists acceptance_mode_reason text not null default '';
+alter table store_operations add column if not exists acceptance_mode_last_reminded_at timestamptz;
+alter table store_operations drop constraint if exists store_operations_reservation_acceptance_mode_check;
+alter table store_operations add constraint store_operations_reservation_acceptance_mode_check
+  check (reservation_acceptance_mode in ('auto', 'force_open', 'force_closed'));
 
 create table if not exists store_temporary_closures (
   id uuid primary key default gen_random_uuid(),

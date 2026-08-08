@@ -74,6 +74,8 @@ export type NanachaCompatibleMenu = {
   selectedStoreId: string;
   storeOperation: {
     reservationsEnabled: boolean;
+    acceptanceMode?: "auto" | "force_open" | "force_closed";
+    acceptanceModeChangedAt?: string | Date | null;
     statusNote: string;
     businessHours: unknown;
     reservationNote: string;
@@ -461,13 +463,20 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
           end as "minimumPickupMinutes",
           case
             when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then true
+            when store_operations.reservation_acceptance_mode = 'force_open' then true
+            when store_operations.reservation_acceptance_mode = 'force_closed' then false
             else coalesce(store_operations.reservations_enabled, true)
           end as "reservationsEnabled",
           case
             when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then ''
             else coalesce(store_operations.status_note, '')
           end as "statusNote",
-          store_operations.temporary_status_until as "temporaryStatusUntil"
+          store_operations.temporary_status_until as "temporaryStatusUntil",
+          case
+            when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then 'auto'
+            else coalesce(store_operations.reservation_acceptance_mode, 'auto')
+          end as "acceptanceMode",
+          store_operations.acceptance_mode_changed_at as "acceptanceModeChangedAt"
         from stores
         left join store_operations on store_operations.store_id = stores.id
         where stores.id = ${selectedStore.osStoreId}
