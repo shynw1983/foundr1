@@ -67,7 +67,12 @@ type InventoryDialog = {
 };
 
 type InventorySyncState = {
-  commandId: string;
+  commandIds: string[];
+  platforms: Record<string, {
+    commandId: string;
+    status: "pending" | "succeeded" | "failed";
+    error?: string;
+  }>;
   status: "pending" | "succeeded" | "failed";
   error?: string;
 };
@@ -210,6 +215,16 @@ function splitQuantityLabel(text: string) {
   return { label: text, quantity: "" };
 }
 
+function formatInventorySyncLabel(sync: InventorySyncState, language: "ja" | "zh") {
+  const labels: Record<string, string> = { uber_eats: "Uber", rocket_now: "Rocket" };
+  const statusMarks = language === "zh"
+    ? { pending: "同步中", succeeded: "完成", failed: "失败" }
+    : { pending: "同期中", succeeded: "完了", failed: "失敗" };
+  return Object.entries(sync.platforms)
+    .map(([platform, state]) => `${labels[platform] ?? platform} ${statusMarks[state.status]}`)
+    .join(" · ");
+}
+
 function simplifyKitchenLine(text: string, isModifier: boolean) {
   if (!isModifier) return text;
   const withoutDetails = text.replace(/（.*$/u, "").trim();
@@ -275,7 +290,7 @@ export default function StoreKitchenPage() {
   const autoStartingTaskIdsRef = useRef<Set<string>>(new Set());
   const bridgeMemberIdsRef = useRef<Set<string>>(new Set());
   const inventoryPointerRef = useRef<{ lineKey: string; x: number; y: number; handled: boolean } | null>(null);
-  const inventoryCommandKeyByIdRef = useRef<Record<string, string>>({});
+  const inventoryCommandByIdRef = useRef<Record<string, { inventoryKey: string; platform: string }>>({});
   const suppressIngredientClickUntilRef = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const soundEnabledRef = useRef(false);
@@ -498,6 +513,29 @@ export default function StoreKitchenPage() {
     inventoryPointerRef.current = null;
   }
 
+  function registerInventoryCommands(body: Record<string, unknown>, inventoryKey: string) {
+    const rawCommands = Array.isArray(body.commands) ? body.commands : [];
+    const commands = rawCommands.flatMap((value) => {
+      if (!value || typeof value !== "object") return [];
+      const command = value as Record<string, unknown>;
+      const commandId = String(command.id ?? "");
+      const platform = String(command.platform ?? "");
+      return commandId && platform ? [{ commandId, platform }] : [];
+    });
+    if (!commands.length && body.commandId) {
+      commands.push({ commandId: String(body.commandId), platform: "uber_eats" });
+    }
+    const platforms = Object.fromEntries(commands.map(({ commandId, platform }) => {
+      inventoryCommandByIdRef.current[commandId] = { inventoryKey, platform };
+      return [platform, { commandId, status: "pending" as const }];
+    }));
+    return {
+      commandIds: commands.map((command) => command.commandId),
+      platforms,
+      status: "pending" as const
+    } satisfies InventorySyncState;
+  }
+
   async function previewInventoryChange(
     task: KitchenTask,
     lineKey: string,
@@ -558,7 +596,7 @@ export default function StoreKitchenPage() {
       const inventoryKey = String(body.inventoryKey || dialog.inventoryKey);
       setInventorySyncByKey((current) => ({
         ...current,
-        [inventoryKey]: { commandId: String(body.commandId), status: "pending" }
+        [inventoryKey]: registerInventoryCommands(body, inventoryKey)
       }));
       setInventoryKeyByLineKey((current) => ({ ...current, [dialog.lineKey]: inventoryKey }));
       setInventoryDialog(null);
@@ -605,11 +643,9 @@ export default function StoreKitchenPage() {
     const body = await response.json().catch(() => ({}));
     if (response.ok && body.commandId) {
       const inventoryKey = String(body.inventoryKey || item.inventoryKey);
-      const commandId = String(body.commandId);
-      inventoryCommandKeyByIdRef.current[commandId] = inventoryKey;
       setInventorySyncByKey((current) => ({
         ...current,
-        [inventoryKey]: { commandId, status: "pending" }
+        [inventoryKey]: registerInventoryCommands(body, inventoryKey)
       }));
     } else {
       setInventoryListError(String(body.error ?? (isChinese ? "无法发送恢复销售操作。" : "販売再開を送信できませんでした。")));
@@ -874,23 +910,45 @@ export default function StoreKitchenPage() {
             const command = event?.command;
             if (!active || !command?.id) return;
             const commandId = String(command.id);
-            const inventoryKey = inventoryCommandKeyByIdRef.current[commandId] ?? "";
-            setInventorySyncByKey((current) => Object.fromEntries(
-              Object.entries(current).map(([key, value]) => value.commandId === commandId
-                ? [key, {
-                  ...value,
-                  status: command.status === "succeeded"
-                    ? "succeeded"
-                    : command.status === "pending" || command.status === "processing"
-                      ? "pending"
-                      : "failed",
-                  error: String(command.error ?? "")
-                } satisfies InventorySyncState]
-                : [key, value])
-            ));
-            if (inventoryKey && command.status === "succeeded") {
-              setUnavailableInventory((current) => current.filter((item) => item.inventoryKey !== inventoryKey));
-              delete inventoryCommandKeyByIdRef.current[commandId];
+            const binding = inventoryCommandByIdRef.current[commandId];
+            const inventoryKey = binding?.inventoryKey ?? "";
+            if (binding) {
+              setInventorySyncByKey((current) => {
+                const value = current[inventoryKey];
+                if (!value) return current;
+                const nextCommandStatus: "pending" | "succeeded" | "failed" = command.status === "succeeded"
+                  ? "succeeded"
+                  : command.status === "pending" || command.status === "processing"
+                    ? "pending"
+                    : "failed";
+                const platforms = {
+                  ...value.platforms,
+                  [binding.platform]: {
+                    commandId,
+                    status: nextCommandStatus,
+                    error: String(command.error ?? "")
+                  }
+                };
+                const platformStates = Object.values(platforms);
+                const status = platformStates.some((state) => state.status === "pending")
+                  ? "pending"
+                  : platformStates.some((state) => state.status === "failed")
+                    ? "failed"
+                    : "succeeded";
+                return {
+                  ...current,
+                  [inventoryKey]: {
+                    ...value,
+                    platforms,
+                    status,
+                    error: platformStates.map((state) => state.error).filter(Boolean).join(" / ")
+                  }
+                };
+              });
+              if (command.status === "succeeded") {
+                delete inventoryCommandByIdRef.current[commandId];
+                void loadUnavailableInventory(selectedStoreIdRef.current);
+              }
             }
             setInventoryAudit((current) => {
               if (!current || current.commandId !== commandId) return current;
@@ -1260,7 +1318,7 @@ export default function StoreKitchenPage() {
                             onClick={() => void previewInventoryChange(task, productLineKey, group.itemName, "item")}
                           >
                             <span>{task.kitchenLanguage === "zh" ? "商品缺货" : "商品売切れ"}</span>
-                            <small>Uber</small>
+                            <small>Bridge</small>
                           </button>
                           {kitchenDisplayMode === "order_only" ? (
                             <button
@@ -1281,11 +1339,7 @@ export default function StoreKitchenPage() {
                               {group.quantity > 1 ? <b>× {group.quantity}</b> : null}
                               {productInventorySync ? (
                                 <em className={`store-kitchen-inventory-sync is-${productInventorySync.status}`}>
-                                  {productInventorySync.status === "pending"
-                                    ? (task.kitchenLanguage === "zh" ? "Uber 待同步" : "Uber 同期待ち")
-                                    : productInventorySync.status === "succeeded"
-                                      ? (task.kitchenLanguage === "zh" ? "Uber 已缺货" : "Uber 売切れ済み")
-                                      : (task.kitchenLanguage === "zh" ? "同步失败" : "同期失敗")}
+                                  {formatInventorySyncLabel(productInventorySync, task.kitchenLanguage)}
                                 </em>
                               ) : null}
                             </button>
@@ -1305,11 +1359,7 @@ export default function StoreKitchenPage() {
                               {group.quantity > 1 ? <b>× {group.quantity}</b> : null}
                               {productInventorySync ? (
                                 <em className={`store-kitchen-inventory-sync is-${productInventorySync.status}`}>
-                                  {productInventorySync.status === "pending"
-                                    ? (task.kitchenLanguage === "zh" ? "Uber 待同步" : "Uber 同期待ち")
-                                    : productInventorySync.status === "succeeded"
-                                      ? (task.kitchenLanguage === "zh" ? "Uber 已缺货" : "Uber 売切れ済み")
-                                      : (task.kitchenLanguage === "zh" ? "同步失败" : "同期失敗")}
+                                  {formatInventorySyncLabel(productInventorySync, task.kitchenLanguage)}
                                 </em>
                               ) : null}
                             </div>
@@ -1333,7 +1383,7 @@ export default function StoreKitchenPage() {
                                   onClick={() => void previewInventoryChange(task, optionLineKey, option.label, "option")}
                                 >
                                   <span>{task.kitchenLanguage === "zh" ? "加料缺货" : "選択肢売切れ"}</span>
-                                  <small>Uber</small>
+                                  <small>Bridge</small>
                                 </button>
                                 {kitchenDisplayMode === "order_only" ? (
                                   <button
@@ -1354,11 +1404,7 @@ export default function StoreKitchenPage() {
                                     {option.count > 1 ? <b>× {option.count}</b> : null}
                                     {optionInventorySync ? (
                                       <em className={`store-kitchen-inventory-sync is-${optionInventorySync.status}`}>
-                                        {optionInventorySync.status === "pending"
-                                          ? (task.kitchenLanguage === "zh" ? "Uber 待同步" : "Uber 同期待ち")
-                                          : optionInventorySync.status === "succeeded"
-                                            ? (task.kitchenLanguage === "zh" ? "Uber 已缺货" : "Uber 売切れ済み")
-                                            : (task.kitchenLanguage === "zh" ? "同步失败" : "同期失敗")}
+                                        {formatInventorySyncLabel(optionInventorySync, task.kitchenLanguage)}
                                       </em>
                                     ) : null}
                                   </button>
@@ -1378,11 +1424,7 @@ export default function StoreKitchenPage() {
                                     {option.count > 1 ? <b>× {option.count}</b> : null}
                                     {optionInventorySync ? (
                                       <em className={`store-kitchen-inventory-sync is-${optionInventorySync.status}`}>
-                                        {optionInventorySync.status === "pending"
-                                          ? (task.kitchenLanguage === "zh" ? "Uber 待同步" : "Uber 同期待ち")
-                                          : optionInventorySync.status === "succeeded"
-                                            ? (task.kitchenLanguage === "zh" ? "Uber 已缺货" : "Uber 売切れ済み")
-                                            : (task.kitchenLanguage === "zh" ? "同步失败" : "同期失敗")}
+                                        {formatInventorySyncLabel(optionInventorySync, task.kitchenLanguage)}
                                       </em>
                                     ) : null}
                                   </div>
@@ -1417,7 +1459,7 @@ export default function StoreKitchenPage() {
                                     onClick={() => void previewInventoryChange(task, lineKey, displayText)}
                                   >
                                     <span>{task.kitchenLanguage === "zh" ? "库存不足" : "在庫不足"}</span>
-                                    <small>Uber</small>
+                                    <small>Bridge</small>
                                   </button>
                                   <button
                                     className={[
@@ -1440,11 +1482,7 @@ export default function StoreKitchenPage() {
                                     {quantityParts.quantity ? <b>{quantityParts.quantity}</b> : null}
                                     {inventorySync ? (
                                       <em className={`store-kitchen-inventory-sync is-${inventorySync.status}`}>
-                                        {inventorySync.status === "pending"
-                                          ? (task.kitchenLanguage === "zh" ? "Uber 待同步" : "Uber 同期待ち")
-                                          : inventorySync.status === "succeeded"
-                                            ? (task.kitchenLanguage === "zh" ? "Uber 已缺货" : "Uber 売切れ済み")
-                                            : (task.kitchenLanguage === "zh" ? "同步失败" : "同期失敗")}
+                                      {formatInventorySyncLabel(inventorySync, task.kitchenLanguage)}
                                       </em>
                                     ) : null}
                                   </button>
@@ -1555,13 +1593,13 @@ export default function StoreKitchenPage() {
         }}>
           <section className="store-kitchen-inventory-modal store-kitchen-inventory-manager" role="dialog" aria-modal="true" aria-labelledby="inventory-manager-title">
             <header>
-              <span>Foundr1 × Uber Eats</span>
+              <span>Foundr1 × Delivery Bridge</span>
               <button type="button" aria-label={isChinese ? "关闭" : "閉じる"} disabled={Boolean(inventoryRestoringKey)} onClick={() => setInventoryManagerOpen(false)}>×</button>
             </header>
             <div className="store-kitchen-inventory-manager-heading">
               <div>
                 <h2 id="inventory-manager-title">{isChinese ? "缺货管理" : "売切管理"}</h2>
-                <p>{isChinese ? "补充库存后，在这里恢复销售。关联的 Uber 选项会同时恢复。" : "補充後はここから販売を再開します。関連する Uber の選択肢も同時に戻ります。"}</p>
+                <p>{isChinese ? "补充库存后，在这里恢复销售。Uber 与 Rocket 会分别同步。" : "補充後はここから販売を再開します。Uber と Rocket へ個別に同期します。"}</p>
               </div>
               <div className="store-kitchen-inventory-manager-heading-actions">
                 <button className="secondary-button" type="button" disabled={inventoryAudit?.status === "pending"} onClick={() => void startInventoryAudit()}>

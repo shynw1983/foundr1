@@ -13,9 +13,19 @@ function cleanText(value: unknown, maxLength = 1000) {
 }
 
 async function authorize(request: Request) {
-  const storeId = cleanText(new URL(request.url).searchParams.get("storeId"), 80);
-  const authorization = await authorizeLocalBridge(request, storeId);
-  return { storeId, ...authorization };
+  const params = new URL(request.url).searchParams;
+  const storeId = cleanText(params.get("storeId"), 80);
+  let authorization = await authorizeLocalBridge(request, storeId, "uber_eats");
+  if (!authorization.authorized) {
+    authorization = await authorizeLocalBridge(request, storeId, "rocket_now");
+  }
+  const platformMode = cleanText(params.get("platformMode"), 20);
+  return {
+    storeId,
+    supportsUber: platformMode !== "rocket_now",
+    supportsRocket: platformMode === "rocket_now" || platformMode === "dual",
+    ...authorization
+  };
 }
 
 async function applyInventoryAuditResult(storeId: string, result: Record<string, unknown>) {
@@ -132,7 +142,10 @@ export async function GET(request: Request) {
       last_error = 'Bridge command expired before execution.',
       updated_at = now()
     where store_id::text = ${authorization.storeId}
-      and platform = 'uber_eats'
+      and (
+        (platform = 'uber_eats' and ${authorization.supportsUber})
+        or (platform = 'rocket_now' and ${authorization.supportsRocket})
+      )
       and status in ('pending', 'processing')
       and created_at < now() - interval '2 hours'
   `;
@@ -151,7 +164,10 @@ export async function GET(request: Request) {
       end,
       updated_at = now()
     where store_id::text = ${authorization.storeId}
-      and platform = 'uber_eats'
+      and (
+        (platform = 'uber_eats' and ${authorization.supportsUber})
+        or (platform = 'rocket_now' and ${authorization.supportsRocket})
+      )
       and status = 'processing'
       and claim_expires_at < now()
   `;
@@ -159,12 +175,16 @@ export async function GET(request: Request) {
   const existing = await sql`
     select
       id::text,
+      platform,
       command_type as type,
       payload,
       attempts
     from local_bridge_commands
     where store_id::text = ${authorization.storeId}
-      and platform = 'uber_eats'
+      and (
+        (platform = 'uber_eats' and ${authorization.supportsUber})
+        or (platform = 'rocket_now' and ${authorization.supportsRocket})
+      )
       and status = 'processing'
       and (
         claimed_by_device_id::text = ${authorization.deviceId}
@@ -185,6 +205,7 @@ export async function GET(request: Request) {
       claimed_at = now(),
       claim_expires_at = now() + case
         when command_type = 'audit_inventory' then interval '30 minutes'
+        when platform = 'rocket_now' and command_type = 'set_inventory_availability' then interval '15 minutes'
         else interval '2 minutes'
       end,
       updated_at = now()
@@ -192,7 +213,10 @@ export async function GET(request: Request) {
       select id
       from local_bridge_commands
       where store_id::text = ${authorization.storeId}
-        and platform = 'uber_eats'
+        and (
+          (platform = 'uber_eats' and ${authorization.supportsUber})
+          or (platform = 'rocket_now' and ${authorization.supportsRocket})
+        )
         and status = 'pending'
         and available_at <= now()
         and attempts < 5
@@ -202,6 +226,7 @@ export async function GET(request: Request) {
     )
     returning
       id::text,
+      platform,
       command_type as type,
       payload,
       attempts
@@ -239,11 +264,10 @@ export async function POST(request: Request) {
   }
 
   const commandRows = await sql`
-    select command_type as "commandType"
+    select command_type as "commandType", platform
     from local_bridge_commands
     where id::text = ${commandId}
       and store_id::text = ${authorization.storeId}
-      and platform = 'uber_eats'
       and status = 'processing'
       and (
         ${authorization.deviceId} = ''
@@ -268,13 +292,12 @@ export async function POST(request: Request) {
       updated_at = now()
     where id::text = ${commandId}
       and store_id::text = ${authorization.storeId}
-      and platform = 'uber_eats'
       and status = 'processing'
       and (
         ${authorization.deviceId} = ''
         or claimed_by_device_id::text = ${authorization.deviceId}
       )
-    returning id::text, status, command_type as "commandType"
+    returning id::text, status, platform, command_type as "commandType"
   ` : await sql`
     update local_bridge_commands
     set
@@ -295,13 +318,12 @@ export async function POST(request: Request) {
       updated_at = now()
     where id::text = ${commandId}
       and store_id::text = ${authorization.storeId}
-      and platform = 'uber_eats'
       and status = 'processing'
       and (
         ${authorization.deviceId} = ''
         or claimed_by_device_id::text = ${authorization.deviceId}
       )
-    returning id::text, status, command_type as "commandType"
+    returning id::text, status, platform, command_type as "commandType"
   `;
   if (!rows[0]) return Response.json({ error: "Command is no longer claimable." }, { status: 409 });
   if (auditSummary) {
@@ -312,6 +334,7 @@ export async function POST(request: Request) {
   }
   await publishBridgeCommandUpdated(authorization.storeId, {
     id: commandId,
+    platform: String(rows[0].platform ?? commandRows[0].platform ?? "uber_eats"),
     status: String(rows[0].status ?? status),
     error,
     result: auditSummary ? { ...result, ...auditSummary } : result

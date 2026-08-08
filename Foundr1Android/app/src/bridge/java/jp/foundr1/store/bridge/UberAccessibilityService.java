@@ -82,6 +82,12 @@ public class UberAccessibilityService extends AccessibilityService {
     private long commandNextAttemptAt = 0L;
     private long commandLastAppLaunchAt = 0L;
     private long commandUnknownPageSince = 0L;
+    private int commandRocketPhase = 0;
+    private boolean commandRocketActionDispatched = false;
+    private long commandRocketMutationAt = 0L;
+    private int commandRocketMissingAttempts = 0;
+    private int commandRocketSelectedCount = 0;
+    private int commandRocketSearchTargetIndex = -1;
     private long commandRealtimeDisconnectedAt = 0L;
     private boolean commandRealtimeConnected = false;
     private final Runnable commandRunnable = () -> runGuarded("command", this::processPendingCommand);
@@ -604,27 +610,39 @@ public class UberAccessibilityService extends AccessibilityService {
             commandInventoryAuditResults = new JSONArray();
             commandLastAppLaunchAt = 0L;
             commandUnknownPageSince = 0L;
+            commandRocketPhase = 0;
+            commandRocketActionDispatched = false;
+            commandRocketMutationAt = 0L;
+            commandRocketMissingAttempts = 0;
+            commandRocketSelectedCount = 0;
+            commandRocketSearchTargetIndex = -1;
         }
-        if (!BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_UBER_EATS)) {
-            BridgeCommandState.fail(this, "この端末は Uber Eats 担当に設定されていません。");
+        String commandPlatform = command.optString("platform", BridgeConfig.PLATFORM_UBER_EATS);
+        if (!BridgeConfig.supportsPlatform(this, commandPlatform)) {
+            BridgeCommandState.fail(this, "この端末は " + commandPlatform + " 担当に設定されていません。");
             resetCommandAttempt();
             return;
         }
         AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null || !looksLikeUber(value(root.getPackageName()))) {
+        String expectedPackage = BridgeConfig.packageForPlatform(commandPlatform);
+        if (root == null || !expectedPackage.equals(value(root.getPackageName()))) {
             if (root != null) root.recycle();
             long now = SystemClock.uptimeMillis();
             if (commandLastAppLaunchAt == 0L
                 || now - commandLastAppLaunchAt >= COMMAND_APP_RELAUNCH_COOLDOWN_MS) {
-                UberRecoveryState.launchUber(this);
+                launchOrderPlatform(commandPlatform);
                 commandLastAppLaunchAt = now;
             }
-            retryPendingCommand(1400L, "Uber Orders を開けませんでした。");
+            retryPendingCommand(1400L, commandPlatform + " を開けませんでした。");
             return;
         }
         JSONArray nodes = new JSONArray();
         collectNodes(root, "0", new StringBuilder(), nodes, new HashSet<>());
-        handlePendingCommand(root, nodes);
+        if (BridgeConfig.PLATFORM_ROCKET_NOW.equals(commandPlatform)) {
+            handleRocketInventoryCommand(root, command);
+        } else {
+            handlePendingCommand(root, nodes);
+        }
         root.recycle();
     }
 
@@ -765,6 +783,12 @@ public class UberAccessibilityService extends AccessibilityService {
         commandNextAttemptAt = 0L;
         commandLastAppLaunchAt = 0L;
         commandUnknownPageSince = 0L;
+        commandRocketPhase = 0;
+        commandRocketActionDispatched = false;
+        commandRocketMutationAt = 0L;
+        commandRocketMissingAttempts = 0;
+        commandRocketSelectedCount = 0;
+        commandRocketSearchTargetIndex = -1;
         handler.removeCallbacks(commandRunnable);
     }
 
@@ -2201,6 +2225,486 @@ public class UberAccessibilityService extends AccessibilityService {
             if (match != null) return match;
         }
         return null;
+    }
+
+    private void launchOrderPlatform(String platform) {
+        String packageName = BridgeConfig.packageForPlatform(platform);
+        Intent intent = getPackageManager().getLaunchIntentForPackage(packageName);
+        if (intent == null) return;
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        try {
+            BridgePlatformState.pauseForegroundGuard(this, 15 * 60 * 1000L);
+            startActivity(intent);
+        } catch (Exception error) {
+            Log.w(TAG, "Unable to launch command platform=" + platform, error);
+        }
+    }
+
+    private void handleRocketInventoryCommand(AccessibilityNodeInfo root, JSONObject command) {
+        if (!"set_inventory_availability".equals(command.optString("type"))) {
+            BridgeCommandState.fail(this, "Rocket Now では未対応の指示です。");
+            resetCommandAttempt();
+            return;
+        }
+        JSONObject payload = command.optJSONObject("payload");
+        JSONArray targets = payload == null ? null : payload.optJSONArray("targets");
+        if (targets == null || targets.length() == 0) {
+            BridgeCommandState.fail(this, "Rocket Now の在庫対象がありません。");
+            resetCommandAttempt();
+            return;
+        }
+        boolean unhide = "unhide".equals(payload.optString("operation"))
+            || payload.optBoolean("isAvailable", false);
+
+        AccessibilityNodeInfo retry = findRocketNodeByOwnLabel(
+            root,
+            new String[] { "再試行する" },
+            true,
+            false
+        );
+        if (retry != null) {
+            boolean clicked = clickOrderCard(retry);
+            retry.recycle();
+            retryPendingCommand(clicked ? 2200L : 900L, "Rocket Now の通信を再試行できませんでした。");
+            return;
+        }
+
+        if (!isRocketInventoryScreen(root)) {
+            AccessibilityNodeInfo entry = findRocketNodeContaining(root, "売り切れ ・ 非表示", true);
+            if (entry != null) {
+                boolean clicked = clickOrderCard(entry);
+                entry.recycle();
+                retryPendingCommand(clicked ? 1800L : 900L, "Rocket Now の売り切れ・非表示画面を開けませんでした。");
+                return;
+            }
+            AccessibilityNodeInfo selfService = findRocketNodeContaining(root, "セルフサービス", true);
+            if (selfService != null) {
+                boolean clicked = clickOrderCard(selfService);
+                selfService.recycle();
+                retryPendingCommand(clicked ? 1500L : 900L, "Rocket Now のセルフサービス画面を開けませんでした。");
+                return;
+            }
+            performGlobalAction(GLOBAL_ACTION_BACK);
+            retryPendingCommand(1200L, "Rocket Now の在庫画面を確認できませんでした。");
+            return;
+        }
+
+        if (commandInventoryTargetIndex >= targets.length()) {
+            if (unhide) {
+                BridgeCommandState.complete(this, "rocket_inventory_unhidden");
+                resetCommandAttempt();
+                return;
+            }
+            finishRocketHideBatch(root);
+            return;
+        }
+
+        if (unhide) {
+            handleRocketUnhideTarget(root, targets);
+        } else {
+            handleRocketHideTarget(root, targets);
+        }
+    }
+
+    private void handleRocketHideTarget(AccessibilityNodeInfo root, JSONArray targets) {
+        if (commandRocketPhase == 0) {
+            AccessibilityNodeInfo allTab = findRocketTopTab(root, "全体");
+            if (allTab != null) {
+                tapNodeCenter(allTab);
+                allTab.recycle();
+            }
+            commandRocketPhase = 1;
+            retryPendingCommand(800L, "Rocket Now の全商品一覧を開けませんでした。");
+            return;
+        }
+        if (prepareRocketTargetSearch(root)) return;
+        JSONObject target = targets.optJSONObject(commandInventoryTargetIndex);
+        AccessibilityNodeInfo label = findRocketTargetLabel(root, target, true);
+        if (label == null) {
+            AccessibilityNodeInfo hidden = findRocketTargetLabel(root, target, false);
+            if (hidden != null) {
+                boolean requested = hidden.performAction(
+                    AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.getId()
+                );
+                hidden.recycle();
+                if (requested) {
+                    retryPendingCommand(700L, "Rocket Now の対象商品へ移動できませんでした。");
+                    return;
+                }
+            }
+            if (scrollInventoryForward(root)) {
+                retryPendingCommand(650L, "Rocket Now の対象商品を検索中です。");
+                return;
+            }
+            BridgeCommandState.fail(this, "Rocket Now に対象商品が見つかりません: " + rocketTargetName(target));
+            resetCommandAttempt();
+            return;
+        }
+        if (rocketRowHasLabel(root, label, "非表示")) {
+            label.recycle();
+            commandInventoryTargetIndex += 1;
+            commandRocketMissingAttempts = 0;
+            retryPendingCommand(250L, "Rocket Now の次の商品を確認できませんでした。");
+            return;
+        }
+        Rect bounds = new Rect();
+        label.getBoundsInScreen(bounds);
+        label.recycle();
+        boolean clicked = tapRocketPoint(root, 0.073f, bounds.exactCenterY());
+        if (!clicked) {
+            retryPendingCommand(700L, "Rocket Now の商品選択欄を押せませんでした。");
+            return;
+        }
+        commandInventoryTargetIndex += 1;
+        commandRocketMissingAttempts = 0;
+        commandRocketSelectedCount += 1;
+        retryPendingCommand(450L, "Rocket Now の商品を選択できませんでした。");
+    }
+
+    private void finishRocketHideBatch(AccessibilityNodeInfo root) {
+        if (commandRocketSelectedCount == 0) {
+            BridgeCommandState.complete(this, "rocket_inventory_already_hidden");
+            resetCommandAttempt();
+            return;
+        }
+        if (commandRocketActionDispatched) {
+            AccessibilityNodeInfo confirm = findRocketNodeByOwnLabel(
+                root,
+                new String[] { "確認", "確定", "保存" },
+                true,
+                true
+            );
+            if (confirm != null) {
+                boolean clicked = clickOrderCard(confirm);
+                confirm.recycle();
+                if (clicked) commandRocketMutationAt = SystemClock.uptimeMillis();
+                retryPendingCommand(1300L, "Rocket Now の非表示操作を確定できませんでした。");
+                return;
+            }
+            if (SystemClock.uptimeMillis() - commandRocketMutationAt >= 1800L) {
+                BridgeCommandState.complete(this, "rocket_inventory_hidden");
+                resetCommandAttempt();
+            } else {
+                retryPendingCommand(700L, "Rocket Now の非表示反映を待っています。");
+            }
+            return;
+        }
+        AccessibilityNodeInfo action = findRocketNodeByOwnLabel(
+            root,
+            new String[] { "非表示にする", "非表示設定", "非表示" },
+            true,
+            true
+        );
+        if (action == null) {
+            retryPendingCommand(800L, "Rocket Now の「非表示」一括操作が見つかりませんでした。");
+            return;
+        }
+        boolean clicked = clickOrderCard(action);
+        action.recycle();
+        if (clicked) {
+            commandRocketActionDispatched = true;
+            commandRocketMutationAt = SystemClock.uptimeMillis();
+        }
+        retryPendingCommand(1200L, "Rocket Now の非表示操作を実行できませんでした。");
+    }
+
+    private void handleRocketUnhideTarget(AccessibilityNodeInfo root, JSONArray targets) {
+        if (commandRocketPhase == 2) {
+            long elapsed = SystemClock.uptimeMillis() - commandRocketMutationAt;
+            if (elapsed < 1400L) {
+                retryPendingCommand(700L, "Rocket Now のページ更新を待っています。");
+                return;
+            }
+            commandInventoryTargetIndex += 1;
+            commandRocketPhase = 0;
+            commandRocketMissingAttempts = 0;
+            retryPendingCommand(700L, "Rocket Now の次の解除対象を準備できませんでした。");
+            return;
+        }
+        if (commandRocketPhase == 0) {
+            AccessibilityNodeInfo hiddenTab = findRocketTopTab(root, "非表示");
+            if (hiddenTab == null) {
+                retryPendingCommand(700L, "Rocket Now の非表示一覧が見つかりませんでした。");
+                return;
+            }
+            boolean clicked = tapNodeCenter(hiddenTab);
+            hiddenTab.recycle();
+            if (clicked) commandRocketPhase = 1;
+            retryPendingCommand(900L, "Rocket Now の非表示一覧を開けませんでした。");
+            return;
+        }
+        if (prepareRocketTargetSearch(root)) return;
+
+        JSONObject target = targets.optJSONObject(commandInventoryTargetIndex);
+        AccessibilityNodeInfo label = findRocketTargetLabel(root, target, true);
+        if (label != null) {
+            AccessibilityNodeInfo release = findRocketButtonNear(root, label, "解除");
+            label.recycle();
+            if (release != null) {
+                boolean clicked = clickOrderCard(release);
+                release.recycle();
+                if (clicked) {
+                    commandRocketPhase = 2;
+                    commandRocketMutationAt = SystemClock.uptimeMillis();
+                }
+                retryPendingCommand(1000L, "Rocket Now の非表示を解除できませんでした。");
+                return;
+            }
+        }
+        AccessibilityNodeInfo offscreen = findRocketTargetLabel(root, target, false);
+        if (offscreen != null) {
+            boolean requested = offscreen.performAction(
+                AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.getId()
+            );
+            offscreen.recycle();
+            if (requested) {
+                retryPendingCommand(700L, "Rocket Now の解除対象へ移動できませんでした。");
+                return;
+            }
+        }
+        if (scrollInventoryForward(root)) {
+            retryPendingCommand(650L, "Rocket Now の解除対象を検索中です。");
+            return;
+        }
+        commandRocketMissingAttempts += 1;
+        if (commandRocketMissingAttempts >= 2) {
+            // Missing from the hidden-only tab means it was already restored.
+            commandInventoryTargetIndex += 1;
+            commandRocketPhase = 0;
+            commandRocketMissingAttempts = 0;
+        }
+        retryPendingCommand(700L, "Rocket Now の解除対象を再確認しています。");
+    }
+
+    private boolean prepareRocketTargetSearch(AccessibilityNodeInfo root) {
+        if (commandRocketSearchTargetIndex == commandInventoryTargetIndex) return false;
+        if (scrollInventoryBackward(root)) {
+            retryPendingCommand(450L, "Rocket Now の商品一覧を先頭へ戻しています。");
+            return true;
+        }
+        commandRocketSearchTargetIndex = commandInventoryTargetIndex;
+        return false;
+    }
+
+    private boolean isRocketInventoryScreen(AccessibilityNodeInfo root) {
+        return subtreeContainsText(root, "売り切れ ・ 非表示")
+            && subtreeContainsText(root, "全体")
+            && subtreeContainsText(root, "非表示");
+    }
+
+    private AccessibilityNodeInfo findRocketTopTab(AccessibilityNodeInfo node, String prefix) {
+        if (node == null) return null;
+        String own = (value(node.getText()) + " " + value(node.getContentDescription())).trim();
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        int screenHeight = Math.max(1, getResources().getDisplayMetrics().heightPixels);
+        if (
+            own.startsWith(prefix)
+            && bounds.top >= Math.round(screenHeight * 0.07f)
+            && bounds.bottom <= Math.round(screenHeight * 0.24f)
+            && bounds.width() > 40
+        ) {
+            return AccessibilityNodeInfo.obtain(node);
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findRocketTopTab(child, prefix);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private String rocketTargetName(JSONObject target) {
+        if (target == null) return "";
+        return target.optString("label").split("[｜|]", 2)[0].trim();
+    }
+
+    private AccessibilityNodeInfo findRocketTargetLabel(
+        AccessibilityNodeInfo root,
+        JSONObject target,
+        boolean visibleOnly
+    ) {
+        LinkedHashMap<String, Boolean> candidates = new LinkedHashMap<>();
+        String primary = rocketTargetName(target);
+        if (!primary.isEmpty()) candidates.put(primary, true);
+        JSONArray aliases = target == null ? null : target.optJSONArray("aliases");
+        if (aliases != null) {
+            for (int index = 0; index < aliases.length(); index += 1) {
+                String alias = aliases.optString(index).split("[｜|]", 2)[0].trim();
+                if (!alias.isEmpty()) candidates.put(alias, true);
+            }
+        }
+        for (String candidate : candidates.keySet()) {
+            AccessibilityNodeInfo result = findRocketExactTextNode(root, candidate, visibleOnly);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findRocketExactTextNode(
+        AccessibilityNodeInfo node,
+        String expected,
+        boolean visibleOnly
+    ) {
+        if (node == null) return null;
+        String ownText = value(node.getText()).trim();
+        String ownDescription = value(node.getContentDescription()).trim();
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        int screenHeight = Math.max(1, getResources().getDisplayMetrics().heightPixels);
+        boolean visible = bounds.height() > 1
+            && bounds.bottom > Math.round(screenHeight * 0.16f)
+            && bounds.top < Math.round(screenHeight * 0.97f);
+        if ((expected.equals(ownText) || expected.equals(ownDescription)) && (!visibleOnly || visible)) {
+            return AccessibilityNodeInfo.obtain(node);
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findRocketExactTextNode(child, expected, visibleOnly);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findRocketButtonNear(
+        AccessibilityNodeInfo root,
+        AccessibilityNodeInfo label,
+        String expected
+    ) {
+        Rect labelBounds = new Rect();
+        label.getBoundsInScreen(labelBounds);
+        return findRocketButtonNearY(root, expected, labelBounds.exactCenterY());
+    }
+
+    private AccessibilityNodeInfo findRocketButtonNearY(
+        AccessibilityNodeInfo node,
+        String expected,
+        float expectedY
+    ) {
+        if (node == null) return null;
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        String own = value(node.getText()).trim();
+        if (
+            expected.equals(own)
+            && node.isEnabled()
+            && Math.abs(bounds.exactCenterY() - expectedY) <= 90f
+        ) return AccessibilityNodeInfo.obtain(node);
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findRocketButtonNearY(child, expected, expectedY);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private boolean rocketRowHasLabel(
+        AccessibilityNodeInfo root,
+        AccessibilityNodeInfo label,
+        String expected
+    ) {
+        AccessibilityNodeInfo status = findRocketButtonNear(root, label, expected);
+        if (status != null) {
+            status.recycle();
+            return true;
+        }
+        Rect labelBounds = new Rect();
+        label.getBoundsInScreen(labelBounds);
+        AccessibilityNodeInfo text = findRocketTextNearY(root, expected, labelBounds.exactCenterY());
+        if (text == null) return false;
+        text.recycle();
+        return true;
+    }
+
+    private AccessibilityNodeInfo findRocketTextNearY(
+        AccessibilityNodeInfo node,
+        String expected,
+        float expectedY
+    ) {
+        if (node == null) return null;
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        if (
+            expected.equals(value(node.getText()).trim())
+            && Math.abs(bounds.exactCenterY() - expectedY) <= 90f
+        ) return AccessibilityNodeInfo.obtain(node);
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findRocketTextNearY(child, expected, expectedY);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findRocketNodeContaining(
+        AccessibilityNodeInfo node,
+        String expected,
+        boolean requireClickable
+    ) {
+        if (node == null) return null;
+        String own = value(node.getText()) + "\n" + value(node.getContentDescription());
+        if (own.contains(expected) && (!requireClickable || node.isClickable()) && node.isEnabled()) {
+            return AccessibilityNodeInfo.obtain(node);
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findRocketNodeContaining(child, expected, requireClickable);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findRocketNodeByOwnLabel(
+        AccessibilityNodeInfo node,
+        String[] labels,
+        boolean requireClickable,
+        boolean lowerHalfOnly
+    ) {
+        if (node == null) return null;
+        String text = value(node.getText()).trim();
+        String description = value(node.getContentDescription()).trim();
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        int screenHeight = Math.max(1, getResources().getDisplayMetrics().heightPixels);
+        for (String label : labels) {
+            boolean matches = label.equals(text) || label.equals(description);
+            boolean positionMatches = !lowerHalfOnly || bounds.exactCenterY() > screenHeight * 0.46f;
+            if (matches && positionMatches && node.isEnabled()) {
+                AccessibilityNodeInfo action = requireClickable ? clickableAncestor(node, 3) : AccessibilityNodeInfo.obtain(node);
+                if (action != null) return action;
+            }
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findRocketNodeByOwnLabel(child, labels, requireClickable, lowerHalfOnly);
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private boolean tapRocketPoint(AccessibilityNodeInfo root, float xFraction, float y) {
+        if (root == null) return false;
+        Rect bounds = new Rect();
+        root.getBoundsInScreen(bounds);
+        if (bounds.width() < 300 || y <= bounds.top || y >= bounds.bottom) return false;
+        Path path = new Path();
+        path.moveTo(bounds.left + (bounds.width() * xFraction), y);
+        GestureDescription gesture = new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path, 0L, 80L))
+            .build();
+        return dispatchGesture(gesture, null, null);
     }
 
     private boolean looksLikeUber(String packageName) {

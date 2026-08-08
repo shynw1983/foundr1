@@ -25,7 +25,6 @@ final class BridgeCommandClient {
 
     static void poll(Context context) {
         Context appContext = context.getApplicationContext();
-        if (!BridgeConfig.supportsPlatform(appContext, BridgeConfig.PLATFORM_UBER_EATS)) return;
         if (!POLLING.compareAndSet(false, true)) return;
         EXECUTOR.execute(() -> {
             try {
@@ -63,6 +62,7 @@ final class BridgeCommandClient {
                 body.put("error", error == null ? "" : error);
                 body.put("result", result == null ? new JSONObject() : result);
                 request(appContext, "POST", body);
+                poll(appContext);
             } catch (Exception requestError) {
                 Log.w(TAG, "Command acknowledgement failed", requestError);
             }
@@ -75,7 +75,11 @@ final class BridgeCommandClient {
         String endpoint = BridgeConfig.endpoint(context)
             .replaceAll("/events/?$", "/commands");
         String urlValue = endpoint + "?storeId="
-            + URLEncoder.encode(storeId, StandardCharsets.UTF_8.name());
+            + URLEncoder.encode(storeId, StandardCharsets.UTF_8.name())
+            + "&platformMode="
+            + URLEncoder.encode(BridgeConfig.platformMode(context), StandardCharsets.UTF_8.name())
+            + "&primaryPlatform="
+            + URLEncoder.encode(BridgeConfig.primaryPlatform(context), StandardCharsets.UTF_8.name());
         HttpURLConnection connection = (HttpURLConnection) new URL(urlValue).openConnection();
         try {
             connection.setConnectTimeout(10000);
