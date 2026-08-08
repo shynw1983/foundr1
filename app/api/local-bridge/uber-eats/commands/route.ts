@@ -172,6 +172,40 @@ export async function GET(request: Request) {
       and claim_expires_at < now()
   `;
 
+  // Inventory availability is a desired state, not a sequence of actions. Keep
+  // only the newest command that has not started. Never supersede a processing
+  // command because Rocket may already have selected rows that must be saved or
+  // explicitly finished before another page or command can safely take over.
+  await sql`
+    update local_bridge_commands as stale
+    set
+      status = 'failed',
+      claimed_by_device_id = null,
+      claimed_at = null,
+      claim_expires_at = null,
+      completed_at = coalesce(stale.completed_at, now()),
+      result = jsonb_build_object('outcome', 'superseded'),
+      last_error = 'Superseded by a newer inventory command.',
+      updated_at = now()
+    where stale.store_id::text = ${authorization.storeId}
+      and stale.command_type = 'set_inventory_availability'
+      and stale.status = 'pending'
+      and (
+        (stale.platform = 'uber_eats' and ${authorization.supportsUber})
+        or (stale.platform = 'rocket_now' and ${authorization.supportsRocket})
+      )
+      and coalesce(stale.payload->>'inventoryKey', '') <> ''
+      and exists (
+        select 1
+        from local_bridge_commands as newer
+        where newer.store_id = stale.store_id
+          and newer.platform = stale.platform
+          and newer.command_type = stale.command_type
+          and newer.payload->>'inventoryKey' = stale.payload->>'inventoryKey'
+          and newer.created_at > stale.created_at
+      )
+  `;
+
   const existing = await sql`
     select
       id::text,

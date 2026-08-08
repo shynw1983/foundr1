@@ -85,10 +85,12 @@ public class UberAccessibilityService extends AccessibilityService {
     private long commandUnknownPageSince = 0L;
     private int commandRocketPhase = 0;
     private boolean commandRocketActionDispatched = false;
+    private boolean commandRocketHideModeSelected = false;
     private long commandRocketMutationAt = 0L;
     private int commandRocketMissingAttempts = 0;
     private int commandRocketSelectedCount = 0;
     private int commandRocketSearchTargetIndex = -1;
+    private String commandRocketActiveTargetKind = "";
     private long commandRocketInventoryOpenedAt = 0L;
     private long commandRealtimeDisconnectedAt = 0L;
     private boolean commandRealtimeConnected = false;
@@ -614,10 +616,12 @@ public class UberAccessibilityService extends AccessibilityService {
             commandUnknownPageSince = 0L;
             commandRocketPhase = 0;
             commandRocketActionDispatched = false;
+            commandRocketHideModeSelected = false;
             commandRocketMutationAt = 0L;
             commandRocketMissingAttempts = 0;
             commandRocketSelectedCount = 0;
             commandRocketSearchTargetIndex = -1;
+            commandRocketActiveTargetKind = "";
             commandRocketInventoryOpenedAt = 0L;
         }
         String commandPlatform = command.optString("platform", BridgeConfig.PLATFORM_UBER_EATS);
@@ -789,10 +793,12 @@ public class UberAccessibilityService extends AccessibilityService {
         commandUnknownPageSince = 0L;
         commandRocketPhase = 0;
         commandRocketActionDispatched = false;
+        commandRocketHideModeSelected = false;
         commandRocketMutationAt = 0L;
         commandRocketMissingAttempts = 0;
         commandRocketSelectedCount = 0;
         commandRocketSearchTargetIndex = -1;
+        commandRocketActiveTargetKind = "";
         commandRocketInventoryOpenedAt = 0L;
         handler.removeCallbacks(commandRunnable);
     }
@@ -2294,6 +2300,14 @@ public class UberAccessibilityService extends AccessibilityService {
                 retryPendingCommand(clicked ? 5000L : 1200L, "Rocket Now の売り切れ・非表示画面を開けませんでした。");
                 return;
             }
+            if (
+                subtreeContainsText(root, "メニュー管理")
+                && subtreeContainsText(root, "メニュー編集 ・ 追加")
+                && scrollInventoryBackward(root)
+            ) {
+                retryPendingCommand(700L, "Rocket Now のメニュー管理を先頭へ戻しています。");
+                return;
+            }
             AccessibilityNodeInfo selfService = findRocketNodeContaining(root, "セルフサービス", true);
             if (selfService != null) {
                 boolean clicked = clickOrderCard(selfService);
@@ -2306,13 +2320,24 @@ public class UberAccessibilityService extends AccessibilityService {
             return;
         }
 
+        if (!unhide && commandRocketSelectedCount == 0) {
+            int recoveredSelectionCount = findRocketSelectedCount(root);
+            if (recoveredSelectionCount > 0) {
+                commandRocketSelectedCount = recoveredSelectionCount;
+                commandInventoryTargetIndex = Math.min(recoveredSelectionCount, targets.length());
+                JSONObject firstTarget = targets.optJSONObject(0);
+                commandRocketActiveTargetKind = rocketTargetKind(firstTarget);
+                commandRocketPhase = 1;
+            }
+        }
+
         if (commandInventoryTargetIndex >= targets.length()) {
             if (unhide) {
                 BridgeCommandState.complete(this, "rocket_inventory_unhidden");
                 resetCommandAttempt();
                 return;
             }
-            finishRocketHideBatch(root);
+            finishRocketHideBatch(root, targets);
             return;
         }
 
@@ -2324,6 +2349,17 @@ public class UberAccessibilityService extends AccessibilityService {
     }
 
     private void handleRocketHideTarget(AccessibilityNodeInfo root, JSONArray targets) {
+        JSONObject target = targets.optJSONObject(commandInventoryTargetIndex);
+        String targetKind = rocketTargetKind(target);
+        if (
+            !commandRocketActiveTargetKind.isEmpty()
+            && !commandRocketActiveTargetKind.equals(targetKind)
+            && commandRocketSelectedCount > 0
+        ) {
+            finishRocketHideBatch(root, targets);
+            return;
+        }
+        if (prepareRocketTargetKind(root, target)) return;
         if (commandRocketPhase == 0) {
             AccessibilityNodeInfo allTab = findRocketTopTab(root, "全体");
             if (allTab != null) {
@@ -2335,7 +2371,6 @@ public class UberAccessibilityService extends AccessibilityService {
             return;
         }
         if (prepareRocketTargetSearch(root)) return;
-        JSONObject target = targets.optJSONObject(commandInventoryTargetIndex);
         AccessibilityNodeInfo label = findRocketTargetLabel(root, target, true);
         if (label == null) {
             AccessibilityNodeInfo hidden = findRocketTargetLabel(root, target, false);
@@ -2378,10 +2413,15 @@ public class UberAccessibilityService extends AccessibilityService {
         retryPendingCommand(450L, "Rocket Now の商品を選択できませんでした。");
     }
 
-    private void finishRocketHideBatch(AccessibilityNodeInfo root) {
+    private void finishRocketHideBatch(AccessibilityNodeInfo root, JSONArray targets) {
         if (commandRocketSelectedCount == 0) {
-            BridgeCommandState.complete(this, "rocket_inventory_already_hidden");
-            resetCommandAttempt();
+            if (commandInventoryTargetIndex >= targets.length()) {
+                BridgeCommandState.complete(this, "rocket_inventory_already_hidden");
+                resetCommandAttempt();
+            } else {
+                resetRocketBatchForNextKind();
+                retryPendingCommand(700L, "Rocket Now の次のページを準備できませんでした。");
+            }
             return;
         }
         if (commandRocketActionDispatched) {
@@ -2399,30 +2439,70 @@ public class UberAccessibilityService extends AccessibilityService {
                 return;
             }
             if (SystemClock.uptimeMillis() - commandRocketMutationAt >= 1800L) {
-                BridgeCommandState.complete(this, "rocket_inventory_hidden");
-                resetCommandAttempt();
+                if (commandInventoryTargetIndex >= targets.length()) {
+                    BridgeCommandState.complete(this, "rocket_inventory_hidden");
+                    resetCommandAttempt();
+                } else {
+                    resetRocketBatchForNextKind();
+                    retryPendingCommand(700L, "Rocket Now の次のページを準備できませんでした。");
+                }
             } else {
                 retryPendingCommand(700L, "Rocket Now の非表示反映を待っています。");
             }
             return;
         }
-        AccessibilityNodeInfo action = findRocketNodeByOwnLabel(
+        boolean actionPickerVisible = subtreeContainsText(root, "提供状況を変更")
+            && subtreeContainsText(root, "売り切れ（本日）")
+            && subtreeContainsText(root, "販売中");
+        if (!commandRocketHideModeSelected) {
+            if (actionPickerVisible) {
+                AccessibilityNodeInfo hideOption = findRocketTextInVerticalRange(
+                    root,
+                    "非表示",
+                    0.72f,
+                    0.88f
+                );
+                if (hideOption == null) {
+                    retryPendingCommand(700L, "Rocket Now の「非表示」選択肢が見つかりませんでした。");
+                    return;
+                }
+                boolean clicked = tapNodeCenter(hideOption);
+                hideOption.recycle();
+                if (clicked) commandRocketHideModeSelected = true;
+                retryPendingCommand(650L, "Rocket Now の「非表示」を選択できませんでした。");
+                return;
+            }
+            AccessibilityNodeInfo currentAction = findRocketNodeContaining(
+                root,
+                "売り切れ（本日）",
+                false
+            );
+            if (currentAction == null) {
+                retryPendingCommand(700L, "Rocket Now の提供状況選択を開けませんでした。");
+                return;
+            }
+            boolean clicked = tapNodeCenter(currentAction);
+            currentAction.recycle();
+            retryPendingCommand(clicked ? 650L : 700L, "Rocket Now の提供状況選択を開けませんでした。");
+            return;
+        }
+        AccessibilityNodeInfo apply = findRocketNodeByOwnLabel(
             root,
-            new String[] { "非表示にする", "非表示設定", "非表示" },
+            new String[] { "適用" },
             true,
             true
         );
-        if (action == null) {
-            retryPendingCommand(800L, "Rocket Now の「非表示」一括操作が見つかりませんでした。");
+        if (apply == null) {
+            retryPendingCommand(700L, "Rocket Now の「適用」ボタンが見つかりませんでした。");
             return;
         }
-        boolean clicked = clickOrderCard(action);
-        action.recycle();
+        boolean clicked = clickOrderCard(apply);
+        apply.recycle();
         if (clicked) {
             commandRocketActionDispatched = true;
             commandRocketMutationAt = SystemClock.uptimeMillis();
         }
-        retryPendingCommand(1200L, "Rocket Now の非表示操作を実行できませんでした。");
+        retryPendingCommand(1200L, "Rocket Now の「非表示」を適用できませんでした。");
     }
 
     private void handleRocketUnhideTarget(AccessibilityNodeInfo root, JSONArray targets) {
@@ -2438,6 +2518,8 @@ public class UberAccessibilityService extends AccessibilityService {
             retryPendingCommand(700L, "Rocket Now の次の解除対象を準備できませんでした。");
             return;
         }
+        JSONObject target = targets.optJSONObject(commandInventoryTargetIndex);
+        if (prepareRocketTargetKind(root, target)) return;
         if (commandRocketPhase == 0) {
             AccessibilityNodeInfo hiddenTab = findRocketTopTab(root, "非表示");
             if (hiddenTab == null) {
@@ -2452,7 +2534,6 @@ public class UberAccessibilityService extends AccessibilityService {
         }
         if (prepareRocketTargetSearch(root)) return;
 
-        JSONObject target = targets.optJSONObject(commandInventoryTargetIndex);
         AccessibilityNodeInfo label = findRocketTargetLabel(root, target, true);
         if (label != null) {
             AccessibilityNodeInfo release = findRocketButtonNear(root, label, "解除");
@@ -2491,6 +2572,40 @@ public class UberAccessibilityService extends AccessibilityService {
             commandRocketMissingAttempts = 0;
         }
         retryPendingCommand(700L, "Rocket Now の解除対象を再確認しています。");
+    }
+
+    private String rocketTargetKind(JSONObject target) {
+        return target != null && "option".equals(target.optString("kind")) ? "option" : "item";
+    }
+
+    private boolean prepareRocketTargetKind(AccessibilityNodeInfo root, JSONObject target) {
+        String targetKind = rocketTargetKind(target);
+        if (targetKind.equals(commandRocketActiveTargetKind)) return false;
+        String tabLabel = "option".equals(targetKind) ? "オプション" : "メニュー";
+        AccessibilityNodeInfo tab = findRocketTopTab(root, tabLabel);
+        if (tab == null) {
+            retryPendingCommand(700L, "Rocket Now の「" + tabLabel + "」ページが見つかりませんでした。");
+            return true;
+        }
+        boolean clicked = tapNodeCenter(tab);
+        tab.recycle();
+        if (clicked) {
+            commandRocketActiveTargetKind = targetKind;
+            commandRocketPhase = 0;
+            commandRocketSearchTargetIndex = -1;
+        }
+        retryPendingCommand(clicked ? 900L : 700L, "Rocket Now の「" + tabLabel + "」ページを開けませんでした。");
+        return true;
+    }
+
+    private void resetRocketBatchForNextKind() {
+        commandRocketPhase = 0;
+        commandRocketActionDispatched = false;
+        commandRocketHideModeSelected = false;
+        commandRocketMutationAt = 0L;
+        commandRocketSelectedCount = 0;
+        commandRocketSearchTargetIndex = -1;
+        commandRocketActiveTargetKind = "";
     }
 
     private boolean prepareRocketTargetSearch(AccessibilityNodeInfo root) {
@@ -2578,13 +2693,23 @@ public class UberAccessibilityService extends AccessibilityService {
         if (node == null) return null;
         String ownText = value(node.getText()).trim();
         String ownDescription = value(node.getContentDescription()).trim();
+        String normalizedExpected = normalizeRocketMenuLabel(expected);
         Rect bounds = new Rect();
         node.getBoundsInScreen(bounds);
         int screenHeight = Math.max(1, getResources().getDisplayMetrics().heightPixels);
         boolean visible = bounds.height() > 1
             && bounds.bottom > Math.round(screenHeight * 0.16f)
             && bounds.top < Math.round(screenHeight * 0.97f);
-        if ((expected.equals(ownText) || expected.equals(ownDescription)) && (!visibleOnly || visible)) {
+        boolean labelMatches = expected.equals(ownText)
+            || expected.equals(ownDescription)
+            || (
+                !normalizedExpected.isEmpty()
+                && (
+                    normalizedExpected.equals(normalizeRocketMenuLabel(ownText))
+                    || normalizedExpected.equals(normalizeRocketMenuLabel(ownDescription))
+                )
+            );
+        if (labelMatches && (!visibleOnly || visible)) {
             return AccessibilityNodeInfo.obtain(node);
         }
         for (int index = 0; index < node.getChildCount(); index += 1) {
@@ -2595,6 +2720,15 @@ public class UberAccessibilityService extends AccessibilityService {
             if (match != null) return match;
         }
         return null;
+    }
+
+    private String normalizeRocketMenuLabel(String value) {
+        if (value == null) return "";
+        return value
+            .trim()
+            .replaceFirst("^(?:【[^】]+】\\s*)+", "")
+            .replaceAll("\\s+", " ")
+            .trim();
     }
 
     private AccessibilityNodeInfo findRocketButtonNear(
@@ -2669,6 +2803,62 @@ public class UberAccessibilityService extends AccessibilityService {
             if (match != null) return match;
         }
         return null;
+    }
+
+    private AccessibilityNodeInfo findRocketTextInVerticalRange(
+        AccessibilityNodeInfo node,
+        String expected,
+        float minimumFraction,
+        float maximumFraction
+    ) {
+        if (node == null) return null;
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        int screenHeight = Math.max(1, getResources().getDisplayMetrics().heightPixels);
+        float centerFraction = bounds.exactCenterY() / screenHeight;
+        if (
+            (
+                expected.equals(value(node.getText()).trim())
+                || expected.equals(value(node.getContentDescription()).trim())
+            )
+            && centerFraction >= minimumFraction
+            && centerFraction <= maximumFraction
+        ) return AccessibilityNodeInfo.obtain(node);
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            AccessibilityNodeInfo match = findRocketTextInVerticalRange(
+                child,
+                expected,
+                minimumFraction,
+                maximumFraction
+            );
+            child.recycle();
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private int findRocketSelectedCount(AccessibilityNodeInfo node) {
+        if (node == null) return 0;
+        String own = (value(node.getText()) + " " + value(node.getContentDescription())).trim();
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+            .compile("(?:^|\\s)(\\d+)点(?:\\s|択)")
+            .matcher(own);
+        if (matcher.find()) {
+            try {
+                return Integer.parseInt(matcher.group(1));
+            } catch (Exception ignored) {
+            }
+        }
+        for (int index = 0; index < node.getChildCount(); index += 1) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child == null) continue;
+            int count = findRocketSelectedCount(child);
+            child.recycle();
+            if (count > 0) return count;
+        }
+        return 0;
     }
 
     private AccessibilityNodeInfo findRocketNodeContaining(

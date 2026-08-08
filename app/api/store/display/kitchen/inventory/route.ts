@@ -286,7 +286,7 @@ export async function POST(request: Request) {
       where store_id::text = ${storeId}
         and platform = 'uber_eats'
         and command_type = 'audit_inventory'
-        and status in ('pending', 'processing')
+        and status = 'pending'
       order by created_at desc
       limit 1
     `;
@@ -403,6 +403,23 @@ export async function POST(request: Request) {
       ? Array.from(new Map(serializedTargets.map((target) => [target.label.trim(), target])).values())
       : serializedTargets;
     const idempotencyKey = `${platform}:set_inventory:${storeId}:${resolved.inventoryKey}:${operation}:${platformCommandId}`;
+    await sql`
+      update local_bridge_commands
+      set
+        status = 'failed',
+        claimed_by_device_id = null,
+        claimed_at = null,
+        claim_expires_at = null,
+        completed_at = coalesce(completed_at, now()),
+        result = jsonb_build_object('outcome', 'superseded'),
+        last_error = 'Superseded by a newer inventory command.',
+        updated_at = now()
+      where store_id::text = ${storeId}
+        and platform = ${platform}
+        and command_type = 'set_inventory_availability'
+        and status = 'pending'
+        and payload->>'inventoryKey' = ${resolved.inventoryKey}
+    `;
     const rows = await sql`
       insert into local_bridge_commands (
         id, store_id, platform, command_type, idempotency_key, payload

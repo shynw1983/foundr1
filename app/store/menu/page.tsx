@@ -5,6 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { clearStoredStoreSelection, getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
+type SharedPusher = ReturnType<(typeof import("../../../lib/shared-pusher-client"))["acquireSharedPusher"]>;
+type SharedPusherChannel = ReturnType<SharedPusher["subscribe"]>;
+
 type StoreOption = {
   id: string;
   name: string;
@@ -192,6 +195,37 @@ export default function StoreMenuPage() {
     void load(getStoredStoreSelection());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!selectedStoreId) return;
+    let active = true;
+    let pusher: SharedPusher | null = null;
+    let channel: SharedPusherChannel | null = null;
+    const refreshAvailability = () => {
+      if (active) void load(selectedStoreId);
+    };
+
+    fetch(`/api/store/realtime-config?storeId=${encodeURIComponent(selectedStoreId)}`, { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then(async (config) => {
+        if (!active || !config?.key || !config?.cluster || !config?.menuChannel) return;
+        const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
+        if (!active) return;
+        pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
+        channel = pusher.subscribe(config.menuChannel);
+        channel.bind("menu.updated", refreshAvailability);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+      channel?.unbind("menu.updated", refreshAvailability);
+      pusher?.disconnect();
+    };
+    // The selected store is the subscription identity. `load` intentionally
+    // remains outside the dependency list so local state updates do not reconnect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStoreId]);
 
   useEffect(() => {
     if (!message) return;
