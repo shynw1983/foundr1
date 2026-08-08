@@ -170,7 +170,7 @@ async function upsertOperationalOrder(input: {
   const existing = existingRows[0];
   const shouldReplaceItems = !existing
     || parsed.completeness > Number(existing.completeness ?? 0)
-    || (input.platform === "rocket_now" && Number(existing.parserVersion ?? 0) < 2)
+    || (input.platform === "rocket_now" && Number(existing.parserVersion ?? 0) < 3)
     || hasExactDuplicateBridgeItems(existing.bridgeItems);
   const nextStatus = existing
     && parsed.status === "new"
@@ -193,7 +193,7 @@ async function upsertOperationalOrder(input: {
       eventId: input.eventId,
       capturedAt: input.capturedAt.toISOString(),
       completeness: parsed.completeness,
-      parserVersion: input.platform === "rocket_now" ? 2 : 1,
+      parserVersion: input.platform === "rocket_now" ? 3 : 1,
       sourceExternalId,
       items: parsed.items
     }

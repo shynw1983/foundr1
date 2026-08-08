@@ -76,3 +76,30 @@ test("groups Rocket buildable options including zero-price seasoning", () => {
   assert.equal(parsed.items[0].lineTotal, 741);
   assert.equal(parsed.total, 3355);
 });
+
+test("keeps zero-price modifiers and ignores Rocket overview counters", () => {
+  const parsed = parseRocketNowBridgeSnapshot([
+    { contentDescription: "新規注文\n10NCC7\n注文時間 : 午後 04:33" },
+    { contentDescription: "メニュー\n数量\n金額" },
+    { contentDescription: "【自由にカスタム】旨味マーラータンスープ\n1\n415円" },
+    { contentDescription: "薬膳スパイスあり【超おすすめ】\n普通辛\n微シビレ\n0円" },
+    { contentDescription: "【おすすめ!】もちもち板春雨\n+216円" },
+    { contentDescription: "小松菜\n+196円" },
+    { contentDescription: "ブンモジャ1本\n+226円" },
+    { contentDescription: "処理中 1\n完了\n10NCC7\n午後 04:33\n[メニュー 1個] 1,053円" },
+    { contentDescription: "注文金額\n1,053円" }
+  ], new Date("2026-08-08T16:37:00+09:00"));
+
+  assert.ok(parsed);
+  assert.equal(parsed.items.length, 1);
+  assert.deepEqual(parsed.items[0].modifiers.map((modifier) => modifier.name), [
+    "薬膳スパイスあり【超おすすめ】",
+    "普通辛",
+    "微シビレ",
+    "【おすすめ!】もちもち板春雨",
+    "小松菜",
+    "ブンモジャ1本"
+  ]);
+  assert.equal(parsed.items[0].lineTotal, 1053);
+  assert.equal(parsed.total, 1053);
+});

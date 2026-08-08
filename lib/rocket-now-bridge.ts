@@ -87,7 +87,7 @@ function parseOrderedAt(values: string[], capturedAt: Date) {
   return capturedAt;
 }
 
-const ignoredLine = /^(?:注文管理|処理中|完了|最新順|過去順|注文受諾|準備完了|準備遅延|注文キャンセル|調理時間変更|レシート出力|合計|小計|決済金額|お客様のご要望|店舗へのリクエスト|配達パートナー|ドライバー|お客様|注文番号|注文管理番号|税込)$/;
+const ignoredLine = /^(?:新規注文|注文管理|処理中(?:\s*\d+)?|完了(?:\s*\d+)?|最新順|過去順|注文受諾|準備完了|準備遅延|注文キャンセル|調理時間変更|レシート出力|合計|小計|決済金額|お客様のご要望|店舗へのリクエスト|配達パートナー|ドライバー|お客様|注文番号|注文管理番号|税込)$/;
 
 function isMoneyLine(value: string) {
   return /(?:￥|¥)\s*[\d,，]+|[\d,，]+\s*円/.test(value);
@@ -112,8 +112,10 @@ function isCandidateName(value: string, orderNo: string) {
 function parseItems(lines: string[], orderNo: string) {
   const items: RocketNowBridgeItem[] = [];
   const usedNames = new Set<string>();
+  let previousMoneyIndex = -1;
   for (let index = 0; index < lines.length; index += 1) {
     if (!isMoneyLine(lines[index])) continue;
+    if (/\[メニュー\s*\d+個\]/.test(lines[index])) continue;
     if (lines.slice(Math.max(0, index - 2), index).some((line) => (
       /^(?:合計|決済金額|注文金額|総額|小計)/.test(line)
     ))) continue;
@@ -129,6 +131,14 @@ function parseItems(lines: string[], orderNo: string) {
     usedNames.add(`${nameIndex}:${name}:${amount}`);
     const quantity = quantityIndex >= 0 ? parseQuantity(lines[quantityIndex]) : 1;
     const previous = items.at(-1);
+    if (previous && previousMoneyIndex >= 0) {
+      for (let pendingIndex = previousMoneyIndex + 1; pendingIndex < nameIndex; pendingIndex += 1) {
+        const pendingName = lines[pendingIndex];
+        if (!isCandidateName(pendingName, orderNo)) continue;
+        const alreadyParsed = previous.modifiers.some((modifier) => modifier.name === pendingName);
+        if (!alreadyParsed) previous.modifiers.push({ name: pendingName, quantity: 1, price: 0 });
+      }
+    }
     const looksLikeNamedModifier = /追加|変更|選択|トッピング|辛さ|痺れ|しびれ|シビ|薬膳|カスタム/i.test(name);
     const looksLikeModifier = Boolean(previous)
       && nameIndex > 0
@@ -139,6 +149,7 @@ function parseItems(lines: string[], orderNo: string) {
     } else {
       items.push({ name, quantity, lineTotal: amount, modifiers: [] });
     }
+    previousMoneyIndex = index;
   }
   return items;
 }
