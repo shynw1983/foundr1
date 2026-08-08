@@ -92,6 +92,7 @@ public class UberAccessibilityService extends AccessibilityService {
     private int commandRocketSearchTargetIndex = -1;
     private String commandRocketActiveTargetKind = "";
     private long commandRocketInventoryOpenedAt = 0L;
+    private boolean commandRocketInventorySeen = false;
     private long commandRealtimeDisconnectedAt = 0L;
     private boolean commandRealtimeConnected = false;
     private final Runnable commandRunnable = () -> runGuarded("command", this::processPendingCommand);
@@ -623,6 +624,7 @@ public class UberAccessibilityService extends AccessibilityService {
             commandRocketSearchTargetIndex = -1;
             commandRocketActiveTargetKind = "";
             commandRocketInventoryOpenedAt = 0L;
+            commandRocketInventorySeen = false;
         }
         String commandPlatform = command.optString("platform", BridgeConfig.PLATFORM_UBER_EATS);
         if (!BridgeConfig.supportsPlatform(this, commandPlatform)) {
@@ -800,6 +802,7 @@ public class UberAccessibilityService extends AccessibilityService {
         commandRocketSearchTargetIndex = -1;
         commandRocketActiveTargetKind = "";
         commandRocketInventoryOpenedAt = 0L;
+        commandRocketInventorySeen = false;
         handler.removeCallbacks(commandRunnable);
     }
 
@@ -2292,6 +2295,11 @@ public class UberAccessibilityService extends AccessibilityService {
                 }
                 return;
             }
+            if (commandRocketInventorySeen) {
+                BridgeCommandState.fail(this, "Rocket Now の在庫操作が画面上で中断されました。");
+                resetCommandAttempt();
+                return;
+            }
             AccessibilityNodeInfo entry = findRocketNodeContaining(root, "売り切れ ・ 非表示", true);
             if (entry != null) {
                 boolean clicked = clickOrderCard(entry);
@@ -2319,6 +2327,7 @@ public class UberAccessibilityService extends AccessibilityService {
             retryPendingCommand(1200L, "Rocket Now の在庫画面を確認できませんでした。");
             return;
         }
+        commandRocketInventorySeen = true;
 
         if (!unhide && commandRocketSelectedCount == 0) {
             int recoveredSelectionCount = findRocketSelectedCount(root);
@@ -2581,6 +2590,16 @@ public class UberAccessibilityService extends AccessibilityService {
     private boolean prepareRocketTargetKind(AccessibilityNodeInfo root, JSONObject target) {
         String targetKind = rocketTargetKind(target);
         if (targetKind.equals(commandRocketActiveTargetKind)) return false;
+        // Rocket always opens the inventory screen on the product tab. Do not
+        // dispatch a redundant gesture here: the WebView can reject it while
+        // its opening gesture is still finishing, which previously caused an
+        // endless "open menu tab" retry loop.
+        if (commandRocketActiveTargetKind.isEmpty() && "item".equals(targetKind)) {
+            commandRocketActiveTargetKind = targetKind;
+            commandRocketPhase = 0;
+            commandRocketSearchTargetIndex = -1;
+            return false;
+        }
         String tabLabel = "option".equals(targetKind) ? "オプション" : "メニュー";
         AccessibilityNodeInfo tab = findRocketTopTab(root, tabLabel);
         if (tab == null) {
@@ -2605,7 +2624,6 @@ public class UberAccessibilityService extends AccessibilityService {
         commandRocketMutationAt = 0L;
         commandRocketSelectedCount = 0;
         commandRocketSearchTargetIndex = -1;
-        commandRocketActiveTargetKind = "";
     }
 
     private boolean prepareRocketTargetSearch(AccessibilityNodeInfo root) {

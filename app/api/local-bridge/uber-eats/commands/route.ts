@@ -336,7 +336,7 @@ export async function POST(request: Request) {
     update local_bridge_commands
     set
       status = case
-        when command_type = 'mark_order_ready' or attempts >= 5 then 'failed'
+        when command_type in ('mark_order_ready', 'set_inventory_availability') or attempts >= 5 then 'failed'
         else 'pending'
       end,
       available_at = now() + interval '15 seconds',
@@ -346,7 +346,7 @@ export async function POST(request: Request) {
       claimed_at = null,
       claim_expires_at = null,
       completed_at = case
-        when command_type = 'mark_order_ready' or attempts >= 5 then now()
+        when command_type in ('mark_order_ready', 'set_inventory_availability') or attempts >= 5 then now()
         else null
       end,
       updated_at = now()
