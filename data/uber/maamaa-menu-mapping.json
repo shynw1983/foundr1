@@ -2,7 +2,7 @@
   "source": {
     "platform": "uber_eats",
     "storeId": "d6205da2-b809-531c-a7b2-d9cf505cf1c0",
-    "capturedAt": "2026-07-30",
+    "capturedAt": "2026-08-08",
     "pricingRule": {
       "multiplier": 0.8,
       "roundingUnit": 10
@@ -107,7 +107,7 @@
           "displayNames": {
             "zh": "鬼门关前",
             "ko": "귀신 직전",
-            "en": "One Step from Hell"
+            "en": "One Step from He ll"
           },
           "websitePrice": 200,
           "uberName": "鬼の一歩手前🔥🔥🔥🔥🔥｜鬼门关前｜귀신 직전 ｜One Step from He ll",
@@ -313,66 +313,66 @@
       "options": [
         {
           "optionKey": "wide-harusame",
-          "name": "【おすすめ❗️】もちもち板春雨",
+          "name": "【おすすめ❗️】もちもち板春雨50g",
           "displayNames": {
             "zh": "宽粉",
             "ko": "넓적당면",
             "en": "Wide Sweet Potato Noodles"
           },
           "websitePrice": 170,
-          "uberName": "【おすすめ❗️】もちもち板春雨｜宽粉｜넓적당면｜Wide Sweet Potato Noodles",
+          "uberName": "【おすすめ❗️】もちもち板春雨50g｜宽粉｜넓적당면｜Wide Sweet Potato Noodles",
           "uberPrice": 216,
           "matchedExisting": true
         },
         {
           "optionKey": "corn-noodle",
-          "name": "トウモロコシ麺",
+          "name": "トウモロコシ麺50g",
           "displayNames": {
             "zh": "玉米面",
             "ko": "옥수수면",
             "en": "Corn Noodles"
           },
           "websitePrice": 170,
-          "uberName": "トウモロコシ麺｜玉米面｜옥수수면｜Corn Noodles",
+          "uberName": "トウモロコシ麺50g｜玉米面｜옥수수면｜Corn Noodles",
           "uberPrice": 216,
           "matchedExisting": true
         },
         {
           "optionKey": "harusame",
-          "name": "春雨",
+          "name": "春雨50g",
           "displayNames": {
             "zh": "粉丝",
             "ko": "당면",
             "en": "Glass Noodles"
           },
           "websitePrice": 140,
-          "uberName": "春雨｜粉丝｜당면｜Glass Noodles",
+          "uberName": "春雨50g｜粉丝｜당면｜Glass Noodles",
           "uberPrice": 176,
           "matchedExisting": true
         },
         {
           "optionKey": "sweet-potato-noodle",
-          "name": "さつまいも麺",
+          "name": "さつまいも麺50g",
           "displayNames": {
             "zh": "红薯粉",
             "ko": "고구마당면",
             "en": "Sweet Potato Noodles"
           },
           "websitePrice": 140,
-          "uberName": "さつまいも麺｜红薯粉｜고구마당면｜Sweet Potato Noodles",
+          "uberName": "さつまいも麺50g｜红薯粉｜고구마당면｜Sweet Potato Noodles",
           "uberPrice": 176,
           "matchedExisting": true
         },
         {
           "optionKey": "rice-noodle",
-          "name": "ビーフン",
+          "name": "ビーフン50g",
           "displayNames": {
             "zh": "米粉",
             "ko": "쌀국수",
             "en": "Rice Noodles"
           },
           "websitePrice": 140,
-          "uberName": "ビーフン｜米粉｜쌀국수｜Rice Noodles",
+          "uberName": "ビーフン50g｜米粉｜쌀국수｜Rice Noodles",
           "uberPrice": 176,
           "externalId": "rice-noodle",
           "matchedExisting": true,
@@ -380,105 +380,105 @@
         },
         {
           "optionKey": "beef-noodle",
-          "name": "【もちもちつるん】牛筋麺",
+          "name": "【もちもちつるん】牛筋麺50g",
           "displayNames": {
             "zh": "牛筋面",
             "ko": "우근면",
             "en": "Niujin Noodles"
           },
           "websitePrice": 220,
-          "uberName": "【もちもちつるん】牛筋麺｜牛筋面｜우근면｜Niujin Noodles",
+          "uberName": "【もちもちつるん】牛筋麺50g｜牛筋面｜우근면｜Niujin Noodles",
           "uberPrice": 276,
           "matchedExisting": true
         },
         {
           "optionKey": "tteokbokki",
-          "name": "トッポッキ",
+          "name": "トッポッキ50g",
           "displayNames": {
             "zh": "韩式年糕",
             "ko": "떡볶이떡",
             "en": "Tteokbokki Rice Cakes"
           },
           "websitePrice": 170,
-          "uberName": "トッポッキ｜韩式年糕｜떡볶이떡｜Tteokbokki Rice Cakes",
+          "uberName": "トッポッキ50g｜韩式年糕｜떡볶이떡｜Tteokbokki Rice Cakes",
           "uberPrice": 216,
           "matchedExisting": true
         },
         {
           "optionKey": "soybean-sprouts-noodle",
-          "name": "【ヘルシー】小大豆もやし",
+          "name": "【ヘルシー】小大豆もやし50g",
           "displayNames": {
             "zh": "黄豆芽",
             "ko": "콩나물",
             "en": "Soybean Sprouts"
           },
           "websitePrice": 140,
-          "uberName": "【ヘルシー】小大豆もやし｜黄豆芽｜콩나물｜Soybean Sprouts",
+          "uberName": "【ヘルシー】小大豆もやし50g｜黄豆芽｜콩나물｜Soybean Sprouts",
           "uberPrice": 176,
           "matchedExisting": true
         },
         {
           "optionKey": "wide-sweet-potato-noodle",
-          "name": "さつまいも板春雨",
+          "name": "さつまいも板春雨50g",
           "displayNames": {
             "zh": "红薯宽粉",
             "ko": "고구마 넓적당면",
             "en": "Wide Sweet Potato Noodles"
           },
           "websitePrice": 170,
-          "uberName": "さつまいも板春雨｜红薯宽粉｜고구마 넓적당면｜Wide Sweet Potato Noodles",
+          "uberName": "さつまいも板春雨50g｜红薯宽粉｜고구마 넓적당면｜Wide Sweet Potato Noodles",
           "uberPrice": 216,
           "matchedExisting": true
         },
         {
           "optionKey": "round-yam-sheet",
-          "name": "【数量限定】山芋粉皮（丸）",
+          "name": "【数量限定】山芋粉皮（丸）50g",
           "displayNames": {
             "zh": "圆形山药粉皮",
             "ko": "둥근 참마 당면",
             "en": "Round Chinese Yam Starch Sheets"
           },
           "websitePrice": 140,
-          "uberName": "【数量限定】山芋粉皮（丸）｜圆形山药粉皮｜둥근 참마 당면｜Round Chinese Yam Starch Sheets",
+          "uberName": "【数量限定】山芋粉皮（丸）50g｜圆形山药粉皮｜둥근 참마 당면｜Round Chinese Yam Starch Sheets",
           "uberPrice": 176,
           "matchedExisting": true
         },
         {
           "optionKey": "yam-noodle",
-          "name": "山芋麺",
+          "name": "山芋麺50g",
           "displayNames": {
             "zh": "山药粉",
             "ko": "마 산약 당면",
             "en": "Chinese Yam Noodles"
           },
           "websitePrice": 140,
-          "uberName": "山芋麺｜山药粉｜마 산약 당면｜Chinese Yam Noodles",
+          "uberName": "山芋麺50g｜山药粉｜마 산약 당면｜Chinese Yam Noodles",
           "uberPrice": 176,
           "matchedExisting": true
         },
         {
           "optionKey": "option-dcafe1ea",
-          "name": "【もっちりつるん】きしめん",
+          "name": "【もっちりつるん】きしめん50g",
           "displayNames": {
             "zh": "宽乌冬面",
             "ko": "기시멘",
             "en": "Kishimen Noodles"
           },
           "websitePrice": 220,
-          "uberName": "【もっちりつるん】きしめん｜宽乌冬面｜기시멘｜Kishimen Noodles",
+          "uberName": "【もっちりつるん】きしめん50g｜宽乌冬面｜기시멘｜Kishimen Noodles",
           "uberPrice": 276,
           "matchedExisting": true
         },
         {
           "optionKey": "knife-shaved-noodle",
-          "name": "【大盛り】刀削麺",
+          "name": "【大盛り】刀削麺100g",
           "displayNames": {
             "zh": "刀削面",
             "ko": "칼국수면",
             "en": "Knife-Shaved Noodles"
           },
           "websitePrice": 220,
-          "uberName": "【大盛り】刀削麺｜刀削面｜칼국수면｜Knife-Shaved Noodles",
+          "uberName": "【大盛り】刀削麺100g｜刀削面｜칼국수면｜Knife-Shaved Noodles",
           "uberPrice": 276,
           "matchedExisting": true
         }
@@ -489,60 +489,84 @@
       "options": [
         {
           "optionKey": "replace-extra-wide-harusame",
-          "name": "板春雨追加",
-          "displayNames": { "zh": "加宽粉", "ko": "넓적당면 추가", "en": "Extra Wide Sweet Potato Noodles" },
+          "name": "板春雨50g追加",
+          "displayNames": {
+            "zh": "加宽粉",
+            "ko": "넓적당면 추가",
+            "en": "Extra Wide Sweet Potato Noodles"
+          },
           "websitePrice": 170,
-          "uberName": "板春雨追加｜加宽粉｜넓적당면 추가｜Extra Wide Sweet Potato Noodles",
+          "uberName": "板春雨50g追加｜加宽粉｜넓적당면 추가｜Extra Wide Sweet Potato Noodles",
           "uberPrice": 216,
           "externalId": "replace-extra-wide-harusame",
           "matchedExisting": true
         },
         {
           "optionKey": "replace-corn-noodle",
-          "name": "【お一人様1回限り】トウモロコシ麺に変更",
-          "displayNames": { "zh": "更换为玉米面", "ko": "옥수수면으로 변경", "en": "Change to Corn Noodles" },
+          "name": "【お一人様1回限り】トウモロコシ麺50gに変更",
+          "displayNames": {
+            "zh": "更换为玉米面",
+            "ko": "옥수수면으로 변경",
+            "en": "Change to Corn Noodles"
+          },
           "websitePrice": 0,
-          "uberName": "【お一人様1回限り】トウモロコシ麺に変更｜更换为玉米面｜옥수수면으로 변경｜Change to Corn Noodles",
+          "uberName": "【お一人様1回限り】トウモロコシ麺50gに変更｜更换为玉米面｜옥수수면으로 변경｜Change to Corn Noodles",
           "uberPrice": 0,
           "externalId": "replace-corn-noodle",
           "matchedExisting": true
         },
         {
           "optionKey": "replace-harusame",
-          "name": "春雨に変更",
-          "displayNames": { "zh": "更换为粉丝", "ko": "당면으로 변경", "en": "Change to Glass Noodles" },
+          "name": "春雨50gに変更",
+          "displayNames": {
+            "zh": "更换为粉丝",
+            "ko": "당면으로 변경",
+            "en": "Change to Glass Noodles"
+          },
           "websitePrice": 140,
-          "uberName": "春雨に変更｜更换为粉丝｜당면으로 변경｜Change to Glass Noodles",
+          "uberName": "春雨50gに変更｜更换为粉丝｜당면으로 변경｜Change to Glass Noodles",
           "uberPrice": 176,
           "externalId": "replace-harusame",
           "matchedExisting": true
         },
         {
           "optionKey": "replace-sweet-potato-noodle",
-          "name": "さつまいも麺に変更",
-          "displayNames": { "zh": "更换为红薯粉", "ko": "고구마당면으로 변경", "en": "Change to Sweet Potato Noodles" },
+          "name": "さつまいも麺50gに変更",
+          "displayNames": {
+            "zh": "更换为红薯粉",
+            "ko": "고구마당면으로 변경",
+            "en": "Change to Sweet Potato Noodles"
+          },
           "websitePrice": 140,
-          "uberName": "さつまいも麺に変更｜更换为红薯粉｜고구마당면으로 변경｜Change to Sweet Potato Noodles",
+          "uberName": "さつまいも麺50gに変更｜更换为红薯粉｜고구마당면으로 변경｜Change to Sweet Potato Noodles",
           "uberPrice": 176,
           "externalId": "replace-sweet-potato-noodle",
           "matchedExisting": true
         },
         {
           "optionKey": "replace-round-yam-sheet",
-          "name": "【数量限定】山芋粉皮（丸）に変更",
-          "displayNames": { "zh": "更换为圆形山药粉皮", "ko": "둥근 참마 당면으로 변경", "en": "Change to Round Chinese Yam Starch Sheets" },
+          "name": "【数量限定】山芋粉皮（丸）50gに変更",
+          "displayNames": {
+            "zh": "更换为圆形山药粉皮",
+            "ko": "둥근 참마 당면으로 변경",
+            "en": "Change to Round Chinese Yam Starch Sheets"
+          },
           "websitePrice": 140,
-          "uberName": "【数量限定】山芋粉皮（丸）に変更｜更换为圆形山药粉皮｜둥근 참마 당면으로 변경｜Change to Round Chinese Yam Starch Sheets",
+          "uberName": "【数量限定】山芋粉皮（丸）50gに変更｜更换为圆形山药粉皮｜둥근 참마 당면으로 변경｜Change to Round Chinese Yam Starch Sheets",
           "uberPrice": 176,
           "externalId": "replace-round-yam-sheet",
           "matchedExisting": true
         },
         {
           "optionKey": "replace-rice-noodle",
-          "name": "ビーフンに変更",
-          "displayNames": { "zh": "更换为米粉", "ko": "쌀국수로 변경", "en": "Change to Rice Noodles" },
+          "name": "ビーフン50gに変更",
+          "displayNames": {
+            "zh": "更换为米粉",
+            "ko": "쌀국수로 변경",
+            "en": "Change to Rice Noodles"
+          },
           "websitePrice": 140,
-          "uberName": "ビーフンに変更｜更换为米粉｜쌀국수로 변경｜Change to Rice Noodles",
+          "uberName": "ビーフン50gに変更｜更换为米粉｜쌀국수로 변경｜Change to Rice Noodles",
           "uberPrice": 176,
           "externalId": "replace-rice-noodle",
           "matchedExisting": true
@@ -550,7 +574,11 @@
         {
           "optionKey": "replace-yam-noodle",
           "name": "山芋麺に変更",
-          "displayNames": { "zh": "更换为山药粉", "ko": "마 산약 당면으로 변경", "en": "Change to Chinese Yam Noodles" },
+          "displayNames": {
+            "zh": "更换为山药粉",
+            "ko": "마 산약 당면으로 변경",
+            "en": "Change to Chinese Yam Noodles"
+          },
           "websitePrice": 140,
           "uberName": "山芋麺に変更｜更换为山药粉｜마 산약 당면으로 변경｜Change to Chinese Yam Noodles",
           "uberPrice": 176,
@@ -560,7 +588,11 @@
         {
           "optionKey": "replace-wide-sweet-potato-noodle",
           "name": "さつまいも板春雨に変更",
-          "displayNames": { "zh": "更换为红薯宽粉", "ko": "고구마 넓적당면으로 변경", "en": "Change to Wide Sweet Potato Noodles" },
+          "displayNames": {
+            "zh": "更换为红薯宽粉",
+            "ko": "고구마 넓적당면으로 변경",
+            "en": "Change to Wide Sweet Potato Noodles"
+          },
           "websitePrice": 170,
           "uberName": "さつまいも板春雨に変更｜更换为红薯宽粉｜고구마 넓적당면으로 변경｜Change to Wide Sweet Potato Noodles",
           "uberPrice": 216,
@@ -570,7 +602,11 @@
         {
           "optionKey": "replace-soybean-sprouts-noodle",
           "name": "【ヘルシー】小大豆もやしに変更",
-          "displayNames": { "zh": "更换为黄豆芽", "ko": "콩나물로 변경", "en": "Change to Soybean Sprouts" },
+          "displayNames": {
+            "zh": "更换为黄豆芽",
+            "ko": "콩나물로 변경",
+            "en": "Change to Soybean Sprouts"
+          },
           "websitePrice": 140,
           "uberName": "【ヘルシー】小大豆もやしに変更｜更换为黄豆芽｜콩나물로 변경｜Change to Soybean Sprouts",
           "uberPrice": 176,
@@ -580,7 +616,11 @@
         {
           "optionKey": "replace-tteokbokki",
           "name": "トッポッキに変更",
-          "displayNames": { "zh": "更换为韩式年糕", "ko": "떡볶이떡으로 변경", "en": "Change to Tteokbokki Rice Cakes" },
+          "displayNames": {
+            "zh": "更换为韩式年糕",
+            "ko": "떡볶이떡으로 변경",
+            "en": "Change to Tteokbokki Rice Cakes"
+          },
           "websitePrice": 170,
           "uberName": "トッポッキに変更｜更换为韩式年糕｜떡볶이떡으로 변경｜Change to Tteokbokki Rice Cakes",
           "uberPrice": 216,
@@ -590,7 +630,11 @@
         {
           "optionKey": "replace-knife-shaved-noodle",
           "name": "【大盛り】刀削麺に変更",
-          "displayNames": { "zh": "更换为刀削面", "ko": "칼국수면으로 변경", "en": "Change to Knife-Shaved Noodles" },
+          "displayNames": {
+            "zh": "更换为刀削面",
+            "ko": "칼국수면으로 변경",
+            "en": "Change to Knife-Shaved Noodles"
+          },
           "websitePrice": 220,
           "uberName": "【大盛り】刀削麺に変更｜更换为刀削面｜칼국수면으로 변경｜Change to Knife-Shaved Noodles",
           "uberPrice": 276,
@@ -600,7 +644,11 @@
         {
           "optionKey": "replace-kishimen",
           "name": "【もっちりつるん】きしめんに変更",
-          "displayNames": { "zh": "更换为宽乌冬面", "ko": "기시멘으로 변경", "en": "Change to Kishimen Noodles" },
+          "displayNames": {
+            "zh": "更换为宽乌冬面",
+            "ko": "기시멘으로 변경",
+            "en": "Change to Kishimen Noodles"
+          },
           "websitePrice": 220,
           "uberName": "【もっちりつるん】きしめんに変更｜更换为宽乌冬面｜기시멘으로 변경｜Change to Kishimen Noodles",
           "uberPrice": 276,
@@ -610,7 +658,11 @@
         {
           "optionKey": "replace-beef-noodle",
           "name": "【もちもちつるん】牛筋麺に変更",
-          "displayNames": { "zh": "更换为牛筋面", "ko": "우근면으로 변경", "en": "Change to Niujin Noodles" },
+          "displayNames": {
+            "zh": "更换为牛筋面",
+            "ko": "우근면으로 변경",
+            "en": "Change to Niujin Noodles"
+          },
           "websitePrice": 220,
           "uberName": "【もちもちつるん】牛筋麺に変更｜更换为牛筋面｜우근면으로 변경｜Change to Niujin Noodles",
           "uberPrice": 276,
@@ -630,9 +682,9 @@
             "ko": "화지완(오징어 완자)",
             "en": "Cuttlefish Ball"
           },
-          "websitePrice": 200,
+          "websitePrice": 220,
           "uberName": "特選イカ団子1個｜花枝丸｜화지완(오징어 완자)｜Cuttlefish Ball",
-          "uberPrice": 250,
+          "uberPrice": 276,
           "matchedExisting": true
         },
         {
@@ -656,9 +708,9 @@
             "ko": "소고기 공완",
             "en": "Taiwanese Beef Meatball"
           },
-          "websitePrice": 200,
+          "websitePrice": 220,
           "uberName": "特選牛肉団子1個｜牛肉贡丸｜소고기 공완｜Taiwanese Beef Meatball",
-          "uberPrice": 250,
+          "uberPrice": 276,
           "matchedExisting": true
         },
         {
@@ -721,9 +773,9 @@
             "ko": "훠궈 두부피",
             "en": "Hot Pot Tofu Skin"
           },
-          "websitePrice": 160,
+          "websitePrice": 180,
           "uberName": "火鍋豆皮｜火锅豆皮｜훠궈 두부피｜Hot Pot Tofu Skin",
-          "uberPrice": 196,
+          "uberPrice": 226,
           "matchedExisting": true
         },
         {
@@ -747,9 +799,9 @@
             "ko": "두부 매듭",
             "en": "Tofu Knots"
           },
-          "websitePrice": 120,
+          "websitePrice": 150,
           "uberName": "結びゆば1個｜百叶结｜두부 매듭｜Tofu Knots",
-          "uberPrice": 149,
+          "uberPrice": 189,
           "matchedExisting": true
         },
         {
@@ -855,6 +907,58 @@
           "uberName": "【大サイズ】老豆皮1枚｜老豆皮｜노두부피｜Traditional Tofu Skin",
           "uberPrice": 276,
           "matchedExisting": true
+        },
+        {
+          "optionKey": "plain-wonton",
+          "name": "ワンタン",
+          "displayNames": {
+            "zh": "云吞",
+            "ko": "완탕",
+            "en": "Wontons"
+          },
+          "websitePrice": 170,
+          "uberName": "ワンタン｜云吞｜완탕｜ Wontons",
+          "uberPrice": 216,
+          "matchedExisting": true
+        },
+        {
+          "optionKey": "soft-boiled-egg",
+          "name": "半熟味玉",
+          "displayNames": {
+            "zh": "半熟蛋",
+            "ko": "반숙계란",
+            "en": "Soft-boiled egg"
+          },
+          "websitePrice": 170,
+          "uberName": "半熟味玉｜半熟蛋｜반숙계란｜Soft-boiled egg",
+          "uberPrice": 216,
+          "matchedExisting": true
+        },
+        {
+          "optionKey": "shiitake-pork-meatball",
+          "name": "椎茸入り豚肉団子",
+          "displayNames": {
+            "zh": "香菇猪肉贡丸",
+            "ko": "표고버섯 돼지고기 공완",
+            "en": "Taiwanese Pork Meatball with Shiitake"
+          },
+          "websitePrice": 200,
+          "uberName": "椎茸入り豚肉団子｜香菇猪肉贡丸｜표고버섯 돼지고기 공완｜Taiwanese Pork Meatball with Shiitake",
+          "uberPrice": 250,
+          "matchedExisting": true
+        },
+        {
+          "optionKey": "chicken-cartilage-meatball",
+          "name": "軟骨入り鶏肉団子",
+          "displayNames": {
+            "zh": "鸡软骨丸",
+            "ko": "닭연골 완자",
+            "en": "Chicken Cartilage Meatball"
+          },
+          "websitePrice": 170,
+          "uberName": "軟骨入り鶏肉団子｜鸡软骨丸｜닭연골 완자｜Chicken Cartilage Meatball",
+          "uberPrice": 216,
+          "matchedExisting": true
         }
       ]
     },
@@ -882,9 +986,9 @@
             "ko": "새송이버섯",
             "en": "King Oyster Mushroom"
           },
-          "websitePrice": 220,
+          "websitePrice": 320,
           "uberName": "エリンギ｜杏鲍菇｜새송이버섯｜King Oyster Mushroom",
-          "uberPrice": 276,
+          "uberPrice": 406,
           "matchedExisting": true
         },
         {
@@ -895,9 +999,9 @@
             "ko": "팽이버섯",
             "en": "Enoki Mushroom"
           },
-          "websitePrice": 220,
+          "websitePrice": 240,
           "uberName": "えのき｜金针菇｜팽이버섯｜Enoki Mushroom",
-          "uberPrice": 276,
+          "uberPrice": 296,
           "matchedExisting": true
         },
         {
@@ -921,9 +1025,9 @@
             "ko": "게맛살",
             "en": "Imitation Crab Stick"
           },
-          "websitePrice": 220,
+          "websitePrice": 270,
           "uberName": "カニカマ｜蟹棒｜게맛살｜Imitation Crab Stick",
-          "uberPrice": 276,
+          "uberPrice": 336,
           "matchedExisting": true
         },
         {
@@ -960,9 +1064,9 @@
             "ko": "고구마",
             "en": "Sweet Potato"
           },
-          "websitePrice": 200,
+          "websitePrice": 290,
           "uberName": "さつまいも｜红薯｜고구마｜Sweet Potato",
-          "uberPrice": 246,
+          "uberPrice": 366,
           "matchedExisting": true
         },
         {
@@ -973,9 +1077,9 @@
             "ko": "만가닥버섯",
             "en": "Shimeji Mushrooms"
           },
-          "websitePrice": 220,
+          "websitePrice": 290,
           "uberName": "しめじ｜蟹味菇｜만가닥버섯｜Shimeji Mushrooms",
-          "uberPrice": 276,
+          "uberPrice": 366,
           "matchedExisting": true
         },
         {
@@ -1038,9 +1142,9 @@
             "ko": "베이비콘",
             "en": "Baby Corn"
           },
-          "websitePrice": 170,
+          "websitePrice": 210,
           "uberName": "ベビーコーン1本｜玉米笋｜베이비콘｜Baby Corn",
-          "uberPrice": 216,
+          "uberPrice": 266,
           "matchedExisting": true
         },
         {
@@ -1103,9 +1207,9 @@
             "ko": "두부",
             "en": "Tofu"
           },
-          "websitePrice": 200,
+          "websitePrice": 240,
           "uberName": "豆腐｜豆腐｜두부｜Tofu",
-          "uberPrice": 246,
+          "uberPrice": 299,
           "matchedExisting": true
         },
         {
@@ -1194,9 +1298,9 @@
             "ko": "죽순 멘마",
             "en": "Tender Bamboo Menma"
           },
-          "websitePrice": 220,
+          "websitePrice": 240,
           "uberName": "【もちもち】穂先メンマ｜糯米笋｜죽순 멘마｜Tender Bamboo Menma",
-          "uberPrice": 276,
+          "uberPrice": 299,
           "matchedExisting": true
         },
         {
@@ -1220,9 +1324,9 @@
             "ko": "표고버섯",
             "en": "Shiitake Mushroom"
           },
-          "websitePrice": 220,
+          "websitePrice": 260,
           "uberName": "しいたけ｜香菇｜표고버섯｜Shiitake Mushroom",
-          "uberPrice": 276,
+          "uberPrice": 326,
           "matchedExisting": true
         },
         {
@@ -1272,9 +1376,9 @@
             "ko": "일본산 떡",
             "en": "Japanese Rice Cake"
           },
-          "websitePrice": 160,
+          "websitePrice": 170,
           "uberName": "国産もち1個｜国产年糕｜일본산 떡｜Japanese Rice Cake",
-          "uberPrice": 200,
+          "uberPrice": 216,
           "matchedExisting": true
         },
         {
@@ -1285,9 +1389,9 @@
             "ko": "시금치",
             "en": "Spinach"
           },
-          "websitePrice": 220,
+          "websitePrice": 230,
           "uberName": "ほうれん草｜菠菜｜시금치｜Spinach",
-          "uberPrice": 276,
+          "uberPrice": 286,
           "matchedExisting": true
         },
         {
@@ -1311,9 +1415,9 @@
             "ko": "일본산 방울토마토",
             "en": "Japanese Cherry Tomatoes"
           },
-          "websitePrice": 100,
+          "websitePrice": 80,
           "uberName": "国産プチトマト1個｜国产小番茄｜일본산 방울토마토｜Japanese Cherry Tomatoes",
-          "uberPrice": 119,
+          "uberPrice": 100,
           "matchedExisting": true
         },
         {
@@ -1381,9 +1485,9 @@
             "ko": "유부",
             "en": "Fried Tofu (Aburaage)"
           },
-          "websitePrice": 80,
+          "websitePrice": 150,
           "uberName": "油あげ｜油豆腐｜유부｜Fried Tofu (Aburaage)",
-          "uberPrice": 100,
+          "uberPrice": 186,
           "matchedExisting": true
         },
         {
@@ -1407,9 +1511,9 @@
             "ko": "죽순",
             "en": "Bamboo Shoots"
           },
-          "websitePrice": 220,
+          "websitePrice": 240,
           "uberName": "たけのこ｜竹笋｜죽순｜Bamboo Shoots",
-          "uberPrice": 276,
+          "uberPrice": 306,
           "matchedExisting": true
         },
         {
@@ -1433,9 +1537,9 @@
             "ko": "고마쓰나",
             "en": "Komatsuna Greens"
           },
-          "websitePrice": 240,
+          "websitePrice": 160,
           "uberName": "小松菜｜小松菜｜고마쓰나｜Komatsuna Greens",
-          "uberPrice": 299,
+          "uberPrice": 196,
           "matchedExisting": true
         },
         {
@@ -1449,7 +1553,7 @@
           "websitePrice": 220,
           "uberName": "レタス｜生菜｜상추｜Lettuce",
           "uberPrice": 276,
-          "matchedExisting": false
+          "matchedExisting": true
         },
         {
           "optionKey": "water-spinach",
@@ -1462,7 +1566,7 @@
           "websitePrice": 220,
           "uberName": "空心菜｜空心菜｜공심채｜Water Spinach",
           "uberPrice": 276,
-          "matchedExisting": false
+          "matchedExisting": true
         }
       ]
     },
@@ -1477,9 +1581,9 @@
             "ko": "돼지고기 슬라이스",
             "en": "Sliced Pork"
           },
-          "websitePrice": 340,
+          "websitePrice": 400,
           "uberName": "【厳選】豚肉スライス(1人前約50g)｜猪肉片｜돼지고기 슬라이스｜Sliced Pork",
-          "uberPrice": 420,
+          "uberPrice": 499,
           "matchedExisting": true
         },
         {
@@ -1503,9 +1607,9 @@
             "ko": "통 가리비",
             "en": "Whole Scallop"
           },
-          "websitePrice": 310,
+          "websitePrice": 400,
           "uberName": "丸ごとホタテ1個｜整颗扇贝｜통 가리비｜Whole Scallop",
-          "uberPrice": 390,
+          "uberPrice": 499,
           "matchedExisting": true
         },
         {
@@ -1588,7 +1692,7 @@
           "displayNames": {
             "zh": "国产猪舌",
             "ko": "일본산 돼지혀",
-            "en": "Japanese Pork Tongue"
+            "en": "Japanese Pork Tongu e"
           },
           "websitePrice": 400,
           "uberName": "【国産】豚タン約50g｜国产猪舌｜일본산 돼지혀｜Japanese Pork Tongu e",
@@ -1675,16 +1779,16 @@
         },
         {
           "optionKey": "squid",
-          "name": "イカ🦑（約50g）",
+          "name": "イカ🦑 （約50g ）",
           "displayNames": {
             "zh": "鱿鱼",
             "ko": "오징어",
-            "en": "Squid"
+            "en": "squid"
           },
-          "websitePrice": 560,
+          "websitePrice": 320,
           "uberName": "イカ🦑 （約50g ）｜鱿鱼 ｜오징어｜ squid",
-          "uberPrice": 699,
-          "matchedExisting": false
+          "uberPrice": 399,
+          "matchedExisting": true
         },
         {
           "optionKey": "baby-octopus",
@@ -1760,9 +1864,9 @@
             "ko": "닭간 & 닭심장",
             "en": "Chicken Liver & Heart"
           },
-          "websitePrice": 310,
+          "websitePrice": 320,
           "uberName": "鶏レバー＆ハツ｜鸡肝&鸡心｜닭간 & 닭심장｜Chicken Liver & Heart",
-          "uberPrice": 390,
+          "uberPrice": 399,
           "matchedExisting": true
         },
         {
@@ -1775,6 +1879,19 @@
           },
           "websitePrice": 320,
           "uberName": "ムール貝｜青口贝｜홍합｜Mussels",
+          "uberPrice": 399,
+          "matchedExisting": true
+        },
+        {
+          "optionKey": "spicy-pollock-roe",
+          "name": "辛子明太子",
+          "displayNames": {
+            "zh": "明太子",
+            "ko": "명란",
+            "en": "Spicy Pollock Roe"
+          },
+          "websitePrice": 320,
+          "uberName": "辛子明太子｜明太子｜명란｜Spicy Pollock Roe",
           "uberPrice": 399,
           "matchedExisting": true
         }
@@ -1841,10 +1958,10 @@
           "displayNames": {
             "zh": "精选三种海鲜拼盘（大虾1只、扇贝1个、鱿鱼圈约50克）",
             "ko": "특선 해산물 3종 모둠 (왕새우 1마리, 가리비 1개, 오징어 링 약 50g)",
-            "en": "Premium Seafood Trio (1 King Prawn, 1 Scallop, Approx. 50g Squid Rings)"
+            "en": "Premium Seafood Trio (1 King Prawns, 1 Scallop, Approx. 50g Squid Rings)"
           },
           "websitePrice": 1340,
-          "uberName": "特選海鮮3種盛り👑（大えび1匹、ほたて1個、イカリング約50g）｜精选三种海鲜拼盘（大虾1只、扇贝1个、鱿鱼圈约50克）｜특선 해산물 3종 모둠 (왕새우 2마리, 가리비 1개, 오징어 링 약 50g)｜Premium Seafood Trio (2 King Prawns, 1 Scallop, Approx. 50g Squid Rings)",
+          "uberName": "特選海鮮3種盛り👑（大えび1匹、ほたて1個、イカリング約50g）｜精选三种海鲜拼盘（大虾1只、扇贝1个、鱿鱼圈约50克）｜특선 해산물 3종 모둠 (왕새우 1마리, 가리비 1개, 오징어 링 약 50g)｜Premium Seafood Trio (1 King Prawns, 1 Scallop, Approx. 50g Squid Rings)",
           "uberPrice": 1680,
           "matchedExisting": true
         },
@@ -1877,7 +1994,7 @@
           "websitePrice": 860,
           "uberName": "特大ずわい蟹爪1個｜特大雪蟹蟹钳｜특대 대게 집게발｜Extra Large Snow Crab Claw",
           "uberPrice": 1080,
-          "matchedExisting": false
+          "matchedExisting": true
         }
       ]
     },
@@ -1892,9 +2009,9 @@
             "ko": "궁채",
             "en": "Gongcai (Dried Lettuce Stem)"
           },
-          "websitePrice": 140,
+          "websitePrice": 220,
           "uberName": "山クラゲ🥇｜贡菜｜궁채｜Gongcai (Dried Lettuce Stem)",
-          "uberPrice": 176,
+          "uberPrice": 276,
           "matchedExisting": true
         },
         {
@@ -1957,7 +2074,7 @@
           "websitePrice": 320,
           "uberName": "特製旨辛肉味噌｜特制香辣肉味噌｜특제 매콤 고기 미소｜Special Savory Spicy Meat Miso Sauce",
           "uberPrice": 399,
-          "matchedExisting": false
+          "matchedExisting": true
         }
       ]
     }

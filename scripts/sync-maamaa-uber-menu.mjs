@@ -5,7 +5,7 @@ import { neon } from "@neondatabase/serverless";
 import { loadLocalEnv } from "./db-env.mjs";
 
 const repoRoot = new URL("../", import.meta.url);
-const defaultSnapshotPath = new URL("../data/uber/maamaa-menu-2026-07-30.json", import.meta.url);
+const defaultSnapshotPath = new URL("../data/uber/maamaa-menu-2026-08-08.json", import.meta.url);
 const mappingPath = new URL("../data/uber/maamaa-menu-mapping.json", import.meta.url);
 const maamaaMenuPath = "/Users/wushengyin/Desktop/maamaa/src/data/malatang-menu.ts";
 const applyChanges = process.argv.includes("--apply");
@@ -42,7 +42,14 @@ const expectedGroups = new Map([
   ["noodle-replacement", { name: "麺の種類を変更する", items: menu.noodleReplacementOptions }],
   ...menu.menuSections.map((section) => [section.id, { name: section.title, items: section.items }])
 ]);
-const supplementalGroupKeys = new Set(["noodle-replacement"]);
+const supplementalGroupKeys = new Set([
+  "noodle-replacement",
+  "cold-noodles",
+  "cold-pack",
+  "featured-quail",
+  "extra-beef-tendon",
+  "extra-pork-cartilage"
+]);
 const expectedGroupKeys = [...expectedGroups.keys()];
 const expectedOptionCount = [...expectedGroups.values()]
   .reduce((total, group) => total + group.items.length, 0);
@@ -186,9 +193,15 @@ if (newUberOptions.length || removedUberOptions.length) {
   throw new Error("The Uber snapshot contains unmapped additions, removals, or renames. Review and update the mapping before publishing.");
 }
 
+const catalogResult = spawnSync(
+  process.execPath,
+  ["scripts/import-maamaa-uber-catalog.mjs"],
+  { cwd: new URL(".", repoRoot), encoding: "utf8", stdio: "inherit" }
+);
+if (catalogResult.status !== 0) process.exit(catalogResult.status ?? 1);
 const result = spawnSync(
   process.execPath,
-  ["scripts/import-brand-menus.mjs", "--brand", "maamaa", "--prune"],
+  ["scripts/import-brand-menus.mjs", "--brand", "maamaa"],
   { cwd: new URL(".", repoRoot), encoding: "utf8", stdio: "inherit" }
 );
 if (result.status !== 0) process.exit(result.status ?? 1);
