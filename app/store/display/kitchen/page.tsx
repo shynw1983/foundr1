@@ -1136,12 +1136,7 @@ export default function StoreKitchenPage() {
                 >
                   <span className="store-kitchen-queue-position">{String(index + 1).padStart(2, "0")}</span>
                   <span className="store-kitchen-queue-main">
-                    <span className="store-kitchen-queue-code-row">
-                      <span className="store-kitchen-queue-code">{task.pickupCode}</span>
-                      <span className="store-kitchen-item-count">
-                        {task.kitchenLanguage === "zh" ? `共 ${getKitchenItemCount(task)} 件` : `合計 ${getKitchenItemCount(task)}点`}
-                      </span>
-                    </span>
+                    <span className="store-kitchen-queue-code">{task.pickupCode}</span>
                     <span className="store-kitchen-queue-meta">
                       {formatOrderDateTime(task.scheduledAt || task.createdAt, task.kitchenLanguage)}
                       <em>{statusLabels[task.kitchenLanguage][task.status]}</em>
@@ -1151,7 +1146,12 @@ export default function StoreKitchenPage() {
                     </span>
                   </span>
                   <span className="store-kitchen-queue-side">
-                    <PlatformLogo source={task.orderSource} />
+                    <span className="store-kitchen-platform-block">
+                      <PlatformLogo source={task.orderSource} />
+                      <span className="store-kitchen-item-count">
+                        {task.kitchenLanguage === "zh" ? `共 ${getKitchenItemCount(task)} 件` : `合計 ${getKitchenItemCount(task)}点`}
+                      </span>
+                    </span>
                     <strong>{formatOrderAmount(task.amount, task.currency)}</strong>
                   </span>
                 </button>
@@ -1175,7 +1175,12 @@ export default function StoreKitchenPage() {
                   </p>
                 ) : null}
                 <div className="store-kitchen-platform-row">
-                  <PlatformLogo source={task.orderSource} />
+                  <span className="store-kitchen-platform-block is-detail">
+                    <PlatformLogo source={task.orderSource} />
+                    <span className="store-kitchen-item-count is-detail">
+                      {task.kitchenLanguage === "zh" ? `共 ${getKitchenItemCount(task)} 件商品` : `商品 合計${getKitchenItemCount(task)}点`}
+                    </span>
+                  </span>
                   <span className={`store-kitchen-status is-${task.status}`}>
                     {task.kitchenLanguage === "zh" && task.productionAreaLabel === "調理" ? "烹饪" : task.productionAreaLabel} / {statusLabels[task.kitchenLanguage][task.status]}
                   </span>
@@ -1187,12 +1192,7 @@ export default function StoreKitchenPage() {
                   </div>
                   <div>
                     <small>{task.kitchenLanguage === "zh" ? "订单编号" : "注文番号"}</small>
-                    <span className="store-kitchen-order-code-line">
-                      <b>{task.pickupCode}</b>
-                      <span className="store-kitchen-item-count is-detail">
-                        {task.kitchenLanguage === "zh" ? `共 ${getKitchenItemCount(task)} 件商品` : `商品 合計${getKitchenItemCount(task)}点`}
-                      </span>
-                    </span>
+                    <b>{task.pickupCode}</b>
                   </div>
                 </div>
                 <div className="store-kitchen-order-facts">

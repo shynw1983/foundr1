@@ -16328,15 +16328,6 @@ body :where(
   line-height: 1;
 }
 
-.store-kitchen-queue-code-row,
-.store-kitchen-order-code-line {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
 .store-kitchen-item-count {
   flex: 0 0 auto;
   border-radius: 999px;
@@ -16390,6 +16381,18 @@ body :where(
 .store-kitchen-queue-side {
   align-content: space-between;
   justify-items: end;
+  gap: 8px;
+}
+
+.store-kitchen-platform-block {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.store-kitchen-platform-block.is-detail {
+  justify-items: start;
   gap: 8px;
 }
 
