@@ -639,11 +639,12 @@ public class UberAccessibilityService extends AccessibilityService {
             retryPendingCommand(1400L, commandPlatform + " を開けませんでした。");
             return;
         }
-        JSONArray nodes = new JSONArray();
-        collectNodes(root, "0", new StringBuilder(), nodes, new HashSet<>());
         if (BridgeConfig.PLATFORM_ROCKET_NOW.equals(commandPlatform)) {
+            root.refresh();
             handleRocketInventoryCommand(root, command);
         } else {
+            JSONArray nodes = new JSONArray();
+            collectNodes(root, "0", new StringBuilder(), nodes, new HashSet<>());
             handlePendingCommand(root, nodes);
         }
         root.recycle();
