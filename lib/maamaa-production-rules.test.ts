@@ -5,6 +5,7 @@ import {
   findMaamaaProductionRule,
   formatMaamaaProductionRule,
   formatMaamaaSeasoningSelection,
+  localizeMaamaaCustomerLabel,
   localizeMaamaaProductionSummary
 } from "./maamaa-production-rules.ts";
 
@@ -78,4 +79,20 @@ test("localizes kitchen summaries with the Chinese labels preserved from Uber", 
 test("keeps kitchen summaries unchanged when Japanese is selected", () => {
   const summary = "・具材：ブンモジャ1本 x2（最低1分加熱）";
   assert.equal(localizeMaamaaProductionSummary(summary, {}, "ja"), summary);
+});
+
+test("uses the Uber-provided Chinese labels for kitchen heat and numbness", () => {
+  const customerSummary = {
+    bridge: {
+      items: [{
+        modifiers: [
+          { name: "中辛🔥🔥｜中辣｜중간 매운맛｜Medium Spicy" },
+          { name: "ちょいシビ⚡️｜微麻｜약한 얼얼함｜Mild Numbing" }
+        ]
+      }]
+    }
+  };
+
+  assert.equal(localizeMaamaaCustomerLabel("辛さ：中辛🔥🔥", customerSummary, "zh"), "辣度：中辣");
+  assert.equal(localizeMaamaaCustomerLabel("痺れ：ちょいシビ⚡️", customerSummary, "zh"), "麻度：微麻");
 });

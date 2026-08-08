@@ -666,15 +666,24 @@ export function localizeMaamaaProductionSummary(
   language: MaamaaReferenceLanguage
 ) {
   if (language !== "zh") return itemSummary;
-  const translations = uberBridgeLabelTranslations(customerSummary);
   return String(itemSummary ?? "")
     .split("\n")
-    .map((line) => {
-      let localized = line;
-      for (const [japanese, chinese] of translations) localized = localized.replaceAll(japanese, chinese);
-      return translateMaamaaReferenceText(localized, "zh");
-    })
+    .map((line) => localizeMaamaaCustomerLabel(line, customerSummary, language))
     .join("\n");
+}
+
+export function localizeMaamaaCustomerLabel(
+  value: unknown,
+  customerSummary: unknown,
+  language: MaamaaReferenceLanguage
+) {
+  const source = String(value ?? "");
+  if (language !== "zh") return source;
+  let localized = source;
+  for (const [japanese, chinese] of uberBridgeLabelTranslations(customerSummary)) {
+    localized = localized.replaceAll(japanese, chinese);
+  }
+  return translateMaamaaReferenceText(localized, "zh");
 }
 
 function cloneMaamaaSettings(settings: MaamaaProductionReferenceSettings): MaamaaProductionReferenceSettings {

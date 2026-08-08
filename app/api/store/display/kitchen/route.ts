@@ -9,6 +9,7 @@ import {
   findMenuDisplayNameCandidate,
   type MenuDisplayNameCandidate
 } from "../../../../../lib/menu-display-name-matcher";
+import { localizeMaamaaCustomerLabel } from "../../../../../lib/maamaa-production-rules";
 import { localizeMaamaaProductionSummary, setProductionTaskStatus } from "../../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
 import { normalizePosPrinterSettings, resolvePosKitchenTicketTemplate } from "../../../../../lib/pos-printer";
@@ -204,7 +205,11 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
             const optionCandidate = brandMenuOptions.find((candidate) => (
               optionKey && candidate.optionKey === optionKey
             )) ?? findMenuDisplayNameCandidate(label, brandMenuOptions);
-            return existingMenuDisplayName(label, optionCandidate, "zh");
+            return localizeMaamaaCustomerLabel(
+              existingMenuDisplayName(label, optionCandidate, "zh"),
+              customerSummary,
+              "zh"
+            );
           })
         };
       })
