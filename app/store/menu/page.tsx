@@ -234,12 +234,58 @@ export default function StoreMenuPage() {
     }
   }, [selectedCategory, showOptionCategory]);
 
+  async function applyDeliveryAvailability(input: {
+    brandId: string;
+    ingredientLabel: string;
+    targetKind: "item" | "option";
+    isAvailable: boolean;
+  }) {
+    const response = await fetch("/api/store/display/kitchen/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...input,
+        action: "apply",
+        source: "sales_status",
+        storeId: selectedStoreId
+      })
+    });
+    const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok) throw new Error(String(body.error || "Bridge sync failed"));
+    const targetIds = new Set(
+      (Array.isArray(body.targets) ? body.targets : []).map((target) => (
+        target && typeof target === "object" ? String((target as Record<string, unknown>).targetId ?? "") : ""
+      )).filter(Boolean)
+    );
+    const platforms = (Array.isArray(body.commands) ? body.commands : []).map((command) => {
+      if (!command || typeof command !== "object") return "";
+      const platform = String((command as Record<string, unknown>).platform ?? "");
+      return platform === "rocket_now" ? "Rocket" : platform === "uber_eats" ? "Uber" : platform;
+    }).filter(Boolean);
+    return { targetIds, platformLabel: platforms.join(" / ") || "Bridge" };
+  }
+
   async function saveItem(item: StoreMenuItem, patch: Partial<StoreMenuItem>) {
     const nextItem = { ...item, ...patch };
     setItems((current) => current.map((entry) => entry.id === item.id ? nextItem : entry));
     setSavingId(item.id);
     setMessage("");
     try {
+      if (typeof patch.isAvailable === "boolean") {
+        const result = await applyDeliveryAvailability({
+          brandId: item.brandId,
+          ingredientLabel: item.name,
+          targetKind: "item",
+          isAvailable: patch.isAvailable
+        });
+        setItems((current) => current.map((entry) => (
+          entry.id === item.id || result.targetIds.has(entry.id)
+            ? { ...entry, isAvailable: patch.isAvailable as boolean }
+            : entry
+        )));
+        setMessage(`${result.platformLabel} へ同期を開始しました。`);
+        return;
+      }
       const response = await fetch("/api/store/menu-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -253,9 +299,11 @@ export default function StoreMenuPage() {
       });
       if (!response.ok) throw new Error("save failed");
       setMessage("更新しました。");
-    } catch {
+    } catch (error) {
       setItems((current) => current.map((entry) => entry.id === item.id ? item : entry));
-      setMessage("保存できませんでした。");
+      setMessage(error instanceof Error && error.message !== "save failed"
+        ? error.message
+        : "保存できませんでした。");
     } finally {
       setSavingId("");
     }
@@ -267,6 +315,21 @@ export default function StoreMenuPage() {
     setSavingId(option.id);
     setMessage("");
     try {
+      if (typeof patch.isAvailable === "boolean") {
+        const result = await applyDeliveryAvailability({
+          brandId: option.brandId,
+          ingredientLabel: option.name,
+          targetKind: "option",
+          isAvailable: patch.isAvailable
+        });
+        setOptions((current) => current.map((entry) => (
+          entry.id === option.id || result.targetIds.has(entry.id)
+            ? { ...entry, isAvailable: patch.isAvailable as boolean }
+            : entry
+        )));
+        setMessage(`${result.platformLabel} へ同期を開始しました。`);
+        return;
+      }
       const response = await fetch("/api/store/menu-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -280,9 +343,11 @@ export default function StoreMenuPage() {
       });
       if (!response.ok) throw new Error("save failed");
       setMessage("更新しました。");
-    } catch {
+    } catch (error) {
       setOptions((current) => current.map((entry) => entry.id === option.id ? option : entry));
-      setMessage("保存できませんでした。");
+      setMessage(error instanceof Error && error.message !== "save failed"
+        ? error.message
+        : "保存できませんでした。");
     } finally {
       setSavingId("");
     }
@@ -306,7 +371,7 @@ export default function StoreMenuPage() {
           <div>
             <p className="eyebrow">Daily Availability</p>
             <h2>本日の販売状態</h2>
-            <p>売切や販売再開を店舗現場で更新します。メニュー名、価格、選択肢は OS のメニュー管理で編集します。</p>
+            <p>売切や販売再開は Foundr1、Uber、Rocket へ同期します。メニュー名、価格、選択肢は OS のメニュー管理で編集します。</p>
           </div>
           <button className="secondary-button" type="button" onClick={() => void load(selectedStoreId)}>
             <RotateCcw size={16} />

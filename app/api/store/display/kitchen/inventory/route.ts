@@ -24,7 +24,7 @@ function inventoryDisplayLabel(
   displayNames: Record<string, unknown> | null
 ) {
   const note = text(statusNote);
-  const kitchenMatch = note.match(/^厨房画面:\s*(.+?)\s+(?:在庫切れ|販売再開)$/u);
+  const kitchenMatch = note.match(/^(?:厨房画面|販売状態):\s*(.+?)\s+(?:在庫切れ|販売再開)$/u);
   if (kitchenMatch?.[1]) return kitchenMatch[1].trim();
   const bridgeMatch = note.match(/^Uber Eats Bridge:\s*(.+?)\s+(?:売り切れ|在庫あり)(?:\s|$)/u);
   const bridgeLabels = bridgeMatch?.[1]?.split(/[｜|]/u).map((value) => value.trim()).filter(Boolean) ?? [];
@@ -274,6 +274,7 @@ export async function POST(request: Request) {
   const action = text(body.action, 40) || "preview";
   const targetKind = body.targetKind === "item" ? "item" : "option";
   const isAvailable = body.isAvailable === true;
+  const statusSource = body.source === "sales_status" ? "販売状態" : "厨房画面";
   if (!storeId || !["preview", "apply", "audit"].includes(action)) {
     return Response.json({ error: "食材と操作内容を確認してください。" }, { status: 400 });
   }
@@ -335,7 +336,7 @@ export async function POST(request: Request) {
   }
   if (action === "preview") return Response.json(resolved);
 
-  const note = `厨房画面: ${resolved.ingredientLabel}${isAvailable ? " 販売再開" : " 在庫切れ"}`;
+  const note = `${statusSource}: ${resolved.ingredientLabel}${isAvailable ? " 販売再開" : " 在庫切れ"}`;
   for (const target of resolved.targets) {
     if (target.kind === "item") {
       await sql`
