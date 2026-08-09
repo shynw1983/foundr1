@@ -71,6 +71,8 @@ The bridge never presses Uber accept, deny, or cancellation actions. It can pres
 
 Bridge releases are published with `npm run apk:bridge`. The first managed release is `1.0.0` with Android `versionCode` 1. Each later publication increments `versionCode` and the semantic patch version, keeps the versioned APK, and refreshes the latest download links and metadata under `public/downloads/bridge`.
 
+Bridge checks `/downloads/bridge/version.json` at startup and every six hours. When a newer release exists, it downloads the APK into app-private storage, verifies the declared file size and SHA-256 digest, and posts an update notification. Staff can also check manually from the Bridge system-status card. Android may require a one-time `Install unknown apps` permission and an installation confirmation; after package replacement, the boot receiver restarts Bridge while preserving the store binding, platform mode, notification access, and accessibility authorization.
+
 Foundr1 OS deduplicates bridge orders by store, local order date, and Uber order number. Only recent order-detail screens are imported, so browsing older order history does not create operational orders.
 
 Rocket Now notifications open the matching merchant-app order screen. The same accessibility service reads the six-character Rocket Now order number, items, options, quantities, customer request, amount, and operational status, then imports the order with `order_source = 'rocket_now'`. It never accepts or cancels a Rocket Now order automatically.

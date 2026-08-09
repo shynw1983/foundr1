@@ -66,6 +66,7 @@ public class BridgeActivity extends Activity {
     private TextView notificationRow;
     private TextView realtimeRow;
     private TextView batteryRow;
+    private TextView updateRow;
     private TextView recentOrder;
     private TextView queueSummary;
     private LinearLayout statusCard;
@@ -74,8 +75,15 @@ public class BridgeActivity extends Activity {
     private Button selfTestButton;
     private Button openUberButton;
     private Button openRocketButton;
+    private Button updateButton;
     private boolean healthReceiverRegistered = false;
     private final BroadcastReceiver healthReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            updateStatus();
+        }
+    };
+    private final BroadcastReceiver otaReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             updateStatus();
@@ -101,6 +109,12 @@ public class BridgeActivity extends Activity {
                 registerReceiver(healthReceiver, filter);
             }
             healthReceiverRegistered = true;
+            IntentFilter otaFilter = new IntentFilter(BridgeOtaManager.ACTION_CHANGED);
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(otaReceiver, otaFilter, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                registerReceiver(otaReceiver, otaFilter);
+            }
         }
     }
 
@@ -110,6 +124,7 @@ public class BridgeActivity extends Activity {
         BridgePlatformState.pauseForegroundGuard(this, 2 * 60 * 1000L);
         BridgeServiceStarter.ensureStarted(this, "activity_resume");
         BridgeRealtimeClient.start(this);
+        BridgeOtaManager.checkForUpdate(this, false);
         updateStatus();
     }
 
@@ -117,6 +132,7 @@ public class BridgeActivity extends Activity {
     protected void onStop() {
         if (healthReceiverRegistered) {
             try { unregisterReceiver(healthReceiver); } catch (Exception ignored) {}
+            try { unregisterReceiver(otaReceiver); } catch (Exception ignored) {}
             healthReceiverRegistered = false;
         }
         super.onStop();
@@ -177,6 +193,8 @@ public class BridgeActivity extends Activity {
         notificationRow = statusRow(checks, "注文通知読み取り");
         realtimeRow = statusRow(checks, "Foundr1 OS 接続");
         batteryRow = statusRow(checks, "バックグラウンド保護");
+        updateRow = statusRow(checks, "Bridge バージョン");
+        updateButton = addSecondaryButton(checks, "更新を確認", view -> handleUpdateAction());
 
         LinearLayout activity = section(page, "最近の動作");
         recentOrder = text("最近の注文：まだありません", 15, COLOR_INK, Typeface.NORMAL);
@@ -305,6 +323,7 @@ public class BridgeActivity extends Activity {
         updateRow(notificationRow, notificationAuthorized && health.notificationConnected, notificationAuthorized ? "接続確認中" : "設定が必要");
         updateRow(realtimeRow, health.realtimeConnected, health.realtimeConnected ? "正常" : "再接続中");
         updateRow(batteryRow, batteryProtected, batteryProtected ? "制限なし" : "解除が必要");
+        updateOtaStatus();
 
         if (health.lastOrderCode.isEmpty()) {
             recentOrder.setText("最近の注文：まだありません");
@@ -340,6 +359,52 @@ public class BridgeActivity extends Activity {
             batteryProtected,
             configured
         );
+    }
+
+    private void updateOtaStatus() {
+        if (updateRow == null || updateButton == null) return;
+        BridgeOtaManager.Snapshot state = BridgeOtaManager.snapshot(this);
+        String current = BridgeStatusReporter.versionName(this);
+        if ("ready".equals(state.status)) {
+            updateRow.setText("Bridge バージョン    △ " + state.versionName + " を更新できます");
+            updateRow.setTextColor(COLOR_ATTENTION);
+            updateButton.setText("Bridge " + state.versionName + " をインストール");
+            updateButton.setVisibility(View.VISIBLE);
+            return;
+        }
+        if ("checking".equals(state.status)) {
+            updateRow.setText("Bridge バージョン    v" + current + " · 更新確認中");
+            updateRow.setTextColor(COLOR_MUTED);
+            updateButton.setVisibility(View.GONE);
+            return;
+        }
+        if ("downloading".equals(state.status)) {
+            updateRow.setText("Bridge バージョン    v" + current + " · " + state.versionName + " をダウンロード中");
+            updateRow.setTextColor(COLOR_ATTENTION);
+            updateButton.setVisibility(View.GONE);
+            return;
+        }
+        if ("error".equals(state.status)) {
+            updateRow.setText("Bridge バージョン    △ 更新確認に失敗");
+            updateRow.setTextColor(COLOR_ATTENTION);
+            updateButton.setText("もう一度確認");
+            updateButton.setVisibility(View.VISIBLE);
+            return;
+        }
+        updateRow.setText("Bridge バージョン    ✓ v" + current + " は最新です");
+        updateRow.setTextColor(COLOR_INK);
+        updateButton.setText("更新を確認");
+        updateButton.setVisibility(View.VISIBLE);
+    }
+
+    private void handleUpdateAction() {
+        BridgeOtaManager.Snapshot state = BridgeOtaManager.snapshot(this);
+        if ("ready".equals(state.status)) {
+            BridgeOtaManager.requestInstall(this);
+            return;
+        }
+        BridgeOtaManager.checkForUpdate(this, true);
+        Toast.makeText(this, "Bridge の更新を確認しています", Toast.LENGTH_SHORT).show();
     }
 
     private void updateRepairButton(

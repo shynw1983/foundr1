@@ -65,6 +65,13 @@ public class BridgeForegroundService extends Service {
             handler.postDelayed(this, 5000L);
         }
     };
+    private final Runnable updateCheck = new Runnable() {
+        @Override
+        public void run() {
+            BridgeOtaManager.checkForUpdate(BridgeForegroundService.this, false);
+            handler.postDelayed(this, 6L * 60L * 60L * 1000L);
+        }
+    };
     @Override
     public void onCreate() {
         super.onCreate();
@@ -83,6 +90,7 @@ public class BridgeForegroundService extends Service {
         handler.post(healthRefresh);
         handler.post(recoveryWatchdog);
         handler.postDelayed(platformForegroundWatchdog, 5000L);
+        handler.postDelayed(updateCheck, 15_000L);
     }
 
     @Override
@@ -98,6 +106,7 @@ public class BridgeForegroundService extends Service {
         handler.removeCallbacks(healthRefresh);
         handler.removeCallbacks(recoveryWatchdog);
         handler.removeCallbacks(platformForegroundWatchdog);
+        handler.removeCallbacks(updateCheck);
         stopSelf(startId);
     }
 
@@ -106,6 +115,7 @@ public class BridgeForegroundService extends Service {
         handler.removeCallbacks(healthRefresh);
         handler.removeCallbacks(recoveryWatchdog);
         handler.removeCallbacks(platformForegroundWatchdog);
+        handler.removeCallbacks(updateCheck);
         if (healthReceiverRegistered) {
             try { unregisterReceiver(healthReceiver); } catch (Exception ignored) {}
             healthReceiverRegistered = false;
