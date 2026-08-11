@@ -159,7 +159,7 @@ public class BridgeForegroundService extends Service {
         HealthResult health = currentHealth(manager);
         boolean healthy = "healthy".equals(health.level);
         String detail = healthy
-            ? "Uber Eats の読み取りと Foundr1 OS への接続は正常です"
+            ? "注文アプリの読み取りと Foundr1 OS への接続は正常です"
             : health.problem;
         manager.notify(NOTIFICATION_ID, buildStatusNotification(health.level, detail));
 
@@ -173,8 +173,8 @@ public class BridgeForegroundService extends Service {
 
     private HealthResult currentHealth(NotificationManager manager) {
         if (!manager.areNotificationsEnabled()) return HealthResult.error("Bridge の通知が許可されていません");
-        if (!isNotificationListenerEnabled()) return HealthResult.error("Uber Eats の通知アクセスが無効です");
-        if (!isAccessibilityServiceEnabled()) return HealthResult.error("Uber Eats の画面読み取りが無効です");
+        if (!isNotificationListenerEnabled()) return HealthResult.error("注文アプリの通知アクセスが無効です");
+        if (!isAccessibilityServiceEnabled()) return HealthResult.error("注文アプリの画面読み取りが無効です");
         if (
             BridgeConfig.endpoint(this).isEmpty()
             || BridgeConfig.token(this).isEmpty()

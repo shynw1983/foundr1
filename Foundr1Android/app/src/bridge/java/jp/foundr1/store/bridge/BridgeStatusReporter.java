@@ -53,8 +53,8 @@ final class BridgeStatusReporter {
     }
 
     static String problem(BridgeHealthState.Snapshot health) {
-        if (!health.accessibilityConnected) return "Uber Eats の画面読み取りが接続されていません";
-        if (!health.notificationConnected) return "Uber Eats の通知読み取りが接続されていません";
+        if (!health.accessibilityConnected) return "注文アプリの画面読み取りが接続されていません";
+        if (!health.notificationConnected) return "注文アプリの通知読み取りが接続されていません";
         if (!health.realtimeConnected) return "Foundr1 OS のリアルタイム接続を確認中です";
         if (health.pendingCount > 0) return "未送信データが " + health.pendingCount + " 件あります";
         if (!health.lastUploadError.isEmpty()) return health.lastUploadError;

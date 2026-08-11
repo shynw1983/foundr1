@@ -8,9 +8,12 @@ import jp.foundr1.store.R;
 final class BridgeConfig {
     static final String PLATFORM_UBER_EATS = "uber_eats";
     static final String PLATFORM_ROCKET_NOW = "rocket_now";
+    static final String PLATFORM_DEMAE_CAN = "demae_can";
+    static final String PLATFORM_ALL = "all";
     static final String PLATFORM_DUAL = "dual";
     static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
     static final String ROCKET_NOW_PACKAGE = "com.cpone.merchant";
+    static final String DEMAE_CAN_PACKAGE = "jp.co.yms.faxreplace.mainunit";
     static final String PREFS = "foundr1_bridge";
     static final String KEY_ENDPOINT = "endpoint";
     static final String KEY_TOKEN = "token";
@@ -33,9 +36,10 @@ final class BridgeConfig {
 
     static String endpoint(Context context, String platform) {
         String configured = endpoint(context);
-        if ("rocket_now".equals(platform)) {
+        if (PLATFORM_ROCKET_NOW.equals(platform))
             return configured.replace("/uber-eats/events", "/rocket-now/events");
-        }
+        if (PLATFORM_DEMAE_CAN.equals(platform))
+            return configured.replace("/uber-eats/events", "/demae-can/events");
         return configured;
     }
 
@@ -60,7 +64,9 @@ final class BridgeConfig {
 
     static String primaryPlatform(Context context) {
         String mode = platformMode(context);
-        if (PLATFORM_UBER_EATS.equals(mode) || PLATFORM_ROCKET_NOW.equals(mode)) return mode;
+        if (PLATFORM_UBER_EATS.equals(mode)
+            || PLATFORM_ROCKET_NOW.equals(mode)
+            || PLATFORM_DEMAE_CAN.equals(mode)) return mode;
         return normalizePrimaryPlatform(
             prefs(context).getString(KEY_PRIMARY_PLATFORM, PLATFORM_UBER_EATS)
         );
@@ -68,7 +74,7 @@ final class BridgeConfig {
 
     static boolean supportsPlatform(Context context, String platform) {
         String mode = platformMode(context);
-        return PLATFORM_DUAL.equals(mode) || mode.equals(platform);
+        return PLATFORM_ALL.equals(mode) || mode.equals(platform);
     }
 
     static boolean supportsPackage(Context context, String packageName) {
@@ -78,27 +84,42 @@ final class BridgeConfig {
         if (ROCKET_NOW_PACKAGE.equals(packageName)) {
             return supportsPlatform(context, PLATFORM_ROCKET_NOW);
         }
+        if (DEMAE_CAN_PACKAGE.equals(packageName)) {
+            return supportsPlatform(context, PLATFORM_DEMAE_CAN);
+        }
         return false;
     }
 
     static String packageForPlatform(String platform) {
-        return PLATFORM_ROCKET_NOW.equals(platform) ? ROCKET_NOW_PACKAGE : UBER_ORDERS_PACKAGE;
+        if (PLATFORM_ROCKET_NOW.equals(platform)) return ROCKET_NOW_PACKAGE;
+        if (PLATFORM_DEMAE_CAN.equals(platform)) return DEMAE_CAN_PACKAGE;
+        return UBER_ORDERS_PACKAGE;
     }
 
     static String platformSummary(Context context) {
         String mode = platformMode(context);
         if (PLATFORM_UBER_EATS.equals(mode)) return "Uber Eats 専用";
         if (PLATFORM_ROCKET_NOW.equals(mode)) return "Rocket Now 専用";
-        return "両方 · 主画面 "
-            + (PLATFORM_ROCKET_NOW.equals(primaryPlatform(context)) ? "Rocket Now" : "Uber Eats");
+        if (PLATFORM_DEMAE_CAN.equals(mode)) return "出前館 専用";
+        return "3サービス · 主画面 " + platformLabel(primaryPlatform(context));
     }
 
     static String normalizePlatformMode(String value) {
-        if (PLATFORM_UBER_EATS.equals(value) || PLATFORM_ROCKET_NOW.equals(value)) return value;
-        return PLATFORM_DUAL;
+        if (PLATFORM_UBER_EATS.equals(value)
+            || PLATFORM_ROCKET_NOW.equals(value)
+            || PLATFORM_DEMAE_CAN.equals(value)) return value;
+        if (PLATFORM_DUAL.equals(value) || PLATFORM_ALL.equals(value)) return PLATFORM_ALL;
+        return PLATFORM_ALL;
     }
 
     static String normalizePrimaryPlatform(String value) {
-        return PLATFORM_ROCKET_NOW.equals(value) ? PLATFORM_ROCKET_NOW : PLATFORM_UBER_EATS;
+        if (PLATFORM_ROCKET_NOW.equals(value) || PLATFORM_DEMAE_CAN.equals(value)) return value;
+        return PLATFORM_UBER_EATS;
+    }
+
+    static String platformLabel(String platform) {
+        if (PLATFORM_ROCKET_NOW.equals(platform)) return "Rocket Now";
+        if (PLATFORM_DEMAE_CAN.equals(platform)) return "出前館";
+        return "Uber Eats";
     }
 }

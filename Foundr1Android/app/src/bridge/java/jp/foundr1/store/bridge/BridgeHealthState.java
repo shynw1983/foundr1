@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 
 final class BridgeHealthState {
     static final String ACTION_CHANGED = "jp.foundr1.bridge.HEALTH_CHANGED";
+    static final String ACTION_ACCESSIBILITY_PING = "jp.foundr1.bridge.ACCESSIBILITY_PING";
     private static final String PREFS = "foundr1_bridge_health";
     private static final String KEY_ACCESSIBILITY_CONNECTED = "accessibility_connected";
     private static final String KEY_NOTIFICATION_CONNECTED = "notification_connected";
@@ -28,6 +29,11 @@ final class BridgeHealthState {
 
     static void setAccessibilityConnected(Context context, boolean connected) {
         setBoolean(context, KEY_ACCESSIBILITY_CONNECTED, connected);
+    }
+
+    static void confirmAccessibilityConnected(Context context) {
+        prefs(context).edit().putBoolean(KEY_ACCESSIBILITY_CONNECTED, true).commit();
+        notifyChanged(context);
     }
 
     static void setNotificationConnected(Context context, boolean connected) {

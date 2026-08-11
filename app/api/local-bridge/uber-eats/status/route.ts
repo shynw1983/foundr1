@@ -16,7 +16,13 @@ export async function POST(request: Request) {
   }
   const source = body as Record<string, unknown>;
   const storeId = cleanText(source.storeId, 80);
-  const authorization = await authorizeLocalBridge(request, storeId);
+  let authorization = await authorizeLocalBridge(request, storeId);
+  if (!authorization.authorized) {
+    authorization = await authorizeLocalBridge(request, storeId, "rocket_now");
+  }
+  if (!authorization.authorized) {
+    authorization = await authorizeLocalBridge(request, storeId, "demae_can");
+  }
   if (!authorization.authorized || !storeId) {
     return Response.json({ error: "Unauthorized bridge token." }, { status: 401 });
   }
@@ -29,11 +35,11 @@ export async function POST(request: Request) {
     lastOrderCode: cleanText(source.lastOrderCode, 40),
     lastOrderAt: cleanText(source.lastOrderAt, 80),
     versionName: cleanText(source.versionName, 40),
-    platformMode: ["uber_eats", "rocket_now", "dual"].includes(cleanText(source.platformMode, 20))
+    platformMode: ["uber_eats", "rocket_now", "demae_can", "all", "dual"].includes(cleanText(source.platformMode, 20))
       ? cleanText(source.platformMode, 20)
       : "dual",
-    primaryPlatform: cleanText(source.primaryPlatform, 20) === "rocket_now"
-      ? "rocket_now"
+    primaryPlatform: ["rocket_now", "demae_can"].includes(cleanText(source.primaryPlatform, 20))
+      ? cleanText(source.primaryPlatform, 20)
       : "uber_eats",
     realtimeConnected: source.realtimeConnected === true,
     accessibilityConnected: source.accessibilityConnected === true,

@@ -13,7 +13,7 @@ export const salesSourceDefinitions: SalesSourceDefinition[] = [
   { platform: "web_reservation", label: "Web予約", sourceType: "web", importSupported: false },
   { platform: "uber_eats", label: "Uber Eats", sourceType: "delivery", importSupported: true },
   { platform: "rocket_now", label: "Rocket Now", sourceType: "delivery", importSupported: true },
-  { platform: "demae_can", label: "出前館", sourceType: "delivery", importSupported: false }
+  { platform: "demae_can", label: "出前館", sourceType: "delivery", importSupported: true }
 ];
 
 export function getSalesSourceDefinition(platform: string) {

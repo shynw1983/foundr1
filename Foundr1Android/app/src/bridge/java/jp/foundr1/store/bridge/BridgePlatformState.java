@@ -40,7 +40,7 @@ final class BridgePlatformState {
     }
 
     static void requestPrimaryReturn(Context context) {
-        if (!BridgeConfig.PLATFORM_DUAL.equals(BridgeConfig.platformMode(context))) return;
+        if (!BridgeConfig.PLATFORM_ALL.equals(BridgeConfig.platformMode(context))) return;
         preferences(context).edit()
             .putLong(KEY_RETURN_PRIMARY_AFTER, System.currentTimeMillis() + 3_000L)
             .apply();

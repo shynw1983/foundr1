@@ -15,7 +15,13 @@ async function authorize(request: Request) {
   const url = new URL(request.url);
   const storeId = cleanText(url.searchParams.get("storeId"), 80);
   const deviceName = cleanText(url.searchParams.get("deviceName"), 160) || "Uber Bridge";
-  const authorization = await authorizeLocalBridge(request, storeId);
+  let authorization = await authorizeLocalBridge(request, storeId);
+  if (!authorization.authorized) {
+    authorization = await authorizeLocalBridge(request, storeId, "rocket_now");
+  }
+  if (!authorization.authorized) {
+    authorization = await authorizeLocalBridge(request, storeId, "demae_can");
+  }
   return { storeId, deviceName, ...authorization };
 }
 

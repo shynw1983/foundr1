@@ -10,6 +10,7 @@
     <queries>
         <package android:name="com.uber.restaurants" />
         <package android:name="com.cpone.merchant" />
+        <package android:name="jp.co.yms.faxreplace.mainunit" />
     </queries>
 
     <application

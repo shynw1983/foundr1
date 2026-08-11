@@ -9,6 +9,7 @@ import org.json.JSONObject;
 public class UberNotificationListenerService extends NotificationListenerService {
     private static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
     private static final String ROCKET_NOW_PACKAGE = "com.cpone.merchant";
+    private static final String DEMAE_CAN_PACKAGE = "jp.co.yms.faxreplace.mainunit";
     private static long lastRebindRequestAt = 0L;
 
     static synchronized void requestConnection(android.content.Context context) {
@@ -51,9 +52,10 @@ public class UberNotificationListenerService extends NotificationListenerService
         String packageName = sbn == null ? "" : sbn.getPackageName();
         boolean isUber = looksLikeUber(packageName);
         boolean isRocketNow = ROCKET_NOW_PACKAGE.equals(packageName);
-        if (!isUber && !isRocketNow) return;
-        String platform = isRocketNow
-            ? BridgeConfig.PLATFORM_ROCKET_NOW
+        boolean isDemaeCan = DEMAE_CAN_PACKAGE.equals(packageName);
+        if (!isUber && !isRocketNow && !isDemaeCan) return;
+        String platform = isRocketNow ? BridgeConfig.PLATFORM_ROCKET_NOW
+            : isDemaeCan ? BridgeConfig.PLATFORM_DEMAE_CAN
             : BridgeConfig.PLATFORM_UBER_EATS;
         if (!BridgeConfig.supportsPlatform(this, platform)) return;
         Notification notification = sbn.getNotification();
@@ -72,7 +74,7 @@ public class UberNotificationListenerService extends NotificationListenerService
                 bigText,
                 notification
             );
-        } else if (looksLikeRocketOrderNotification(title, text, bigText)) {
+        } else if (looksLikeDeliveryOrderNotification(title, text, bigText)) {
             try {
                 if (notification.contentIntent != null) notification.contentIntent.send();
             } catch (Exception ignored) {
@@ -106,10 +108,11 @@ public class UberNotificationListenerService extends NotificationListenerService
         return UBER_ORDERS_PACKAGE.equals(packageName);
     }
 
-    private boolean looksLikeRocketOrderNotification(String title, String text, String bigText) {
+    private boolean looksLikeDeliveryOrderNotification(String title, String text, String bigText) {
         String combined = (title + "\n" + text + "\n" + bigText).toLowerCase();
         return combined.contains("注文")
             || combined.contains("order")
-            || combined.contains("rocket nowから");
+            || combined.contains("rocket nowから")
+            || combined.contains("出前館");
     }
 }

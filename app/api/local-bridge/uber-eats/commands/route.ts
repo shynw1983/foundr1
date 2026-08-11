@@ -19,11 +19,14 @@ async function authorize(request: Request) {
   if (!authorization.authorized) {
     authorization = await authorizeLocalBridge(request, storeId, "rocket_now");
   }
+  if (!authorization.authorized) {
+    authorization = await authorizeLocalBridge(request, storeId, "demae_can");
+  }
   const platformMode = cleanText(params.get("platformMode"), 20);
   return {
     storeId,
-    supportsUber: platformMode !== "rocket_now",
-    supportsRocket: platformMode === "rocket_now" || platformMode === "dual",
+    supportsUber: ["", "uber_eats", "dual", "all"].includes(platformMode),
+    supportsRocket: ["rocket_now", "dual", "all"].includes(platformMode),
     ...authorization
   };
 }

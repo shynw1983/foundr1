@@ -17,6 +17,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.text.InputType;
 import android.text.TextUtils;
@@ -49,6 +51,7 @@ public class BridgeActivity extends Activity {
     private static final int COLOR_HEALTHY = Color.rgb(24, 112, 74);
     private static final int COLOR_ATTENTION = Color.rgb(183, 121, 31);
     private static final int COLOR_ERROR = Color.rgb(190, 24, 45);
+    private final Handler statusHandler = new Handler(Looper.getMainLooper());
 
     private EditText endpointInput;
     private EditText tokenInput;
@@ -75,6 +78,7 @@ public class BridgeActivity extends Activity {
     private Button selfTestButton;
     private Button openUberButton;
     private Button openRocketButton;
+    private Button openDemaeButton;
     private Button updateButton;
     private boolean healthReceiverRegistered = false;
     private final BroadcastReceiver healthReceiver = new BroadcastReceiver() {
@@ -122,6 +126,9 @@ public class BridgeActivity extends Activity {
     protected void onResume() {
         super.onResume();
         BridgePlatformState.pauseForegroundGuard(this, 2 * 60 * 1000L);
+        sendBroadcast(new Intent(BridgeHealthState.ACTION_ACCESSIBILITY_PING).setPackage(getPackageName()));
+        statusHandler.removeCallbacksAndMessages(null);
+        statusHandler.postDelayed(this::updateStatus, 500L);
         BridgeServiceStarter.ensureStarted(this, "activity_resume");
         BridgeRealtimeClient.start(this);
         BridgeOtaManager.checkForUpdate(this, false);
@@ -130,6 +137,7 @@ public class BridgeActivity extends Activity {
 
     @Override
     protected void onStop() {
+        statusHandler.removeCallbacksAndMessages(null);
         if (healthReceiverRegistered) {
             try { unregisterReceiver(healthReceiver); } catch (Exception ignored) {}
             try { unregisterReceiver(otaReceiver); } catch (Exception ignored) {}
@@ -159,7 +167,7 @@ public class BridgeActivity extends Activity {
         headingParams.leftMargin = dp(12);
         header.addView(heading, headingParams);
         heading.addView(text("Foundr1 Bridge", 23, COLOR_INK, Typeface.BOLD));
-        heading.addView(text("Uber Eats + Rocket Now  ·  v" + BridgeStatusReporter.versionName(this), 13, COLOR_MUTED, Typeface.NORMAL));
+        heading.addView(text("Uber Eats + Rocket Now + 出前館  ·  v" + BridgeStatusReporter.versionName(this), 13, COLOR_MUTED, Typeface.NORMAL));
         page.addView(header);
 
         statusCard = new LinearLayout(this);
@@ -217,6 +225,7 @@ public class BridgeActivity extends Activity {
 
         openUberButton = addPrimaryButton(page, "Uber Orders を開く", view -> openUberOrders());
         openRocketButton = addSecondaryButton(page, "Rocket Now を開く", view -> openRocketNow());
+        openDemaeButton = addSecondaryButton(page, "出前館を開く", view -> openDemaeCan());
         selfTestButton = addSecondaryButton(page, "接続を診断", view -> runSelfTest());
 
         Button advancedButton = addTextButton(page, "管理者設定を表示", null);
@@ -251,14 +260,14 @@ public class BridgeActivity extends Activity {
         platformModeInput = addSpinner(
             layout,
             "担当プラットフォーム",
-            new String[] { "Uber Eats 専用", "Rocket Now 専用", "Uber Eats + Rocket Now" },
+            new String[] { "Uber Eats 専用", "Rocket Now 専用", "出前館 専用", "3サービスすべて" },
             platformModePosition(BridgeConfig.platformMode(this))
         );
         primaryPlatformInput = addSpinner(
             layout,
-            "両方を使う場合の主画面",
-            new String[] { "Uber Eats", "Rocket Now" },
-            BridgeConfig.PLATFORM_ROCKET_NOW.equals(BridgeConfig.primaryPlatform(this)) ? 1 : 0
+            "複数サービスを使う場合の主画面",
+            new String[] { "Uber Eats", "Rocket Now", "出前館" },
+            primaryPlatformPosition(BridgeConfig.primaryPlatform(this))
         );
         addPrimaryButton(layout, "設定を保存して再接続", view -> {
             saveConfig();
@@ -299,8 +308,14 @@ public class BridgeActivity extends Activity {
             level = "error";
             problem = "店舗の接続設定が未完了です";
         } else {
-            level = BridgeStatusReporter.healthLevel(health);
-            problem = BridgeStatusReporter.problem(health);
+            level = !health.realtimeConnected || health.pendingCount > 0 || !health.lastUploadError.isEmpty()
+                ? "attention"
+                : "healthy";
+            problem = !health.realtimeConnected
+                ? "Foundr1 OS のリアルタイム接続を確認中です"
+                : health.pendingCount > 0
+                    ? "未送信データが " + health.pendingCount + " 件あります"
+                    : health.lastUploadError;
         }
 
         int accent = "healthy".equals(level) ? COLOR_HEALTHY : "attention".equals(level) ? COLOR_ATTENTION : COLOR_ERROR;
@@ -316,10 +331,10 @@ public class BridgeActivity extends Activity {
         getWindow().setStatusBarColor(accent);
         getWindow().setNavigationBarColor(accent);
 
-        updateStage(uberStage, accessibilityAuthorized && health.accessibilityConnected);
+        updateStage(uberStage, accessibilityAuthorized);
         updateStage(bridgeStage, notificationAuthorized && health.notificationConnected && health.pendingCount == 0);
         updateStage(osStage, health.realtimeConnected);
-        updateRow(accessibilityRow, accessibilityAuthorized && health.accessibilityConnected, accessibilityAuthorized ? "接続確認中" : "設定が必要");
+        updateRow(accessibilityRow, accessibilityAuthorized, "設定が必要");
         updateRow(notificationRow, notificationAuthorized && health.notificationConnected, notificationAuthorized ? "接続確認中" : "設定が必要");
         updateRow(realtimeRow, health.realtimeConnected, health.realtimeConnected ? "正常" : "再接続中");
         updateRow(batteryRow, batteryProtected, batteryProtected ? "制限なし" : "解除が必要");
@@ -345,6 +360,13 @@ public class BridgeActivity extends Activity {
         if (openRocketButton != null) {
             openRocketButton.setVisibility(
                 BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_ROCKET_NOW)
+                    ? View.VISIBLE
+                    : View.GONE
+            );
+        }
+        if (openDemaeButton != null) {
+            openDemaeButton.setVisibility(
+                BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_DEMAE_CAN)
                     ? View.VISIBLE
                     : View.GONE
             );
@@ -673,10 +695,14 @@ public class BridgeActivity extends Activity {
             ? BridgeConfig.PLATFORM_UBER_EATS
             : platformModeInput.getSelectedItemPosition() == 1
                 ? BridgeConfig.PLATFORM_ROCKET_NOW
-                : BridgeConfig.PLATFORM_DUAL;
+                : platformModeInput.getSelectedItemPosition() == 2
+                    ? BridgeConfig.PLATFORM_DEMAE_CAN
+                    : BridgeConfig.PLATFORM_ALL;
         String primaryPlatform = primaryPlatformInput.getSelectedItemPosition() == 1
             ? BridgeConfig.PLATFORM_ROCKET_NOW
-            : BridgeConfig.PLATFORM_UBER_EATS;
+            : primaryPlatformInput.getSelectedItemPosition() == 2
+                ? BridgeConfig.PLATFORM_DEMAE_CAN
+                : BridgeConfig.PLATFORM_UBER_EATS;
         editor.putString(BridgeConfig.KEY_PLATFORM_MODE, platformMode);
         editor.putString(BridgeConfig.KEY_PRIMARY_PLATFORM, primaryPlatform);
         editor.apply();
@@ -686,7 +712,14 @@ public class BridgeActivity extends Activity {
     private int platformModePosition(String mode) {
         if (BridgeConfig.PLATFORM_UBER_EATS.equals(mode)) return 0;
         if (BridgeConfig.PLATFORM_ROCKET_NOW.equals(mode)) return 1;
-        return 2;
+        if (BridgeConfig.PLATFORM_DEMAE_CAN.equals(mode)) return 2;
+        return 3;
+    }
+
+    private int primaryPlatformPosition(String platform) {
+        if (BridgeConfig.PLATFORM_ROCKET_NOW.equals(platform)) return 1;
+        if (BridgeConfig.PLATFORM_DEMAE_CAN.equals(platform)) return 2;
+        return 0;
     }
 
     private void openUberOrders() {
@@ -695,6 +728,10 @@ public class BridgeActivity extends Activity {
 
     private void openRocketNow() {
         openOrderApp("Rocket Now", "com.cpone.merchant");
+    }
+
+    private void openDemaeCan() {
+        openOrderApp("出前館 Order", "jp.co.yms.faxreplace.mainunit");
     }
 
     private void openOrderApp(String label, String packageName) {

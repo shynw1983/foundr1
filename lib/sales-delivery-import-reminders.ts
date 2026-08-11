@@ -136,7 +136,7 @@ export async function notifyOwnersForDueDeliveryImports() {
       brandName: String(row.brandName ?? ""),
       sourceType: String(row.sourceType),
       sourcePlatform: String(row.sourcePlatform),
-      importSupported: ["uber_eats", "rocket_now"].includes(String(row.sourcePlatform))
+      importSupported: ["uber_eats", "rocket_now", "demae_can"].includes(String(row.sourcePlatform))
     });
     sourcesByStore.set(storeId, entry);
   }

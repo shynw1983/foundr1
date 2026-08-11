@@ -31,6 +31,7 @@ public class UberAccessibilityService extends AccessibilityService {
     private static final String TAG = "Foundr1BridgeRecovery";
     private static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
     private static final String ROCKET_NOW_PACKAGE = "com.cpone.merchant";
+    private static final String DEMAE_CAN_PACKAGE = "jp.co.yms.faxreplace.mainunit";
     private static final long COMMAND_APP_RELAUNCH_COOLDOWN_MS = 15_000L;
     private static final long COMMAND_UNKNOWN_PAGE_GRACE_MS = 10_000L;
     private static final long ROCKET_INVENTORY_LOAD_TIMEOUT_MS = 300_000L;
@@ -65,6 +66,15 @@ public class UberAccessibilityService extends AccessibilityService {
     private final Runnable rocketUploadRunnable = () -> runGuarded(
         "rocket_order_upload",
         this::uploadRocketOrder
+    );
+    private final Map<String, JSONObject> demaeAccumulatedNodes = new LinkedHashMap<>();
+    private String demaeActiveOrderCode = "";
+    private String demaeLastUploadedSignature = "";
+    private long demaeLastUploadedAt = 0L;
+    private int demaeScrollSteps = 0;
+    private final Runnable demaeUploadRunnable = () -> runGuarded(
+        "demae_order_upload",
+        this::uploadDemaeOrder
     );
     private String activeCommandId = "";
     private int commandAttempts = 0;
@@ -139,6 +149,8 @@ public class UberAccessibilityService extends AccessibilityService {
                 } else if (BridgeHealthState.ACTION_CHANGED.equals(intent.getAction())) {
                     if (overlayController != null) overlayController.updateHealth();
                     refreshCommandFallbackPolling();
+                } else if (BridgeHealthState.ACTION_ACCESSIBILITY_PING.equals(intent.getAction())) {
+                    BridgeHealthState.confirmAccessibilityConnected(UberAccessibilityService.this);
                 }
             }
         }
@@ -206,6 +218,11 @@ public class UberAccessibilityService extends AccessibilityService {
         if (looksLikeRocketNow(packageName)) {
             if (!BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_ROCKET_NOW)) return;
             handleRocketNowAccessibilityEvent(packageName);
+            return;
+        }
+        if (looksLikeDemaeCan(packageName)) {
+            if (!BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_DEMAE_CAN)) return;
+            handleDemaeCanAccessibilityEvent(packageName);
             return;
         }
         if (!looksLikeUber(packageName)) return;
@@ -547,6 +564,7 @@ public class UberAccessibilityService extends AccessibilityService {
             filter.addAction(UberRecoveryState.ACTION_RECOVERY_REQUESTED);
             filter.addAction(BridgeCommandState.ACTION_COMMAND_AVAILABLE);
             filter.addAction(BridgeHealthState.ACTION_CHANGED);
+            filter.addAction(BridgeHealthState.ACTION_ACCESSIBILITY_PING);
             if (Build.VERSION.SDK_INT >= 33) {
                 registerReceiver(recoveryReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
             } else {
@@ -587,6 +605,7 @@ public class UberAccessibilityService extends AccessibilityService {
         handler.removeCallbacks(commandPollRunnable);
         handler.removeCallbacks(inventoryCaptureRunnable);
         handler.removeCallbacks(rocketUploadRunnable);
+        handler.removeCallbacks(demaeUploadRunnable);
         if (recoveryReceiverRegistered) {
             try {
                 unregisterReceiver(recoveryReceiver);
@@ -3226,8 +3245,12 @@ public class UberAccessibilityService extends AccessibilityService {
         return ROCKET_NOW_PACKAGE.equals(packageName);
     }
 
+    private boolean looksLikeDemaeCan(String packageName) {
+        return DEMAE_CAN_PACKAGE.equals(packageName);
+    }
+
     private boolean looksLikeOrderApp(String packageName) {
-        return looksLikeUber(packageName) || looksLikeRocketNow(packageName);
+        return looksLikeUber(packageName) || looksLikeRocketNow(packageName) || looksLikeDemaeCan(packageName);
     }
 
     private void handleRocketNowAccessibilityEvent(String packageName) {
@@ -3357,5 +3380,113 @@ public class UberAccessibilityService extends AccessibilityService {
             if (scrolled) return true;
         }
         return false;
+    }
+
+    private void handleDemaeCanAccessibilityEvent(String packageName) {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null || !looksLikeDemaeCan(value(root.getPackageName()))) {
+            if (root != null) root.recycle();
+            return;
+        }
+        StringBuilder builder = new StringBuilder();
+        JSONArray nodes = new JSONArray();
+        collectNodes(root, "0", builder, nodes, new HashSet<>());
+        root.recycle();
+        String orderCode = extractDemaeOrderCode(nodes);
+        if (orderCode.isEmpty() || !containsDemaeOrderDetails(nodes)) return;
+        if (!orderCode.equals(demaeActiveOrderCode)) {
+            demaeActiveOrderCode = orderCode;
+            demaeAccumulatedNodes.clear();
+            demaeScrollSteps = 0;
+            demaeLastUploadedSignature = "";
+        }
+        mergeDemaeNodes(nodes);
+        handler.removeCallbacks(demaeUploadRunnable);
+        handler.postDelayed(demaeUploadRunnable, 1200L);
+    }
+
+    private boolean containsDemaeOrderDetails(JSONArray nodes) {
+        StringBuilder combined = new StringBuilder();
+        for (int index = 0; index < nodes.length(); index += 1) {
+            JSONObject node = nodes.optJSONObject(index);
+            if (node == null) continue;
+            combined.append(node.optString("text"));
+            combined.append('\n');
+            combined.append(node.optString("contentDescription"));
+            combined.append('\n');
+        }
+        String value = combined.toString();
+        return value.contains("注文情報")
+            && value.contains("注文詳細")
+            && value.contains("注文番号");
+    }
+
+    private String extractDemaeOrderCode(JSONArray nodes) {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+            "注文番号\\s*[：:]?\\s*([0-9]{8,16})"
+        );
+        for (int index = 0; index < nodes.length(); index += 1) {
+            JSONObject node = nodes.optJSONObject(index);
+            if (node == null) continue;
+            String candidate = node.optString("text") + "\n" + node.optString("contentDescription");
+            java.util.regex.Matcher matcher = pattern.matcher(candidate);
+            if (matcher.find()) return matcher.group(1);
+        }
+        return "";
+    }
+
+    private void mergeDemaeNodes(JSONArray nodes) {
+        for (int index = 0; index < nodes.length(); index += 1) {
+            JSONObject node = nodes.optJSONObject(index);
+            if (node == null) continue;
+            String signature = node.optString("path")
+                + "|" + node.optString("text")
+                + "|" + node.optString("contentDescription");
+            demaeAccumulatedNodes.put(signature, node);
+        }
+    }
+
+    private JSONArray demaeAccumulatedNodeArray() {
+        JSONArray result = new JSONArray();
+        for (JSONObject node : demaeAccumulatedNodes.values()) result.put(node);
+        return result;
+    }
+
+    private void uploadDemaeOrder() {
+        if (demaeActiveOrderCode.isEmpty() || demaeAccumulatedNodes.isEmpty()) return;
+        JSONArray nodes = demaeAccumulatedNodeArray();
+        String signature = demaeActiveOrderCode + ":" + nodes.length();
+        long now = System.currentTimeMillis();
+        if (!signature.equals(demaeLastUploadedSignature) || now - demaeLastUploadedAt > 30000L) {
+            try {
+                JSONObject payload = new JSONObject();
+                payload.put("orderCode", demaeActiveOrderCode);
+                payload.put("nodes", nodes);
+                payload.put("nodeCount", nodes.length());
+                BridgeUploader.upload(
+                    this,
+                    BridgeConfig.PLATFORM_DEMAE_CAN,
+                    "accessibility_order",
+                    DEMAE_CAN_PACKAGE,
+                    payload
+                );
+                demaeLastUploadedSignature = signature;
+                demaeLastUploadedAt = now;
+            } catch (Exception ignored) {
+            }
+        }
+        if (demaeScrollSteps >= 6) return;
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null || !looksLikeDemaeCan(value(root.getPackageName()))) {
+            if (root != null) root.recycle();
+            return;
+        }
+        boolean scrolled = scrollRocketOrderForward(root);
+        root.recycle();
+        if (scrolled) {
+            demaeScrollSteps += 1;
+            handler.removeCallbacks(demaeUploadRunnable);
+            handler.postDelayed(demaeUploadRunnable, 900L);
+        }
     }
 }
