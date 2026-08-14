@@ -73,8 +73,8 @@ async function readRows(page, targets) {
   }, requested);
 }
 
-async function waitForRows(page, labels, hidden) {
-  await page.waitForFunction(({ wantedLabels, expectedHidden }) => {
+async function waitForRows(page, labels, hidden, targetKind) {
+  const verify = async () => page.waitForFunction(({ wantedLabels, expectedHidden }) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
     return wantedLabels.every((label) => {
@@ -83,6 +83,15 @@ async function waitForRows(page, labels, hidden) {
       return Boolean(row) && normalize(row.textContent).includes("非表示") === expectedHidden;
     });
   }, { timeout: 15000 }, { wantedLabels: labels, expectedHidden: hidden });
+
+  try {
+    await verify();
+  } catch {
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.waitForNetworkIdle({ idleTime: 500, timeout: 8000 }).catch(() => undefined);
+    await waitForInventoryRows(page, targetKind);
+    await verify();
+  }
 }
 
 export class RocketNowAdapter {
@@ -124,7 +133,7 @@ export class RocketNowAdapter {
           return true;
         }, item.matches[0].checkboxId);
         if (!clicked) throw new Error(`rocket_now_unhide_button_missing:${item.label}`);
-        await waitForRows(page, [item.label], false);
+        await waitForRows(page, [item.label], false, targetKind);
       }
       return { outcome: "applied", changed: changing.length, desiredHidden };
     }
@@ -160,7 +169,7 @@ export class RocketNowAdapter {
       return true;
     });
     if (!applied) throw new Error("rocket_now_apply_button_missing");
-    await waitForRows(page, changing.map((item) => item.label), true);
+    await waitForRows(page, changing.map((item) => item.label), true, targetKind);
     return { outcome: "applied", changed: changing.length, desiredHidden };
   }
 }
