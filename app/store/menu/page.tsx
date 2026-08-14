@@ -2,6 +2,7 @@
 
 import { CheckCircle2, RotateCcw, Search, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { clearStoredStoreSelection, getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
@@ -47,7 +48,9 @@ type StoreMenuItem = {
   brandId: string;
   brandName: string;
   name: string;
+  displayNames: Record<string, string>;
   promotionPrefix: string;
+  promotionPrefixDisplayNames: Record<string, string>;
   category: string;
   websitePresentation: {
     nameOverride?: string;
@@ -72,8 +75,10 @@ type StoreMenuOption = {
   brandName: string;
   groupId: string;
   groupName: string;
+  groupDisplayNames: Record<string, string>;
   groupKey: string;
   name: string;
+  displayNames: Record<string, string>;
   priceDelta: number | null;
   isAvailable: boolean;
   statusNote: string;
@@ -94,12 +99,24 @@ function stripEmoji(value: string) {
     .trim();
 }
 
-function itemName(item: StoreMenuItem) {
+type StoreMenuLanguage = "ja" | "zh-Hans" | "zh-Hant";
+
+function localizedMenuName(name: string, displayNames: Record<string, string> | undefined, language: StoreMenuLanguage) {
+  if (language === "ja") return name;
+  const languageKey = language === "zh-Hans" ? "zh" : "zh-Hant";
+  return String(displayNames?.[languageKey] || displayNames?.en || name).trim();
+}
+
+function itemName(item: StoreMenuItem, language: StoreMenuLanguage) {
   const presentation = item.websitePresentation ?? {};
-  const name = presentation.nameOverride?.trim() || item.name;
+  const name = language === "ja"
+    ? presentation.nameOverride?.trim() || item.name
+    : localizedMenuName(item.name, item.displayNames, language);
   const prefix = presentation.showPromotionPrefix === false
     ? ""
-    : presentation.promotionPrefixOverride?.trim() || item.promotionPrefix;
+    : language === "ja"
+      ? presentation.promotionPrefixOverride?.trim() || item.promotionPrefix
+      : localizedMenuName(item.promotionPrefix, item.promotionPrefixDisplayNames, language);
   const value = `${prefix}${name}`;
   return presentation.showEmoji === false ? stripEmoji(value) : value;
 }
@@ -134,6 +151,7 @@ function getCategories(items: StoreMenuItem[], categories: StoreMenuCategory[], 
 }
 
 export default function StoreMenuPage() {
+  const { language } = useOsTranslation();
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [categories, setCategories] = useState<StoreMenuCategory[]>([]);
   const [items, setItems] = useState<StoreMenuItem[]>([]);
@@ -239,10 +257,14 @@ export default function StoreMenuPage() {
     return items.filter((item) => {
       if (selectedBrandId && item.brandId !== selectedBrandId) return false;
       if (selectedCategory !== null && itemCategory(item) !== selectedCategory) return false;
-      if (normalizedQuery && !itemName(item).toLowerCase().includes(normalizedQuery)) return false;
+      if (normalizedQuery && ![
+        itemName(item, language),
+        item.name,
+        ...Object.values(item.displayNames ?? {})
+      ].some((value) => value.toLowerCase().includes(normalizedQuery))) return false;
       return true;
     });
-  }, [items, query, selectedBrandId, selectedCategory]);
+  }, [items, language, query, selectedBrandId, selectedCategory]);
 
   const categoryItems = useMemo(() => items.filter((item) => !selectedBrandId || item.brandId === selectedBrandId), [items, selectedBrandId]);
   const categorySummaries = useMemo(() => getCategories(categoryItems, categories, selectedBrandId), [categories, categoryItems, selectedBrandId]);
@@ -254,10 +276,16 @@ export default function StoreMenuPage() {
     const normalizedQuery = query.trim().toLowerCase();
     return optionItems.filter((option) => (
       !normalizedQuery ||
-      option.name.toLowerCase().includes(normalizedQuery) ||
-      option.groupName.toLowerCase().includes(normalizedQuery)
+      [
+        localizedMenuName(option.name, option.displayNames, language),
+        localizedMenuName(option.groupName, option.groupDisplayNames, language),
+        option.name,
+        option.groupName,
+        ...Object.values(option.displayNames ?? {}),
+        ...Object.values(option.groupDisplayNames ?? {})
+      ].some((value) => value.toLowerCase().includes(normalizedQuery))
     ));
-  }, [optionItems, query]);
+  }, [language, optionItems, query]);
   const isOptionCategory = selectedCategory === optionCategoryKey;
   const showOptionCategory = settings.availability.targets.options && settings.availability.optionDisplayMode === "separate_category";
   const showMixedOptions = settings.availability.targets.options && settings.availability.optionDisplayMode === "mixed";
@@ -481,6 +509,7 @@ export default function StoreMenuPage() {
                   {visibleOptions.map((option) => (
                     <StoreOptionRow
                       option={option}
+                      language={language}
                       savingId={savingId}
                       onSave={saveOption}
                       onStatusNoteChange={(optionId, statusNote) => setOptions((current) => current.map((entry) => (
@@ -504,6 +533,7 @@ export default function StoreMenuPage() {
                       {visibleOptions.map((option) => (
                         <StoreOptionRow
                           option={option}
+                          language={language}
                           savingId={savingId}
                           onSave={saveOption}
                           onStatusNoteChange={(optionId, statusNote) => setOptions((current) => current.map((entry) => (
@@ -521,7 +551,7 @@ export default function StoreMenuPage() {
                       <div className="store-menu-item-main">
                         {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <div className="store-menu-image-empty">No image</div>}
                         <div>
-                          <strong>{itemName(item)}</strong>
+                          <strong data-i18n-ignore>{itemName(item, language)}</strong>
                           <span>{item.brandName} / {itemCategory(item)}</span>
                           <small>
                             {item.priceOverride == null ? `${item.basePrice ?? 0}円` : `${item.priceOverride}円 店舗価格`}
@@ -593,11 +623,13 @@ export default function StoreMenuPage() {
 
 function StoreOptionRow({
   option,
+  language,
   savingId,
   onSave,
   onStatusNoteChange
 }: {
   option: StoreMenuOption;
+  language: StoreMenuLanguage;
   savingId: string;
   onSave: (option: StoreMenuOption, patch: Partial<StoreMenuOption>) => Promise<void>;
   onStatusNoteChange: (optionId: string, statusNote: string) => void;
@@ -607,8 +639,8 @@ function StoreOptionRow({
       <div className="store-menu-item-main">
         <div className="store-menu-image-empty">OP</div>
         <div>
-          <strong>{option.name}</strong>
-          <span>{option.brandName} / {option.groupName}</span>
+          <strong data-i18n-ignore>{localizedMenuName(option.name, option.displayNames, language)}</strong>
+          <span>{option.brandName} / <span data-i18n-ignore>{localizedMenuName(option.groupName, option.groupDisplayNames, language)}</span></span>
           <small>{option.priceDelta ? `${option.priceDelta > 0 ? "+" : ""}${option.priceDelta}円` : "追加料金なし"}</small>
         </div>
       </div>

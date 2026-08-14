@@ -10,7 +10,9 @@ type MenuStoreItem = {
   brandId: string;
   brandName: string;
   name: string;
+  displayNames: Record<string, string>;
   promotionPrefix: string;
+  promotionPrefixDisplayNames: Record<string, string>;
   category: string;
   websitePresentation: {
     nameOverride?: string;
@@ -42,8 +44,10 @@ type MenuStoreOption = {
   brandName: string;
   groupId: string;
   groupName: string;
+  groupDisplayNames: Record<string, string>;
   groupKey: string;
   name: string;
+  displayNames: Record<string, string>;
   priceDelta: number | null;
   isAvailable: boolean;
   statusNote: string;
@@ -100,7 +104,9 @@ export async function GET(request: Request) {
         menu_catalog_items.brand_id::text as "brandId",
         brands.name as "brandName",
         menu_catalog_items.name,
+        coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
         coalesce(menu_catalog_items.promotion_prefix, '') as "promotionPrefix",
+        coalesce(menu_catalog_items.promotion_prefix_display_names, '{}'::jsonb) as "promotionPrefixDisplayNames",
         coalesce(menu_catalog_items.category, '') as category,
         coalesce(menu_catalog_items.variable_schema->'websitePresentation', '{}'::jsonb) as "websitePresentation",
         coalesce(menu_catalog_items.image_url, '') as "imageUrl",
@@ -134,8 +140,10 @@ export async function GET(request: Request) {
         brands.name as "brandName",
         menu_option_groups.id::text as "groupId",
         menu_option_groups.name as "groupName",
+        coalesce(menu_option_groups.display_names, '{}'::jsonb) as "groupDisplayNames",
         menu_option_groups.group_key as "groupKey",
         menu_options.name,
+        coalesce(menu_options.display_names, '{}'::jsonb) as "displayNames",
         menu_options.price_delta::float as "priceDelta",
         coalesce(menu_option_store_settings.is_available, true) as "isAvailable",
         coalesce(menu_option_store_settings.status_note, '') as "statusNote"
