@@ -1,0 +1,25 @@
+const platformLabels = {
+  uber_eats: "Uber",
+  rocket_now: "火箭",
+  demae_can: "出前馆"
+};
+
+export function readableVoiceError(value) {
+  const error = String(value ?? "").trim();
+  if (/login required|ログイン/i.test(error)) return "需要重新登录";
+  if (/target verification failed|対応する.*見つかりません/i.test(error)) return "找不到对应商品";
+  if (/timed out|timeout/i.test(error)) return "平台页面响应超时";
+  if (/expired/i.test(error)) return "任务已过期";
+  return error || "修改失败";
+}
+
+export function formatVoiceResult({ matchedLabel, isAvailable, commands }) {
+  const action = isAvailable ? "恢复销售" : "设为永久缺货";
+  const results = ["网站预约成功", ...commands.map((command) => {
+    const label = platformLabels[command.platform] ?? command.platform;
+    return command.status === "succeeded"
+      ? `${label}成功`
+      : `${label}失败，${readableVoiceError(command.error)}`;
+  })];
+  return `${matchedLabel}已${action}。${results.join("，")}。`;
+}

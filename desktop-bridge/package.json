@@ -7,6 +7,7 @@
     "check": "node src/main.mjs check",
     "login": "node src/main.mjs login",
     "locate": "node src/main.mjs locate",
+    "voice": "node src/voice-command.mjs",
     "install:mac": "node macos/install-launch-agent.mjs",
     "uninstall:mac": "node macos/uninstall-launch-agent.mjs",
     "start": "node src/main.mjs run",

@@ -50,4 +50,27 @@ export class BridgeApiClient {
       })
     });
   }
+
+  voiceInventoryUrl(commandId = "") {
+    const params = new URLSearchParams({ storeId: this.config.storeId });
+    if (commandId) params.set("commandId", commandId);
+    return `${this.config.serverUrl}/api/local-bridge/inventory/voice?${params}`;
+  }
+
+  async setVoiceInventory(action, query, { preview = false, confirmed = false } = {}) {
+    return this.request(this.voiceInventoryUrl(), {
+      method: "POST",
+      body: JSON.stringify({
+        storeId: this.config.storeId,
+        action,
+        query,
+        preview,
+        confirmed
+      })
+    });
+  }
+
+  async voiceInventoryCommandStatus(commandId) {
+    return this.request(this.voiceInventoryUrl(commandId));
+  }
 }

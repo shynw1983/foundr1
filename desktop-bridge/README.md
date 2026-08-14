@@ -38,6 +38,20 @@ Chrome 自体は閉じず、Bridge の検査・実行プロセスだけが接続
 通常運用では Uber Eats を同じログインプロファイルのバックグラウンド Chrome で動かせます。
 ログインが必要なときだけ `headless` を一時的に `false` にして可視ウィンドウを開きます。
 
+## Siri / macOS Shortcuts
+
+音声操作は Bridge の端末トークンをそのまま利用し、ショートカット側には認証情報を保存しません。
+実行前にショートカットで商品名と操作を確認したうえで、次のコマンドを呼び出します。
+
+```bash
+/usr/local/bin/node src/voice-command.mjs stockout --confirmed --shortcut '商品名'
+/usr/local/bin/node src/voice-command.mjs restore --confirmed --shortcut '商品名'
+```
+
+`stockout` は各サービスで翌日に戻らない永久在庫切れを使用します。商品名が見つからない、
+または複数候補になる場合は何も変更しません。処理後は Web予約、Uber、Rocket Now、
+出前館それぞれの結果を中国語の読み上げ用テキストで返します。
+
 常駐実行は商品変更の実機検証後にのみ有効化します。
 
 ## macOS auto start
