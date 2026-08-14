@@ -329,7 +329,7 @@ export async function POST(request: Request) {
   const result = body.result && typeof body.result === "object"
     ? body.result as Record<string, unknown>
     : {};
-  if (!commandId || !["succeeded", "failed"].includes(status)) {
+  if (!commandId || !["processing", "succeeded", "failed"].includes(status)) {
     return Response.json({ error: "Invalid command acknowledgement." }, { status: 400 });
   }
 
@@ -346,6 +346,34 @@ export async function POST(request: Request) {
     limit 1
   `;
   if (!commandRows[0]) return Response.json({ error: "Command is no longer claimable." }, { status: 409 });
+
+  if (status === "processing") {
+    const progressRows = await sql`
+      update local_bridge_commands
+      set
+        result = result || ${JSON.stringify(result)}::jsonb,
+        last_error = ${error},
+        updated_at = now()
+      where id::text = ${commandId}
+        and store_id::text = ${authorization.storeId}
+        and status = 'processing'
+        and (
+          ${authorization.deviceId} = ''
+          or claimed_by_device_id::text = ${authorization.deviceId}
+        )
+      returning id::text, platform
+    `;
+    if (!progressRows[0]) return Response.json({ error: "Command is no longer claimable." }, { status: 409 });
+    await publishBridgeCommandUpdated(authorization.storeId, {
+      id: commandId,
+      platform: String(progressRows[0].platform ?? commandRows[0].platform ?? "uber_eats"),
+      status: "processing",
+      error,
+      result
+    }).catch(() => undefined);
+    return Response.json({ ok: true });
+  }
+
   let auditSummary: { updatedCount: number; missingCount: number } | null = null;
   if (status === "succeeded" && String(commandRows[0].commandType) === "audit_inventory") {
     auditSummary = await applyInventoryAuditResult(authorization.storeId, result);

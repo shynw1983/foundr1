@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, ChevronUp, LoaderCircle, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, Clock3, LoaderCircle, RefreshCw, TimerOff, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import { getStoredStoreSelection, setStoredStoreSelection, storeSelectionEventName } from "./store-selection";
@@ -8,13 +8,17 @@ import { getStoredStoreSelection, setStoredStoreSelection, storeSelectionEventNa
 type SharedPusher = ReturnType<(typeof import("../../../lib/shared-pusher-client"))["acquireSharedPusher"]>;
 type SharedPusherChannel = ReturnType<SharedPusher["subscribe"]>;
 type StoreMenuLanguage = "ja" | "zh-Hans" | "zh-Hant";
-type InventorySyncStatus = "pending" | "succeeded" | "failed";
+type InventorySyncStatus = "queued" | "processing" | "retrying" | "timed_out" | "succeeded" | "failed";
 
 type InventorySyncPlatform = {
   commandId: string;
   platform: string;
   status: InventorySyncStatus;
   error: string;
+  phase: string;
+  attempt: number;
+  maxAttempts: number;
+  updatedAt: string;
 };
 
 export type StoreInventorySyncRun = {
@@ -46,7 +50,10 @@ function syncCopy(language: StoreMenuLanguage) {
     return {
       available: "恢复销售",
       unavailable: "缺货",
-      pending: "执行中",
+      queued: "等待中",
+      processing: "执行中",
+      retrying: "重试中",
+      timed_out: "超时",
       succeeded: "成功",
       failed: "失败",
       title: "平台同步状态",
@@ -55,6 +62,10 @@ function syncCopy(language: StoreMenuLanguage) {
       pageTimeout: "平台页面响应超时。",
       expired: "同步任务已过期。",
       generic: "同步失败。",
+      queuedDetail: "等待 Bridge 执行",
+      locating: "正在查找商品",
+      applying: "正在修改并确认结果",
+      retryingDetail: "自动重试",
       collapse: "收起",
       expand: "展开",
       siri: "Siri"
@@ -64,7 +75,10 @@ function syncCopy(language: StoreMenuLanguage) {
     return {
       available: "恢復銷售",
       unavailable: "缺貨",
-      pending: "執行中",
+      queued: "等待中",
+      processing: "執行中",
+      retrying: "重試中",
+      timed_out: "逾時",
       succeeded: "成功",
       failed: "失敗",
       title: "平台同步狀態",
@@ -73,6 +87,10 @@ function syncCopy(language: StoreMenuLanguage) {
       pageTimeout: "平台頁面回應逾時。",
       expired: "同步工作已過期。",
       generic: "同步失敗。",
+      queuedDetail: "等待 Bridge 執行",
+      locating: "正在尋找商品",
+      applying: "正在修改並確認結果",
+      retryingDetail: "自動重試",
       collapse: "收起",
       expand: "展開",
       siri: "Siri"
@@ -81,7 +99,10 @@ function syncCopy(language: StoreMenuLanguage) {
   return {
     available: "販売再開",
     unavailable: "在庫切れ",
-    pending: "実行中",
+    queued: "待機中",
+    processing: "実行中",
+    retrying: "再試行中",
+    timed_out: "タイムアウト",
     succeeded: "成功",
     failed: "失敗",
     title: "プラットフォーム同期状況",
@@ -90,6 +111,10 @@ function syncCopy(language: StoreMenuLanguage) {
     pageTimeout: "プラットフォーム画面の応答がタイムアウトしました。",
     expired: "同期処理の有効期限が切れました。",
     generic: "同期に失敗しました。",
+    queuedDetail: "Bridgeの実行待ち",
+    locating: "商品を確認中",
+    applying: "変更・結果確認中",
+    retryingDetail: "自動再試行",
     collapse: "折りたたむ",
     expand: "開く",
     siri: "Siri"
@@ -116,15 +141,26 @@ function readableSyncError(error: string, language: StoreMenuLanguage) {
   const copy = syncCopy(language);
   if (/login required|ログイン/i.test(error)) return copy.login;
   if (/target verification failed|対応する.*見つかりません/i.test(error)) return copy.target;
-  if (/cdp.*timed out|page.*timeout|condition timed out/i.test(error)) return copy.pageTimeout;
+  if (/timeout|timed out|waiting failed|waiting for selector|verification_timeout|condition timed out/i.test(error)) return copy.pageTimeout;
   if (/expired|有効期限/i.test(error)) return copy.expired;
   return error.trim() || copy.generic;
 }
 
-function normalizeStatus(value: unknown): InventorySyncStatus {
+function normalizeStatus(value: unknown, error = ""): InventorySyncStatus {
   if (value === "succeeded") return "succeeded";
+  if (value === "timed_out" || (value === "failed" && /timeout|timed out|waiting failed|waiting for selector|超时/i.test(error))) return "timed_out";
   if (value === "failed") return "failed";
-  return "pending";
+  if (value === "retrying") return "retrying";
+  if (value === "processing") return "processing";
+  return "queued";
+}
+
+function progressFrom(value: unknown) {
+  if (!value || typeof value !== "object") return {} as Record<string, unknown>;
+  const result = value as Record<string, unknown>;
+  return result.progress && typeof result.progress === "object"
+    ? result.progress as Record<string, unknown>
+    : result;
 }
 
 function normalizeRun(value: unknown): StoreInventorySyncRun | null {
@@ -138,11 +174,17 @@ function normalizeRun(value: unknown): StoreInventorySyncRun | null {
     const row = entry as Record<string, unknown>;
     const commandId = String(row.commandId ?? "");
     const platform = String(row.platform ?? "");
+    const error = String(row.error ?? "");
+    const progress = progressFrom(row.result);
     return commandId && platform ? [{
       commandId,
       platform,
-      status: normalizeStatus(row.status),
-      error: String(row.error ?? "")
+      status: normalizeStatus(row.status, error),
+      error,
+      phase: String(row.phase ?? progress.phase ?? ""),
+      attempt: Math.max(1, Number(row.attempt ?? progress.attempt ?? 1)),
+      maxAttempts: Math.max(1, Number(row.maxAttempts ?? progress.maxAttempts ?? 3)),
+      updatedAt: String(row.updatedAt ?? source.createdAt ?? new Date().toISOString())
     }] : [];
   });
   if (!platforms.length) return null;
@@ -154,6 +196,22 @@ function normalizeRun(value: unknown): StoreInventorySyncRun | null {
     createdAt: String(source.createdAt ?? new Date().toISOString()),
     platforms
   };
+}
+
+function platformDetail(platform: InventorySyncPlatform, language: StoreMenuLanguage) {
+  const copy = syncCopy(language);
+  if (platform.status === "queued") return copy.queuedDetail;
+  if (platform.status === "processing") {
+    return platform.phase === "locating" ? copy.locating : copy.applying;
+  }
+  if (platform.status === "retrying") {
+    const reason = platform.error ? readableSyncError(platform.error, language) : "";
+    return `${copy.retryingDetail} ${platform.attempt}/${platform.maxAttempts}${reason ? ` · ${reason}` : ""}`;
+  }
+  if (platform.status === "timed_out" || platform.status === "failed") {
+    return readableSyncError(platform.error, language);
+  }
+  return "";
 }
 
 function mergeRun(current: StoreInventorySyncRun[], next: StoreInventorySyncRun) {
@@ -173,10 +231,10 @@ export function StoreInventorySyncStatus() {
   const [isOpen, setIsOpen] = useState(false);
 
   const pendingCount = useMemo(() => runs.reduce((count, run) => (
-    count + run.platforms.filter((platform) => platform.status === "pending").length
+    count + run.platforms.filter((platform) => ["queued", "processing", "retrying"].includes(platform.status)).length
   ), 0), [runs]);
   const failedCount = useMemo(() => runs.reduce((count, run) => (
-    count + run.platforms.filter((platform) => platform.status === "failed").length
+    count + run.platforms.filter((platform) => ["failed", "timed_out"].includes(platform.status)).length
   ), 0), [runs]);
 
   useEffect(() => {
@@ -253,10 +311,16 @@ export function StoreInventorySyncStatus() {
         ...run,
         platforms: run.platforms.map((platform) => {
           if (platform.commandId !== commandId) return platform;
+          const error = String(command?.error ?? "");
+          const progress = progressFrom(command?.result);
           return {
             ...platform,
-            status: normalizeStatus(command?.status),
-            error: String(command?.error ?? "")
+            status: normalizeStatus(command?.status, error),
+            error,
+            phase: String(progress.phase ?? platform.phase),
+            attempt: Math.max(1, Number(progress.attempt ?? platform.attempt)),
+            maxAttempts: Math.max(1, Number(progress.maxAttempts ?? platform.maxAttempts)),
+            updatedAt: new Date().toISOString()
           };
         })
       })));
@@ -326,13 +390,18 @@ export function StoreInventorySyncStatus() {
                 {run.platforms.map((platform) => (
                   <div className={`store-menu-sync-platform is-${platform.status}`} key={platform.commandId}>
                     <span className="store-menu-sync-state">
-                      {platform.status === "pending" ? <LoaderCircle size={15} /> : null}
+                      {platform.status === "queued" ? <Clock3 size={15} /> : null}
+                      {platform.status === "processing" ? <LoaderCircle size={15} /> : null}
+                      {platform.status === "retrying" ? <RefreshCw size={15} /> : null}
+                      {platform.status === "timed_out" ? <TimerOff size={15} /> : null}
                       {platform.status === "succeeded" ? <CheckCircle2 size={15} /> : null}
                       {platform.status === "failed" ? <XCircle size={15} /> : null}
                       <strong>{platformName(platform.platform, language)}</strong>
                       <small>{copy[platform.status]}</small>
                     </span>
-                    {platform.error ? <span className="store-menu-sync-error">{readableSyncError(platform.error, language)}</span> : null}
+                    {platformDetail(platform, language) ? (
+                      <span className="store-menu-sync-error">{platformDetail(platform, language)}</span>
+                    ) : null}
                   </div>
                 ))}
               </div>

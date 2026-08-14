@@ -10,14 +10,28 @@ type CommandRow = {
   platform: string;
   status: string;
   payload: Record<string, unknown> | null;
+  result: Record<string, unknown> | null;
   lastError: string;
+  attempts: number;
   createdAt: string;
+  updatedAt: string;
 };
 
-function commandStatus(value: string) {
-  if (value === "succeeded") return "succeeded" as const;
-  if (value === "pending" || value === "processing") return "pending" as const;
-  return "failed" as const;
+function commandStatus(row: CommandRow) {
+  if (row.status === "succeeded") return "succeeded" as const;
+  if (row.status === "failed") {
+    return /timeout|timed out|waiting failed|waiting for selector|超时/i.test(row.lastError)
+      ? "timed_out" as const
+      : "failed" as const;
+  }
+  const progress = row.result?.progress && typeof row.result.progress === "object"
+    ? row.result.progress as Record<string, unknown>
+    : {};
+  if (String(progress.phase ?? "") === "retrying" || (row.status === "pending" && row.attempts > 0)) {
+    return "retrying" as const;
+  }
+  if (row.status === "processing") return "processing" as const;
+  return "queued" as const;
 }
 
 export async function GET(request: Request) {
@@ -39,8 +53,11 @@ export async function GET(request: Request) {
       platform,
       status,
       payload,
+      result,
       last_error as "lastError",
-      created_at::text as "createdAt"
+      attempts,
+      created_at::text as "createdAt",
+      updated_at::text as "updatedAt"
     from local_bridge_commands
     where store_id::text = ${storeId}
       and command_type = 'set_inventory_availability'
@@ -59,8 +76,12 @@ export async function GET(request: Request) {
     platforms: Array<{
       commandId: string;
       platform: string;
-      status: "pending" | "succeeded" | "failed";
+      status: "queued" | "processing" | "retrying" | "timed_out" | "succeeded" | "failed";
       error: string;
+      phase: string;
+      attempt: number;
+      maxAttempts: number;
+      updatedAt: string;
     }>;
   }>();
 
@@ -78,14 +99,25 @@ export async function GET(request: Request) {
         commandId: `${runId}-foundr1`,
         platform: "foundr1",
         status: "succeeded" as const,
-        error: ""
+        error: "",
+        phase: "",
+        attempt: 1,
+        maxAttempts: 1,
+        updatedAt: row.createdAt
       }]
     };
+    const progress = row.result?.progress && typeof row.result.progress === "object"
+      ? row.result.progress as Record<string, unknown>
+      : {};
     run.platforms.push({
       commandId: row.id,
       platform: row.platform,
-      status: commandStatus(row.status),
-      error: row.lastError
+      status: commandStatus(row),
+      error: row.lastError,
+      phase: String(progress.phase ?? ""),
+      attempt: Math.max(1, Number(progress.attempt ?? row.attempts ?? 1)),
+      maxAttempts: Math.max(1, Number(progress.maxAttempts ?? 3)),
+      updatedAt: row.updatedAt
     });
     grouped.set(runId, run);
   }

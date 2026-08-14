@@ -11438,7 +11438,20 @@ body :where(
   color: #a72f2f;
 }
 
-.store-menu-sync-platform.is-pending {
+.store-menu-sync-platform.is-queued {
+  border-color: rgba(100, 116, 139, 0.25);
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.store-menu-sync-platform.is-processing {
+  border-color: rgba(37, 99, 235, 0.25);
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.store-menu-sync-platform.is-retrying,
+.store-menu-sync-platform.is-timed_out {
   border-color: rgba(169, 101, 20, 0.28);
   background: var(--amber-soft);
   color: var(--amber);
@@ -11455,8 +11468,13 @@ body :where(
   flex: 0 0 auto;
 }
 
-.store-menu-sync-platform.is-pending .store-menu-sync-state svg {
+.store-menu-sync-platform.is-processing .store-menu-sync-state svg,
+.store-menu-sync-platform.is-retrying .store-menu-sync-state svg {
   animation: store-menu-sync-spin 900ms linear infinite;
+}
+
+.store-menu-sync-platform.is-retrying .store-menu-sync-state svg {
+  animation-duration: 1.4s;
 }
 
 .store-menu-sync-state strong {
@@ -11490,7 +11508,8 @@ body :where(
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .store-menu-sync-platform.is-pending .store-menu-sync-state svg,
+  .store-menu-sync-platform.is-processing .store-menu-sync-state svg,
+  .store-menu-sync-platform.is-retrying .store-menu-sync-state svg,
   .store-menu-option-group-meta svg {
     animation: none;
     transition: none;

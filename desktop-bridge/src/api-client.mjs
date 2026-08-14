@@ -38,6 +38,10 @@ export class BridgeApiClient {
     });
   }
 
+  async reportProgress(commandId, progress, error = "") {
+    return this.acknowledge(commandId, "processing", { progress }, error);
+  }
+
   async reportStatus(status) {
     return this.request(`${this.config.serverUrl}/api/local-bridge/uber-eats/status`, {
       method: "POST",

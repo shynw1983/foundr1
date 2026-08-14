@@ -4,6 +4,10 @@ import { BridgeApiClient } from "./api-client.mjs";
 import { createAdapter } from "./adapters/index.mjs";
 import { BrowserSession } from "./browser-session.mjs";
 import { loadConfig } from "./config.mjs";
+import {
+  INVENTORY_COMMAND_MAX_ATTEMPTS,
+  isRetryableInventoryError
+} from "./retry-policy.mjs";
 
 const mode = process.argv[2] ?? "check";
 const requestedPlatform = String(process.argv[3] ?? "").trim();
@@ -42,6 +46,62 @@ async function inspectAll() {
 
 async function shutdown() {
   await Promise.all([...sessions.values()].map((session) => session.disconnect()));
+}
+
+async function reportProgress(command, progress, error = "") {
+  await api.reportProgress(command.id, progress, error).catch((progressError) => {
+    console.error(new Date().toISOString(), "progress update failed", progressError instanceof Error ? progressError.message : progressError);
+  });
+}
+
+async function executeInventoryCommand(command) {
+  const platform = String(command.platform);
+  const adapter = adapters.get(platform);
+  if (!adapter) throw new Error(`No enabled adapter for ${platform}`);
+  const payload = command.payload && typeof command.payload === "object" ? command.payload : {};
+  const targets = Array.isArray(payload.targets) ? payload.targets : [];
+
+  for (let attempt = 1; attempt <= INVENTORY_COMMAND_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      await reportProgress(command, {
+        phase: "locating",
+        attempt,
+        maxAttempts: INVENTORY_COMMAND_MAX_ATTEMPTS
+      });
+      const located = await adapter.locateTargets(targets);
+      const ambiguous = located.filter((item) => item.matches.length > 1);
+      const verified = located.filter((item) => item.matches.length === 1);
+      const missing = located.filter((item) => item.matches.length === 0);
+      if (ambiguous.length || !verified.length) {
+        const rejected = [...ambiguous, ...missing];
+        throw new Error(`Target verification failed: ${rejected.map((item) => `${item.label}=${item.matches.length}`).join(", ")}`);
+      }
+      await reportProgress(command, {
+        phase: "applying",
+        attempt,
+        maxAttempts: INVENTORY_COMMAND_MAX_ATTEMPTS
+      });
+      const result = await adapter.setInventory(payload, verified);
+      return {
+        ...result,
+        matchedTargetCount: verified.length,
+        missingTargetCount: missing.length,
+        missingTargets: missing.map((item) => item.label)
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt >= INVENTORY_COMMAND_MAX_ATTEMPTS || !isRetryableInventoryError(message)) throw error;
+      console.error(new Date().toISOString(), `${platform} retry ${attempt}/${INVENTORY_COMMAND_MAX_ATTEMPTS - 1}: ${message}`);
+      await reportProgress(command, {
+        phase: "retrying",
+        attempt: attempt + 1,
+        maxAttempts: INVENTORY_COMMAND_MAX_ATTEMPTS
+      }, message);
+      await sessions.get(platform)?.disconnect();
+      await delay(1500 * attempt);
+    }
+  }
+  throw new Error("Inventory command retry limit reached.");
 }
 
 process.once("SIGINT", async () => {
@@ -103,25 +163,8 @@ for (;;) {
       await delay(config.pollIntervalMs);
       continue;
     }
-    const adapter = adapters.get(String(command.platform));
-    if (!adapter) throw new Error(`No enabled adapter for ${command.platform}`);
-    const payload = command.payload && typeof command.payload === "object" ? command.payload : {};
-    const targets = Array.isArray(payload.targets) ? payload.targets : [];
-    const located = await adapter.locateTargets(targets);
-    const ambiguous = located.filter((item) => item.matches.length > 1);
-    const verified = located.filter((item) => item.matches.length === 1);
-    const missing = located.filter((item) => item.matches.length === 0);
-    if (ambiguous.length || !verified.length) {
-      const rejected = [...ambiguous, ...missing];
-      throw new Error(`Target verification failed: ${rejected.map((item) => `${item.label}=${item.matches.length}`).join(", ")}`);
-    }
-    const result = await adapter.setInventory(payload, verified);
-    await api.acknowledge(command.id, "succeeded", {
-      ...result,
-      matchedTargetCount: verified.length,
-      missingTargetCount: missing.length,
-      missingTargets: missing.map((item) => item.label)
-    });
+    const result = await executeInventoryCommand(command);
+    await api.acknowledge(command.id, "succeeded", result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(new Date().toISOString(), message);
