@@ -115,6 +115,23 @@ type BridgeStatus = {
   deviceName?: string;
 };
 
+function bridgeAttentionLabel(problem: string | undefined, isChinese: boolean) {
+  const platformLabels: Record<string, { ja: string; zh: string }> = {
+    uber_eats: { ja: "Uber Eats", zh: "Uber Eats" },
+    rocket_now: { ja: "ロケットナウ", zh: "火箭" },
+    demae_can: { ja: "出前館", zh: "出前馆" }
+  };
+  const loginPlatforms = Array.from(
+    String(problem ?? "").matchAll(/(?:^|;\s*)(uber_eats|rocket_now|demae_can): login required(?=;|$)/g),
+    (match) => match[1]
+  );
+  if (!loginPlatforms.length) return isChinese ? "Bridge 检查中" : "Bridge 確認中";
+  const names = loginPlatforms.map((platform) => platformLabels[platform][isChinese ? "zh" : "ja"]);
+  return isChinese
+    ? `${names.join("、")}需要重新登录`
+    : `${names.join("・")}に再ログインが必要`;
+}
+
 type NewOrderNotice = {
   taskId: string;
   pickupCode: string;
@@ -1019,7 +1036,7 @@ export default function StoreKitchenPage() {
   const bridgeLabel = bridgeLevel === "healthy"
     ? (isChinese ? "Bridge 正常" : "Bridge 正常")
     : bridgeLevel === "attention"
-      ? (isChinese ? "Bridge 检查中" : "Bridge 確認中")
+      ? bridgeAttentionLabel(bridgeStatus?.problem, isChinese)
       : (isChinese ? "Bridge 异常" : "Bridge 異常");
 
   return (
