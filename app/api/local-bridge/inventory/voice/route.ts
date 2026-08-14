@@ -19,7 +19,7 @@ function normalizedVoiceLabel(value: unknown) {
 
 async function authorize(request: Request, storeId: string) {
   if (!storeId) return null;
-  const authorization = await authorizeLocalBridge(request, storeId, "uber_eats");
+  const authorization = await authorizeLocalBridge(request, storeId, "desktop");
   return authorization.authorized ? authorization : null;
 }
 
