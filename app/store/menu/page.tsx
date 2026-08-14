@@ -143,11 +143,17 @@ function itemCategory(item: StoreMenuItem) {
 }
 
 function platformName(platform: string, language: StoreMenuLanguage) {
-  if (platform === "foundr1") return language === "ja" ? "Web予約" : "网站预约";
+  if (platform === "foundr1") return language === "ja" ? "Web予約" : language === "zh-Hant" ? "網站預約" : "网站预约";
   if (platform === "uber_eats") return "Uber";
   if (platform === "rocket_now") return language === "ja" ? "ロケットナウ" : "火箭";
-  if (platform === "demae_can") return language === "ja" ? "出前館" : "出前馆";
+  if (platform === "demae_can") return language === "zh-Hans" ? "出前馆" : "出前館";
   return platform;
+}
+
+function storeMenuDescription(language: StoreMenuLanguage) {
+  if (language === "zh-Hans") return "缺货和恢复销售会同步到网站预约、Uber、火箭、出前馆。商品名称、价格和选项请在 OS 的菜单管理中编辑。";
+  if (language === "zh-Hant") return "缺貨和恢復銷售會同步到網站預約、Uber、火箭、出前館。商品名稱、價格和選項請在 OS 的選單管理中編輯。";
+  return "売切や販売再開は Web予約、Uber、ロケットナウ、出前館へ同期します。メニュー名、価格、選択肢は OS のメニュー管理で編集します。";
 }
 
 function syncCopy(language: StoreMenuLanguage) {
@@ -597,7 +603,7 @@ export default function StoreMenuPage() {
           <div>
             <p className="eyebrow">Daily Availability</p>
             <h2>本日の販売状態</h2>
-            <p>売切や販売再開は Foundr1、Uber、Rocket へ同期します。メニュー名、価格、選択肢は OS のメニュー管理で編集します。</p>
+            <p data-i18n-ignore>{storeMenuDescription(language)}</p>
           </div>
           <button className="secondary-button" type="button" onClick={() => void load(selectedStoreId)}>
             <RotateCcw size={16} />
