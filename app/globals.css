@@ -11280,6 +11280,118 @@ body :where(
   gap: 14px;
 }
 
+.store-menu-sync-feedback {
+  display: grid;
+  gap: 8px;
+}
+
+.store-menu-sync-run {
+  display: grid;
+  gap: 10px;
+  padding: 13px 14px;
+}
+
+.store-menu-sync-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.store-menu-sync-heading strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.store-menu-sync-heading span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.store-menu-sync-platforms {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.store-menu-sync-platform {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #f8fafc;
+  color: var(--muted);
+}
+
+.store-menu-sync-platform.is-succeeded {
+  border-color: rgba(33, 116, 91, 0.28);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.store-menu-sync-platform.is-failed {
+  border-color: rgba(188, 54, 54, 0.3);
+  background: #fff4f4;
+  color: #a72f2f;
+}
+
+.store-menu-sync-platform.is-pending {
+  border-color: rgba(169, 101, 20, 0.28);
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.store-menu-sync-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.store-menu-sync-state svg {
+  flex: 0 0 auto;
+}
+
+.store-menu-sync-platform.is-pending .store-menu-sync-state svg {
+  animation: store-menu-sync-spin 900ms linear infinite;
+}
+
+.store-menu-sync-state strong {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.store-menu-sync-state small {
+  margin-left: auto;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.store-menu-sync-error {
+  overflow-wrap: anywhere;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+@keyframes store-menu-sync-spin {
+  to { transform: rotate(360deg); }
+}
+
 .store-menu-head,
 .store-menu-controls,
 .store-menu-list-head,
@@ -11670,6 +11782,16 @@ body :where(
 }
 
 @media (max-width: 900px) {
+  .store-menu-sync-platforms {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .store-menu-sync-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
   .menu-presentation-grid {
     grid-template-columns: 1fr;
   }
