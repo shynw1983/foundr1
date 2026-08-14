@@ -15,11 +15,17 @@ async function readRows(page, targets) {
           .map((title) => title.closest("label[class*=TableSubRow_tableSubRow]"))
           .filter(Boolean);
       };
-      const primaryRows = findRows(item.primaryNames);
-      const rows = primaryRows.length ? primaryRows : findRows(item.aliasNames);
+      const exactRows = findRows(item.exactNames);
+      const fallbackRows = exactRows.length ? [] : findRows(item.fallbackNames);
+      const aliasRows = exactRows.length || fallbackRows.length ? [] : findRows(item.aliasNames);
+      const rows = exactRows.length ? exactRows : fallbackRows.length ? fallbackRows : aliasRows;
       return {
         label: item.label,
-        names: primaryRows.length ? item.primaryNames : item.aliasNames,
+        names: exactRows.length
+          ? item.exactNames
+          : fallbackRows.length
+            ? item.fallbackNames
+            : item.aliasNames,
         matches: rows.map((row, index) => ({
           text: normalize(row.textContent),
           matchIndex: index,

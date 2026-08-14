@@ -57,12 +57,18 @@ async function readRows(page, targets) {
           .map((title) => title.closest("div[class*=e1iqhfx24]"))
           .filter(Boolean);
       };
-      const primaryRows = findRows(item.primaryNames);
-      const rows = primaryRows.length ? primaryRows : findRows(item.aliasNames);
+      const exactRows = findRows(item.exactNames);
+      const fallbackRows = exactRows.length ? [] : findRows(item.fallbackNames);
+      const aliasRows = exactRows.length || fallbackRows.length ? [] : findRows(item.aliasNames);
+      const rows = exactRows.length ? exactRows : fallbackRows.length ? fallbackRows : aliasRows;
       return {
         kind: item.kind,
         label: item.label,
-        names: primaryRows.length ? item.primaryNames : item.aliasNames,
+        names: exactRows.length
+          ? item.exactNames
+          : fallbackRows.length
+            ? item.fallbackNames
+            : item.aliasNames,
         matches: rows.map((row) => ({
           text: normalize(row.textContent),
           checkboxId: row.querySelector('input[type="checkbox"],input[type="checkBox"]')?.id ?? "",
