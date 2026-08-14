@@ -2329,6 +2329,7 @@ create table if not exists store_customer_orders (
   payment_refund_status text not null default '',
   payment_refund_error text not null default '',
   payment_refunded_at timestamptz,
+  shortage_preference text not null default 'refund',
   receipt_download_count integer not null default 0,
   receipt_last_downloaded_at timestamptz,
   square_order_id text,
@@ -2377,10 +2378,32 @@ alter table store_customer_orders add column if not exists payment_refund_id tex
 alter table store_customer_orders add column if not exists payment_refund_status text not null default '';
 alter table store_customer_orders add column if not exists payment_refund_error text not null default '';
 alter table store_customer_orders add column if not exists payment_refunded_at timestamptz;
+alter table store_customer_orders add column if not exists shortage_preference text not null default 'refund';
 alter table store_customer_orders add column if not exists receipt_download_count integer not null default 0;
 alter table store_customer_orders add column if not exists receipt_last_downloaded_at timestamptz;
 alter table store_customer_orders add column if not exists store_table_id uuid references store_tables(id) on delete set null;
 alter table store_customer_orders add column if not exists table_session_key text not null default '';
+
+create table if not exists store_order_alert_events (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references store_customer_orders(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  alert_phase text not null,
+  due_at timestamptz not null,
+  status text not null default 'pending',
+  workflow_run_id text not null default '',
+  attempt_count integer not null default 0,
+  first_sent_at timestamptz,
+  last_sent_at timestamptz,
+  acknowledged_at timestamptz,
+  acknowledged_by uuid references employees(id) on delete set null,
+  last_error text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (order_id, alert_phase)
+);
+
+alter table os_notifications add column if not exists source_key text not null default '';
 
 create table if not exists members (
   id uuid primary key default gen_random_uuid(),
@@ -3082,6 +3105,25 @@ alter table store_customer_order_items add column if not exists refund_reason te
 alter table store_customer_order_items add column if not exists external_refund_confirmed_at timestamptz;
 alter table store_customer_order_items add column if not exists refunded_at timestamptz;
 alter table store_customer_order_items add column if not exists refunded_by uuid references employees(id) on delete set null;
+
+create table if not exists store_order_shortage_actions (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references store_customer_orders(id) on delete cascade,
+  order_item_id uuid not null references store_customer_order_items(id) on delete cascade,
+  target_type text not null,
+  target_key text not null,
+  target_name text not null,
+  target_snapshot jsonb not null default '{}'::jsonb,
+  action_type text not null,
+  replacement_name text not null default '',
+  refund_amount integer not null default 0,
+  payment_refund_id text not null default '',
+  payment_refund_status text not null default '',
+  payment_refund_error text not null default '',
+  handled_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (order_item_id, target_type, target_key)
+);
 
 create table if not exists order_production_tasks (
   id uuid primary key default gen_random_uuid(),
@@ -3863,6 +3905,11 @@ create unique index if not exists idx_store_customer_orders_offline_client_order
   on store_customer_orders(offline_client_order_id)
   where offline_client_order_id is not null;
 create index if not exists idx_store_customer_orders_pickup on store_customer_orders(pickup_code, pickup_date);
+create index if not exists idx_store_order_alert_events_due
+  on store_order_alert_events(status, due_at);
+create unique index if not exists idx_os_notifications_recipient_source
+  on os_notifications(recipient_employee_id, source_key)
+  where source_key <> '';
 create index if not exists idx_store_customer_orders_square_order on store_customer_orders(square_order_id);
 create unique index if not exists idx_store_customer_orders_source_external
   on store_customer_orders(order_source, source_external_id)
@@ -3872,6 +3919,7 @@ create index if not exists idx_store_customer_orders_payment_session on store_cu
 create index if not exists idx_store_customer_orders_payment_id on store_customer_orders(payment_provider, payment_id);
 create index if not exists idx_store_customer_orders_pos_cash_session on store_customer_orders(pos_cash_session_id, created_at desc);
 create index if not exists idx_store_customer_order_items_order on store_customer_order_items(order_id, sort_order);
+create index if not exists idx_store_order_shortage_actions_order on store_order_shortage_actions(order_id, created_at desc);
 create index if not exists idx_order_production_tasks_order on order_production_tasks(order_id, production_area);
 create unique index if not exists idx_order_production_tasks_unique_area on order_production_tasks(order_id, production_area, production_area_label);
 create index if not exists idx_order_production_tasks_store_status on order_production_tasks(store_id, status, created_at desc);

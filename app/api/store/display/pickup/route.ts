@@ -21,7 +21,7 @@ export async function GET(request: Request) {
       to_char(created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime"
     from store_customer_orders
     where store_id::text = ${storeFilter}
-      and payment_status = 'paid'
+      and payment_status in ('paid', 'partial_refunded')
       and status in ('new', 'preparing', 'ready')
       and created_at > now() - interval '1 day'
     order by

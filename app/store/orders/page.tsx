@@ -16,6 +16,7 @@ type StoreOrder = {
   pickupCode: string;
   status: string;
   paymentStatus: string;
+  shortagePreference: "substitute_or_refund" | "refund";
   pickupDate: string;
   pickupTime: string;
   pickupTiming: string;
@@ -52,6 +53,24 @@ type StoreOrder = {
   }>;
   createdAt: string;
   squareReceiptUrl: string;
+};
+
+type ShortageDetail = {
+  shortagePreference: "substitute_or_refund" | "refund";
+  items: Array<{
+    id: string;
+    itemName: string;
+    candidates: Array<{ key: string; type: "item" | "option"; name: string; groupName: string; price: number }>;
+  }>;
+  actions: Array<{
+    id: string;
+    orderItemId: string;
+    targetName: string;
+    actionType: "replace" | "refund";
+    replacementName: string;
+    refundAmount: number;
+    paymentRefundStatus: string;
+  }>;
 };
 
 function isFoundr1NativeShell() {
@@ -126,7 +145,8 @@ const paymentLabels: Record<string, string> = {
   paid: "決済済み",
   failed: "未決済",
   canceled: "未決済",
-  refunded: "返金済み"
+  refunded: "返金済み",
+  partial_refunded: "一部返金済み"
 };
 
 const sourceLabels: Record<string, string> = {
@@ -191,7 +211,7 @@ function getPaymentPillClass(paymentStatus: string) {
 }
 
 function isPaidOrder(order?: StoreOrder | null) {
-  return order?.paymentStatus === "paid";
+  return order?.paymentStatus === "paid" || order?.paymentStatus === "partial_refunded";
 }
 
 function isPendingPaymentOrder(order: StoreOrder) {
@@ -293,6 +313,14 @@ export default function StoreOrdersPage() {
   const [cancelNotice, setCancelNotice] = useState("");
   const [checkoutHandlingId, setCheckoutHandlingId] = useState("");
   const [alertAcknowledgingId, setAlertAcknowledgingId] = useState("");
+  const [shortageOrderId, setShortageOrderId] = useState("");
+  const [shortageDetail, setShortageDetail] = useState<ShortageDetail | null>(null);
+  const [shortageItemId, setShortageItemId] = useState("");
+  const [shortageTargetKey, setShortageTargetKey] = useState("");
+  const [shortageAction, setShortageAction] = useState<"replace" | "refund">("refund");
+  const [shortageReplacement, setShortageReplacement] = useState("");
+  const [shortageSaving, setShortageSaving] = useState(false);
+  const [shortageMessage, setShortageMessage] = useState("");
   const audioContextRef = useRef<AudioContext | null>(null);
   const ordersRef = useRef<StoreOrder[]>([]);
   const repeatAlertTimersRef = useRef<number[]>([]);
@@ -817,6 +845,69 @@ export default function StoreOrdersPage() {
     }
   };
 
+  const loadShortageDetail = async (orderId: string) => {
+    setShortageOrderId(orderId);
+    setShortageDetail(null);
+    setShortageMessage("");
+    const response = await fetch(`/api/store/orders/shortages?orderId=${encodeURIComponent(orderId)}`, { cache: "no-store" });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setShortageMessage(String(body.error || "欠品対応を読み込めませんでした。"));
+      return;
+    }
+    const detail = body as ShortageDetail;
+    const firstItem = detail.items.find((item) => item.candidates.length);
+    setShortageDetail(detail);
+    setShortageItemId(firstItem?.id || "");
+    setShortageTargetKey(firstItem?.candidates[0]?.key || "");
+    setShortageAction(detail.shortagePreference === "substitute_or_refund" ? "replace" : "refund");
+    setShortageReplacement("");
+  };
+
+  const submitShortage = async () => {
+    if (!shortageOrderId || !shortageItemId || !shortageTargetKey) return;
+    const item = shortageDetail?.items.find((entry) => entry.id === shortageItemId);
+    const candidate = item?.candidates.find((entry) => entry.key === shortageTargetKey);
+    if (!candidate) return;
+    if (shortageAction === "replace") {
+      if (!shortageReplacement.trim()) {
+        setShortageMessage("同類の代替商品名を入力してください。");
+        return;
+      }
+      const confirmed = window.confirm(`「${candidate.name}」を「${shortageReplacement.trim()}」へ変更します。\n\n原材料・アレルゲン・宗教上の制限を含め、安全に同類と判断できることを確認しましたか？`);
+      if (!confirmed) return;
+    } else if (!window.confirm(`「${candidate.name}」を提供せず、返金処理を実行しますか？`)) {
+      return;
+    }
+    setShortageSaving(true);
+    setShortageMessage("");
+    try {
+      const response = await fetch("/api/store/orders/shortages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: shortageOrderId,
+          orderItemId: shortageItemId,
+          targetKey: shortageTargetKey,
+          actionType: shortageAction,
+          replacementName: shortageReplacement.trim()
+        })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setShortageMessage(String(body.error || "欠品対応を保存できませんでした。"));
+        return;
+      }
+      await loadShortageDetail(shortageOrderId);
+      setShortageMessage(shortageAction === "replace"
+        ? "代替内容を制作データへ反映しました。"
+        : `返金処理を完了しました${Number(body.refundAmount) > 0 ? `（¥${Number(body.refundAmount).toLocaleString("ja-JP")}）` : ""}。`);
+      await refresh();
+    } finally {
+      setShortageSaving(false);
+    }
+  };
+
   const cancelOrder = async (order: StoreOrder) => {
     if (order.paymentStatus === "paid") {
       const confirmed = window.confirm([
@@ -1186,6 +1277,78 @@ export default function StoreOrdersPage() {
                 <span>合計</span>
                 <strong>¥{Number(selectedOrder.amount).toLocaleString("ja-JP")}</strong>
               </div>
+
+              {selectedOrder.orderSource.endsWith("_web") && ["paid", "partial_refunded"].includes(selectedOrder.paymentStatus) && ["new", "preparing"].includes(selectedOrder.status) ? (
+                <section className="store-order-shortage-panel" aria-label="欠品対応">
+                  <div className="store-order-shortage-head">
+                    <div>
+                      <span>欠品時のお客様指定</span>
+                      <strong>{selectedOrder.shortagePreference === "substitute_or_refund" ? "同類・同等以上へ代替（適切な代替がなければ返金）" : "欠品分を返金"}</strong>
+                    </div>
+                    <button type="button" className="secondary-button" onClick={() => void loadShortageDetail(selectedOrder.id)}>
+                      欠品対応
+                    </button>
+                  </div>
+                  {shortageOrderId === selectedOrder.id ? (
+                    <div className="store-order-shortage-form">
+                      {shortageDetail ? (
+                        <>
+                          <label>
+                            対象の商品
+                            <select
+                              value={shortageItemId}
+                              onChange={(event) => {
+                                const nextItemId = event.target.value;
+                                const nextItem = shortageDetail.items.find((item) => item.id === nextItemId);
+                                setShortageItemId(nextItemId);
+                                setShortageTargetKey(nextItem?.candidates[0]?.key || "");
+                              }}
+                            >
+                              {shortageDetail.items.filter((item) => item.candidates.length).map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.itemName}</option>)}
+                            </select>
+                          </label>
+                          <label>
+                            欠品した商品・オプション
+                            <select value={shortageTargetKey} onChange={(event) => setShortageTargetKey(event.target.value)}>
+                              {(shortageDetail.items.find((item) => item.id === shortageItemId)?.candidates ?? []).map((candidate) => (
+                                <option key={candidate.key} value={candidate.key}>
+                                  {candidate.groupName} / {candidate.name}{candidate.price > 0 ? `（¥${candidate.price.toLocaleString("ja-JP")}）` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <div className="store-order-shortage-actions-choice">
+                            {shortageDetail.shortagePreference === "substitute_or_refund" ? (
+                              <label><input type="radio" checked={shortageAction === "replace"} onChange={() => setShortageAction("replace")} /> 同類・同等以上へ代替</label>
+                            ) : null}
+                            <label><input type="radio" checked={shortageAction === "refund"} onChange={() => setShortageAction("refund")} /> 提供せず返金</label>
+                          </div>
+                          {shortageAction === "replace" ? (
+                            <label>
+                              代替する商品名
+                              <input value={shortageReplacement} onChange={(event) => setShortageReplacement(event.target.value)} placeholder="例: 牛肉（上位部位）" />
+                              <small>牛肉→羊肉のような異種置換は行わず、原材料・アレルゲンを確認してください。</small>
+                            </label>
+                          ) : null}
+                          {!shortageDetail.items.some((item) => item.candidates.length) ? <p>未対応の欠品候補はありません。</p> : null}
+                          <button type="button" className="primary-button" disabled={shortageSaving || !shortageTargetKey} onClick={() => void submitShortage()}>
+                            {shortageSaving ? "処理中..." : shortageAction === "replace" ? "代替を確定" : "返金を実行"}
+                          </button>
+                          {shortageDetail.actions.length ? (
+                            <div className="store-order-shortage-history">
+                              <span>対応履歴</span>
+                              {shortageDetail.actions.map((action) => (
+                                <p key={action.id}>{action.targetName}：{action.actionType === "replace" ? `${action.replacementName}へ代替` : `返金 ¥${action.refundAmount.toLocaleString("ja-JP")}`}</p>
+                              ))}
+                            </div>
+                          ) : null}
+                        </>
+                      ) : <p>読み込み中...</p>}
+                      {shortageMessage ? <p className="store-order-payment-note">{shortageMessage}</p> : null}
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
 
               {!isPaidOrder(selectedOrder) ? (
                 <p className="store-order-payment-note">

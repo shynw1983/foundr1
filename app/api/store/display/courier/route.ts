@@ -51,7 +51,7 @@ export async function GET(request: Request) {
         where order_production_tasks.order_id = store_customer_orders.id
       ) production on true
       where store_customer_orders.store_id::text = ${storeFilter}
-        and store_customer_orders.payment_status = 'paid'
+        and store_customer_orders.payment_status in ('paid', 'partial_refunded')
         and store_customer_orders.order_source = any(${pickupSources})
         and store_customer_orders.status not in ('completed', 'cancelled', 'refund_pending')
         and (

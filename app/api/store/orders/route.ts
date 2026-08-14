@@ -8,6 +8,7 @@ import {
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
 import { canChangeOrderStatus, getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
+import { acknowledgePreparationDueAlert, cancelPendingStoreOrderAlerts } from "../../../../lib/store-order-alert-events";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
       store_customer_orders.pickup_code as "pickupCode",
       store_customer_orders.status,
       store_customer_orders.payment_status as "paymentStatus",
+      store_customer_orders.shortage_preference as "shortagePreference",
       store_customer_orders.pickup_date::text as "pickupDate",
       store_customer_orders.pickup_time as "pickupTime",
       coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') as "pickupTiming",
@@ -179,12 +181,15 @@ export async function PATCH(request: Request) {
         customer_summary = customer_summary || ${JSON.stringify(acknowledgementPayload)}::jsonb,
         updated_at = now()
       where id = ${orderId}
-        and payment_status = 'paid'
+        and payment_status in ('paid', 'partial_refunded')
         and status = 'new'
         and order_source <> 'store_pos'
       returning id::text
     `;
     if (rows[0]?.id) {
+      if (alertPhase === "scheduled_reminder") {
+        await acknowledgePreparationDueAlert(rows[0].id as string, session.id);
+      }
       await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(rows[0].id as string));
     }
     return Response.json({ ok: Boolean(rows[0]?.id), acknowledgedAt });
@@ -203,6 +208,9 @@ export async function PATCH(request: Request) {
     returning id::text
   `;
   if (rows[0]?.id) {
+    if (["preparing", "ready", "completed", "cancelled"].includes(status)) {
+      await cancelPendingStoreOrderAlerts(rows[0].id as string);
+    }
     if (["preparing", "ready"].includes(status)) {
       await ensureProductionTasksForOrder(rows[0].id as string);
       await sql`

@@ -20,6 +20,11 @@ function parsePickupAt(order: StoreOrderAlertTimingInput) {
   return Number.isFinite(pickupAt.getTime()) ? pickupAt.getTime() : null;
 }
 
+export function getScheduledOrderReminderAt(order: StoreOrderAlertTimingInput) {
+  const pickupAt = parsePickupAt(order);
+  return pickupAt === null ? null : new Date(pickupAt - scheduledOrderReminderLeadMinutes * 60 * 1000);
+}
+
 export function isScheduledMaamaaOrder(order: StoreOrderAlertTimingInput) {
   return order.orderSource === "maamaa_web" && order.pickupTiming === "scheduled";
 }

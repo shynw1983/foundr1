@@ -51,7 +51,7 @@ export async function GET(request: Request) {
     left join stores on stores.id = store_customer_orders.store_id
     left join brands on brands.id = order_production_tasks.brand_id
     where order_production_tasks.store_id::text = ${selectedStoreId}
-      and store_customer_orders.payment_status = 'paid'
+      and store_customer_orders.payment_status in ('paid', 'partial_refunded')
       and store_customer_orders.status not in ('cancelled', 'refund_pending')
       and (
         order_production_tasks.print_status = 'reprint_pending'
@@ -152,7 +152,7 @@ export async function PATCH(request: Request) {
           select 1
           from store_customer_orders
           where store_customer_orders.id = order_production_tasks.order_id
-            and store_customer_orders.payment_status = 'paid'
+            and store_customer_orders.payment_status in ('paid', 'partial_refunded')
             and store_customer_orders.status not in ('cancelled', 'refund_pending')
         )
       returning id::text

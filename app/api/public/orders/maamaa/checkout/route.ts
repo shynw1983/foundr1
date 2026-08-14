@@ -229,6 +229,42 @@ function buildMaamaaProductionLabels(item: Exclude<ReturnType<typeof validateBui
   ].filter(Boolean);
 }
 
+function buildMaamaaStoredCustomizations(item: Exclude<ReturnType<typeof validateBuildableItem>, { error: string }>) {
+  const coreOptions = [item.medicinalSpice, item.heat, item.numb, ...item.specialFlavorItems].filter(Boolean) as MaamaaPricedOption[];
+  return [
+    ...(item.noodleChanges.length ? [{
+      groupId: "maamaa-noodle-changes",
+      groupKey: "maamaa-noodle-changes",
+      groupName: "麺の変更",
+      selectionType: "multiple",
+      optionIds: item.noodleChanges.map((option) => option.id),
+      optionKeys: item.noodleChanges.map((option) => option.id),
+      optionLabels: item.noodleChanges.map((option) => option.name),
+      optionPrices: item.noodleChanges.map((option) => option.price)
+    }] : []),
+    ...(coreOptions.length ? [{
+      groupId: "maamaa-core",
+      groupKey: "maamaa-core",
+      groupName: "スープ・辛さ・痺れ",
+      selectionType: "multiple",
+      optionIds: coreOptions.map((option) => option.id),
+      optionKeys: coreOptions.map((option) => option.id),
+      optionLabels: coreOptions.map((option) => option.name),
+      optionPrices: coreOptions.map((option) => option.price)
+    }] : []),
+    ...item.selectedSections.map(({ section, items: selectedItems }) => ({
+      groupId: section.id,
+      groupKey: section.id,
+      groupName: section.title,
+      selectionType: "multiple",
+      optionIds: selectedItems.map((option) => option.id),
+      optionKeys: selectedItems.map((option) => option.id),
+      optionLabels: selectedItems.map((option) => option.name),
+      optionPrices: selectedItems.map((option) => option.price)
+    }))
+  ];
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return Response.json({ error: "Invalid request body" }, { status: 400 });
@@ -239,6 +275,10 @@ export async function POST(request: Request) {
   const completionUrl = String(body.completionUrl || "");
   const completionPath = String(body.completionPath || "/order-complete");
   const completionSummary = (body.completionSummary || {}) as Record<string, unknown>;
+  const shortagePreference = String(body.shortagePreference || "");
+  if (!['substitute_or_refund', 'refund'].includes(shortagePreference)) {
+    return Response.json({ error: "Please select how shortages should be handled" }, { status: 400 });
+  }
 
   const { brandId, baseMenu: menu } = await getMaamaaCompatibleMenu(storeId);
   const publicStore = menu.stores.find((store) => store.id === storeId || store.label === storeId || store.osStoreId === storeId) ?? (menu.stores.length === 1 ? menu.stores[0] : null);
@@ -350,6 +390,7 @@ export async function POST(request: Request) {
     pickupDate,
     pickupTime: pickup,
     amount,
+    shortagePreference: shortagePreference as "substitute_or_refund" | "refund",
     customerSummary: {
       ...completionSummary,
       brand: "maamaa",
@@ -364,6 +405,7 @@ export async function POST(request: Request) {
       couponCode: coupon?.couponCode ?? "",
       couponName: coupon?.name ?? "",
       couponDiscountAmount,
+      shortagePreference,
       customer: {
         name: completionSummary.name ?? body.name ?? "",
         phone: completionSummary.phone ?? body.phone ?? ""
@@ -404,6 +446,7 @@ export async function POST(request: Request) {
         ...item.toppingItems.map((topping) => topping.id)
       ].filter(Boolean),
       toppingLabels: buildMaamaaProductionLabels(item),
+      customizations: buildMaamaaStoredCustomizations(item),
       amount: item.amount
     }))
   });

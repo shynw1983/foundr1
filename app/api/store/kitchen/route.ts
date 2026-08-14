@@ -36,7 +36,7 @@ async function getKitchenTasks(storeId: string, area = "") {
     join store_customer_orders on store_customer_orders.id = order_production_tasks.order_id
     left join store_tables on store_tables.id = store_customer_orders.store_table_id
     where order_production_tasks.store_id::text = ${storeId}
-      and store_customer_orders.payment_status = 'paid'
+      and store_customer_orders.payment_status in ('paid', 'partial_refunded')
       and store_customer_orders.status not in ('completed', 'cancelled', 'refund_pending')
       and order_production_tasks.status in ('new', 'preparing', 'ready')
       and (${area} = '' or order_production_tasks.production_area = ${area})

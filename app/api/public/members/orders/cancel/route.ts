@@ -3,6 +3,7 @@ import { sql } from "../../../../../../lib/db";
 import { getMemberSession } from "../../../../../../lib/member-auth";
 import { upsertMember } from "../../../../../../lib/loyalty";
 import { publishCustomerOrderEvent } from "../../../../../../lib/order-realtime";
+import { cancelPendingStoreOrderAlerts } from "../../../../../../lib/store-order-alert-events";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,7 @@ export async function PATCH(request: Request) {
     );
   }
 
+  await cancelPendingStoreOrderAlerts(orderId);
   await publishCustomerOrderEvent("order.updated", result.order);
   return Response.json({ order: toPublicCustomerOrder(result.order, url.origin) }, { headers: { "Cache-Control": "no-store" } });
 }

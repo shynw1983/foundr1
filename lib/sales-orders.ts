@@ -157,8 +157,11 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
     from store_customer_order_items
     left join menu_catalog_items on menu_catalog_items.id = store_customer_order_items.menu_catalog_item_id
     where store_customer_order_items.order_id = ${orderId}
+      and coalesce(store_customer_order_items.refund_status, '') <> 'refunded'
     order by store_customer_order_items.sort_order
   `;
+
+  await sql`delete from sales_order_items where sales_order_id = ${salesOrderId}`;
 
   for (const item of itemRows as any[]) {
     await sql`

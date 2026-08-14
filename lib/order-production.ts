@@ -132,7 +132,7 @@ export async function refreshActiveProductionTasksForStore(storeId: string, limi
     from store_customer_orders
     left join order_production_tasks on order_production_tasks.order_id = store_customer_orders.id
     where store_customer_orders.store_id::text = ${normalizedStoreId}
-      and store_customer_orders.payment_status = 'paid'
+      and store_customer_orders.payment_status in ('paid', 'partial_refunded')
       and store_customer_orders.status in ('new', 'preparing', 'ready')
       and store_customer_orders.created_at > now() - interval '14 days'
       and (
@@ -181,7 +181,7 @@ export async function ensureProductionTasksForOrder(
   `;
   const order = orderRows[0] as { id: string; storeId: string; orderSource: string; status: string; paymentStatus: string } | undefined;
   const canProduceUnpaidTableOrder = order?.orderSource === "table_qr" && ["new", "preparing", "ready"].includes(order.status);
-  if (!order || (!canProduceUnpaidTableOrder && order.paymentStatus !== "paid") || ["cancelled", "refund_pending", "pending_payment", "checkout_failed", "payment_failed"].includes(order.status)) {
+  if (!order || (!canProduceUnpaidTableOrder && !["paid", "partial_refunded"].includes(order.paymentStatus)) || ["cancelled", "refund_pending", "pending_payment", "checkout_failed", "payment_failed"].includes(order.status)) {
     return [];
   }
 
@@ -206,6 +206,7 @@ export async function ensureProductionTasksForOrder(
     left join menu_catalog_items on menu_catalog_items.id = store_customer_order_items.menu_catalog_item_id
     left join brands on brands.id = coalesce(menu_catalog_items.brand_id, store_customer_orders.brand_id)
     where store_customer_order_items.order_id::text = ${normalizedOrderId}
+      and coalesce(store_customer_order_items.refund_status, '') <> 'refunded'
     order by store_customer_order_items.sort_order, store_customer_order_items.created_at
   `;
   const maamaaSettings = providedMaamaaSettings ?? await readMaamaaProductionReferenceSettings();
@@ -349,6 +350,7 @@ export async function ensureOrderProductionEstimate(orderId: string) {
       )::int as "bowlCount"
     from store_customer_orders
     left join store_customer_order_items on store_customer_order_items.order_id = store_customer_orders.id
+      and coalesce(store_customer_order_items.refund_status, '') <> 'refunded'
     where store_customer_orders.id::text = ${orderId}
     group by store_customer_orders.id
     limit 1

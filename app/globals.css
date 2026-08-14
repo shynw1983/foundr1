@@ -13146,6 +13146,102 @@ body :where(
   line-height: 1.55;
 }
 
+.store-order-shortage-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid rgba(33, 116, 91, 0.22);
+  border-radius: 10px;
+  background: #f7fbf9;
+}
+
+.store-order-shortage-head,
+.store-order-shortage-head > div {
+  display: flex;
+  gap: 6px;
+}
+
+.store-order-shortage-head {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.store-order-shortage-head > div {
+  min-width: 0;
+  flex-direction: column;
+}
+
+.store-order-shortage-head span,
+.store-order-shortage-form label,
+.store-order-shortage-history > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.store-order-shortage-head strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.store-order-shortage-form {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(33, 116, 91, 0.16);
+}
+
+.store-order-shortage-form > label {
+  display: grid;
+  gap: 5px;
+}
+
+.store-order-shortage-form select,
+.store-order-shortage-form input[type="text"] {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+}
+
+.store-order-shortage-form label small {
+  color: var(--muted);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.store-order-shortage-actions-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.store-order-shortage-actions-choice label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.store-order-shortage-actions-choice input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.store-order-shortage-history {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(33, 116, 91, 0.12);
+}
+
+.store-order-shortage-history p {
+  margin: 0;
+  font-size: 12px;
+}
+
 .store-order-actions {
   justify-content: flex-start;
   flex-wrap: wrap;

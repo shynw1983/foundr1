@@ -83,6 +83,7 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
         select sum(store_customer_order_items.quantity)::int
         from store_customer_order_items
         where store_customer_order_items.order_id = store_customer_orders.id
+          and coalesce(store_customer_order_items.refund_status, '') <> 'refunded'
       ), 0)::int as "itemCount",
       coalesce((
         select jsonb_agg(
@@ -99,6 +100,7 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
         from store_customer_order_items
         left join menu_catalog_items on menu_catalog_items.id = store_customer_order_items.menu_catalog_item_id
         where store_customer_order_items.order_id = store_customer_orders.id
+          and coalesce(store_customer_order_items.refund_status, '') <> 'refunded'
           and (
             order_production_tasks.brand_id is null
             or coalesce(menu_catalog_items.brand_id, store_customer_orders.brand_id) = order_production_tasks.brand_id
@@ -110,7 +112,7 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
     left join store_tables on store_tables.id = store_customer_orders.store_table_id
     left join brands on brands.id = order_production_tasks.brand_id
     where order_production_tasks.store_id::text = ${storeId}
-      and store_customer_orders.payment_status = 'paid'
+      and store_customer_orders.payment_status in ('paid', 'partial_refunded')
       and (
         ${includeCompleted} = true
         or store_customer_orders.status not in ('completed', 'cancelled', 'refund_pending')
@@ -369,7 +371,7 @@ export async function PATCH(request: Request) {
         updated_at = now()
       where id::text = ${requestedOrderId}
         and store_id::text = ${storeFilter}
-        and payment_status = 'paid'
+        and payment_status in ('paid', 'partial_refunded')
         and status in ('new', 'preparing', 'ready')
       returning id::text
     `;

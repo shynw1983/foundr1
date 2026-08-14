@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { findCustomerOrderByPaymentReference, updateCustomerOrder } from "./customer-orders";
 import { publishCustomerOrderEvent } from "./order-realtime";
+import { cancelPendingStoreOrderAlerts } from "./store-order-alert-events";
+import { scheduleStoreOrderPreparationReminder } from "./store-order-alert-scheduler";
 import type { StorePaymentAccount } from "./store-payment-accounts";
 
 function clean(value = "") {
@@ -71,6 +73,7 @@ export async function handleKomojuWebhook(request: Request, account?: StorePayme
       paymentUpdatedAt: payment.updated_at || paidAt,
       paidAt
     });
+    await scheduleStoreOrderPreparationReminder(updatedOrder);
     await publishCustomerOrderEvent("order.created", updatedOrder);
   } else if (eventType === "payment.refunded" || payment.status === "refunded") {
     const updatedOrder = await updateCustomerOrder(order.id, {
@@ -87,6 +90,7 @@ export async function handleKomojuWebhook(request: Request, account?: StorePayme
       paymentRefundedAt: payment.refunded_at || payment.updated_at || new Date().toISOString(),
       paymentUpdatedAt: payment.updated_at || new Date().toISOString()
     });
+    await cancelPendingStoreOrderAlerts(order.id);
     await publishCustomerOrderEvent("order.updated", updatedOrder);
   } else if (
     ["payment.failed", "payment.cancelled", "payment.expired"].includes(eventType) ||
@@ -102,6 +106,7 @@ export async function handleKomojuWebhook(request: Request, account?: StorePayme
       paymentReceiptUrl: receiptUrl,
       paymentUpdatedAt: payment.updated_at || new Date().toISOString()
     });
+    await cancelPendingStoreOrderAlerts(order.id);
     await publishCustomerOrderEvent("order.updated", updatedOrder);
   }
 

@@ -145,18 +145,23 @@ export async function createOsNotification(input: {
   title: string;
   message: string;
   href: string;
+  sourceKey?: string;
   sendPush?: boolean;
 }) {
-  await sql`
-    insert into os_notifications (recipient_employee_id, notification_type, title, message, href)
-    values (${input.employeeId}, ${input.type}, ${input.title}, ${input.message}, ${input.href})
+  const rows = await sql`
+    insert into os_notifications (recipient_employee_id, notification_type, title, message, href, source_key)
+    values (${input.employeeId}, ${input.type}, ${input.title}, ${input.message}, ${input.href}, ${input.sourceKey ?? ""})
+    on conflict (recipient_employee_id, source_key) where source_key <> '' do nothing
+    returning id::text
   `;
+  if (!rows[0]?.id) return { created: false };
   await publishOsNotificationEvent(input.employeeId).catch(() => undefined);
-  if (input.sendPush === false) return;
+  if (input.sendPush === false) return { created: true, pushed: false };
   await sendWebPushToEmployee(input.employeeId, {
     title: input.title,
     message: input.message,
     href: input.href,
     type: input.type
   });
+  return { created: true, pushed: true };
 }

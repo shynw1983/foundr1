@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { randomUUID } from "crypto";
 import { awardLoyaltyForPaidOrder, redeemPendingCouponForPaidOrder, reverseLoyaltyForRefundedOrder } from "./loyalty";
 import { ensureProductionTasksForOrder } from "./order-production";
 import { syncWebReservationToSalesOrder } from "./sales-orders";
@@ -13,6 +14,7 @@ export type CustomerOrderRow = {
   pickupCode: string;
   status: string;
   paymentStatus: string;
+  shortagePreference: "substitute_or_refund" | "refund";
   paymentProvider: string;
   paymentAccountId: string;
   paymentSessionId: string;
@@ -28,6 +30,7 @@ export type CustomerOrderRow = {
   pickupDate: string;
   pickupTime: string;
   pickupTiming: string;
+  alertPhase: string;
   initialAlertAcknowledgedAt: string;
   reminderAlertAcknowledgedAt: string;
   amount: number;
@@ -78,6 +81,8 @@ export type CustomerOrderItemInput = {
     optionIds: string[];
     optionKeys: string[];
     optionLabels: string[];
+    optionPrices?: number[];
+    price?: number;
   }>;
   amount: number;
 };
@@ -144,6 +149,7 @@ export function toPublicCustomerOrder(order: CustomerOrderRow, baseUrl = "") {
     storeName: order.storeName,
     status: order.status,
     paymentStatus: order.paymentStatus,
+    shortagePreference: order.shortagePreference,
     refundStatus: order.paymentRefundStatus,
     refundError: order.paymentRefundError,
     refundedAt: order.paymentRefundedAt,
@@ -180,6 +186,7 @@ export async function createCustomerOrder(input: {
   pickupDate: string;
   pickupTime: string;
   amount: number;
+  shortagePreference?: "substitute_or_refund" | "refund";
   currency?: string;
   customerSummary: Record<string, unknown>;
   drink: string;
@@ -191,6 +198,15 @@ export async function createCustomerOrder(input: {
   toppings: string;
   items: CustomerOrderItemInput[];
 }) {
+  const grossAmount = input.items.reduce((sum, orderItem) => sum + orderItem.amount, 0);
+  let remainingPaidAmount = input.amount;
+  const paidAmounts = input.items.map((item, index) => {
+    const amount = index === input.items.length - 1
+      ? remainingPaidAmount
+      : Math.min(remainingPaidAmount, Math.max(0, Math.round(item.amount * input.amount / Math.max(1, grossAmount))));
+    remainingPaidAmount = Math.max(0, remainingPaidAmount - amount);
+    return amount;
+  });
   const rows = await sql`
     insert into store_customer_orders (
       brand_id,
@@ -198,6 +214,7 @@ export async function createCustomerOrder(input: {
       order_source,
       payment_provider,
       payment_account_id,
+      shortage_preference,
       member_id,
       pickup_code,
       pickup_date,
@@ -219,6 +236,7 @@ export async function createCustomerOrder(input: {
       ${input.orderSource ?? "nanacha_web"},
       ${input.paymentProvider ?? "square"},
       ${input.paymentAccountId || null},
+      ${input.shortagePreference ?? "refund"},
       ${input.memberId || null},
       ${input.pickupCode},
       ${input.pickupDate},
@@ -256,6 +274,8 @@ export async function createCustomerOrder(input: {
         topping_labels,
         customizations,
         amount,
+        gross_amount,
+        paid_amount,
         sort_order
       )
       values (
@@ -273,6 +293,8 @@ export async function createCustomerOrder(input: {
         ${item.toppingLabels},
         ${JSON.stringify(item.customizations ?? [])},
         ${item.amount},
+        ${item.amount},
+        ${paidAmounts[index]},
         ${index}
       )
     `;
@@ -351,6 +373,7 @@ export async function findCustomerOrderById(orderId: string) {
       store_customer_orders.pickup_code as "pickupCode",
       store_customer_orders.status,
       store_customer_orders.payment_status as "paymentStatus",
+      store_customer_orders.shortage_preference as "shortagePreference",
       store_customer_orders.payment_provider as "paymentProvider",
       coalesce(store_customer_orders.payment_account_id::text, '') as "paymentAccountId",
       coalesce(store_customer_orders.payment_session_id, '') as "paymentSessionId",
@@ -367,6 +390,13 @@ export async function findCustomerOrderById(orderId: string) {
       store_customer_orders.pickup_date::text as "pickupDate",
       store_customer_orders.pickup_time as "pickupTime",
       coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') as "pickupTiming",
+      case
+        when store_customer_orders.order_source <> 'maamaa_web'
+          or coalesce(store_customer_orders.customer_summary ->> 'pickupTiming', '') <> 'scheduled' then 'immediate'
+        when store_customer_orders.paid_at > now() - interval '2 minutes' then 'scheduled_initial'
+        when ((store_customer_orders.pickup_date::text || ' ' || store_customer_orders.pickup_time)::timestamp at time zone 'Asia/Tokyo') <= now() + interval '20 minutes' then 'scheduled_reminder'
+        else 'scheduled_waiting'
+      end as "alertPhase",
       coalesce(store_customer_orders.customer_summary ->> 'initialAlertAcknowledgedAt', '') as "initialAlertAcknowledgedAt",
       coalesce(store_customer_orders.customer_summary ->> 'reminderAlertAcknowledgedAt', '') as "reminderAlertAcknowledgedAt",
       store_customer_orders.amount,
@@ -450,7 +480,7 @@ async function getRefundPaymentAccount(order: CustomerOrderRow) {
   });
 }
 
-async function refundKomojuPayment(order: CustomerOrderRow) {
+async function refundKomojuPayment(order: CustomerOrderRow, amount?: number, description?: string) {
   if (order.paymentProvider !== "komoju") {
     return { ok: false, error: "This payment provider does not support automatic refund here.", refundId: "" };
   }
@@ -471,7 +501,8 @@ async function refundKomojuPayment(order: CustomerOrderRow) {
       Accept: "application/json"
     },
     body: JSON.stringify({
-      description: `Customer cancellation ${order.pickupCode}`
+      ...(amount && amount > 0 ? { amount: Math.round(amount) } : {}),
+      description: description || `Customer cancellation ${order.pickupCode}`
     })
   });
   const body = await response.json().catch(() => ({}));
@@ -481,6 +512,43 @@ async function refundKomojuPayment(order: CustomerOrderRow) {
 
   const refundId = String((body as Record<string, any>).id || (body as Record<string, any>).refund?.id || "");
   return { ok: true, error: "", refundId };
+}
+
+async function refundSquarePayment(order: CustomerOrderRow, amount: number, description: string) {
+  const accessToken = String(process.env.SQUARE_ACCESS_TOKEN || "").trim().replace(/^Bearer\s+/i, "");
+  const environment = String(process.env.SQUARE_ENVIRONMENT || "production").trim().toLowerCase();
+  const paymentId = order.squarePaymentId || order.paymentId;
+  if (!accessToken) return { ok: false, error: "Square refund access token is not configured.", refundId: "" };
+  if (!paymentId) return { ok: false, error: "Square payment ID is missing.", refundId: "" };
+  const host = environment === "sandbox" ? "https://connect.squareupsandbox.com" : "https://connect.squareup.com";
+  const response = await fetch(`${host}/v2/refunds`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "Square-Version": "2026-01-22"
+    },
+    body: JSON.stringify({
+      idempotency_key: randomUUID(),
+      payment_id: paymentId,
+      amount_money: { amount: Math.round(amount), currency: order.currency || "JPY" },
+      reason: description.slice(0, 192)
+    })
+  });
+  const body = await response.json().catch(() => ({})) as Record<string, any>;
+  if (!response.ok) {
+    const message = String(body.errors?.[0]?.detail || body.errors?.[0]?.code || "Square refund failed.");
+    return { ok: false, error: message, refundId: "" };
+  }
+  return { ok: true, error: "", refundId: String(body.refund?.id || "") };
+}
+
+export async function refundCustomerOrderPayment(order: CustomerOrderRow, amount: number, description: string) {
+  const normalizedAmount = Math.max(0, Math.round(Number(amount) || 0));
+  if (!normalizedAmount) return { ok: true, error: "", refundId: "" };
+  if (order.paymentProvider === "komoju") return refundKomojuPayment(order, normalizedAmount, description);
+  if (order.paymentProvider === "square") return refundSquarePayment(order, normalizedAmount, description);
+  return { ok: false, error: "This payment provider does not support automatic refund here.", refundId: "" };
 }
 
 export async function cancelPublicMaamaaCustomerOrder(input: { orderId?: string | null; pickupCode?: string | null; pickupDate?: string | null }) {

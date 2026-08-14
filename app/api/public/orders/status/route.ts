@@ -1,5 +1,6 @@
 import { cancelPublicMaamaaCustomerOrder, findPublicCustomerOrder, toPublicCustomerOrder } from "../../../../../lib/customer-orders";
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
+import { cancelPendingStoreOrderAlerts } from "../../../../../lib/store-order-alert-events";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,9 @@ export async function PATCH(request: Request) {
     return Response.json({ error: result.error, order: toPublicCustomerOrder(result.order, url.origin) }, { status: result.status, headers: { "Cache-Control": "no-store" } });
   }
 
+  if (result.order?.id && result.order.status === "cancelled") {
+    await cancelPendingStoreOrderAlerts(result.order.id);
+  }
   await publishCustomerOrderEvent("order.updated", result.order);
   return Response.json({ order: toPublicCustomerOrder(result.order, url.origin) }, { headers: { "Cache-Control": "no-store" } });
 }

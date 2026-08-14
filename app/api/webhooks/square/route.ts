@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { findCustomerOrderBySquareOrderId, updateCustomerOrder } from "../../../../lib/customer-orders";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
+import { cancelPendingStoreOrderAlerts } from "../../../../lib/store-order-alert-events";
+import { scheduleStoreOrderPreparationReminder } from "../../../../lib/store-order-alert-scheduler";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +56,7 @@ export async function POST(request: Request) {
       squarePaymentUpdatedAt: payment.updated_at || payment.created_at || new Date().toISOString(),
       paidAt: payment.updated_at || payment.created_at || new Date().toISOString()
     });
+    await scheduleStoreOrderPreparationReminder(updatedOrder);
     await publishCustomerOrderEvent("order.created", updatedOrder);
   } else if (["FAILED", "CANCELED"].includes(payment.status)) {
     const updatedOrder = await updateCustomerOrder(order.id, {
@@ -68,6 +71,7 @@ export async function POST(request: Request) {
       squareReceiptUrl: payment.receipt_url || "",
       squarePaymentUpdatedAt: payment.updated_at || payment.created_at || new Date().toISOString()
     });
+    await cancelPendingStoreOrderAlerts(order.id);
     await publishCustomerOrderEvent("order.updated", updatedOrder);
   }
 

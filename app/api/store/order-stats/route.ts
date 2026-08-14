@@ -24,11 +24,11 @@ export async function GET(request: Request) {
   const [summaryRows, statusRows, productRows, storeRows] = await Promise.all([
     sql`
       select
-        count(*) filter (where payment_status = 'paid')::int as "paidOrders",
+        count(*) filter (where payment_status in ('paid', 'partial_refunded'))::int as "paidOrders",
         count(*) filter (where status = 'completed')::int as "completedOrders",
         count(*) filter (where status = 'cancelled')::int as "cancelledOrders",
         count(*) filter (where status in ('new', 'preparing', 'ready'))::int as "activeOrders",
-        coalesce(sum(amount) filter (where payment_status = 'paid'), 0)::int as "grossSales",
+        coalesce(sum(amount) filter (where payment_status in ('paid', 'partial_refunded')), 0)::int as "grossSales",
         coalesce(round(avg(extract(epoch from (completed_at - paid_at)) / 60) filter (where completed_at is not null and paid_at is not null))::int, 0) as "averageCompletionMinutes"
       from store_customer_orders
       where (${access.allStores} or store_id::text = any(${access.storeIds}))
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
       join store_customer_orders on store_customer_orders.id = store_customer_order_items.order_id
       where (${access.allStores} or store_customer_orders.store_id::text = any(${access.storeIds}))
         and (${storeFilter}::text is null or store_customer_orders.store_id::text = ${storeFilter})
-        and store_customer_orders.payment_status = 'paid'
+        and store_customer_orders.payment_status in ('paid', 'partial_refunded')
         and (coalesce(store_customer_orders.paid_at, store_customer_orders.created_at) at time zone 'Asia/Tokyo')::date >= ((now() at time zone 'Asia/Tokyo')::date - (${days}::int - 1))
       group by store_customer_order_items.item_name
       order by count desc, sales desc, name
@@ -62,8 +62,8 @@ export async function GET(request: Request) {
     sql`
       select
         coalesce(stores.name, '店舗未設定') as name,
-        count(*) filter (where store_customer_orders.payment_status = 'paid')::int as "paidOrders",
-        coalesce(sum(store_customer_orders.amount) filter (where store_customer_orders.payment_status = 'paid'), 0)::int as sales
+        count(*) filter (where store_customer_orders.payment_status in ('paid', 'partial_refunded'))::int as "paidOrders",
+        coalesce(sum(store_customer_orders.amount) filter (where store_customer_orders.payment_status in ('paid', 'partial_refunded')), 0)::int as sales
       from store_customer_orders
       left join stores on stores.id = store_customer_orders.store_id
       where (${access.allStores} or store_customer_orders.store_id::text = any(${access.storeIds}))

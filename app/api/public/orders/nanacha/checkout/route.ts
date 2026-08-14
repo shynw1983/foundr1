@@ -57,6 +57,7 @@ type ValidatedCustomization = {
   optionIds: string[];
   optionKeys: string[];
   optionLabels: string[];
+  optionPrices: number[];
   price: number;
 };
 
@@ -108,6 +109,7 @@ function validateStructuredCustomizations(rawValue: unknown, groups: NanachaCust
       optionIds,
       optionKeys: selectedOptions.map((option) => option?.optionKey || option?.externalId || option?.id || ""),
       optionLabels: selectedOptions.map((option) => option?.label || ""),
+      optionPrices: selectedOptions.map((option) => option?.price ?? 0),
       price: selectedOptions.reduce((sum, option) => sum + (option?.price ?? 0), 0)
     });
   }
@@ -167,6 +169,10 @@ export async function POST(request: Request) {
   const completionUrl = String(body.completionUrl || "");
   const completionPath = String(body.completionPath || "/order-complete");
   const completionSummary = (body.completionSummary || {}) as Record<string, unknown>;
+  const shortagePreference = String(body.shortagePreference || "");
+  if (!["substitute_or_refund", "refund"].includes(shortagePreference)) {
+    return Response.json({ error: "Please select how shortages should be handled" }, { status: 400 });
+  }
   const requestedItems =
     Array.isArray(body.items) && body.items.length
       ? body.items.map((item) => item as Record<string, unknown>)
@@ -374,6 +380,7 @@ export async function POST(request: Request) {
     pickupDate,
     pickupTime: pickup,
     amount,
+    shortagePreference: shortagePreference as "substitute_or_refund" | "refund",
     customerSummary: {
       ...completionSummary,
       memberId: member?.id ?? "",
@@ -382,7 +389,8 @@ export async function POST(request: Request) {
       couponId: coupon?.id ?? "",
       couponCode: coupon?.couponCode ?? "",
       couponName: coupon?.name ?? "",
-      couponDiscountAmount
+      couponDiscountAmount,
+      shortagePreference
     },
     drink: drinkLabel,
     size: sizeLabel,
@@ -403,15 +411,26 @@ export async function POST(request: Request) {
       optionLabel: item.option.label,
       toppingKeys: item.toppings.map((topping) => topping.id),
       toppingLabels: item.toppings.map((topping) => topping.label),
-      customizations: item.customizations.map((customization) => ({
-        groupId: customization.groupId,
-        groupKey: customization.groupKey,
-        groupName: customization.groupName,
-        selectionType: customization.selectionType,
-        optionIds: customization.optionIds,
-        optionKeys: customization.optionKeys,
-        optionLabels: customization.optionLabels
-      })),
+      customizations: item.customizations.length
+        ? item.customizations.map((customization) => ({
+            groupId: customization.groupId,
+            groupKey: customization.groupKey,
+            groupName: customization.groupName,
+            selectionType: customization.selectionType,
+            optionIds: customization.optionIds,
+            optionKeys: customization.optionKeys,
+            optionLabels: customization.optionLabels,
+            optionPrices: customization.optionPrices,
+            price: customization.price
+          }))
+        : [
+            { groupId: "size", groupKey: "size", groupName: "サイズ", selectionType: "single", optionIds: [item.size.id], optionKeys: [item.size.id], optionLabels: [item.size.label], optionPrices: [item.size.price] },
+            { groupId: "temperature", groupKey: "temperature", groupName: "温度", selectionType: "single", optionIds: [item.temperature], optionKeys: [item.temperature], optionLabels: [item.temperature], optionPrices: [0] },
+            { groupId: "sweetness", groupKey: "sweetness", groupName: "甘さ", selectionType: "single", optionIds: [item.sweetness], optionKeys: [item.sweetness], optionLabels: [item.sweetness], optionPrices: [0] },
+            { groupId: "ice", groupKey: "ice", groupName: "氷", selectionType: "single", optionIds: [item.ice], optionKeys: [item.ice], optionLabels: [item.ice], optionPrices: [0] },
+            ...(item.option.id && item.option.id !== "none" ? [{ groupId: "option", groupKey: "option", groupName: "オプション", selectionType: "single", optionIds: [item.option.id], optionKeys: [item.option.id], optionLabels: [item.option.label], optionPrices: [item.option.price] }] : []),
+            ...(item.toppings.length ? [{ groupId: "toppings", groupKey: "toppings", groupName: "トッピング", selectionType: "multiple", optionIds: item.toppings.map((topping) => topping.id), optionKeys: item.toppings.map((topping) => topping.id), optionLabels: item.toppings.map((topping) => topping.label), optionPrices: item.toppings.map((topping) => topping.price) }] : [])
+          ],
       amount: item.amount
     }))
   });
