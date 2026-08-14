@@ -7,7 +7,7 @@ const OOS_URL = "https://store.rocketnow.co.jp/merchant/management/oos";
 async function readRows(page, targets) {
   const requested = targets.map((target) => ({ label: target.label, names: targetNames(target) }));
   return page.evaluate((items) => {
-    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
     return items.map((item) => {
       const wanted = new Set(item.names.map(normalize));
@@ -30,7 +30,7 @@ async function readRows(page, targets) {
 
 async function waitForRows(page, labels, hidden) {
   await page.waitForFunction(({ wantedLabels, expectedHidden }) => {
-    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
     return wantedLabels.every((label) => {
       const title = titles.find((candidate) => normalize(candidate.textContent) === normalize(label));

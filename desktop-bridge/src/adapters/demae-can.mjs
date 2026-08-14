@@ -5,7 +5,7 @@ const STOCKOUT_URL = "https://partner.demae-can.com/merchant-admin/shop/stockout
 async function readRows(page, targets) {
   const requested = targets.map((target) => ({ label: target.label, names: targetNames(target) }));
   return page.evaluate((items) => {
-    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll("[class*=Styles_name__]")];
     return items.map((item) => {
       const wanted = item.names.map(normalize);
@@ -29,7 +29,7 @@ async function readRows(page, targets) {
 async function clickRows(page, items) {
   for (const item of items) {
     const clicked = await page.evaluate((names) => {
-      const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+      const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
       const wanted = names.map(normalize);
       const candidates = [...document.querySelectorAll("[class*=Styles_name__]")]
         .filter((title) => wanted.some((name) => normalize(title.textContent) === name || normalize(title.textContent).startsWith(`${name}|`)));
@@ -46,7 +46,7 @@ async function clickRows(page, items) {
 
 async function waitForRows(page, items, unavailable) {
   await page.waitForFunction(({ requested, expectedUnavailable }) => {
-    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll("[class*=Styles_name__]")];
     return requested.every((item) => {
       const wanted = item.names.map(normalize);

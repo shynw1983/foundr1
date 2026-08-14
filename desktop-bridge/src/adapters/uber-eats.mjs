@@ -6,6 +6,7 @@ import { loginState, targetNames } from "./common.mjs";
 const UBER_ORIGIN = "https://merchants.ubereats.com/";
 const NORMALIZE_SOURCE = `const normalize = (value) => String(value ?? "")
   .normalize("NFKC")
+  .replace(/【[^】]*】|\\[[^\\]]*\\]/g, " ")
   .replace(/[\\s\\u200b-\\u200d\\ufeff]+/g, " ")
   .trim();`;
 
