@@ -376,19 +376,21 @@ export async function POST(request: Request) {
     select distinct source_platform as platform
     from store_sales_sources
     where store_id::text = ${storeId}
-      and source_platform in ('uber_eats', 'rocket_now')
+      and source_platform in ('uber_eats', 'rocket_now', 'demae_can')
       and is_enabled = true
   `;
   const configuredPlatforms = sourceRows
     .map((row) => String(row.platform))
-    .filter((platform) => platform === "uber_eats" || platform === "rocket_now");
+    .filter((platform) => ["uber_eats", "rocket_now", "demae_can"].includes(platform));
   const platforms = configuredPlatforms.length ? configuredPlatforms : ["uber_eats"];
   const commandRows: Array<{ id: string; platform: string }> = [];
   for (const platform of platforms) {
     const platformCommandId = platform === platforms[0] ? commandId : randomUUID();
     const operation = platform === "rocket_now"
       ? (isAvailable ? "unhide" : "hide")
-      : (isAvailable ? "available" : "sold_out");
+      : platform === "demae_can"
+        ? (isAvailable ? "available" : "stockout")
+        : (isAvailable ? "available" : "sold_out");
     const serializedTargets = resolved.targets.map((target) => ({
       kind: target.kind,
       targetId: target.targetId,
@@ -399,7 +401,7 @@ export async function POST(request: Request) {
     // Rocket exposes one merchant row per Japanese label, while the Foundr1/Uber
     // model can contain the same ingredient in more than one option group. Sending
     // duplicates would tap the same Rocket checkbox twice and undo the selection.
-    const commandTargets = platform === "rocket_now"
+    const commandTargets = platform === "rocket_now" || platform === "demae_can"
       ? Array.from(new Map(serializedTargets.map((target) => [target.label.trim(), target])).values())
       : serializedTargets;
     const idempotencyKey = `${platform}:set_inventory:${storeId}:${resolved.inventoryKey}:${operation}:${platformCommandId}`;

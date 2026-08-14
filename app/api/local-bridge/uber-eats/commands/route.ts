@@ -22,11 +22,17 @@ async function authorize(request: Request) {
   if (!authorization.authorized) {
     authorization = await authorizeLocalBridge(request, storeId, "demae_can");
   }
+  if (!authorization.authorized) {
+    authorization = await authorizeLocalBridge(request, storeId, "desktop");
+  }
   const platformMode = cleanText(params.get("platformMode"), 20);
+  const isDesktop = authorization.devicePlatform === "desktop";
   return {
     storeId,
-    supportsUber: ["", "uber_eats", "dual", "all"].includes(platformMode),
-    supportsRocket: ["rocket_now", "dual", "all"].includes(platformMode),
+    isDesktop,
+    supportsUber: isDesktop || ["", "uber_eats", "dual", "all"].includes(platformMode),
+    supportsRocket: isDesktop || ["rocket_now", "dual", "all"].includes(platformMode),
+    supportsDemae: isDesktop,
     ...authorization
   };
 }
@@ -148,7 +154,9 @@ export async function GET(request: Request) {
       and (
         (platform = 'uber_eats' and ${authorization.supportsUber})
         or (platform = 'rocket_now' and ${authorization.supportsRocket})
+        or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
+      and (${authorization.isDesktop} = false or command_type = 'set_inventory_availability')
       and status in ('pending', 'processing')
       and created_at < now() - interval '2 hours'
   `;
@@ -170,7 +178,9 @@ export async function GET(request: Request) {
       and (
         (platform = 'uber_eats' and ${authorization.supportsUber})
         or (platform = 'rocket_now' and ${authorization.supportsRocket})
+        or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
+      and (${authorization.isDesktop} = false or command_type = 'set_inventory_availability')
       and status = 'processing'
       and claim_expires_at < now()
   `;
@@ -196,7 +206,9 @@ export async function GET(request: Request) {
       and (
         (stale.platform = 'uber_eats' and ${authorization.supportsUber})
         or (stale.platform = 'rocket_now' and ${authorization.supportsRocket})
+        or (stale.platform = 'demae_can' and ${authorization.supportsDemae})
       )
+      and (${authorization.isDesktop} = false or stale.command_type = 'set_inventory_availability')
       and coalesce(stale.payload->>'inventoryKey', '') <> ''
       and exists (
         select 1
@@ -221,7 +233,9 @@ export async function GET(request: Request) {
       and (
         (platform = 'uber_eats' and ${authorization.supportsUber})
         or (platform = 'rocket_now' and ${authorization.supportsRocket})
+        or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
+      and (${authorization.isDesktop} = false or command_type = 'set_inventory_availability')
       and status = 'processing'
       and (
         claimed_by_device_id::text = ${authorization.deviceId}
@@ -242,7 +256,8 @@ export async function GET(request: Request) {
       claimed_at = now(),
       claim_expires_at = now() + case
         when command_type = 'audit_inventory' then interval '30 minutes'
-        when platform = 'rocket_now' and command_type = 'set_inventory_availability' then interval '15 minutes'
+        when command_type = 'set_inventory_availability'
+          and (${authorization.isDesktop} or platform = 'rocket_now') then interval '15 minutes'
         else interval '2 minutes'
       end,
       updated_at = now()
@@ -253,7 +268,9 @@ export async function GET(request: Request) {
         and (
           (platform = 'uber_eats' and ${authorization.supportsUber})
           or (platform = 'rocket_now' and ${authorization.supportsRocket})
+          or (platform = 'demae_can' and ${authorization.supportsDemae})
         )
+        and (${authorization.isDesktop} = false or command_type = 'set_inventory_availability')
         and status = 'pending'
         and available_at <= now()
         and attempts < 5

@@ -1,0 +1,23 @@
+{
+  "serverUrl": "https://www.foundr1.jp",
+  "storeId": "FOUND R1 STORE UUID",
+  "bridgeToken": "ENROLLED DESKTOP BRIDGE TOKEN",
+  "deviceName": "Kitchen MacBook Air",
+  "executionEnabled": false,
+  "pollIntervalMs": 5000,
+  "chromeExecutablePath": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "chromeProfilesRoot": "~/Library/Application Support/Foundr1 Desktop Bridge/Chrome",
+  "platforms": {
+    "uber_eats": {
+      "enabled": true,
+      "headless": true,
+      "storeUuid": "UBER STORE UUID"
+    },
+    "rocket_now": {
+      "enabled": true
+    },
+    "demae_can": {
+      "enabled": true
+    }
+  }
+}

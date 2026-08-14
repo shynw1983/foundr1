@@ -23,6 +23,9 @@ export async function POST(request: Request) {
   if (!authorization.authorized) {
     authorization = await authorizeLocalBridge(request, storeId, "demae_can");
   }
+  if (!authorization.authorized) {
+    authorization = await authorizeLocalBridge(request, storeId, "desktop");
+  }
   if (!authorization.authorized || !storeId) {
     return Response.json({ error: "Unauthorized bridge token." }, { status: 401 });
   }
@@ -35,7 +38,7 @@ export async function POST(request: Request) {
     lastOrderCode: cleanText(source.lastOrderCode, 40),
     lastOrderAt: cleanText(source.lastOrderAt, 80),
     versionName: cleanText(source.versionName, 40),
-    platformMode: ["uber_eats", "rocket_now", "demae_can", "all", "dual"].includes(cleanText(source.platformMode, 20))
+    platformMode: ["uber_eats", "rocket_now", "demae_can", "desktop", "all", "dual"].includes(cleanText(source.platformMode, 20))
       ? cleanText(source.platformMode, 20)
       : "dual",
     primaryPlatform: ["rocket_now", "demae_can"].includes(cleanText(source.primaryPlatform, 20))

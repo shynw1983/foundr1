@@ -12,7 +12,7 @@ export async function authorizeLocalBridge(request: Request, storeId: string, pl
   const header = request.headers.get("authorization") ?? "";
   const token = header.replace(/^Bearer\s+/i, "").trim();
   if (!token && process.env.NODE_ENV !== "production") {
-    return { authorized: true, deviceId: "" };
+    return { authorized: true, deviceId: "", devicePlatform: platform };
   }
   if (token && storeId) {
     const tokenHash = createHash("sha256").update(token).digest("hex");
@@ -25,11 +25,13 @@ export async function authorizeLocalBridge(request: Request, storeId: string, pl
         and is_enabled = true
       limit 1
     `;
-    if (rows[0]?.id) return { authorized: true, deviceId: String(rows[0].id) };
+    if (rows[0]?.id) {
+      return { authorized: true, deviceId: String(rows[0].id), devicePlatform: platform };
+    }
   }
   const expectedToken = process.env.LOCAL_BRIDGE_TOKEN;
   if (expectedToken && token && secureEqual(token, expectedToken)) {
-    return { authorized: true, deviceId: "" };
+    return { authorized: true, deviceId: "", devicePlatform: "" };
   }
-  return { authorized: false, deviceId: "" };
+  return { authorized: false, deviceId: "", devicePlatform: "" };
 }

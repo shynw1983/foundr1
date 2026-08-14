@@ -1,0 +1,19 @@
+{
+  "name": "foundr1-desktop-bridge",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "check": "node src/main.mjs check",
+    "login": "node src/main.mjs login",
+    "locate": "node src/main.mjs locate",
+    "install:mac": "node macos/install-launch-agent.mjs",
+    "uninstall:mac": "node macos/uninstall-launch-agent.mjs",
+    "start": "node src/main.mjs run",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.1.0",
+    "ws": "^8.18.3"
+  }
+}
