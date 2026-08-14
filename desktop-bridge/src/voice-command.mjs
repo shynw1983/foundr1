@@ -1,22 +1,63 @@
+import { spawn } from "node:child_process";
+import { appendFile, mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 import { BridgeApiClient } from "./api-client.mjs";
 import { loadConfig } from "./config.mjs";
-import { formatVoiceResult } from "./voice-result.mjs";
+import { formatVoiceAcknowledgement, formatVoiceResult } from "./voice-result.mjs";
 
 const args = process.argv.slice(2);
 const action = String(args[0] ?? "").trim();
 const preview = args.includes("--preview");
 const confirmed = args.includes("--confirmed");
 const shortcutMode = args.includes("--shortcut");
+const backgroundMode = args.includes("--background");
 const query = args.slice(1).filter((value) => !value.startsWith("--")).join(" ").trim();
+const scriptFilename = fileURLToPath(import.meta.url);
+const voiceLogDirectory = path.join(homedir(), "Library", "Logs", "Foundr1 Desktop Bridge");
+const voiceLogFilename = path.join(voiceLogDirectory, "voice.log");
 
-async function run() {
+async function appendVoiceLog(message) {
+  await mkdir(voiceLogDirectory, { recursive: true });
+  await appendFile(voiceLogFilename, `${new Date().toISOString()} ${message}\n`, "utf8");
+}
+
+function startBackgroundCommand() {
+  const child = spawn(process.execPath, [
+    scriptFilename,
+    action,
+    "--confirmed",
+    "--shortcut",
+    "--background",
+    query
+  ], {
+    detached: true,
+    stdio: "ignore"
+  });
+  child.unref();
+}
+
+async function speakChinese(message) {
+  await new Promise((resolve, reject) => {
+    const child = spawn("/usr/bin/say", ["-v", "Ting-Ting", message], { stdio: "ignore" });
+    child.once("error", reject);
+    child.once("exit", (code) => code === 0 ? resolve() : reject(new Error(`say exited with code ${code}`)));
+  });
+}
+
+function validateRequest() {
   if (!["stockout", "restore"].includes(action) || !query) {
     throw new Error("请说出要修改的商品名称。");
   }
   if (!preview && !confirmed) {
     throw new Error("缺少确认参数，未修改商品状态。");
   }
+}
+
+async function run() {
+  validateRequest();
   const config = await loadConfig({ requireCredentials: true });
   const api = new BridgeApiClient(config);
   const result = await api.setVoiceInventory(action, query, { preview, confirmed });
@@ -65,9 +106,25 @@ async function run() {
 }
 
 try {
-  console.log(await run());
+  if (shortcutMode && !backgroundMode && !preview) {
+    validateRequest();
+    startBackgroundCommand();
+    console.log(formatVoiceAcknowledgement({ query, isAvailable: action === "restore" }));
+  } else {
+    const message = await run();
+    console.log(message);
+    if (backgroundMode) {
+      await appendVoiceLog(message).catch(() => undefined);
+      await speakChinese(message);
+    }
+  }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
-  console.log(`操作失败：${message.replace(/^Foundr1 HTTP \d+:\s*/i, "")}`);
+  const feedback = `操作失败：${message.replace(/^Foundr1 HTTP \d+:\s*/i, "")}`;
+  console.log(feedback);
+  if (backgroundMode) {
+    await appendVoiceLog(feedback).catch(() => undefined);
+    await speakChinese(feedback).catch(() => undefined);
+  }
   if (!shortcutMode) process.exitCode = 1;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 const storeSelectionStorageKey = "foundr1:store:selectedStoreId";
-const storeSelectionEventName = "foundr1-store-selection-change";
+export const storeSelectionEventName = "foundr1-store-selection-change";
 
 export function getStoredStoreSelection() {
   if (typeof window === "undefined") return "";

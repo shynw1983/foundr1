@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { getAppVersion, getShortAppVersion } from "../../lib/app-version";
 import { StoreNativeOrderNotifier } from "./components/StoreNativeOrderNotifier";
+import { StoreInventorySyncStatus } from "./components/StoreInventorySyncStatus";
 import { StorePrintStation } from "./components/StorePrintStation";
 import { StoreVersionNotice } from "./components/StoreVersionNotice";
 
@@ -41,6 +42,7 @@ export default function StoreLayout({
       <StoreVersionNotice initialVersion={version} initialShortVersion={getShortAppVersion(version)} />
       <StoreNativeOrderNotifier />
       <StorePrintStation />
+      <StoreInventorySyncStatus />
       {children}
     </>
   );

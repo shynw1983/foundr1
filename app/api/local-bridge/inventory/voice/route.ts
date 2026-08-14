@@ -117,6 +117,8 @@ export async function POST(request: Request) {
     resolution: match.resolution,
     isAvailable,
     statusSource: "Siri",
+    syncSource: "siri",
+    feedbackLabel: matchedLabel,
     updatedBy: null
   });
   return Response.json({
@@ -127,6 +129,7 @@ export async function POST(request: Request) {
     targetKind: match.targetKind,
     targetCount: match.resolution.targets.length,
     isAvailable,
-    commands: applied.commands
+    commands: applied.commands,
+    syncRun: applied.syncRun
   });
 }

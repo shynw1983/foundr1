@@ -222,6 +222,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const storeId = await authorizeStore(session, text(body.storeId, 80));
   const ingredientLabel = text(body.ingredientLabel);
+  const feedbackLabel = text(body.feedbackLabel);
   const brandId = text(body.brandId, 80);
   const action = text(body.action, 40) || "preview";
   const targetKind = body.targetKind === "item" ? "item" : "option";
@@ -293,12 +294,15 @@ export async function POST(request: Request) {
     resolution: resolved,
     isAvailable,
     statusSource,
+    syncSource: "store",
+    feedbackLabel,
     updatedBy: session.id
   });
   return Response.json({
     ok: true,
     commandId: applied.commands[0]?.id ?? "",
     commands: applied.commands,
+    syncRun: applied.syncRun,
     isAvailable,
     ...resolved
   });

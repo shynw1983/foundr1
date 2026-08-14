@@ -7,7 +7,7 @@ export function bridgeRealtimeChannel(storeId: string) {
 
 async function publishBridgeEvent(
   storeId: string,
-  eventName: "bridge.command.available" | "bridge.command.updated" | "bridge.status.updated" | "bridge.inventory.updated",
+  eventName: "bridge.command.available" | "bridge.command.updated" | "bridge.status.updated" | "bridge.inventory.updated" | "bridge.inventory.sync.started",
   payload: Record<string, unknown>
 ) {
   const pusher = getPusher();
@@ -46,4 +46,11 @@ export async function publishBridgeInventoryUpdated(
   inventory: Record<string, unknown>
 ) {
   await publishBridgeEvent(storeId, "bridge.inventory.updated", { storeId, inventory });
+}
+
+export async function publishBridgeInventorySyncStarted(
+  storeId: string,
+  run: Record<string, unknown>
+) {
+  await publishBridgeEvent(storeId, "bridge.inventory.sync.started", { storeId, run });
 }

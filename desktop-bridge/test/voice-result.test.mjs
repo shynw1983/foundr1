@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatVoiceResult, readableVoiceError } from "../src/voice-result.mjs";
+import {
+  formatVoiceAcknowledgement,
+  formatVoiceResult,
+  readableVoiceError
+} from "../src/voice-result.mjs";
 
 test("formats successful permanent stockout feedback", () => {
   assert.equal(formatVoiceResult({
@@ -16,4 +20,11 @@ test("formats successful permanent stockout feedback", () => {
 
 test("translates login failures into spoken feedback", () => {
   assert.equal(readableVoiceError("demae_can: login required"), "需要重新登录");
+});
+
+test("formats immediate restore acknowledgement for Siri", () => {
+  assert.equal(formatVoiceAcknowledgement({
+    query: "二八酱",
+    isAvailable: true
+  }), "正在将二八酱恢复销售，请稍候。完成后我会告诉你结果。");
 });

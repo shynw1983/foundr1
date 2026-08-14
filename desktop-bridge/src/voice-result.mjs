@@ -23,3 +23,8 @@ export function formatVoiceResult({ matchedLabel, isAvailable, commands }) {
   })];
   return `${matchedLabel}已${action}。${results.join("，")}。`;
 }
+
+export function formatVoiceAcknowledgement({ query, isAvailable }) {
+  const action = isAvailable ? "恢复销售" : "设为永久缺货";
+  return `正在将${query}${action}，请稍候。完成后我会告诉你结果。`;
+}

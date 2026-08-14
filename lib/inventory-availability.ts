@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "./db";
-import { publishBridgeCommandAvailable } from "./local-bridge-realtime";
+import {
+  publishBridgeCommandAvailable,
+  publishBridgeInventorySyncStarted
+} from "./local-bridge-realtime";
 import { publishPublicMenuUpdatedEvent } from "./order-realtime";
 import {
   resolveUberInventoryItemTarget,
@@ -77,9 +80,14 @@ export async function applyInventoryAvailability(input: {
   resolution: InventoryAvailabilityResolution;
   isAvailable: boolean;
   statusSource: string;
+  syncSource?: "siri" | "store";
+  feedbackLabel?: string;
   updatedBy: string | null;
 }) {
   const { storeId, resolution, isAvailable } = input;
+  const syncRunId = randomUUID();
+  const syncSource = input.syncSource ?? (input.statusSource === "Siri" ? "siri" : "store");
+  const feedbackLabel = input.feedbackLabel?.trim() || resolution.ingredientLabel;
   const note = `${input.statusSource}: ${resolution.ingredientLabel}${isAvailable ? " 販売再開" : " 在庫切れ"}`;
   for (const target of resolution.targets) {
     if (target.kind === "item") {
@@ -175,6 +183,9 @@ export async function applyInventoryAvailability(input: {
         ${JSON.stringify({
           inventoryKey: resolution.inventoryKey,
           ingredientLabel: resolution.ingredientLabel,
+          syncRunId,
+          syncSource,
+          feedbackLabel,
           isAvailable,
           operation,
           soldOutMode: "indefinite",
@@ -185,7 +196,24 @@ export async function applyInventoryAvailability(input: {
     `;
     commandRows.push({ id: String(rows[0]?.id ?? platformCommandId), platform });
   }
+  const syncRun = {
+    id: syncRunId,
+    itemLabel: feedbackLabel,
+    isAvailable,
+    source: syncSource,
+    createdAt: new Date().toISOString(),
+    platforms: [
+      { commandId: `${syncRunId}-foundr1`, platform: "foundr1", status: "succeeded", error: "" },
+      ...commandRows.map((command) => ({
+        commandId: command.id,
+        platform: command.platform,
+        status: "pending",
+        error: ""
+      }))
+    ]
+  };
   await publishBridgeCommandAvailable(storeId).catch(() => undefined);
+  await publishBridgeInventorySyncStarted(storeId, syncRun).catch(() => undefined);
   await publishPublicMenuUpdatedEvent(storeId).catch(() => undefined);
-  return { commands: commandRows, note };
+  return { commands: commandRows, note, syncRun };
 }

@@ -1,8 +1,12 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, ChevronUp, LoaderCircle, RotateCcw, Search, XCircle } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, ChevronDown, RotateCcw, Search, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
+import {
+  announceStoreInventorySync,
+  type StoreInventorySyncRun
+} from "../components/StoreInventorySyncStatus";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { clearStoredStoreSelection, getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
@@ -98,22 +102,6 @@ type StoreMenuOptionGroup = {
   options: StoreMenuOption[];
 };
 
-type InventorySyncStatus = "pending" | "succeeded" | "failed";
-
-type InventorySyncPlatform = {
-  commandId: string;
-  platform: string;
-  status: InventorySyncStatus;
-  error: string;
-};
-
-type InventorySyncRun = {
-  id: string;
-  itemLabel: string;
-  isAvailable: boolean;
-  platforms: InventorySyncPlatform[];
-};
-
 const optionCategoryKey = "__store_menu_options__";
 
 function stripEmoji(value: string) {
@@ -150,98 +138,10 @@ function itemCategory(item: StoreMenuItem) {
   return item.websitePresentation?.showEmoji === false ? stripEmoji(value) : value;
 }
 
-function platformName(platform: string, language: StoreMenuLanguage) {
-  if (platform === "foundr1") return language === "ja" ? "Web予約" : language === "zh-Hant" ? "網站預約" : "网站预约";
-  if (platform === "uber_eats") return "Uber";
-  if (platform === "rocket_now") return language === "ja" ? "ロケットナウ" : "火箭";
-  if (platform === "demae_can") return language === "zh-Hans" ? "出前馆" : "出前館";
-  return platform;
-}
-
 function storeMenuDescription(language: StoreMenuLanguage) {
   if (language === "zh-Hans") return "缺货和恢复销售会同步到网站预约、Uber、火箭、出前馆。商品名称、价格和选项请在 OS 的菜单管理中编辑。";
   if (language === "zh-Hant") return "缺貨和恢復銷售會同步到網站預約、Uber、火箭、出前館。商品名稱、價格和選項請在 OS 的選單管理中編輯。";
   return "売切や販売再開は Web予約、Uber、ロケットナウ、出前館へ同期します。メニュー名、価格、選択肢は OS のメニュー管理で編集します。";
-}
-
-function syncCopy(language: StoreMenuLanguage) {
-  if (language === "zh-Hans") {
-    return {
-      available: "恢复销售",
-      unavailable: "缺货",
-      pending: "执行中",
-      succeeded: "成功",
-      failed: "失败",
-      title: "平台同步结果",
-      timeout: "结果确认超时，请检查 Bridge 状态。",
-      login: "需要重新登录该平台。",
-      target: "找不到对应的商品或选项。",
-      pageTimeout: "平台页面响应超时。",
-      expired: "同步任务已过期。",
-      generic: "同步失败。",
-      collapse: "收起",
-      expand: "展开"
-    };
-  }
-  if (language === "zh-Hant") {
-    return {
-      available: "恢復銷售",
-      unavailable: "缺貨",
-      pending: "執行中",
-      succeeded: "成功",
-      failed: "失敗",
-      title: "平台同步結果",
-      timeout: "結果確認逾時，請檢查 Bridge 狀態。",
-      login: "需要重新登入該平台。",
-      target: "找不到對應的商品或選項。",
-      pageTimeout: "平台頁面回應逾時。",
-      expired: "同步工作已過期。",
-      generic: "同步失敗。",
-      collapse: "收起",
-      expand: "展開"
-    };
-  }
-  return {
-    available: "販売再開",
-    unavailable: "在庫切れ",
-    pending: "実行中",
-    succeeded: "成功",
-    failed: "失敗",
-    title: "プラットフォーム同期結果",
-    timeout: "結果確認がタイムアウトしました。Bridge の状態を確認してください。",
-    login: "このプラットフォームへの再ログインが必要です。",
-    target: "対応する商品・オプションが見つかりません。",
-    pageTimeout: "プラットフォーム画面の応答がタイムアウトしました。",
-    expired: "同期処理の有効期限が切れました。",
-    generic: "同期に失敗しました。",
-    collapse: "折りたたむ",
-    expand: "開く"
-  };
-}
-
-function syncSummaryText(language: StoreMenuLanguage, pendingCount: number, failedCount: number, runCount: number) {
-  if (language === "zh-Hans") {
-    if (pendingCount) return `${pendingCount} 个平台执行中`;
-    if (failedCount) return `${failedCount} 个平台修改失败`;
-    return `最近 ${runCount} 个商品`;
-  }
-  if (language === "zh-Hant") {
-    if (pendingCount) return `${pendingCount} 個平台執行中`;
-    if (failedCount) return `${failedCount} 個平台修改失敗`;
-    return `最近 ${runCount} 個商品`;
-  }
-  if (pendingCount) return `${pendingCount}プラットフォーム実行中`;
-  if (failedCount) return `${failedCount}プラットフォーム失敗`;
-  return `直近${runCount}商品`;
-}
-
-function readableSyncError(error: string, language: StoreMenuLanguage) {
-  const copy = syncCopy(language);
-  if (/login required|ログイン/i.test(error)) return copy.login;
-  if (/target verification failed|対応する.*見つかりません/i.test(error)) return copy.target;
-  if (/cdp.*timed out|page.*timeout|condition timed out/i.test(error)) return copy.pageTimeout;
-  if (/expired|有効期限/i.test(error)) return copy.expired;
-  return error.trim() || copy.generic;
 }
 
 function getCategories(items: StoreMenuItem[], categories: StoreMenuCategory[], brandId: string): StoreMenuCategorySummary[] {
@@ -311,17 +211,6 @@ export default function StoreMenuPage() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
   const [message, setMessage] = useState("");
-  const [syncRuns, setSyncRuns] = useState<InventorySyncRun[]>([]);
-  const [syncFeedbackOpen, setSyncFeedbackOpen] = useState(true);
-  const syncMonitorActive = useRef(true);
-
-  useEffect(() => {
-    syncMonitorActive.current = true;
-    return () => {
-      syncMonitorActive.current = false;
-    };
-  }, []);
-
   async function load(nextStoreId = selectedStoreId, resetFilters = false) {
     setLoading(true);
     const params = new URLSearchParams();
@@ -447,58 +336,6 @@ export default function StoreMenuPage() {
     }
   }, [selectedCategory, showOptionCategory]);
 
-  function updateSyncPlatform(runId: string, commandId: string, patch: Partial<InventorySyncPlatform>) {
-    if (!syncMonitorActive.current) return;
-    setSyncRuns((current) => current.map((run) => run.id === runId
-      ? {
-          ...run,
-          platforms: run.platforms.map((platform) => platform.commandId === commandId
-            ? { ...platform, ...patch }
-            : platform)
-        }
-      : run));
-  }
-
-  async function monitorInventoryCommand(
-    runId: string,
-    command: { id: string; platform: string },
-    storeId: string
-  ) {
-    const attempts = 60;
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      if (!syncMonitorActive.current) return;
-      if (attempt > 0) await new Promise((resolve) => window.setTimeout(resolve, 2000));
-      try {
-        const params = new URLSearchParams({ storeId, commandId: command.id });
-        const response = await fetch(`/api/store/display/kitchen/inventory?${params.toString()}`, { cache: "no-store" });
-        const body = await response.json().catch(() => ({})) as Record<string, unknown>;
-        if (!response.ok) {
-          updateSyncPlatform(runId, command.id, {
-            status: "failed",
-            error: readableSyncError(String(body.error || ""), language)
-          });
-          return;
-        }
-        const status = String(body.status || "pending");
-        if (status === "succeeded") {
-          updateSyncPlatform(runId, command.id, { status: "succeeded", error: "" });
-          return;
-        }
-        if (status === "failed") {
-          updateSyncPlatform(runId, command.id, {
-            status: "failed",
-            error: readableSyncError(String(body.lastError || ""), language)
-          });
-          return;
-        }
-      } catch {
-        // A temporary network error should not turn a running Bridge command into
-        // a false failure. Continue polling until the confirmation window ends.
-      }
-    }
-    updateSyncPlatform(runId, command.id, { status: "failed", error: syncCopy(language).timeout });
-  }
-
   async function applyDeliveryAvailability(input: {
     brandId: string;
     ingredientLabel: string;
@@ -506,16 +343,16 @@ export default function StoreMenuPage() {
     targetKind: "item" | "option";
     isAvailable: boolean;
   }) {
-    const storeId = selectedStoreId;
     const { feedbackLabel, ...requestInput } = input;
     const response = await fetch("/api/store/display/kitchen/inventory", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...requestInput,
+        feedbackLabel,
         action: "apply",
         source: "sales_status",
-        storeId
+        storeId: selectedStoreId
       })
     });
     const body = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -525,30 +362,9 @@ export default function StoreMenuPage() {
         target && typeof target === "object" ? String((target as Record<string, unknown>).targetId ?? "") : ""
       )).filter(Boolean)
     );
-    const commands = (Array.isArray(body.commands) ? body.commands : []).flatMap((command) => {
-      if (!command || typeof command !== "object") return [];
-      const row = command as Record<string, unknown>;
-      const id = String(row.id ?? "");
-      const platform = String(row.platform ?? "");
-      return id && platform ? [{ id, platform }] : [];
-    });
-    const runId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    setSyncFeedbackOpen(true);
-    setSyncRuns((current) => [{
-      id: runId,
-      itemLabel: feedbackLabel,
-      isAvailable: input.isAvailable,
-      platforms: [
-        { commandId: `${runId}-foundr1`, platform: "foundr1", status: "succeeded" as const, error: "" },
-        ...commands.map((command) => ({
-          commandId: command.id,
-          platform: command.platform,
-          status: "pending" as const,
-          error: ""
-        }))
-      ]
-    }, ...current].slice(0, 4));
-    for (const command of commands) void monitorInventoryCommand(runId, command, storeId);
+    if (body.syncRun && typeof body.syncRun === "object") {
+      announceStoreInventorySync(body.syncRun as StoreInventorySyncRun);
+    }
     return { targetIds };
   }
 
@@ -639,13 +455,6 @@ export default function StoreMenuPage() {
       setSavingId("");
     }
   }
-
-  const pendingSyncCount = syncRuns.reduce((count, run) => (
-    count + run.platforms.filter((platform) => platform.status === "pending").length
-  ), 0);
-  const failedSyncCount = syncRuns.reduce((count, run) => (
-    count + run.platforms.filter((platform) => platform.status === "failed").length
-  ), 0);
 
   return (
     <main className="store-workbench-shell">
@@ -849,59 +658,6 @@ export default function StoreMenuPage() {
           </section>
         </div>
 
-        {syncRuns.length ? (() => {
-          const copy = syncCopy(language);
-          return (
-            <aside
-              className={`store-menu-sync-feedback${syncFeedbackOpen ? " is-open" : " is-collapsed"}`}
-              aria-live="polite"
-              data-i18n-ignore
-            >
-              <button
-                className="store-menu-sync-dock-head"
-                type="button"
-                aria-expanded={syncFeedbackOpen}
-                onClick={() => setSyncFeedbackOpen((current) => !current)}
-              >
-                <span className={`store-menu-sync-dock-dot${pendingSyncCount ? " is-pending" : failedSyncCount ? " is-failed" : " is-complete"}`} />
-                <span className="store-menu-sync-dock-title">
-                  <strong>{copy.title}</strong>
-                  <small>{syncSummaryText(language, pendingSyncCount, failedSyncCount, syncRuns.length)}</small>
-                </span>
-                <span className="store-menu-sync-dock-toggle">
-                  {syncFeedbackOpen ? copy.collapse : copy.expand}
-                  {syncFeedbackOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-                </span>
-              </button>
-              {syncFeedbackOpen ? (
-                <div className="store-menu-sync-dock-body">
-                  {syncRuns.map((run) => (
-                    <article className="store-menu-sync-run" key={run.id}>
-                      <div className="store-menu-sync-heading">
-                        <strong>{run.itemLabel}</strong>
-                        <span>{run.isAvailable ? copy.available : copy.unavailable}</span>
-                      </div>
-                      <div className="store-menu-sync-platforms">
-                        {run.platforms.map((platform) => (
-                          <div className={`store-menu-sync-platform is-${platform.status}`} key={platform.commandId}>
-                            <span className="store-menu-sync-state">
-                              {platform.status === "pending" ? <LoaderCircle size={15} /> : null}
-                              {platform.status === "succeeded" ? <CheckCircle2 size={15} /> : null}
-                              {platform.status === "failed" ? <XCircle size={15} /> : null}
-                              <strong>{platformName(platform.platform, language)}</strong>
-                              <small>{copy[platform.status]}</small>
-                            </span>
-                            {platform.error ? <span className="store-menu-sync-error">{platform.error}</span> : null}
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-            </aside>
-          );
-        })() : null}
       </section>
     </main>
   );
