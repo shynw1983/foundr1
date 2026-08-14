@@ -4,8 +4,27 @@ import { loginState, pageSummary, targetNames } from "./common.mjs";
 
 const OOS_URL = "https://store.rocketnow.co.jp/merchant/management/oos";
 
+async function selectInventoryTab(page, targetKind) {
+  const tabLabel = targetKind === "option" ? "オプション" : "メニュー";
+  const selected = await page.evaluate((label) => {
+    const tab = [...document.querySelectorAll(".selectable-tab")]
+      .find((candidate) => candidate.textContent?.trim() === label);
+    if (!(tab instanceof HTMLElement)) return false;
+    if (!tab.classList.contains("selected")) tab.click();
+    return true;
+  }, tabLabel);
+  if (!selected) throw new Error(`rocket_now_inventory_tab_missing:${targetKind}`);
+  await page.waitForFunction(
+    (label) => [...document.querySelectorAll(".selectable-tab")]
+      .some((candidate) => candidate.textContent?.trim() === label && candidate.classList.contains("selected")),
+    { timeout: 10000 },
+    tabLabel
+  );
+  await page.waitForSelector(".nested-checkbox-list__sub_title", { visible: true, timeout: 15000 });
+}
+
 async function readRows(page, targets) {
-  const requested = targets.map((target) => ({ label: target.label, names: targetNames(target) }));
+  const requested = targets.map((target) => ({ kind: target.kind, label: target.label, names: targetNames(target) }));
   return page.evaluate((items) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
@@ -16,6 +35,7 @@ async function readRows(page, targets) {
         .map((title) => title.closest("div[class*=e1iqhfx24]"))
         .filter(Boolean);
       return {
+        kind: item.kind,
         label: item.label,
         names: item.names,
         matches: rows.map((row) => ({
@@ -53,13 +73,17 @@ export class RocketNowAdapter {
 
   async locateTargets(targets) {
     const page = await this.session.goto(OOS_URL);
+    const targetKind = targets.every((target) => target.kind === "option") ? "option" : "item";
+    await selectInventoryTab(page, targetKind);
     return readRows(page, targets);
   }
 
   async setInventory(payload, located) {
     const page = await this.session.goto(OOS_URL);
+    const targetKind = located.every((item) => item.kind === "option") ? "option" : "item";
+    await selectInventoryTab(page, targetKind);
     const desiredHidden = payload.isAvailable !== true;
-    const fresh = await readRows(page, located.map((item) => ({ label: item.label, aliases: item.names })));
+    const fresh = await readRows(page, located.map((item) => ({ kind: item.kind, label: item.label, aliases: item.names })));
     const changing = fresh.filter((item) => item.matches[0]?.hidden !== desiredHidden);
     if (!changing.length) return { outcome: "already_applied", changed: 0, desiredHidden };
 

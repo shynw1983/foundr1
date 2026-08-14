@@ -382,13 +382,7 @@ export async function POST(request: Request) {
   const configuredPlatforms = sourceRows
     .map((row) => String(row.platform))
     .filter((platform) => ["uber_eats", "rocket_now", "demae_can"].includes(platform));
-  const availablePlatforms = configuredPlatforms.length ? configuredPlatforms : ["uber_eats"];
-  // Rocket's inventory page exposes complete menu items only. It has no
-  // modifier/option rows, so option availability must not create a command
-  // that can never resolve to a unique Rocket target.
-  const platforms = targetKind === "option"
-    ? availablePlatforms.filter((platform) => platform !== "rocket_now")
-    : availablePlatforms;
+  const platforms = configuredPlatforms.length ? configuredPlatforms : ["uber_eats"];
   const commandRows: Array<{ id: string; platform: string }> = [];
   for (const platform of platforms) {
     const platformCommandId = platform === platforms[0] ? commandId : randomUUID();
