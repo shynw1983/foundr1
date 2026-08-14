@@ -90,6 +90,14 @@ type StoreMenuCategorySummary = {
   count: number;
 };
 
+type StoreMenuOptionGroup = {
+  id: string;
+  brandName: string;
+  name: string;
+  displayNames: Record<string, string>;
+  options: StoreMenuOption[];
+};
+
 type InventorySyncStatus = "pending" | "succeeded" | "failed";
 
 type InventorySyncPlatform = {
@@ -260,6 +268,28 @@ function getCategories(items: StoreMenuItem[], categories: StoreMenuCategory[], 
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ja"));
 }
 
+function groupMenuOptions(options: StoreMenuOption[]): StoreMenuOptionGroup[] {
+  const groups = new Map<string, StoreMenuOptionGroup>();
+
+  for (const option of options) {
+    const id = option.groupId || `${option.brandId}:${option.groupKey || option.groupName}`;
+    const group = groups.get(id);
+    if (group) {
+      group.options.push(option);
+      continue;
+    }
+    groups.set(id, {
+      id,
+      brandName: option.brandName,
+      name: option.groupName,
+      displayNames: option.groupDisplayNames,
+      options: [option]
+    });
+  }
+
+  return Array.from(groups.values());
+}
+
 export default function StoreMenuPage() {
   const { language } = useOsTranslation();
   const [brands, setBrands] = useState<BrandOption[]>([]);
@@ -406,6 +436,7 @@ export default function StoreMenuPage() {
       ].some((value) => value.toLowerCase().includes(normalizedQuery))
     ));
   }, [language, optionItems, query]);
+  const visibleOptionGroups = useMemo(() => groupMenuOptions(visibleOptions), [visibleOptions]);
   const isOptionCategory = selectedCategory === optionCategoryKey;
   const showOptionCategory = settings.availability.targets.options && settings.availability.optionDisplayMode === "separate_category";
   const showMixedOptions = settings.availability.targets.options && settings.availability.optionDisplayMode === "mixed";
@@ -706,17 +737,17 @@ export default function StoreMenuPage() {
             </div>
             {isOptionCategory && showOptionCategory ? (
               <section className="store-menu-option-section store-menu-option-section-flat">
-                <div className="store-menu-item-list">
-                  {visibleOptions.map((option) => (
-                    <StoreOptionRow
-                      option={option}
+                <div className="store-menu-option-groups">
+                  {visibleOptionGroups.map((group) => (
+                    <StoreOptionGroup
+                      group={group}
                       language={language}
                       savingId={savingId}
                       onSave={saveOption}
                       onStatusNoteChange={(optionId, statusNote) => setOptions((current) => current.map((entry) => (
                         entry.id === optionId ? { ...entry, statusNote } : entry
                       )))}
-                      key={option.id}
+                      key={group.id}
                     />
                   ))}
                   {!visibleOptions.length ? <p className="empty-state">{loading ? "読み込み中..." : "オプション・トッピングがありません。"}</p> : null}
@@ -730,17 +761,17 @@ export default function StoreMenuPage() {
                       <h3>オプション・トッピング</h3>
                       <span className="status-pill">{visibleOptions.length}件</span>
                     </div>
-                    <div className="store-menu-item-list">
-                      {visibleOptions.map((option) => (
-                        <StoreOptionRow
-                          option={option}
+                    <div className="store-menu-option-groups">
+                      {visibleOptionGroups.map((group) => (
+                        <StoreOptionGroup
+                          group={group}
                           language={language}
                           savingId={savingId}
                           onSave={saveOption}
                           onStatusNoteChange={(optionId, statusNote) => setOptions((current) => current.map((entry) => (
                             entry.id === optionId ? { ...entry, statusNote } : entry
                           )))}
-                          key={option.id}
+                          key={group.id}
                         />
                       ))}
                     </div>
@@ -873,6 +904,49 @@ export default function StoreMenuPage() {
         })() : null}
       </section>
     </main>
+  );
+}
+
+function StoreOptionGroup({
+  group,
+  language,
+  savingId,
+  onSave,
+  onStatusNoteChange
+}: {
+  group: StoreMenuOptionGroup;
+  language: StoreMenuLanguage;
+  savingId: string;
+  onSave: (option: StoreMenuOption, patch: Partial<StoreMenuOption>) => Promise<void>;
+  onStatusNoteChange: (optionId: string, statusNote: string) => void;
+}) {
+  const unavailableCount = group.options.filter((option) => !option.isAvailable).length;
+  return (
+    <details className="store-menu-option-group">
+      <summary>
+        <span className="store-menu-option-group-title">
+          <strong data-i18n-ignore>{localizedMenuName(group.name, group.displayNames, language)}</strong>
+          <small>{group.brandName}</small>
+        </span>
+        <span className="store-menu-option-group-meta">
+          {unavailableCount ? <span className="store-menu-option-group-alert">{unavailableCount}件 売切</span> : null}
+          <span>{group.options.length}件</span>
+          <ChevronDown size={18} aria-hidden="true" />
+        </span>
+      </summary>
+      <div className="store-menu-item-list">
+        {group.options.map((option) => (
+          <StoreOptionRow
+            option={option}
+            language={language}
+            savingId={savingId}
+            onSave={onSave}
+            onStatusNoteChange={onStatusNoteChange}
+            key={option.id}
+          />
+        ))}
+      </div>
+    </details>
   );
 }
 
