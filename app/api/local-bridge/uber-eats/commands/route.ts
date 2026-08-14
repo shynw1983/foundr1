@@ -140,6 +140,10 @@ export async function GET(request: Request) {
     `;
   }
 
+  // Inventory synchronization belongs exclusively to the desktop bridge. The
+  // tablet bridges remain dedicated to order operations so inventory changes
+  // can never navigate an order-taking tablet away from its operational page.
+
   await sql`
     update local_bridge_commands
     set
@@ -156,7 +160,10 @@ export async function GET(request: Request) {
         or (platform = 'rocket_now' and ${authorization.supportsRocket})
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
-      and (${authorization.isDesktop} = false or command_type = 'set_inventory_availability')
+      and (
+        (${authorization.isDesktop} and command_type = 'set_inventory_availability')
+        or (${authorization.isDesktop} = false and command_type <> 'set_inventory_availability')
+      )
       and status in ('pending', 'processing')
       and created_at < now() - interval '2 hours'
   `;
@@ -180,7 +187,10 @@ export async function GET(request: Request) {
         or (platform = 'rocket_now' and ${authorization.supportsRocket})
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
-      and (${authorization.isDesktop} = false or command_type = 'set_inventory_availability')
+      and (
+        (${authorization.isDesktop} and command_type = 'set_inventory_availability')
+        or (${authorization.isDesktop} = false and command_type <> 'set_inventory_availability')
+      )
       and status = 'processing'
       and claim_expires_at < now()
   `;
@@ -208,7 +218,7 @@ export async function GET(request: Request) {
         or (stale.platform = 'rocket_now' and ${authorization.supportsRocket})
         or (stale.platform = 'demae_can' and ${authorization.supportsDemae})
       )
-      and (${authorization.isDesktop} = false or stale.command_type = 'set_inventory_availability')
+      and ${authorization.isDesktop}
       and coalesce(stale.payload->>'inventoryKey', '') <> ''
       and exists (
         select 1
@@ -235,7 +245,10 @@ export async function GET(request: Request) {
         or (platform = 'rocket_now' and ${authorization.supportsRocket})
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
-      and (${authorization.isDesktop} = false or command_type = 'set_inventory_availability')
+      and (
+        (${authorization.isDesktop} and command_type = 'set_inventory_availability')
+        or (${authorization.isDesktop} = false and command_type <> 'set_inventory_availability')
+      )
       and status = 'processing'
       and (
         claimed_by_device_id::text = ${authorization.deviceId}
@@ -270,7 +283,10 @@ export async function GET(request: Request) {
           or (platform = 'rocket_now' and ${authorization.supportsRocket})
           or (platform = 'demae_can' and ${authorization.supportsDemae})
         )
-        and (${authorization.isDesktop} = false or command_type = 'set_inventory_availability')
+        and (
+          (${authorization.isDesktop} and command_type = 'set_inventory_availability')
+          or (${authorization.isDesktop} = false and command_type <> 'set_inventory_availability')
+        )
         and status = 'pending'
         and available_at <= now()
         and attempts < 5

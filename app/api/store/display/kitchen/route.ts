@@ -300,7 +300,7 @@ export async function GET(request: Request) {
         (last_seen_at > now() - interval '7 minutes') as "recentlyOnline"
       from local_bridge_devices
       where store_id::text = ${storeFilter}
-        and platform = 'uber_eats'
+        and platform = 'desktop'
         and is_enabled = true
       order by last_seen_at desc nulls last, updated_at desc
       limit 1

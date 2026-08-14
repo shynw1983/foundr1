@@ -1008,13 +1008,12 @@ export default function StoreKitchenPage() {
   )), [businessDayOffset, statusFilter, tasks]);
   const selectedTask = filteredTasks.find((task) => task.id === selectedTaskId) ?? filteredTasks[0] ?? null;
   const isChinese = displayLanguage === "zh";
-  const bridgeOnline = bridgePresence === "online"
-    || (bridgePresence === "connecting" && bridgeStatus?.recentlyOnline === true);
+  const bridgeOnline = bridgeStatus?.recentlyOnline === true;
   const bridgeLevel = !bridgeOnline
     ? "error"
     : bridgeStatus?.level === "error"
       ? "error"
-      : bridgeStatus?.level === "attention" || bridgePresence === "connecting"
+      : bridgeStatus?.level === "attention"
         ? "attention"
         : "healthy";
   const bridgeLabel = bridgeLevel === "healthy"
