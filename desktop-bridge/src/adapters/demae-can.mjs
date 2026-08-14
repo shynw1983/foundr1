@@ -1,9 +1,17 @@
 import { loginState, pageSummary, targetNameTiers } from "./common.mjs";
+import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 
 const STOCKOUT_URL = "https://partner.demae-can.com/merchant-admin/shop/stockout";
 
+async function waitForInventoryRows(page) {
+  await page.waitForSelector("[class*=Styles_name__]", { visible: true, timeout: 30000 });
+}
+
 async function readRows(page, targets) {
-  const requested = targets.map((target) => ({ label: target.label, ...targetNameTiers(target) }));
+  const requested = targets.map((target) => {
+    const projected = withPlatformTargetAliases("demae_can", target);
+    return { label: projected.label, ...targetNameTiers(projected) };
+  });
   return page.evaluate((items) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll("[class*=Styles_name__]")];
@@ -11,7 +19,10 @@ async function readRows(page, targets) {
       const findRows = (names) => {
         const wanted = names.map(normalize);
         return titles
-          .filter((title) => wanted.some((name) => normalize(title.textContent) === name || normalize(title.textContent).startsWith(`${name}|`)))
+          .filter((title) => {
+            const titleParts = normalize(title.textContent).split(/[|｜]/u).map((part) => part.trim());
+            return wanted.some((name) => titleParts.includes(name));
+          })
           .map((title) => title.closest("label[class*=TableSubRow_tableSubRow]"))
           .filter(Boolean);
       };
@@ -19,6 +30,13 @@ async function readRows(page, targets) {
       const fallbackRows = exactRows.length ? [] : findRows(item.fallbackNames);
       const aliasRows = exactRows.length || fallbackRows.length ? [] : findRows(item.aliasNames);
       const rows = exactRows.length ? exactRows : fallbackRows.length ? fallbackRows : aliasRows;
+      const matches = rows.map((row, index) => ({
+        text: normalize(row.textContent),
+        rowId: row.querySelector('input[type="checkbox"]')?.id ?? "",
+        matchIndex: index,
+        unavailable: /品切れ|終売/u.test(normalize(row.textContent)),
+        permanentlyUnavailable: /終売|無期限/u.test(normalize(row.textContent))
+      }));
       return {
         label: item.label,
         names: exactRows.length
@@ -26,12 +44,12 @@ async function readRows(page, targets) {
           : fallbackRows.length
             ? item.fallbackNames
             : item.aliasNames,
-        matches: rows.map((row, index) => ({
-          text: normalize(row.textContent),
-          matchIndex: index,
-          unavailable: /品切れ|終売/u.test(normalize(row.textContent)),
-          permanentlyUnavailable: /終売|無期限/u.test(normalize(row.textContent))
-        }))
+        matches: matches.length ? [{
+          ...matches[0],
+          rowMatches: matches,
+          unavailable: matches.some((match) => match.unavailable),
+          permanentlyUnavailable: matches.every((match) => match.permanentlyUnavailable)
+        }] : []
       };
     });
   }, requested);
@@ -39,18 +57,14 @@ async function readRows(page, targets) {
 
 async function clickRows(page, items) {
   for (const item of items) {
-    const clicked = await page.evaluate((names) => {
-      const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
-      const wanted = names.map(normalize);
-      const candidates = [...document.querySelectorAll("[class*=Styles_name__]")]
-        .filter((title) => wanted.some((name) => normalize(title.textContent) === name || normalize(title.textContent).startsWith(`${name}|`)));
-      if (candidates.length !== 1) return false;
-      const row = candidates[0].closest("label[class*=TableSubRow_tableSubRow]");
-      const checkbox = row?.querySelector('input[type="checkbox"]');
+    const rowIds = (item.matches[0]?.rowMatches ?? item.matches)
+      .map((match) => match.rowId).filter(Boolean);
+    const clicked = await page.evaluate((ids) => ids.every((id) => {
+      const checkbox = document.getElementById(id);
       if (!(checkbox instanceof HTMLInputElement)) return false;
       checkbox.click();
       return true;
-    }, item.names);
+    }), rowIds);
     if (!clicked) throw new Error(`demae_can_checkbox_missing:${item.label}`);
   }
 }
@@ -61,11 +75,14 @@ async function waitForRows(page, items, permanentlyUnavailable) {
     const titles = [...document.querySelectorAll("[class*=Styles_name__]")];
     return requested.every((item) => {
       const wanted = item.names.map(normalize);
-      const title = titles.find((candidate) => wanted.some((name) => normalize(candidate.textContent) === name || normalize(candidate.textContent).startsWith(`${name}|`)));
-      const rowText = normalize(title?.closest("label[class*=TableSubRow_tableSubRow]")?.textContent);
-      return Boolean(title) && (expectedPermanentlyUnavailable
-        ? /終売|無期限/u.test(rowText)
-        : !/品切れ|終売/u.test(rowText));
+      const matching = titles.filter((candidate) => {
+        const titleParts = normalize(candidate.textContent).split(/[|｜]/u).map((part) => part.trim());
+        return wanted.some((name) => titleParts.includes(name));
+      });
+      return matching.length > 0 && matching.every((title) => {
+        const rowText = normalize(title.closest("label[class*=TableSubRow_tableSubRow]")?.textContent);
+        return expectedPermanentlyUnavailable ? /終売|無期限/u.test(rowText) : !/品切れ|終売/u.test(rowText);
+      });
     });
   }, { timeout: 15000 }, { requested: items, expectedPermanentlyUnavailable: permanentlyUnavailable });
 }
@@ -95,21 +112,26 @@ export class DemaeCanAdapter {
 
   async locateTargets(targets) {
     const page = await this.session.goto(STOCKOUT_URL);
+    await waitForInventoryRows(page);
     return readRows(page, targets);
   }
 
   async setInventory(payload, located) {
     const page = await this.session.goto(STOCKOUT_URL);
-    // Demae leaves selection and confirmation overlays mounted after a slow or
-    // interrupted submission. Always begin an execution from a clean page so
-    // the next command cannot interact with stale modal state.
-    await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.waitForSelector("[class*=Styles_name__]", { visible: true, timeout: 15000 });
+    // locateTargets has just verified this same page. Reusing it is more reliable
+    // than reloading Demae's slow inventory screen before every save.
+    await waitForInventoryRows(page);
     const desiredUnavailable = payload.isAvailable !== true;
     const fresh = await readRows(page, located.map((item) => ({ label: item.label, aliases: item.names })));
-    const changing = fresh.filter((item) => desiredUnavailable
-      ? item.matches[0]?.permanentlyUnavailable !== true
-      : item.matches[0]?.unavailable === true);
+    const changing = fresh.flatMap((item) => {
+      const rowMatches = (item.matches[0]?.rowMatches ?? item.matches).filter((match) => desiredUnavailable
+        ? match.permanentlyUnavailable !== true
+        : match.unavailable === true);
+      return rowMatches.length ? [{
+        ...item,
+        matches: [{ ...rowMatches[0], rowMatches }]
+      }] : [];
+    });
     if (!changing.length) return { outcome: "already_applied", changed: 0, desiredUnavailable };
 
     await clickRows(page, changing);

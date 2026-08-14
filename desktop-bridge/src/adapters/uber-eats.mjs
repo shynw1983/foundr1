@@ -11,6 +11,20 @@ const NORMALIZE_SOURCE = `const normalize = (value) => String(value ?? "")
   .replace(/[\\s\\u200b-\\u200d\\ufeff]+/g, " ")
   .trim();`;
 
+export function preferCurrentUberMatches(matches) {
+  if (matches.length < 2) return matches;
+  const scored = matches.map((match) => ({
+    match,
+    score: Number(match.price > 0)
+      + Number(match.hasSchedule) * 2
+      + Number(match.hasCustomization) * 2
+      + Number(match.decorated)
+  }));
+  const highest = Math.max(...scored.map((entry) => entry.score));
+  const preferred = scored.filter((entry) => entry.score === highest).map((entry) => entry.match);
+  return preferred.length === 1 ? preferred : matches;
+}
+
 export class UberEatsAdapter {
   constructor(session, platformConfig = {}) {
     this.session = session;
@@ -66,8 +80,31 @@ export class UberEatsAdapter {
             const wanted = new Set(names.map(normalize));
             const found = anchors
               .filter((anchor) => normalize(anchor.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())))
-              .map((anchor) => ({ text: normalize(anchor.textContent), href: anchor.href }));
-            return [...new Map(found.map((match) => [match.href, match])).values()];
+              .map((anchor) => {
+                const lines = (anchor.closest(".cw.bd.il.r6.cu")?.innerText ?? "")
+                  .split("\\n").map((line) => line.trim()).filter(Boolean);
+                const price = Number(String(lines[1] ?? "").replace(/[^0-9]/g, "")) || 0;
+                return {
+                  text: normalize(anchor.textContent),
+                  href: anchor.href,
+                  price,
+                  hasSchedule: Boolean(lines[2] && lines[2] !== "-"),
+                  hasCustomization: Boolean(lines[5] && lines[5] !== "-"),
+                  decorated: /【|[\\p{Extended_Pictographic}]/u.test(anchor.textContent ?? "")
+                };
+              });
+            const unique = [...new Map(found.map((match) => [match.href, match])).values()];
+            if (unique.length < 2) return unique;
+            const scored = unique.map((match) => ({
+              match,
+              score: Number(match.price > 0)
+                + Number(match.hasSchedule) * 2
+                + Number(match.hasCustomization) * 2
+                + Number(match.decorated)
+            }));
+            const highest = Math.max(...scored.map((entry) => entry.score));
+            const preferred = scored.filter((entry) => entry.score === highest).map((entry) => entry.match);
+            return preferred.length === 1 ? preferred : unique;
           };
           const exactMatches = findMatches(item.exactNames);
           const fallbackMatches = exactMatches.length ? [] : findMatches(item.fallbackNames);

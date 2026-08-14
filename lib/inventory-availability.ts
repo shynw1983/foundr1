@@ -13,6 +13,7 @@ import {
   type UberInventoryOptionRow,
   type UberInventoryTarget
 } from "./uber-inventory-targets";
+import { projectInventoryTargetsForPlatform } from "./inventory-platform-targets";
 
 export type InventoryAvailabilityResolution = {
   inventoryKey: string;
@@ -134,7 +135,7 @@ export async function applyInventoryAvailability(input: {
     .map((row) => String(row.platform))
     .filter((platform) => ["uber_eats", "rocket_now", "demae_can"].includes(platform));
   const platforms = configuredPlatforms.length ? configuredPlatforms : ["uber_eats"];
-  const commandRows: Array<{ id: string; platform: string }> = [];
+  const commandRows: Array<{ id: string; platform: string; status: "pending" | "succeeded"; error: string }> = [];
   for (const platform of platforms) {
     const platformCommandId = randomUUID();
     const operation = platform === "rocket_now"
@@ -142,7 +143,11 @@ export async function applyInventoryAvailability(input: {
       : platform === "demae_can"
         ? (isAvailable ? "available" : "stockout")
         : (isAvailable ? "available" : "sold_out");
-    const serializedTargets = resolution.targets.map((target) => ({
+    const projectedTargets = projectInventoryTargetsForPlatform(
+      platform as "uber_eats" | "rocket_now" | "demae_can",
+      resolution.targets
+    );
+    const serializedTargets = projectedTargets.map((target) => ({
       kind: target.kind,
       targetId: target.targetId,
       groupKey: target.kind === "option" ? target.groupKey : "",
@@ -170,31 +175,53 @@ export async function applyInventoryAvailability(input: {
         and payload->>'inventoryKey' = ${resolution.inventoryKey}
     `;
     const idempotencyKey = `${platform}:set_inventory:${storeId}:${resolution.inventoryKey}:${operation}:${platformCommandId}`;
+    const payload = JSON.stringify({
+      inventoryKey: resolution.inventoryKey,
+      ingredientLabel: resolution.ingredientLabel,
+      syncRunId,
+      syncSource,
+      feedbackLabel,
+      isAvailable,
+      operation,
+      soldOutMode: "indefinite",
+      targets: commandTargets
+    });
+    if (!commandTargets.length) {
+      await sql`
+        insert into local_bridge_commands (
+          id, store_id, platform, command_type, idempotency_key, payload,
+          status, completed_at, result, updated_at
+        )
+        values (
+          ${platformCommandId}, ${storeId}, ${platform}, 'set_inventory_availability',
+          ${idempotencyKey}, ${payload}::jsonb, 'succeeded', now(),
+          ${JSON.stringify({ outcome: "not_applicable", changed: 0 })}::jsonb, now()
+        )
+      `;
+      commandRows.push({
+        id: platformCommandId,
+        platform,
+        status: "succeeded",
+        error: "该平台未上架（不适用）"
+      });
+      continue;
+    }
     const rows = await sql`
       insert into local_bridge_commands (
         id, store_id, platform, command_type, idempotency_key, payload
       )
       values (
-        ${platformCommandId},
-        ${storeId},
-        ${platform},
-        'set_inventory_availability',
-        ${idempotencyKey},
-        ${JSON.stringify({
-          inventoryKey: resolution.inventoryKey,
-          ingredientLabel: resolution.ingredientLabel,
-          syncRunId,
-          syncSource,
-          feedbackLabel,
-          isAvailable,
-          operation,
-          soldOutMode: "indefinite",
-          targets: commandTargets
-        })}::jsonb
+        ${platformCommandId}, ${storeId}, ${platform}, 'set_inventory_availability',
+        ${idempotencyKey}, ${payload}::jsonb
       )
       returning id::text
     `;
-    commandRows.push({ id: String(rows[0]?.id ?? platformCommandId), platform });
+    commandRows.push({
+      id: String(rows[0]?.id ?? platformCommandId),
+      platform,
+      status: "pending",
+      error: ""
+    });
   }
   const syncRun = {
     id: syncRunId,
@@ -207,8 +234,8 @@ export async function applyInventoryAvailability(input: {
       ...commandRows.map((command) => ({
         commandId: command.id,
         platform: command.platform,
-        status: "pending",
-        error: ""
+        status: command.status,
+        error: command.error
       }))
     ]
   };

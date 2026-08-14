@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { normalizeText, targetNameTiers } from "../src/adapters/common.mjs";
+import { withPlatformTargetAliases } from "../src/adapters/platform-target-aliases.mjs";
 import { uniqueLocatedRows } from "../src/adapters/rocket-now.mjs";
+import { preferCurrentUberMatches } from "../src/adapters/uber-eats.mjs";
 
 test("normalizes decorative vinegar text used differently by platforms", () => {
   assert.equal(
@@ -71,4 +73,46 @@ test("deduplicates Rocket targets that resolve to the same inventory row", () =>
   ]);
 
   assert.deepEqual(result.map((item) => item.label), ["小大豆もやし50g", "小大豆もやしに変更"]);
+});
+
+test("expands a logical Rocket match to every physical inventory row", () => {
+  const first = { checkboxId: "row-1", hidden: false };
+  const second = { checkboxId: "row-2", hidden: false };
+  const result = uniqueLocatedRows([{
+    label: "濃厚旨辛スンドゥブスープ",
+    matches: [{ ...first, rowMatches: [first, second] }]
+  }]);
+
+  assert.deepEqual(result.map((item) => item.matches[0].checkboxId), ["row-1", "row-2"]);
+});
+
+test("adds Rocket aliases from the current published menu", () => {
+  const projected = withPlatformTargetAliases("rocket_now", {
+    label: "極上の肉麻辣湯",
+    aliases: ["Premium Meat Malatang"]
+  });
+
+  assert.deepEqual(projected.aliases, [
+    "Premium Meat Malatang",
+    "厳選霜降り黒毛和牛 極上の肉麻辣湯"
+  ]);
+});
+
+test("prefers the current Uber menu record over a legacy duplicate", () => {
+  const current = {
+    href: "current",
+    price: 488,
+    hasSchedule: true,
+    hasCustomization: true,
+    decorated: true
+  };
+  const legacy = {
+    href: "legacy",
+    price: 0,
+    hasSchedule: false,
+    hasCustomization: false,
+    decorated: false
+  };
+
+  assert.deepEqual(preferCurrentUberMatches([legacy, current]), [current]);
 });

@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 import { loginState, pageSummary, targetNameTiers } from "./common.mjs";
+import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 
 const OOS_URL = "https://store.rocketnow.co.jp/merchant/management/oos";
 const INVENTORY_ROW_SELECTOR = ".nested-checkbox-list__sub_title";
@@ -45,7 +46,10 @@ async function selectInventoryTab(page, targetKind) {
 }
 
 async function readRows(page, targets) {
-  const requested = targets.map((target) => ({ kind: target.kind, label: target.label, ...targetNameTiers(target) }));
+  const requested = targets.map((target) => {
+    const projected = withPlatformTargetAliases("rocket_now", target);
+    return { kind: projected.kind, label: projected.label, ...targetNameTiers(projected) };
+  });
   return page.evaluate((items) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
@@ -61,6 +65,11 @@ async function readRows(page, targets) {
       const fallbackRows = exactRows.length ? [] : findRows(item.fallbackNames);
       const aliasRows = exactRows.length || fallbackRows.length ? [] : findRows(item.aliasNames);
       const rows = exactRows.length ? exactRows : fallbackRows.length ? fallbackRows : aliasRows;
+      const matches = rows.map((row) => ({
+        text: normalize(row.textContent),
+        checkboxId: row.querySelector('input[type="checkbox"],input[type="checkBox"]')?.id ?? "",
+        hidden: normalize(row.textContent).includes("非表示")
+      }));
       return {
         kind: item.kind,
         label: item.label,
@@ -69,11 +78,11 @@ async function readRows(page, targets) {
           : fallbackRows.length
             ? item.fallbackNames
             : item.aliasNames,
-        matches: rows.map((row) => ({
-          text: normalize(row.textContent),
-          checkboxId: row.querySelector('input[type="checkbox"],input[type="checkBox"]')?.id ?? "",
-          hidden: normalize(row.textContent).includes("非表示")
-        }))
+        matches: matches.length ? [{
+          ...matches[0],
+          rowMatches: matches,
+          hidden: matches.every((match) => match.hidden)
+        }] : []
       };
     });
   }, requested);
@@ -85,9 +94,11 @@ async function waitForRows(page, items, hidden, targetKind) {
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
     return requested.every((item) => {
       const wanted = new Set(item.names.map(normalize));
-      const title = titles.find((candidate) => normalize(candidate.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())));
-      const row = title?.closest("div[class*=e1iqhfx24]");
-      return Boolean(row) && normalize(row.textContent).includes("非表示") === expectedHidden;
+      const matching = titles.filter((candidate) => normalize(candidate.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())));
+      return matching.length > 0 && matching.every((title) => {
+        const row = title.closest("div[class*=e1iqhfx24]");
+        return Boolean(row) && normalize(row.textContent).includes("非表示") === expectedHidden;
+      });
     });
   }, { timeout: 15000 }, { requested: items, expectedHidden: hidden });
 
@@ -104,8 +115,13 @@ async function waitForRows(page, items, hidden, targetKind) {
 export function uniqueLocatedRows(items) {
   const rows = new Map();
   for (const item of items) {
-    const checkboxId = item.matches[0]?.checkboxId ?? "";
-    if (checkboxId && !rows.has(checkboxId)) rows.set(checkboxId, item);
+    const rowMatches = item.matches[0]?.rowMatches ?? item.matches;
+    for (const match of rowMatches) {
+      const checkboxId = match?.checkboxId ?? "";
+      if (checkboxId && !rows.has(checkboxId)) {
+        rows.set(checkboxId, { ...item, matches: [{ ...match, rowMatches: [match] }] });
+      }
+    }
   }
   return [...rows.values()];
 }
@@ -134,11 +150,20 @@ export class RocketNowAdapter {
     await selectInventoryTab(page, targetKind);
     const desiredHidden = payload.isAvailable !== true;
     const fresh = await readRows(page, located.map((item) => ({ kind: item.kind, label: item.label, aliases: item.names })));
-    const changing = fresh.filter((item) => item.matches[0]?.hidden !== desiredHidden);
+    const changing = fresh.flatMap((item) => {
+      const rowMatches = (item.matches[0]?.rowMatches ?? item.matches)
+        .filter((match) => match.hidden !== desiredHidden);
+      return rowMatches.length ? [{
+        ...item,
+        matches: [{ ...rowMatches[0], rowMatches }]
+      }] : [];
+    });
     if (!changing.length) return { outcome: "already_applied", changed: 0, desiredHidden };
 
+    const uniqueChanging = uniqueLocatedRows(changing);
+
     if (!desiredHidden) {
-      for (const item of changing) {
+      for (const item of uniqueChanging) {
         const clicked = await page.evaluate((checkboxId) => {
           const checkbox = document.getElementById(checkboxId);
           const row = checkbox?.closest("div[class*=e1iqhfx24]");
@@ -151,10 +176,9 @@ export class RocketNowAdapter {
         if (!clicked) throw new Error(`rocket_now_unhide_button_missing:${item.label}`);
         await waitForRows(page, [item], false, targetKind);
       }
-      return { outcome: "applied", changed: changing.length, desiredHidden };
+      return { outcome: "applied", changed: uniqueChanging.length, desiredHidden };
     }
 
-    const uniqueChanging = uniqueLocatedRows(changing);
     for (const item of uniqueChanging) {
       const checkboxId = item.matches[0].checkboxId;
       if (!checkboxId) throw new Error(`rocket_now_checkbox_missing:${item.label}`);
