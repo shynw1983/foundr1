@@ -7,7 +7,7 @@ import { roleHasPermission } from "../../../lib/role-permissions";
 
 const defaultExternalPlatforms = [
   { key: "uber_eats", name: "Uber Eats" },
-  { key: "wolt", name: "Wolt" },
+  { key: "rocket_now", name: "Rocket Now" },
   { key: "demae_can", name: "出前館" }
 ];
 const customerDisplayLanguages = ["en", "zh", "zh-Hant", "ko", "vi", "ne"];
@@ -432,6 +432,7 @@ async function recordMenuChangeSyncTasks(input: {
     from menu_external_platforms
     where brand_id = ${input.brandId}
       and is_active = true
+      and platform_key in ('uber_eats', 'rocket_now', 'demae_can')
       and (${input.storeId || null}::uuid is null or store_id = ${input.storeId || null})
       and (${input.storeId || null}::uuid is not null or store_id is null)
   `;

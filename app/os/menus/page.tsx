@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangle,
   Boxes,
   CheckCircle2,
   ChevronDown,
@@ -13,6 +14,7 @@ import {
   MenuSquare,
   PackageCheck,
   Plus,
+  RefreshCw,
   Save,
   Search,
   Sparkles,
@@ -176,6 +178,36 @@ type MenuAdminData = {
   syncTasks: MenuSyncTask[];
 };
 
+type MenuPublishPreviewChange = {
+  id: string;
+  targetType: "item" | "option" | "category" | "option_group" | "other";
+  targetLabel: string;
+  kind: "create" | "rename" | "reprice" | "update" | "move" | "disable" | "delete";
+  summary: string;
+  currentValue?: string;
+  projectedValue?: string;
+  confidence: "confirmed" | "provisional";
+};
+
+type MenuPublishPreviewPlatform = {
+  platformKey: "uber_eats" | "rocket_now" | "demae_can";
+  platformName: string;
+  ruleVersion: string;
+  baselineStatus: "ready" | "missing";
+  baselineCapturedAt: string | null;
+  changes: MenuPublishPreviewChange[];
+  warnings: string[];
+  blockers: string[];
+};
+
+type MenuPublishPreview = {
+  generatedAt: string;
+  mode: "read_only";
+  brandId: string;
+  brandName: string;
+  platforms: MenuPublishPreviewPlatform[];
+};
+
 type MenuTranslationDraftEntry = {
   key: string;
   targetType: "item" | "item_description" | "group" | "option";
@@ -299,6 +331,7 @@ const customerMenuLanguageOptions = [
 
 const choiceSettingsCategory = "__choice_settings__";
 const uberImportDraftCategory = "__uber_import_drafts__";
+const supportedDeliveryPlatformKeys = new Set(["uber_eats", "rocket_now", "demae_can"]);
 
 const schemaRuleKeys: Record<string, string> = {
   size: "allowedSizes",
@@ -403,6 +436,18 @@ function formatDateTime(value: string | null) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(date);
+}
+
+function getPublishChangeLabel(kind: MenuPublishPreviewChange["kind"]) {
+  return ({
+    create: "追加",
+    rename: "名称変更",
+    reprice: "価格変更",
+    update: "更新",
+    move: "移動",
+    disable: "停止",
+    delete: "削除候補"
+  } as const)[kind];
 }
 
 function getCategoryCounts(items: MenuItem[], categories: MenuCategory[], brandId: string): MenuCategorySummary[] {
@@ -570,6 +615,28 @@ export default function MenuAdminPage() {
   const [translationPreview, setTranslationPreview] = useState<MenuTranslationPreview | null>(null);
   const [translationStatus, setTranslationStatus] = useState("");
   const [translationBusy, setTranslationBusy] = useState<"preview" | "apply" | "">("");
+  const [publishPreview, setPublishPreview] = useState<MenuPublishPreview | null>(null);
+  const [publishPreviewStatus, setPublishPreviewStatus] = useState<"loading" | "error" | "">("");
+
+  async function loadPublishPreview(brandId: string) {
+    if (!brandId) {
+      setPublishPreview(null);
+      return;
+    }
+    setPublishPreviewStatus("loading");
+    try {
+      const response = await fetch(`/api/menus/publish-preview?brandId=${encodeURIComponent(brandId)}`, { cache: "no-store" });
+      const result = await response.json().catch(() => ({})) as MenuPublishPreview & { error?: string };
+      if (!response.ok) {
+        setPublishPreviewStatus("error");
+        return;
+      }
+      setPublishPreview(result);
+      setPublishPreviewStatus("");
+    } catch {
+      setPublishPreviewStatus("error");
+    }
+  }
 
   async function loadMenus(nextSelectedItemId = selectedItemId) {
     setLoading(true);
@@ -592,6 +659,7 @@ export default function MenuAdminPage() {
     setDetailMode("item");
     setActiveCategory((current) => current ?? nextItem?.category ?? null);
     setLoading(false);
+    void loadPublishPreview(nextBrandId);
   }
 
   useEffect(() => {
@@ -638,11 +706,13 @@ export default function MenuAdminPage() {
   const selectedSource = data.sources.find((source) => source.id === itemDraft.menuSourceId);
   const publicMenuUrl = buildPublicMenuUrl(activeBrandId);
   const brandExternalPlatforms = useMemo(() => data.externalPlatforms.filter((platform) => (
-    platform.brandId === activeBrandId && !platform.storeId
+    platform.brandId === activeBrandId && !platform.storeId && supportedDeliveryPlatformKeys.has(platform.platformKey)
   )), [activeBrandId, data.externalPlatforms]);
   const brandSyncTasks = useMemo(() => data.syncTasks.filter((task) => (
-    task.brandId === activeBrandId && !task.storeId
-  )), [activeBrandId, data.syncTasks]);
+    task.brandId === activeBrandId
+      && !task.storeId
+      && supportedDeliveryPlatformKeys.has(data.externalPlatforms.find((platform) => platform.id === task.externalPlatformId)?.platformKey ?? "")
+  )), [activeBrandId, data.externalPlatforms, data.syncTasks]);
   const pendingSyncTasks = brandSyncTasks.filter((task) => task.status === "pending");
   const completedSyncTasks = brandSyncTasks.filter((task) => task.status === "completed").slice(0, 8);
 
@@ -696,6 +766,7 @@ export default function MenuAdminPage() {
     setGroupDraft({ ...emptyGroup, brandId });
     setOptionDraft(emptyOption);
     setActiveOptionGroupId("");
+    void loadPublishPreview(brandId);
   }
 
   function selectItem(item: MenuItem) {
@@ -1364,7 +1435,7 @@ export default function MenuAdminPage() {
           {translationStatus ? <p className="menu-auto-translation-status">{translationStatus}</p> : null}
         </section>
 
-        <details className="menu-sync-panel">
+        <details className="menu-sync-panel" open>
           <summary className="section-heading menu-sync-summary">
             <span className="menu-sync-summary-title">
               <span className="eyebrow">External Platforms</span>
@@ -1378,6 +1449,91 @@ export default function MenuAdminPage() {
             </span>
           </summary>
           <div className="menu-sync-body">
+            <section className="menu-publish-preview" aria-live="polite">
+              <div className="menu-publish-preview-head">
+                <div>
+                  <strong>配信前差分プレビュー</strong>
+                  <span>現在は確認専用です。この画面から外部プラットフォームを変更しません。</span>
+                </div>
+                <button
+                  className="secondary-button compact-button"
+                  type="button"
+                  disabled={!activeBrandId || publishPreviewStatus === "loading"}
+                  onClick={() => void loadPublishPreview(activeBrandId)}
+                >
+                  <RefreshCw className={publishPreviewStatus === "loading" ? "is-spinning" : ""} size={15} />
+                  {publishPreviewStatus === "loading" ? "比較中" : "再比較"}
+                </button>
+              </div>
+              {publishPreviewStatus === "error" ? (
+                <p className="menu-publish-preview-error">差分を読み込めませんでした。再比較してください。</p>
+              ) : null}
+              {publishPreview ? (
+                <div className="menu-publish-platform-grid">
+                  {publishPreview.platforms.map((platform) => {
+                    const counts = platform.changes.reduce<Record<string, number>>((result, change) => {
+                      result[change.kind] = (result[change.kind] ?? 0) + 1;
+                      return result;
+                    }, {});
+                    return (
+                      <article className="menu-publish-platform-card" key={platform.platformKey}>
+                        <div className="menu-publish-platform-head">
+                          <div>
+                            <strong>{platform.platformName}</strong>
+                            <small>{platform.ruleVersion}</small>
+                          </div>
+                          <span className={platform.baselineStatus === "ready" ? "is-ready" : "is-blocked"}>
+                            {platform.baselineStatus === "ready" ? "基準取込済み" : "基準未取込"}
+                          </span>
+                        </div>
+                        <div className="menu-publish-counts">
+                          {(["create", "rename", "reprice", "update", "move", "disable", "delete"] as const).map((kind) => (
+                            counts[kind] ? <span key={kind}><b>{counts[kind]}</b>{getPublishChangeLabel(kind)}</span> : null
+                          ))}
+                          {!platform.changes.length ? <span className="is-empty">確定差分なし</span> : null}
+                        </div>
+                        {platform.blockers.map((blocker) => (
+                          <p className="menu-publish-notice is-blocker" key={blocker}>
+                            <AlertTriangle size={14} />
+                            <span>{blocker}</span>
+                          </p>
+                        ))}
+                        {platform.warnings.map((warning) => (
+                          <p className="menu-publish-notice is-warning" key={warning}>
+                            <AlertTriangle size={14} />
+                            <span>{warning}</span>
+                          </p>
+                        ))}
+                        {platform.changes.length ? (
+                          <details className="menu-publish-change-details">
+                            <summary>差分 {platform.changes.length}件を見る</summary>
+                            <div className="menu-publish-change-list">
+                              {platform.changes.map((change) => (
+                                <div className="menu-publish-change-row" key={change.id}>
+                                  <span className={`menu-publish-change-kind is-${change.kind}`}>{getPublishChangeLabel(change.kind)}</span>
+                                  <div>
+                                    <strong>{change.targetLabel}</strong>
+                                    <p>{change.summary}</p>
+                                    {change.currentValue || change.projectedValue ? (
+                                      <small>
+                                        {change.currentValue ? `現在: ${change.currentValue}` : ""}
+                                        {change.currentValue && change.projectedValue ? " → " : ""}
+                                        {change.projectedValue ? `予定: ${change.projectedValue}` : ""}
+                                      </small>
+                                    ) : null}
+                                  </div>
+                                  {change.confidence === "provisional" ? <em>要確認</em> : null}
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : publishPreviewStatus === "loading" ? <p className="empty-state">プラットフォーム別の差分を比較しています。</p> : null}
+            </section>
             <div className="menu-platform-list">
               {brandExternalPlatforms.map((platform) => (
                 <div className="menu-platform-row" key={platform.id}>
