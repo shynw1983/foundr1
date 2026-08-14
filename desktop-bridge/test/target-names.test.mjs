@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { normalizeText, targetNameTiers } from "../src/adapters/common.mjs";
+import { uniqueLocatedRows } from "../src/adapters/rocket-now.mjs";
 
 test("normalizes decorative vinegar text used differently by platforms", () => {
   assert.equal(
@@ -58,4 +59,16 @@ test("matches platform titles that omit a trailing ingredient description", () =
     "痛風海鮮5種盛り",
     "痛風海鮮5種盛り(広島県産牡蠣3個、丸ごとホタテ1個、大海老1尾、あさり身、ぶつ切りたこ)"
   ]);
+});
+
+test("deduplicates Rocket targets that resolve to the same inventory row", () => {
+  const sharedMatch = { checkboxId: "row-soybean", hidden: false };
+  const uniqueMatch = { checkboxId: "row-replacement", hidden: false };
+  const result = uniqueLocatedRows([
+    { label: "小大豆もやし50g", matches: [sharedMatch] },
+    { label: "【大分県産】小大豆もやし", matches: [sharedMatch] },
+    { label: "小大豆もやしに変更", matches: [uniqueMatch] }
+  ]);
+
+  assert.deepEqual(result.map((item) => item.label), ["小大豆もやし50g", "小大豆もやしに変更"]);
 });

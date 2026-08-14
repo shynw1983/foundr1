@@ -65,7 +65,7 @@ function cleanKitchenLabel(value: unknown) {
     .trim();
 }
 
-function canonicalInventoryKey(value: unknown) {
+function canonicalInventoryKey(value: unknown, groupKey = "") {
   const key = String(value ?? "").trim().toLowerCase();
   const aliases: Record<string, string> = {
     "replace-corn-noodle": "corn-noodle",
@@ -95,7 +95,16 @@ function canonicalInventoryKey(value: unknown) {
     "replace-soybean-sprouts-noodle": "soybean-sprouts-noodle",
     "replace-tteokbokki": "tteokbokki"
   };
-  return aliases[key] ?? key;
+  if (aliases[key]) return aliases[key];
+
+  // Noodle availability is physical-inventory state. Keep every menu surface
+  // for the same noodle (normal, replacement, and cold) on one inventory key.
+  // Explicit aliases above cover legacy names whose keys are not symmetrical;
+  // this convention makes newly added, consistently keyed noodles link without
+  // requiring another one-off entry in this table.
+  return /noodle|麺|面/i.test(groupKey)
+    ? key.replace(/^(?:replace|cold)-/, "").replace(/-noodles$/, "-noodle")
+    : key;
 }
 
 function unique(values: string[]) {
@@ -121,7 +130,7 @@ export function resolveUberInventoryTargets(
       row,
       aliases,
       normalizedAliases: aliases.map(normalize).filter((value) => value.length >= 2),
-      canonicalKey: canonicalInventoryKey(row.externalId || row.optionKey)
+      canonicalKey: canonicalInventoryKey(row.externalId || row.optionKey, row.groupKey)
     };
   });
   const exactRows = preparedRows.filter(({ normalizedAliases }) =>

@@ -101,6 +101,15 @@ async function waitForRows(page, items, hidden, targetKind) {
   }
 }
 
+export function uniqueLocatedRows(items) {
+  const rows = new Map();
+  for (const item of items) {
+    const checkboxId = item.matches[0]?.checkboxId ?? "";
+    if (checkboxId && !rows.has(checkboxId)) rows.set(checkboxId, item);
+  }
+  return [...rows.values()];
+}
+
 export class RocketNowAdapter {
   constructor(session) {
     this.session = session;
@@ -145,38 +154,39 @@ export class RocketNowAdapter {
       return { outcome: "applied", changed: changing.length, desiredHidden };
     }
 
-    for (const item of changing) {
+    const uniqueChanging = uniqueLocatedRows(changing);
+    for (const item of uniqueChanging) {
       const checkboxId = item.matches[0].checkboxId;
       if (!checkboxId) throw new Error(`rocket_now_checkbox_missing:${item.label}`);
       await page.evaluate((id) => document.getElementById(id)?.click(), checkboxId);
+      await page.waitForSelector('[data-testid="FloatingPopup"]', { visible: true, timeout: 10000 });
+      const selectedHide = await page.evaluate(() => {
+        const popup = document.querySelector('[data-testid="FloatingPopup"]');
+        const trigger = popup?.querySelector(":scope > div > div");
+        if (!(trigger instanceof HTMLElement)) return false;
+        trigger.click();
+        return true;
+      });
+      if (!selectedHide) throw new Error("rocket_now_status_picker_missing");
+      await delay(250);
+      const hideSelected = await page.evaluate(() => {
+        const input = document.querySelector('input[type="radio"][value="HIDE"]');
+        if (!(input instanceof HTMLInputElement)) return false;
+        input.click();
+        return input.checked;
+      });
+      if (!hideSelected) throw new Error("rocket_now_hide_option_missing");
+      const applied = await page.evaluate(() => {
+        const popup = document.querySelector('[data-testid="FloatingPopup"]');
+        const button = [...(popup?.querySelectorAll("button") ?? [])]
+          .find((candidate) => candidate.textContent?.trim() === "適用");
+        if (!(button instanceof HTMLButtonElement)) return false;
+        button.click();
+        return true;
+      });
+      if (!applied) throw new Error("rocket_now_apply_button_missing");
+      await waitForRows(page, [item], true, targetKind);
     }
-    await page.waitForSelector('[data-testid="FloatingPopup"]', { visible: true, timeout: 10000 });
-    const selectedHide = await page.evaluate(() => {
-      const popup = document.querySelector('[data-testid="FloatingPopup"]');
-      const trigger = popup?.querySelector(":scope > div > div");
-      if (!(trigger instanceof HTMLElement)) return false;
-      trigger.click();
-      return true;
-    });
-    if (!selectedHide) throw new Error("rocket_now_status_picker_missing");
-    await delay(250);
-    const hideSelected = await page.evaluate(() => {
-      const input = document.querySelector('input[type="radio"][value="HIDE"]');
-      if (!(input instanceof HTMLInputElement)) return false;
-      input.click();
-      return input.checked;
-    });
-    if (!hideSelected) throw new Error("rocket_now_hide_option_missing");
-    const applied = await page.evaluate(() => {
-      const popup = document.querySelector('[data-testid="FloatingPopup"]');
-      const button = [...(popup?.querySelectorAll("button") ?? [])]
-        .find((candidate) => candidate.textContent?.trim() === "適用");
-      if (!(button instanceof HTMLButtonElement)) return false;
-      button.click();
-      return true;
-    });
-    if (!applied) throw new Error("rocket_now_apply_button_missing");
-    await waitForRows(page, changing, true, targetKind);
-    return { outcome: "applied", changed: changing.length, desiredHidden };
+    return { outcome: "applied", changed: uniqueChanging.length, desiredHidden };
   }
 }

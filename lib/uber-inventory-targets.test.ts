@@ -53,6 +53,30 @@ test("groups normal, replacement, and cold sweet-potato wide noodles", () => {
   }
 });
 
+test("links every consistently keyed noodle surface without a one-off alias", () => {
+  const rows = [
+    row({ id: "normal", groupKey: "noodles", optionKey: "potato-noodle", externalId: "potato-noodle", name: "じゃがいも麺50g" }),
+    row({ id: "replacement", groupKey: "noodle-replacement", optionKey: "replace-potato-noodle", externalId: "replace-potato-noodle", name: "じゃがいも麺に変更" }),
+    row({ id: "cold", groupKey: "cold-noodles", optionKey: "cold-potato-noodles", externalId: "cold-potato-noodles", name: "冷やしじゃがいも麺100g" })
+  ];
+
+  for (const label of rows.map((item) => item.name)) {
+    const result = resolveUberInventoryTargets(label, rows);
+    assert.equal(result.inventoryKey, "potato-noodle");
+    assert.deepEqual(result.targets.map((target) => target.menuOptionId), ["normal", "replacement", "cold"]);
+  }
+});
+
+test("does not apply noodle prefix linking to unrelated option groups", () => {
+  const result = resolveUberInventoryTargets("冷製ソース", [
+    row({ id: "normal", groupKey: "sauces", optionKey: "sauce", externalId: "sauce", name: "ソース" }),
+    row({ id: "cold", groupKey: "sauces", optionKey: "cold-sauce", externalId: "cold-sauce", name: "冷製ソース" })
+  ]);
+
+  assert.equal(result.inventoryKey, "cold-sauce");
+  assert.deepEqual(result.targets.map((target) => target.menuOptionId), ["cold"]);
+});
+
 test("matches a customer-facing topping label directly", () => {
   const result = resolveUberInventoryTargets("香醋", [
     row({ id: "vinegar", groupKey: "toppings", optionKey: "vinegar", name: "香醋" }),
