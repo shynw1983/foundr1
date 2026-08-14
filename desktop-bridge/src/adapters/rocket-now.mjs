@@ -3,6 +3,27 @@ import { setTimeout as delay } from "node:timers/promises";
 import { loginState, pageSummary, targetNameTiers } from "./common.mjs";
 
 const OOS_URL = "https://store.rocketnow.co.jp/merchant/management/oos";
+const INVENTORY_ROW_SELECTOR = ".nested-checkbox-list__sub_title";
+
+async function waitForInventoryRows(page, targetKind) {
+  const routeSuffix = targetKind === "option" ? "/option" : "/menu";
+  await page.waitForFunction(
+    (suffix) => window.location.pathname.endsWith(suffix),
+    { timeout: 20000 },
+    routeSuffix
+  );
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await page.waitForSelector(INVENTORY_ROW_SELECTOR, { visible: true, timeout: 25000 });
+      return;
+    } catch (error) {
+      if (attempt > 0) throw error;
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.waitForNetworkIdle({ idleTime: 500, timeout: 8000 }).catch(() => undefined);
+    }
+  }
+}
 
 async function selectInventoryTab(page, targetKind) {
   const tabLabel = targetKind === "option" ? "オプション" : "メニュー";
@@ -20,7 +41,7 @@ async function selectInventoryTab(page, targetKind) {
     { timeout: 10000 },
     tabLabel
   );
-  await page.waitForSelector(".nested-checkbox-list__sub_title", { visible: true, timeout: 15000 });
+  await waitForInventoryRows(page, targetKind);
 }
 
 async function readRows(page, targets) {
