@@ -38,7 +38,11 @@ export function targetNameTiers(target) {
   const primaryNames = nameVariants(target?.label);
   const primary = new Set(primaryNames);
   const aliasNames = targetNames(target).filter((name) => !primary.has(name));
-  return { primaryNames, aliasNames };
+  const exactName = normalizeText(target?.label);
+  const exactNames = exactName ? [exactName] : [];
+  const exact = new Set(exactNames);
+  const fallbackNames = primaryNames.filter((name) => !exact.has(name));
+  return { exactNames, fallbackNames, primaryNames, aliasNames };
 }
 
 export async function pageSummary(page) {

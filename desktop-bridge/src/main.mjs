@@ -73,8 +73,14 @@ async function executeInventoryCommand(command) {
       const verified = located.filter((item) => item.matches.length === 1);
       const missing = located.filter((item) => item.matches.length === 0);
       if (ambiguous.length || !verified.length) {
-        const rejected = [...ambiguous, ...missing];
-        throw new Error(`Target verification failed: ${rejected.map((item) => `${item.label}=${item.matches.length}`).join(", ")}`);
+        const problems = [];
+        if (ambiguous.length) {
+          problems.push(`Multiple target matches: ${ambiguous.map((item) => `${item.label}=${item.matches.length}`).join(", ")}`);
+        }
+        if (missing.length) {
+          problems.push(`Target verification failed: ${missing.map((item) => `${item.label}=0`).join(", ")}`);
+        }
+        throw new Error(problems.join("; "));
       }
       await reportProgress(command, {
         phase: "applying",

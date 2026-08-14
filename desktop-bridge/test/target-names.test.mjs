@@ -17,7 +17,19 @@ test("keeps Japanese source variants ahead of shared translated aliases", () => 
   });
 
   assert.deepEqual(tiers.primaryNames, ["さつまいも板春雨50g", "さつまいも板春雨"]);
+  assert.deepEqual(tiers.exactNames, ["さつまいも板春雨50g"]);
+  assert.deepEqual(tiers.fallbackNames, ["さつまいも板春雨"]);
   assert.deepEqual(tiers.aliasNames, ["红薯宽粉", "Wide Sweet Potato Noodles"]);
+});
+
+test("keeps an exact weighted noodle name ahead of a legacy weightless title", () => {
+  const tiers = targetNameTiers({
+    label: "トウモロコシ麺50g",
+    aliases: ["玉米面", "Corn Noodles"]
+  });
+
+  assert.deepEqual(tiers.exactNames, ["トウモロコシ麺50g"]);
+  assert.deepEqual(tiers.fallbackNames, ["トウモロコシ麺"]);
 });
 
 test("generates safe platform variants without merging noodle categories", () => {

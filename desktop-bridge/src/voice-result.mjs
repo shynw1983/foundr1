@@ -7,6 +7,7 @@ const platformLabels = {
 export function readableVoiceError(value) {
   const error = String(value ?? "").trim();
   if (/login required|ログイン/i.test(error)) return "需要重新登录";
+  if (/multiple target matches|複数の候補|多个候选/i.test(error)) return "找到多个同名商品";
   if (/target verification failed|対応する.*見つかりません/i.test(error)) return "找不到对应商品";
   if (/timed out|timeout/i.test(error)) return "平台页面响应超时";
   if (/expired/i.test(error)) return "任务已过期";

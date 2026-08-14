@@ -69,11 +69,17 @@ export class UberEatsAdapter {
               .map((anchor) => ({ text: normalize(anchor.textContent), href: anchor.href }));
             return [...new Map(found.map((match) => [match.href, match])).values()];
           };
-          const primaryMatches = findMatches(item.primaryNames);
-          const matches = primaryMatches.length ? primaryMatches : findMatches(item.aliasNames);
+          const exactMatches = findMatches(item.exactNames);
+          const fallbackMatches = exactMatches.length ? [] : findMatches(item.fallbackNames);
+          const aliasMatches = exactMatches.length || fallbackMatches.length ? [] : findMatches(item.aliasNames);
+          const matches = exactMatches.length ? exactMatches : fallbackMatches.length ? fallbackMatches : aliasMatches;
           return {
             label: item.label,
-            names: primaryMatches.length ? item.primaryNames : item.aliasNames,
+            names: exactMatches.length
+              ? item.exactNames
+              : fallbackMatches.length
+                ? item.fallbackNames
+                : item.aliasNames,
             matches
           };
         });
