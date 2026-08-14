@@ -11,6 +11,10 @@ function nameVariants(value) {
   const normalized = normalizeText(value);
   if (!normalized) return [];
   const variants = [normalized];
+  const withoutDetails = normalized
+    .replace(/\s*[（(][^）)]*[）)]\s*$/u, "")
+    .trim();
+  if (withoutDetails) variants.push(withoutDetails);
   const weightless = normalized
     .replace(/(?:1人前)?約?\d+(?:\.\d+)?\s*(?:g|kg)\b/giu, "")
     .replace(/\s+/g, " ")

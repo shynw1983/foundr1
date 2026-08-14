@@ -34,3 +34,16 @@ test("generates safe platform variants without merging noodle categories", () =>
     ["極上の肉麻辣湯", "極上の肉マーラータン"]
   );
 });
+
+test("matches platform titles that omit a trailing ingredient description", () => {
+  const tiers = targetNameTiers({
+    label: "痛風海鮮5種盛り👑（広島県産牡蠣3個、丸ごとホタテ1個、大海老1尾、あさり身約50g、ぶつ切りたこ約50g）",
+    aliases: []
+  });
+
+  assert.deepEqual(tiers.primaryNames, [
+    "痛風海鮮5種盛り(広島県産牡蠣3個、丸ごとホタテ1個、大海老1尾、あさり身約50g、ぶつ切りたこ約50g)",
+    "痛風海鮮5種盛り",
+    "痛風海鮮5種盛り(広島県産牡蠣3個、丸ごとホタテ1個、大海老1尾、あさり身、ぶつ切りたこ)"
+  ]);
+});
