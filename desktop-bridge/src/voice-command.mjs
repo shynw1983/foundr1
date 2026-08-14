@@ -171,10 +171,9 @@ try {
       await speakChinese(feedback);
     } else {
       await clearPendingQuery();
-      const feedback = "我没有听清。我们重新来一次，请再说商品名称。";
+      const feedback = "我没有听清确认回答，本次操作已经取消。请重新对 Siri 说商品缺货或商品恢复。";
       console.log(feedback);
       await speakChinese(feedback);
-      startShortcutAgain();
     }
   } else if (shortcutMode && !backgroundMode && !preview) {
     validateRequest();
