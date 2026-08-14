@@ -7,7 +7,11 @@ import { loadConfig } from "./config.mjs";
 
 const mode = process.argv[2] ?? "check";
 const requestedPlatform = String(process.argv[3] ?? "").trim();
-const requestedTarget = String(process.argv.slice(4).join(" ") ?? "").trim();
+const locateHasKind = mode === "locate" && ["item", "option"].includes(process.argv[4]);
+const requestedKind = locateHasKind
+  ? process.argv[4]
+  : "item";
+const requestedTarget = String(process.argv.slice(locateHasKind ? 5 : 4).join(" ") ?? "").trim();
 const config = await loadConfig({ requireCredentials: mode === "run" });
 const enabledPlatforms = ["uber_eats", "rocket_now", "demae_can"]
   .filter((platform) => config.platforms[platform]?.enabled !== false)
@@ -64,9 +68,9 @@ if (mode === "check") {
 
 if (mode === "locate") {
   if (!requestedPlatform || !requestedTarget) {
-    throw new Error("Usage: node src/main.mjs locate <platform> <exact product name>");
+    throw new Error("Usage: node src/main.mjs locate <platform> [item|option] <exact product name>");
   }
-  const result = await adapters.get(requestedPlatform).locateTargets([{ label: requestedTarget, aliases: [] }]);
+  const result = await adapters.get(requestedPlatform).locateTargets([{ kind: requestedKind, label: requestedTarget, aliases: [] }]);
   console.log(JSON.stringify(result, null, 2));
   await shutdown();
   process.exit(0);
@@ -104,12 +108,20 @@ for (;;) {
     const payload = command.payload && typeof command.payload === "object" ? command.payload : {};
     const targets = Array.isArray(payload.targets) ? payload.targets : [];
     const located = await adapter.locateTargets(targets);
-    const ambiguous = located.filter((item) => item.matches.length !== 1);
-    if (ambiguous.length) {
-      throw new Error(`Target verification failed: ${ambiguous.map((item) => `${item.label}=${item.matches.length}`).join(", ")}`);
+    const ambiguous = located.filter((item) => item.matches.length > 1);
+    const verified = located.filter((item) => item.matches.length === 1);
+    const missing = located.filter((item) => item.matches.length === 0);
+    if (ambiguous.length || !verified.length) {
+      const rejected = [...ambiguous, ...missing];
+      throw new Error(`Target verification failed: ${rejected.map((item) => `${item.label}=${item.matches.length}`).join(", ")}`);
     }
-    const result = await adapter.setInventory(payload, located);
-    await api.acknowledge(command.id, "succeeded", result);
+    const result = await adapter.setInventory(payload, verified);
+    await api.acknowledge(command.id, "succeeded", {
+      ...result,
+      matchedTargetCount: verified.length,
+      missingTargetCount: missing.length,
+      missingTargets: missing.map((item) => item.label)
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(new Date().toISOString(), message);

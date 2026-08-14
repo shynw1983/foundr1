@@ -1,21 +1,25 @@
-import { loginState, pageSummary, targetNames } from "./common.mjs";
+import { loginState, pageSummary, targetNameTiers } from "./common.mjs";
 
 const STOCKOUT_URL = "https://partner.demae-can.com/merchant-admin/shop/stockout";
 
 async function readRows(page, targets) {
-  const requested = targets.map((target) => ({ label: target.label, names: targetNames(target) }));
+  const requested = targets.map((target) => ({ label: target.label, ...targetNameTiers(target) }));
   return page.evaluate((items) => {
-    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll("[class*=Styles_name__]")];
     return items.map((item) => {
-      const wanted = item.names.map(normalize);
-      const rows = titles
-        .filter((title) => wanted.some((name) => normalize(title.textContent) === name || normalize(title.textContent).startsWith(`${name}|`)))
-        .map((title) => title.closest("label[class*=TableSubRow_tableSubRow]"))
-        .filter(Boolean);
+      const findRows = (names) => {
+        const wanted = names.map(normalize);
+        return titles
+          .filter((title) => wanted.some((name) => normalize(title.textContent) === name || normalize(title.textContent).startsWith(`${name}|`)))
+          .map((title) => title.closest("label[class*=TableSubRow_tableSubRow]"))
+          .filter(Boolean);
+      };
+      const primaryRows = findRows(item.primaryNames);
+      const rows = primaryRows.length ? primaryRows : findRows(item.aliasNames);
       return {
         label: item.label,
-        names: item.names,
+        names: primaryRows.length ? item.primaryNames : item.aliasNames,
         matches: rows.map((row, index) => ({
           text: normalize(row.textContent),
           matchIndex: index,
@@ -30,7 +34,7 @@ async function readRows(page, targets) {
 async function clickRows(page, items) {
   for (const item of items) {
     const clicked = await page.evaluate((names) => {
-      const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+      const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
       const wanted = names.map(normalize);
       const candidates = [...document.querySelectorAll("[class*=Styles_name__]")]
         .filter((title) => wanted.some((name) => normalize(title.textContent) === name || normalize(title.textContent).startsWith(`${name}|`)));
@@ -47,7 +51,7 @@ async function clickRows(page, items) {
 
 async function waitForRows(page, items, permanentlyUnavailable) {
   await page.waitForFunction(({ requested, expectedPermanentlyUnavailable }) => {
-    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll("[class*=Styles_name__]")];
     return requested.every((item) => {
       const wanted = item.names.map(normalize);

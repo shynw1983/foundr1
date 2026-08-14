@@ -39,6 +39,20 @@ test("groups the default wide noodle and the extra wide noodle action", () => {
   assert.equal(result.targets.length, 2);
 });
 
+test("groups normal, replacement, and cold sweet-potato wide noodles", () => {
+  const rows = [
+    row({ id: "normal", groupKey: "noodles", optionKey: "wide-sweet-potato-noodle", externalId: "wide-sweet-potato-noodle", name: "さつまいも板春雨50g", displayNames: { zh: "红薯宽粉", en: "Wide Sweet Potato Noodles" } }),
+    row({ id: "replacement", groupKey: "noodle-replacement", optionKey: "replace-wide-sweet-potato-noodle", externalId: "replace-wide-sweet-potato-noodle", name: "さつまいも板春雨に変更", displayNames: { zh: "更换为红薯宽粉", en: "Wide Sweet Potato Noodles" } }),
+    row({ id: "cold", groupKey: "cold-noodles", optionKey: "cold-wide-sweet-potato-noodles", externalId: "cold-wide-sweet-potato-noodles", name: "冷やしさつまいも板春雨100g", displayNames: { zh: "红薯宽粉", en: "Wide Sweet Potato Noodles" } })
+  ];
+
+  for (const label of ["さつまいも板春雨50g", "红薯宽粉"]) {
+    const result = resolveUberInventoryTargets(label, rows);
+    assert.equal(result.inventoryKey, "wide-sweet-potato-noodle");
+    assert.deepEqual(result.targets.map((target) => target.menuOptionId), ["normal", "replacement", "cold"]);
+  }
+});
+
 test("matches a customer-facing topping label directly", () => {
   const result = resolveUberInventoryTargets("香醋", [
     row({ id: "vinegar", groupKey: "toppings", optionKey: "vinegar", name: "香醋" }),

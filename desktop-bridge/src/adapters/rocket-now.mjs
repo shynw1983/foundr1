@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 
-import { loginState, pageSummary, targetNames } from "./common.mjs";
+import { loginState, pageSummary, targetNameTiers } from "./common.mjs";
 
 const OOS_URL = "https://store.rocketnow.co.jp/merchant/management/oos";
 
@@ -24,20 +24,24 @@ async function selectInventoryTab(page, targetKind) {
 }
 
 async function readRows(page, targets) {
-  const requested = targets.map((target) => ({ kind: target.kind, label: target.label, names: targetNames(target) }));
+  const requested = targets.map((target) => ({ kind: target.kind, label: target.label, ...targetNameTiers(target) }));
   return page.evaluate((items) => {
-    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
     return items.map((item) => {
-      const wanted = new Set(item.names.map(normalize));
-      const rows = titles
-        .filter((title) => wanted.has(normalize(title.textContent)))
-        .map((title) => title.closest("div[class*=e1iqhfx24]"))
-        .filter(Boolean);
+      const findRows = (names) => {
+        const wanted = new Set(names.map(normalize));
+        return titles
+          .filter((title) => wanted.has(normalize(title.textContent)))
+          .map((title) => title.closest("div[class*=e1iqhfx24]"))
+          .filter(Boolean);
+      };
+      const primaryRows = findRows(item.primaryNames);
+      const rows = primaryRows.length ? primaryRows : findRows(item.aliasNames);
       return {
         kind: item.kind,
         label: item.label,
-        names: item.names,
+        names: primaryRows.length ? item.primaryNames : item.aliasNames,
         matches: rows.map((row) => ({
           text: normalize(row.textContent),
           checkboxId: row.querySelector('input[type="checkbox"],input[type="checkBox"]')?.id ?? "",
@@ -50,7 +54,7 @@ async function readRows(page, targets) {
 
 async function waitForRows(page, labels, hidden) {
   await page.waitForFunction(({ wantedLabels, expectedHidden }) => {
-    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
     return wantedLabels.every((label) => {
       const title = titles.find((candidate) => normalize(candidate.textContent) === normalize(label));

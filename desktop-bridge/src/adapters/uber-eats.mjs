@@ -1,12 +1,13 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 import { CdpPage } from "../cdp-page.mjs";
-import { loginState, targetNames } from "./common.mjs";
+import { loginState, targetNameTiers } from "./common.mjs";
 
 const UBER_ORIGIN = "https://merchants.ubereats.com/";
 const NORMALIZE_SOURCE = `const normalize = (value) => String(value ?? "")
   .normalize("NFKC")
   .replace(/【[^】]*】|\\[[^\\]]*\\]/g, " ")
+  .replace(/[\\p{Extended_Pictographic}\\uFE0F\\u200D\\u20E3]/gu, "")
   .replace(/[\\s\\u200b-\\u200d\\ufeff]+/g, " ")
   .trim();`;
 
@@ -54,18 +55,26 @@ export class UberEatsAdapter {
     const page = await this.connect();
     try {
       await this.openItemsPage(page);
-      const requested = targets.map((target) => ({ label: target.label, names: targetNames(target) }));
+      const requested = targets.map((target) => ({ label: target.label, ...targetNameTiers(target) }));
       return await page.evaluate(`(() => {
         ${NORMALIZE_SOURCE}
         const items = ${JSON.stringify(requested)};
         const anchors = [...document.querySelectorAll('a[href*="/items/"]')]
           .filter((anchor) => anchor.getClientRects().length);
         return items.map((item) => {
-          const wanted = new Set(item.names.map(normalize));
-          const matches = anchors
-            .filter((anchor) => normalize(anchor.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())))
-            .map((anchor) => ({ text: normalize(anchor.textContent), href: anchor.href }));
-          return { label: item.label, names: item.names, matches };
+          const findMatches = (names) => {
+            const wanted = new Set(names.map(normalize));
+            return anchors
+              .filter((anchor) => normalize(anchor.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())))
+              .map((anchor) => ({ text: normalize(anchor.textContent), href: anchor.href }));
+          };
+          const primaryMatches = findMatches(item.primaryNames);
+          const matches = primaryMatches.length ? primaryMatches : findMatches(item.aliasNames);
+          return {
+            label: item.label,
+            names: primaryMatches.length ? item.primaryNames : item.aliasNames,
+            matches
+          };
         });
       })()`);
     } finally {

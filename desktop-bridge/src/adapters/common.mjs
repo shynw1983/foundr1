@@ -1,6 +1,8 @@
 export function normalizeText(value) {
   return String(value ?? "")
     .normalize("NFKC")
+    .replace(/【[^】]*】|\[[^\]]*\]/g, " ")
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "")
     .replace(/[\s\u200b-\u200d\ufeff]+/g, " ")
     .trim();
 }
@@ -10,6 +12,13 @@ export function targetNames(target) {
     target?.label,
     ...(Array.isArray(target?.aliases) ? target.aliases : [])
   ].map(normalizeText).filter(Boolean)));
+}
+
+export function targetNameTiers(target) {
+  const primaryNames = [normalizeText(target?.label)].filter(Boolean);
+  const primary = new Set(primaryNames);
+  const aliasNames = targetNames(target).filter((name) => !primary.has(name));
+  return { primaryNames, aliasNames };
 }
 
 export async function pageSummary(page) {

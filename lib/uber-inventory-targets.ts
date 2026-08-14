@@ -66,10 +66,36 @@ function cleanKitchenLabel(value: unknown) {
 }
 
 function canonicalInventoryKey(value: unknown) {
-  let key = String(value ?? "").trim().toLowerCase();
-  key = key.replace(/^replace-/, "");
-  if (key === "extra-wide-harusame" || key === "wide-harusame-extra") return "wide-harusame";
-  return key;
+  const key = String(value ?? "").trim().toLowerCase();
+  const aliases: Record<string, string> = {
+    "replace-corn-noodle": "corn-noodle",
+    "cold-corn-noodles": "corn-noodle",
+    "replace-harusame": "harusame",
+    "cold-glass-noodles": "harusame",
+    "replace-sweet-potato-noodle": "sweet-potato-noodle",
+    "cold-sweet-potato-noodles": "sweet-potato-noodle",
+    "replace-rice-noodle": "rice-noodle",
+    "cold-rice-noodles": "rice-noodle",
+    "replace-beef-noodle": "beef-noodle",
+    "cold-niujin-noodles": "beef-noodle",
+    "replace-yam-noodle": "yam-noodle",
+    "cold-yam-noodles": "yam-noodle",
+    "replace-wide-sweet-potato-noodle": "wide-sweet-potato-noodle",
+    "cold-wide-sweet-potato-noodles": "wide-sweet-potato-noodle",
+    "replace-kishimen": "kishimen",
+    "cold-kishimen": "kishimen",
+    "option-dcafe1ea": "kishimen",
+    "replace-knife-shaved-noodle": "knife-shaved-noodle",
+    "cold-knife-shaved-noodles": "knife-shaved-noodle",
+    "replace-extra-wide-harusame": "wide-harusame",
+    "extra-wide-harusame": "wide-harusame",
+    "wide-harusame-extra": "wide-harusame",
+    "cold-wide-glass-noodles": "wide-harusame",
+    "replace-round-yam-sheet": "round-yam-sheet",
+    "replace-soybean-sprouts-noodle": "soybean-sprouts-noodle",
+    "replace-tteokbokki": "tteokbokki"
+  };
+  return aliases[key] ?? key;
 }
 
 function unique(values: string[]) {
