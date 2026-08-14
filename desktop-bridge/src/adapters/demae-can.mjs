@@ -57,6 +57,18 @@ async function waitForRows(page, items, unavailable) {
   }, { timeout: 15000 }, { requested: items, expectedUnavailable: unavailable });
 }
 
+async function waitForVisibleForm(page, selector, errorCode) {
+  try {
+    await page.waitForFunction((formSelector) => {
+      const form = document.querySelector(formSelector);
+      const rect = form?.getBoundingClientRect();
+      return Boolean(rect && rect.width > 0 && rect.height > 0);
+    }, { timeout: 5000 }, selector);
+  } catch {
+    throw new Error(errorCode);
+  }
+}
+
 export class DemaeCanAdapter {
   constructor(session) {
     this.session = session;
@@ -75,6 +87,11 @@ export class DemaeCanAdapter {
 
   async setInventory(payload, located) {
     const page = await this.session.goto(STOCKOUT_URL);
+    // Demae leaves selection and confirmation overlays mounted after a slow or
+    // interrupted submission. Always begin an execution from a clean page so
+    // the next command cannot interact with stale modal state.
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.waitForSelector("[class*=Styles_name__]", { visible: true, timeout: 15000 });
     const desiredUnavailable = payload.isAvailable !== true;
     const fresh = await readRows(page, located.map((item) => ({ label: item.label, aliases: item.names })));
     const changing = fresh.filter((item) => item.matches[0]?.unavailable !== desiredUnavailable);
@@ -83,6 +100,14 @@ export class DemaeCanAdapter {
     await clickRows(page, changing);
     await page.waitForSelector("[class*=FloatingModal_isOpen]", { visible: true, timeout: 10000 });
     if (desiredUnavailable) {
+      const opened = await page.evaluate(() => {
+        const tab = document.querySelector('[data-key="stockoutSetting"]');
+        if (!(tab instanceof HTMLElement)) return false;
+        tab.click();
+        return true;
+      });
+      if (!opened) throw new Error("demae_can_stockout_tab_missing");
+      await waitForVisibleForm(page, "form[class*=StockoutSetting_form]", "demae_can_stockout_form_timeout");
       const selected = await page.evaluate(() => {
         const form = document.querySelector("form[class*=StockoutSetting_form]");
         const labels = [...(form?.querySelectorAll("label") ?? [])];
@@ -101,7 +126,7 @@ export class DemaeCanAdapter {
         return true;
       });
       if (!opened) throw new Error("demae_can_restore_tab_missing");
-      await page.waitForSelector("form[class*=StockoutDelete_form]", { visible: true, timeout: 5000 });
+      await waitForVisibleForm(page, "form[class*=StockoutDelete_form]", "demae_can_restore_form_timeout");
     }
     const submitted = await page.evaluate((restoring) => {
       const selector = restoring ? "form[class*=StockoutDelete_form]" : "form[class*=StockoutSetting_form]";
@@ -113,7 +138,29 @@ export class DemaeCanAdapter {
       return true;
     }, !desiredUnavailable);
     if (!submitted) throw new Error("demae_can_apply_button_missing");
-    await waitForRows(page, changing, desiredUnavailable);
+    try {
+      await page.waitForFunction(() => [...document.querySelectorAll("button")].some((button) => {
+        const rect = button.getBoundingClientRect();
+        return button.textContent?.trim() === "確定" && rect.width > 0 && rect.height > 0;
+      }), { timeout: 5000 });
+    } catch {
+      throw new Error("demae_can_confirmation_timeout");
+    }
+    const confirmed = await page.evaluate(() => {
+      const button = [...document.querySelectorAll("button")].find((candidate) => {
+        const rect = candidate.getBoundingClientRect();
+        return candidate.textContent?.trim() === "確定" && rect.width > 0 && rect.height > 0;
+      });
+      if (!(button instanceof HTMLButtonElement)) return false;
+      button.click();
+      return true;
+    });
+    if (!confirmed) throw new Error("demae_can_confirmation_missing");
+    try {
+      await waitForRows(page, changing, desiredUnavailable);
+    } catch {
+      throw new Error("demae_can_verification_timeout");
+    }
     return { outcome: "applied", changed: changing.length, desiredUnavailable };
   }
 }

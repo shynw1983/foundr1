@@ -95,9 +95,13 @@ export class RocketNowAdapter {
     });
     if (!selectedHide) throw new Error("rocket_now_status_picker_missing");
     await delay(250);
-    const hideChoice = await page.$('input[type="radio"][value="HIDE"]');
-    if (!hideChoice) throw new Error("rocket_now_hide_option_missing");
-    await hideChoice.click();
+    const hideSelected = await page.evaluate(() => {
+      const input = document.querySelector('input[type="radio"][value="HIDE"]');
+      if (!(input instanceof HTMLInputElement)) return false;
+      input.click();
+      return input.checked;
+    });
+    if (!hideSelected) throw new Error("rocket_now_hide_option_missing");
     const applied = await page.evaluate(() => {
       const popup = document.querySelector('[data-testid="FloatingPopup"]');
       const button = [...(popup?.querySelectorAll("button") ?? [])]
