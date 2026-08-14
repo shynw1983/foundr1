@@ -19,7 +19,8 @@ async function readRows(page, targets) {
         matches: rows.map((row, index) => ({
           text: normalize(row.textContent),
           matchIndex: index,
-          unavailable: /品切れ|終売/u.test(normalize(row.textContent))
+          unavailable: /品切れ|終売/u.test(normalize(row.textContent)),
+          permanentlyUnavailable: /終売|無期限/u.test(normalize(row.textContent))
         }))
       };
     });
@@ -44,17 +45,19 @@ async function clickRows(page, items) {
   }
 }
 
-async function waitForRows(page, items, unavailable) {
-  await page.waitForFunction(({ requested, expectedUnavailable }) => {
+async function waitForRows(page, items, permanentlyUnavailable) {
+  await page.waitForFunction(({ requested, expectedPermanentlyUnavailable }) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll("[class*=Styles_name__]")];
     return requested.every((item) => {
       const wanted = item.names.map(normalize);
       const title = titles.find((candidate) => wanted.some((name) => normalize(candidate.textContent) === name || normalize(candidate.textContent).startsWith(`${name}|`)));
       const rowText = normalize(title?.closest("label[class*=TableSubRow_tableSubRow]")?.textContent);
-      return Boolean(title) && (/品切れ|終売/u.test(rowText) === expectedUnavailable);
+      return Boolean(title) && (expectedPermanentlyUnavailable
+        ? /終売|無期限/u.test(rowText)
+        : !/品切れ|終売/u.test(rowText));
     });
-  }, { timeout: 15000 }, { requested: items, expectedUnavailable: unavailable });
+  }, { timeout: 15000 }, { requested: items, expectedPermanentlyUnavailable: permanentlyUnavailable });
 }
 
 async function waitForVisibleForm(page, selector, errorCode) {
@@ -94,7 +97,9 @@ export class DemaeCanAdapter {
     await page.waitForSelector("[class*=Styles_name__]", { visible: true, timeout: 15000 });
     const desiredUnavailable = payload.isAvailable !== true;
     const fresh = await readRows(page, located.map((item) => ({ label: item.label, aliases: item.names })));
-    const changing = fresh.filter((item) => item.matches[0]?.unavailable !== desiredUnavailable);
+    const changing = fresh.filter((item) => desiredUnavailable
+      ? item.matches[0]?.permanentlyUnavailable !== true
+      : item.matches[0]?.unavailable === true);
     if (!changing.length) return { outcome: "already_applied", changed: 0, desiredUnavailable };
 
     await clickRows(page, changing);
