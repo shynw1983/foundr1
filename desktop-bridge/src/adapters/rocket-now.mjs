@@ -53,7 +53,7 @@ async function readRows(page, targets) {
       const findRows = (names) => {
         const wanted = new Set(names.map(normalize));
         return titles
-          .filter((title) => wanted.has(normalize(title.textContent)))
+          .filter((title) => normalize(title.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())))
           .map((title) => title.closest("div[class*=e1iqhfx24]"))
           .filter(Boolean);
       };
@@ -73,16 +73,17 @@ async function readRows(page, targets) {
   }, requested);
 }
 
-async function waitForRows(page, labels, hidden, targetKind) {
-  const verify = async () => page.waitForFunction(({ wantedLabels, expectedHidden }) => {
+async function waitForRows(page, items, hidden, targetKind) {
+  const verify = async () => page.waitForFunction(({ requested, expectedHidden }) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
-    return wantedLabels.every((label) => {
-      const title = titles.find((candidate) => normalize(candidate.textContent) === normalize(label));
+    return requested.every((item) => {
+      const wanted = new Set(item.names.map(normalize));
+      const title = titles.find((candidate) => normalize(candidate.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())));
       const row = title?.closest("div[class*=e1iqhfx24]");
       return Boolean(row) && normalize(row.textContent).includes("非表示") === expectedHidden;
     });
-  }, { timeout: 15000 }, { wantedLabels: labels, expectedHidden: hidden });
+  }, { timeout: 15000 }, { requested: items, expectedHidden: hidden });
 
   try {
     await verify();
@@ -133,7 +134,7 @@ export class RocketNowAdapter {
           return true;
         }, item.matches[0].checkboxId);
         if (!clicked) throw new Error(`rocket_now_unhide_button_missing:${item.label}`);
-        await waitForRows(page, [item.label], false, targetKind);
+        await waitForRows(page, [item], false, targetKind);
       }
       return { outcome: "applied", changed: changing.length, desiredHidden };
     }
@@ -169,7 +170,7 @@ export class RocketNowAdapter {
       return true;
     });
     if (!applied) throw new Error("rocket_now_apply_button_missing");
-    await waitForRows(page, changing.map((item) => item.label), true, targetKind);
+    await waitForRows(page, changing, true, targetKind);
     return { outcome: "applied", changed: changing.length, desiredHidden };
   }
 }

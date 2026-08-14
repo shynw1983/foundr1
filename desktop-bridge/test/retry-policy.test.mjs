@@ -11,10 +11,10 @@ test("retries transient browser and platform page errors", () => {
   assert.equal(isRetryableInventoryError("Waiting for selector failed"), true);
   assert.equal(isRetryableInventoryError("CDP Runtime.evaluate timeout"), true);
   assert.equal(isRetryableInventoryError("demae_can_confirmation_timeout"), true);
+  assert.equal(isRetryableInventoryError("Target verification failed: 商品=0"), true);
 });
 
-test("does not retry permanent target or configuration errors", () => {
-  assert.equal(isRetryableInventoryError("Target verification failed: 商品=0"), false);
+test("does not retry login or configuration errors", () => {
   assert.equal(isRetryableInventoryError("login required"), false);
   assert.equal(isRetryableInventoryError("No enabled adapter for platform"), false);
 });

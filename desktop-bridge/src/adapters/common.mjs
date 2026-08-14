@@ -7,15 +7,31 @@ export function normalizeText(value) {
     .trim();
 }
 
+function nameVariants(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return [];
+  const variants = [normalized];
+  const weightless = normalized
+    .replace(/(?:1人前)?約?\d+(?:\.\d+)?\s*(?:g|kg)\b/giu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (weightless) variants.push(weightless);
+  for (const name of [...variants]) {
+    if (name.includes("麻辣湯")) variants.push(name.replaceAll("麻辣湯", "マーラータン"));
+    if (name.includes("マーラータン")) variants.push(name.replaceAll("マーラータン", "麻辣湯"));
+  }
+  return Array.from(new Set(variants));
+}
+
 export function targetNames(target) {
   return Array.from(new Set([
     target?.label,
     ...(Array.isArray(target?.aliases) ? target.aliases : [])
-  ].map(normalizeText).filter(Boolean)));
+  ].flatMap(nameVariants).filter(Boolean)));
 }
 
 export function targetNameTiers(target) {
-  const primaryNames = [normalizeText(target?.label)].filter(Boolean);
+  const primaryNames = nameVariants(target?.label);
   const primary = new Set(primaryNames);
   const aliasNames = targetNames(target).filter((name) => !primary.has(name));
   return { primaryNames, aliasNames };

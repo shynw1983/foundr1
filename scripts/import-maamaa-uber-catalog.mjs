@@ -168,26 +168,32 @@ if (websiteExceptionItemIds.length) {
   `;
 }
 
-const coldProductId = itemIdByWebsiteId.get("cold-dry-mala-noodles");
 for (const [groupIndex, group] of catalog.extraGroups.entries()) {
+  const owningProductIds = catalog.products
+    .filter((product) => product.websiteEnabled !== false && product.groupKeys.includes(group.key))
+    .map((product) => itemIdByWebsiteId.get(product.websiteId))
+    .filter(Boolean);
+  const directOwnerItemId = owningProductIds.length === 1 ? owningProductIds[0] : null;
   const existing = await sql`
     select id::text from menu_option_groups
     where brand_id = ${brandId} and group_key = ${group.key}
     limit 1
   `;
   const ruleJson = { source: "uber-eats-menu-maker", minSelections: group.key === "cold-noodles" ? 1 : 0, maxSelections: group.limit, limit: group.limit, perOptionMax: 1 };
+  const groupDisplayNames = group.displayNames && typeof group.displayNames === "object" ? group.displayNames : {};
   let groupId;
   if (existing[0]) {
     const rows = await sql`
-      update menu_option_groups set menu_catalog_item_id = ${coldProductId}, external_id = ${group.uberId}, name = ${group.name}, selection_type = ${group.type},
+      update menu_option_groups set menu_catalog_item_id = ${directOwnerItemId}, external_id = ${group.uberId}, name = ${group.name},
+        display_names = ${JSON.stringify(groupDisplayNames)}::jsonb, selection_type = ${group.type},
         rule_json = ${JSON.stringify(ruleJson)}::jsonb, sort_order = ${300 + groupIndex * 10}, is_active = true, updated_at = now()
       where id = ${existing[0].id} returning id::text
     `;
     groupId = rows[0].id;
   } else {
     const rows = await sql`
-      insert into menu_option_groups (brand_id, menu_catalog_item_id, external_id, group_key, name, selection_type, affects_procedure, rule_json, sort_order, is_active, updated_at)
-      values (${brandId}, ${coldProductId}, ${group.uberId}, ${group.key}, ${group.name}, ${group.type}, true, ${JSON.stringify(ruleJson)}::jsonb, ${300 + groupIndex * 10}, true, now())
+      insert into menu_option_groups (brand_id, menu_catalog_item_id, external_id, group_key, name, display_names, selection_type, affects_procedure, rule_json, sort_order, is_active, updated_at)
+      values (${brandId}, ${directOwnerItemId}, ${group.uberId}, ${group.key}, ${group.name}, ${JSON.stringify(groupDisplayNames)}::jsonb, ${group.type}, true, ${JSON.stringify(ruleJson)}::jsonb, ${300 + groupIndex * 10}, true, now())
       returning id::text
     `;
     groupId = rows[0].id;

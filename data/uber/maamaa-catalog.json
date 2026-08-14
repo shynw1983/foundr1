@@ -505,6 +505,12 @@
       "key": "cold-pack",
       "uberId": "unknown-cold-pack",
       "name": "🧊 極冷を保つために",
+      "displayNames": {
+        "zh": "极冷保冷",
+        "zh-Hant": "極冷保冷",
+        "ko": "차갑게 유지하기",
+        "en": "Keep It Extra Cold"
+      },
       "type": "multiple",
       "limit": 1,
       "options": [
@@ -519,6 +525,12 @@
       "key": "cold-noodles",
       "uberId": "unknown-cold-noodles",
       "name": "🍜冷やし麺の種類を選ぶ",
+      "displayNames": {
+        "zh": "冷面的种类",
+        "zh-Hant": "冷麵的種類",
+        "ko": "차가운 면 종류",
+        "en": "Cold Noodle Type"
+      },
       "type": "quantity",
       "limit": 2,
       "options": [
@@ -578,6 +590,12 @@
       "key": "featured-quail",
       "uberId": "uber-featured-quail-2026-08-08",
       "name": "みんなが選ぶ！人気具材の山盛り",
+      "displayNames": {
+        "zh": "人气配料加量",
+        "zh-Hant": "人氣配料加量",
+        "ko": "인기 토핑 듬뿍",
+        "en": "Popular Topping Extra"
+      },
       "type": "multiple",
       "limit": 1,
       "options": [
@@ -597,6 +615,12 @@
       "key": "extra-beef-tendon",
       "uberId": "uber-extra-beef-tendon-2026-08-08",
       "name": "とろとろ牛すじを追加する",
+      "displayNames": {
+        "zh": "追加软烂牛筋",
+        "zh-Hant": "追加軟爛牛筋",
+        "ko": "부드러운 소힘줄 추가",
+        "en": "Add Tender Beef Tendon"
+      },
       "type": "multiple",
       "limit": 1,
       "options": [
@@ -616,6 +640,12 @@
       "key": "extra-pork-cartilage",
       "uberId": "uber-extra-pork-cartilage-2026-08-08",
       "name": "とろとろ豚軟骨を追加する",
+      "displayNames": {
+        "zh": "追加软烂猪软骨",
+        "zh-Hant": "追加軟爛豬軟骨",
+        "ko": "부드러운 돼지연골 추가",
+        "en": "Add Tender Pork Cartilage"
+      },
       "type": "multiple",
       "limit": 1,
       "options": [

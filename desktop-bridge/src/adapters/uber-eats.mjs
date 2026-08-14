@@ -64,9 +64,10 @@ export class UberEatsAdapter {
         return items.map((item) => {
           const findMatches = (names) => {
             const wanted = new Set(names.map(normalize));
-            return anchors
+            const found = anchors
               .filter((anchor) => normalize(anchor.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())))
               .map((anchor) => ({ text: normalize(anchor.textContent), href: anchor.href }));
+            return [...new Map(found.map((match) => [match.href, match])).values()];
           };
           const primaryMatches = findMatches(item.primaryNames);
           const matches = primaryMatches.length ? primaryMatches : findMatches(item.aliasNames);

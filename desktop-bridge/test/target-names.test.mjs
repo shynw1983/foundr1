@@ -10,12 +10,27 @@ test("normalizes decorative vinegar text used differently by platforms", () => {
   );
 });
 
-test("keeps the Japanese source label separate from shared translated aliases", () => {
+test("keeps Japanese source variants ahead of shared translated aliases", () => {
   const tiers = targetNameTiers({
     label: "さつまいも板春雨50g",
     aliases: ["红薯宽粉", "Wide Sweet Potato Noodles"]
   });
 
-  assert.deepEqual(tiers.primaryNames, ["さつまいも板春雨50g"]);
+  assert.deepEqual(tiers.primaryNames, ["さつまいも板春雨50g", "さつまいも板春雨"]);
   assert.deepEqual(tiers.aliasNames, ["红薯宽粉", "Wide Sweet Potato Noodles"]);
+});
+
+test("generates safe platform variants without merging noodle categories", () => {
+  assert.deepEqual(
+    targetNameTiers({ label: "【お一人様1回限り】トウモロコシ麺50gに変更", aliases: [] }).primaryNames,
+    ["トウモロコシ麺50gに変更", "トウモロコシ麺に変更"]
+  );
+  assert.deepEqual(
+    targetNameTiers({ label: "冷やしトウモロコシ麺100g", aliases: [] }).primaryNames,
+    ["冷やしトウモロコシ麺100g", "冷やしトウモロコシ麺"]
+  );
+  assert.deepEqual(
+    targetNameTiers({ label: "極上の肉麻辣湯", aliases: [] }).primaryNames,
+    ["極上の肉麻辣湯", "極上の肉マーラータン"]
+  );
 });

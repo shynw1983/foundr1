@@ -762,9 +762,19 @@ async function importMaamaa() {
   }
 
   if (pruneMissing) {
+    // These reviewed delivery-only groups are owned by the Uber catalog
+    // importer. A website-menu refresh must not deactivate them.
+    const supplementalGroupKeys = [
+      "cold-pack",
+      "cold-noodles",
+      "featured-quail",
+      "extra-beef-tendon",
+      "extra-pork-cartilage"
+    ];
     const activeGroupKeys = [
       ...fixedGroups.map((group) => group.key),
-      ...menu.menuSections.map((section) => section.id)
+      ...menu.menuSections.map((section) => section.id),
+      ...supplementalGroupKeys
     ];
     await sql`
       update menu_option_groups
