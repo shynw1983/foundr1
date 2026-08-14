@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  classifyVoiceConfirmation,
   formatVoiceAcknowledgement,
+  formatVoiceConfirmation,
+  formatVoiceFailure,
   formatVoiceResult,
   readableVoiceError
 } from "../src/voice-result.mjs";
@@ -27,4 +30,24 @@ test("formats immediate restore acknowledgement for Siri", () => {
     query: "二八酱",
     isAvailable: true
   }), "正在将二八酱恢复销售，请稍候。完成后我会告诉你结果。");
+});
+
+test("asks for spoken confirmation in Chinese", () => {
+  assert.equal(formatVoiceConfirmation({
+    query: "香醋",
+    isAvailable: false
+  }), "你说的是香醋，要设为永久缺货，对吗？请回答是或者不是。");
+});
+
+test("translates Japanese API matching errors into Chinese", () => {
+  assert.equal(
+    formatVoiceFailure("Foundr1 HTTP 404: 「香酢」に対応する商品または選択肢が見つかりません。"),
+    "没有找到这个商品，请换一个商品名称再试。"
+  );
+});
+
+test("classifies Chinese spoken confirmation without treating 不是 as yes", () => {
+  assert.equal(classifyVoiceConfirmation("是的"), "yes");
+  assert.equal(classifyVoiceConfirmation("不是"), "no");
+  assert.equal(classifyVoiceConfirmation("狮子"), "unknown");
 });

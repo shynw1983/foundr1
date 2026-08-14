@@ -41,11 +41,14 @@ Chrome 自体は閉じず、Bridge の検査・実行プロセスだけが接続
 ## Siri / macOS Shortcuts
 
 音声操作は Bridge の端末トークンをそのまま利用し、ショートカット側には認証情報を保存しません。
-実行前にショートカットで商品名と操作を確認したうえで、次のコマンドを呼び出します。
+実行前にショートカットで商品名を聞き、中国語で商品名と操作を復唱します。「是」の場合だけ
+実行し、「不是」または不明瞭な回答の場合は商品名の聞き取りからやり直します。
 
 ```bash
-/usr/local/bin/node src/voice-command.mjs stockout --confirmed --shortcut '商品名'
-/usr/local/bin/node src/voice-command.mjs restore --confirmed --shortcut '商品名'
+/usr/local/bin/node src/voice-command.mjs stockout --preview --shortcut '商品名'
+/usr/local/bin/node src/voice-command.mjs stockout --voice-confirm --shortcut '是または不是'
+/usr/local/bin/node src/voice-command.mjs restore --preview --shortcut '商品名'
+/usr/local/bin/node src/voice-command.mjs restore --voice-confirm --shortcut '是または不是'
 ```
 
 `stockout` は各サービスで翌日に戻らない永久在庫切れを使用します。商品名が見つからない、
