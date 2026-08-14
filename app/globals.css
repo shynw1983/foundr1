@@ -11503,6 +11503,46 @@ body :where(
   line-height: 1.45;
 }
 
+.store-menu-sync-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: end;
+  gap: 4px;
+  min-height: 28px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 4px 9px;
+  background: rgba(255, 255, 255, 0.76);
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.store-menu-sync-retry:hover:not(:disabled) {
+  background: #fff;
+}
+
+.store-menu-sync-retry:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.store-menu-sync-retry:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.store-menu-sync-retry-error {
+  overflow-wrap: anywhere;
+  color: #a72f2f;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 @keyframes store-menu-sync-spin {
   to { transform: rotate(360deg); }
 }

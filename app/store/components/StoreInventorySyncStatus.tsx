@@ -66,6 +66,9 @@ function syncCopy(language: StoreMenuLanguage) {
       locating: "正在查找商品",
       applying: "正在修改并确认结果",
       retryingDetail: "自动重试",
+      retry: "重试",
+      retryUnavailable: "无法重试：该商品已有更新的同步任务。",
+      retryFailed: "重试请求失败，请再试一次。",
       collapse: "收起",
       expand: "展开",
       siri: "Siri"
@@ -91,6 +94,9 @@ function syncCopy(language: StoreMenuLanguage) {
       locating: "正在尋找商品",
       applying: "正在修改並確認結果",
       retryingDetail: "自動重試",
+      retry: "重試",
+      retryUnavailable: "無法重試：該商品已有更新的同步工作。",
+      retryFailed: "重試要求失敗，請再試一次。",
       collapse: "收起",
       expand: "展開",
       siri: "Siri"
@@ -115,6 +121,9 @@ function syncCopy(language: StoreMenuLanguage) {
     locating: "商品を確認中",
     applying: "変更・結果確認中",
     retryingDetail: "自動再試行",
+    retry: "再実行",
+    retryUnavailable: "再実行できません。より新しい同期処理があります。",
+    retryFailed: "再実行を開始できませんでした。もう一度お試しください。",
     collapse: "折りたたむ",
     expand: "開く",
     siri: "Siri"
@@ -229,6 +238,8 @@ export function StoreInventorySyncStatus() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [runs, setRuns] = useState<StoreInventorySyncRun[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [retryingCommandIds, setRetryingCommandIds] = useState<Set<string>>(() => new Set());
+  const [retryErrors, setRetryErrors] = useState<Record<string, string>>({});
 
   const pendingCount = useMemo(() => runs.reduce((count, run) => (
     count + run.platforms.filter((platform) => ["queued", "processing", "retrying"].includes(platform.status)).length
@@ -354,6 +365,59 @@ export function StoreInventorySyncStatus() {
     };
   }, [selectedStoreId]);
 
+  const retryPlatform = async (platform: InventorySyncPlatform) => {
+    if (!selectedStoreId || retryingCommandIds.has(platform.commandId)) return;
+    const previousPlatform = { ...platform };
+    setRetryingCommandIds((current) => new Set(current).add(platform.commandId));
+    setRetryErrors((current) => {
+      const next = { ...current };
+      delete next[platform.commandId];
+      return next;
+    });
+    setRuns((current) => current.map((run) => ({
+      ...run,
+      platforms: run.platforms.map((entry) => entry.commandId === platform.commandId ? {
+        ...entry,
+        status: "queued",
+        error: "",
+        phase: "queued",
+        attempt: 1,
+        maxAttempts: 3,
+        updatedAt: new Date().toISOString()
+      } : entry)
+    })));
+
+    try {
+      const response = await fetch("/api/store/menu-sync-runs/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeId: selectedStoreId, commandId: platform.commandId })
+      });
+      if (!response.ok) {
+        throw new Error(response.status === 409 ? "unavailable" : "failed");
+      }
+    } catch (error) {
+      setRuns((current) => current.map((run) => ({
+        ...run,
+        platforms: run.platforms.map((entry) => entry.commandId === platform.commandId
+          ? previousPlatform
+          : entry)
+      })));
+      setRetryErrors((current) => ({
+        ...current,
+        [platform.commandId]: error instanceof Error && error.message === "unavailable"
+          ? syncCopy(language).retryUnavailable
+          : syncCopy(language).retryFailed
+      }));
+    } finally {
+      setRetryingCommandIds((current) => {
+        const next = new Set(current);
+        next.delete(platform.commandId);
+        return next;
+      });
+    }
+  };
+
   if (!runs.length) return null;
   const copy = syncCopy(language);
   return (
@@ -387,23 +451,41 @@ export function StoreInventorySyncStatus() {
                 <span>{run.source === "siri" ? `${copy.siri} · ` : ""}{run.isAvailable ? copy.available : copy.unavailable}</span>
               </div>
               <div className="store-menu-sync-platforms">
-                {run.platforms.map((platform) => (
-                  <div className={`store-menu-sync-platform is-${platform.status}`} key={platform.commandId}>
-                    <span className="store-menu-sync-state">
-                      {platform.status === "queued" ? <Clock3 size={15} /> : null}
-                      {platform.status === "processing" ? <LoaderCircle size={15} /> : null}
-                      {platform.status === "retrying" ? <RefreshCw size={15} /> : null}
-                      {platform.status === "timed_out" ? <TimerOff size={15} /> : null}
-                      {platform.status === "succeeded" ? <CheckCircle2 size={15} /> : null}
-                      {platform.status === "failed" ? <XCircle size={15} /> : null}
-                      <strong>{platformName(platform.platform, language)}</strong>
-                      <small>{copy[platform.status]}</small>
-                    </span>
-                    {platformDetail(platform, language) ? (
-                      <span className="store-menu-sync-error">{platformDetail(platform, language)}</span>
-                    ) : null}
-                  </div>
-                ))}
+                {run.platforms.map((platform) => {
+                  const canRetry = platform.status === "failed" || platform.status === "timed_out";
+                  return (
+                    <div className={`store-menu-sync-platform is-${platform.status}`} key={platform.commandId}>
+                      <span className="store-menu-sync-state">
+                        {platform.status === "queued" ? <Clock3 size={15} /> : null}
+                        {platform.status === "processing" ? <LoaderCircle size={15} /> : null}
+                        {platform.status === "retrying" ? <RefreshCw size={15} /> : null}
+                        {platform.status === "timed_out" ? <TimerOff size={15} /> : null}
+                        {platform.status === "succeeded" ? <CheckCircle2 size={15} /> : null}
+                        {platform.status === "failed" ? <XCircle size={15} /> : null}
+                        <strong>{platformName(platform.platform, language)}</strong>
+                        <small>{copy[platform.status]}</small>
+                      </span>
+                      {platformDetail(platform, language) ? (
+                        <span className="store-menu-sync-error">{platformDetail(platform, language)}</span>
+                      ) : null}
+                      {canRetry ? (
+                        <button
+                          className="store-menu-sync-retry"
+                          type="button"
+                          disabled={retryingCommandIds.has(platform.commandId)}
+                          aria-label={`${platformName(platform.platform, language)} ${copy.retry}`}
+                          onClick={() => void retryPlatform(platform)}
+                        >
+                          <RefreshCw size={13} />
+                          {copy.retry}
+                        </button>
+                      ) : null}
+                      {retryErrors[platform.commandId] ? (
+                        <span className="store-menu-sync-retry-error" role="alert">{retryErrors[platform.commandId]}</span>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </article>
           ))}
