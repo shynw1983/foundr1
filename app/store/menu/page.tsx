@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, LoaderCircle, RotateCcw, Search, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, LoaderCircle, RotateCcw, Search, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import { StoreNavTabs } from "../components/StoreNavTabs";
@@ -170,7 +170,9 @@ function syncCopy(language: StoreMenuLanguage) {
       target: "找不到对应的商品或选项。",
       pageTimeout: "平台页面响应超时。",
       expired: "同步任务已过期。",
-      generic: "同步失败。"
+      generic: "同步失败。",
+      collapse: "收起",
+      expand: "展开"
     };
   }
   if (language === "zh-Hant") {
@@ -186,7 +188,9 @@ function syncCopy(language: StoreMenuLanguage) {
       target: "找不到對應的商品或選項。",
       pageTimeout: "平台頁面回應逾時。",
       expired: "同步工作已過期。",
-      generic: "同步失敗。"
+      generic: "同步失敗。",
+      collapse: "收起",
+      expand: "展開"
     };
   }
   return {
@@ -201,8 +205,26 @@ function syncCopy(language: StoreMenuLanguage) {
     target: "対応する商品・オプションが見つかりません。",
     pageTimeout: "プラットフォーム画面の応答がタイムアウトしました。",
     expired: "同期処理の有効期限が切れました。",
-    generic: "同期に失敗しました。"
+    generic: "同期に失敗しました。",
+    collapse: "折りたたむ",
+    expand: "開く"
   };
+}
+
+function syncSummaryText(language: StoreMenuLanguage, pendingCount: number, failedCount: number, runCount: number) {
+  if (language === "zh-Hans") {
+    if (pendingCount) return `${pendingCount} 个平台执行中`;
+    if (failedCount) return `${failedCount} 个平台修改失败`;
+    return `最近 ${runCount} 个商品`;
+  }
+  if (language === "zh-Hant") {
+    if (pendingCount) return `${pendingCount} 個平台執行中`;
+    if (failedCount) return `${failedCount} 個平台修改失敗`;
+    return `最近 ${runCount} 個商品`;
+  }
+  if (pendingCount) return `${pendingCount}プラットフォーム実行中`;
+  if (failedCount) return `${failedCount}プラットフォーム失敗`;
+  return `直近${runCount}商品`;
 }
 
 function readableSyncError(error: string, language: StoreMenuLanguage) {
@@ -260,6 +282,7 @@ export default function StoreMenuPage() {
   const [savingId, setSavingId] = useState("");
   const [message, setMessage] = useState("");
   const [syncRuns, setSyncRuns] = useState<InventorySyncRun[]>([]);
+  const [syncFeedbackOpen, setSyncFeedbackOpen] = useState(true);
   const syncMonitorActive = useRef(true);
 
   useEffect(() => {
@@ -479,6 +502,7 @@ export default function StoreMenuPage() {
       return id && platform ? [{ id, platform }] : [];
     });
     const runId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setSyncFeedbackOpen(true);
     setSyncRuns((current) => [{
       id: runId,
       itemLabel: feedbackLabel,
@@ -585,6 +609,13 @@ export default function StoreMenuPage() {
     }
   }
 
+  const pendingSyncCount = syncRuns.reduce((count, run) => (
+    count + run.platforms.filter((platform) => platform.status === "pending").length
+  ), 0);
+  const failedSyncCount = syncRuns.reduce((count, run) => (
+    count + run.platforms.filter((platform) => platform.status === "failed").length
+  ), 0);
+
   return (
     <main className="store-workbench-shell">
       <header className="store-workbench-topbar">
@@ -632,36 +663,6 @@ export default function StoreMenuPage() {
         </div>
 
         {message ? <div className="inline-alert">{message}</div> : null}
-
-        {syncRuns.length ? (
-          <section className="store-menu-sync-feedback" aria-live="polite" data-i18n-ignore>
-            {syncRuns.map((run) => {
-              const copy = syncCopy(language);
-              return (
-                <article className="store-menu-sync-run panel" key={run.id}>
-                  <div className="store-menu-sync-heading">
-                    <strong>{run.itemLabel} · {run.isAvailable ? copy.available : copy.unavailable}</strong>
-                    <span>{copy.title}</span>
-                  </div>
-                  <div className="store-menu-sync-platforms">
-                    {run.platforms.map((platform) => (
-                      <div className={`store-menu-sync-platform is-${platform.status}`} key={platform.commandId}>
-                        <span className="store-menu-sync-state">
-                          {platform.status === "pending" ? <LoaderCircle size={16} /> : null}
-                          {platform.status === "succeeded" ? <CheckCircle2 size={16} /> : null}
-                          {platform.status === "failed" ? <XCircle size={16} /> : null}
-                          <strong>{platformName(platform.platform, language)}</strong>
-                          <small>{copy[platform.status]}</small>
-                        </span>
-                        {platform.error ? <span className="store-menu-sync-error">{platform.error}</span> : null}
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              );
-            })}
-          </section>
-        ) : null}
 
         <div className="store-menu-layout">
           <aside className="panel store-menu-category-panel">
@@ -816,6 +817,60 @@ export default function StoreMenuPage() {
             )}
           </section>
         </div>
+
+        {syncRuns.length ? (() => {
+          const copy = syncCopy(language);
+          return (
+            <aside
+              className={`store-menu-sync-feedback${syncFeedbackOpen ? " is-open" : " is-collapsed"}`}
+              aria-live="polite"
+              data-i18n-ignore
+            >
+              <button
+                className="store-menu-sync-dock-head"
+                type="button"
+                aria-expanded={syncFeedbackOpen}
+                onClick={() => setSyncFeedbackOpen((current) => !current)}
+              >
+                <span className={`store-menu-sync-dock-dot${pendingSyncCount ? " is-pending" : failedSyncCount ? " is-failed" : " is-complete"}`} />
+                <span className="store-menu-sync-dock-title">
+                  <strong>{copy.title}</strong>
+                  <small>{syncSummaryText(language, pendingSyncCount, failedSyncCount, syncRuns.length)}</small>
+                </span>
+                <span className="store-menu-sync-dock-toggle">
+                  {syncFeedbackOpen ? copy.collapse : copy.expand}
+                  {syncFeedbackOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                </span>
+              </button>
+              {syncFeedbackOpen ? (
+                <div className="store-menu-sync-dock-body">
+                  {syncRuns.map((run) => (
+                    <article className="store-menu-sync-run" key={run.id}>
+                      <div className="store-menu-sync-heading">
+                        <strong>{run.itemLabel}</strong>
+                        <span>{run.isAvailable ? copy.available : copy.unavailable}</span>
+                      </div>
+                      <div className="store-menu-sync-platforms">
+                        {run.platforms.map((platform) => (
+                          <div className={`store-menu-sync-platform is-${platform.status}`} key={platform.commandId}>
+                            <span className="store-menu-sync-state">
+                              {platform.status === "pending" ? <LoaderCircle size={15} /> : null}
+                              {platform.status === "succeeded" ? <CheckCircle2 size={15} /> : null}
+                              {platform.status === "failed" ? <XCircle size={15} /> : null}
+                              <strong>{platformName(platform.platform, language)}</strong>
+                              <small>{copy[platform.status]}</small>
+                            </span>
+                            {platform.error ? <span className="store-menu-sync-error">{platform.error}</span> : null}
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </aside>
+          );
+        })() : null}
       </section>
     </main>
   );
