@@ -177,12 +177,21 @@ export async function GET(request: Request) {
           pos_enabled as "posEnabled",
           coalesce(table_order_enabled, true) as "tableOrderEnabled",
           delivery_enabled as "deliveryEnabled",
-          is_available as "isAvailable",
+          case platform_settings.availability
+            when 'available' then true
+            when 'unavailable' then false
+            else is_available
+          end as "isAvailable",
           price_override::float as "priceOverride",
           status_note as "statusNote"
         from menu_store_settings
-        where brand_id = ${brand.id}
-          and store_id = ${store.id}
+        left join menu_platform_availability_settings platform_settings
+          on platform_settings.store_id = menu_store_settings.store_id
+          and platform_settings.target_kind = 'item'
+          and platform_settings.target_id = menu_store_settings.menu_catalog_item_id
+          and platform_settings.platform = 'foundr1'
+        where menu_store_settings.brand_id = ${brand.id}
+          and menu_store_settings.store_id = ${store.id}
       `
     : [];
   const settingsByItemId = new Map(storeSettings.map((setting) => [String(setting.menuCatalogItemId), setting]));
@@ -245,11 +254,20 @@ export async function GET(request: Request) {
     ? await sql`
         select
           menu_option_id::text as "menuOptionId",
-          is_available as "isAvailable",
+          case platform_settings.availability
+            when 'available' then true
+            when 'unavailable' then false
+            else is_available
+          end as "isAvailable",
           status_note as "statusNote"
         from menu_option_store_settings
-        where brand_id = ${brand.id}
-          and store_id = ${store.id}
+        left join menu_platform_availability_settings platform_settings
+          on platform_settings.store_id = menu_option_store_settings.store_id
+          and platform_settings.target_kind = 'option'
+          and platform_settings.target_id = menu_option_store_settings.menu_option_id
+          and platform_settings.platform = 'foundr1'
+        where menu_option_store_settings.brand_id = ${brand.id}
+          and menu_option_store_settings.store_id = ${store.id}
       `
     : [];
   const unavailableOptionIds = new Set(

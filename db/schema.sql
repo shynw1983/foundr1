@@ -2253,6 +2253,7 @@ create table if not exists menu_store_settings (
   table_order_enabled boolean not null default true,
   delivery_enabled boolean not null default false,
   is_available boolean not null default true,
+  stock_status text not null default 'available',
   price_override numeric(12, 2),
   status_note text not null default '',
   updated_by uuid references employees(id) on delete set null,
@@ -2262,6 +2263,8 @@ create table if not exists menu_store_settings (
 );
 
 alter table menu_store_settings add column if not exists table_order_enabled boolean not null default true;
+alter table menu_store_settings add column if not exists stock_status text not null default 'available';
+update menu_store_settings set stock_status = 'unavailable' where is_available = false and stock_status = 'available';
 
 create table if not exists menu_option_store_settings (
   id uuid primary key default gen_random_uuid(),
@@ -2269,11 +2272,29 @@ create table if not exists menu_option_store_settings (
   store_id uuid not null references stores(id) on delete cascade,
   menu_option_id uuid not null references menu_options(id) on delete cascade,
   is_available boolean not null default true,
+  stock_status text not null default 'available',
   status_note text not null default '',
   updated_by uuid references employees(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (store_id, menu_option_id)
+);
+
+alter table menu_option_store_settings add column if not exists stock_status text not null default 'available';
+update menu_option_store_settings set stock_status = 'unavailable' where is_available = false and stock_status = 'available';
+
+create table if not exists menu_platform_availability_settings (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid not null references brands(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  target_kind text not null,
+  target_id uuid not null,
+  platform text not null,
+  availability text not null,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (store_id, target_kind, target_id, platform)
 );
 
 create table if not exists menu_external_platforms (
@@ -3882,6 +3903,9 @@ create index if not exists idx_menu_catalog_item_option_groups_group
   on menu_catalog_item_option_groups(option_group_id, menu_catalog_item_id);
 create index if not exists idx_menu_store_settings_brand_store on menu_store_settings(brand_id, store_id);
 create index if not exists idx_menu_option_store_settings_brand_store on menu_option_store_settings(brand_id, store_id);
+create index if not exists idx_menu_store_settings_low_stock on menu_store_settings(store_id, stock_status) where stock_status = 'low_stock';
+create index if not exists idx_menu_option_store_settings_low_stock on menu_option_store_settings(store_id, stock_status) where stock_status = 'low_stock';
+create index if not exists idx_menu_platform_availability_target on menu_platform_availability_settings(store_id, target_kind, target_id);
 create index if not exists idx_menu_external_platforms_brand_store on menu_external_platforms(brand_id, store_id, is_active);
 create unique index if not exists idx_menu_external_platforms_unique_scope
   on menu_external_platforms (

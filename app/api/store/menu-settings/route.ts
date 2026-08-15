@@ -1,6 +1,7 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { getStoreModuleSettings } from "../../../../lib/module-settings";
+import { publishPublicMenuUpdatedEvent } from "../../../../lib/order-realtime";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,8 @@ type MenuStoreItem = {
   posEnabled: boolean;
   deliveryEnabled: boolean;
   isAvailable: boolean;
+  stockStatus: "available" | "low_stock" | "unavailable";
+  platformAvailability: Record<string, "available" | "unavailable">;
   priceOverride: number | null;
   statusNote: string;
 };
@@ -50,6 +53,8 @@ type MenuStoreOption = {
   displayNames: Record<string, string>;
   priceDelta: number | null;
   isAvailable: boolean;
+  stockStatus: "available" | "low_stock" | "unavailable";
+  platformAvailability: Record<string, "available" | "unavailable">;
   statusNote: string;
 };
 
@@ -115,6 +120,14 @@ export async function GET(request: Request) {
         coalesce(menu_store_settings.pos_enabled, true) as "posEnabled",
         coalesce(menu_store_settings.delivery_enabled, false) as "deliveryEnabled",
         coalesce(menu_store_settings.is_available, true) as "isAvailable",
+        coalesce(menu_store_settings.stock_status, case when menu_store_settings.is_available = false then 'unavailable' else 'available' end) as "stockStatus",
+        coalesce((
+          select jsonb_object_agg(platform_settings.platform, platform_settings.availability)
+          from menu_platform_availability_settings platform_settings
+          where platform_settings.store_id = ${selectedStoreId}
+            and platform_settings.target_kind = 'item'
+            and platform_settings.target_id = menu_catalog_items.id
+        ), '{}'::jsonb) as "platformAvailability",
         menu_store_settings.price_override::float as "priceOverride",
         coalesce(menu_store_settings.status_note, '') as "statusNote"
       from menu_catalog_items
@@ -146,6 +159,14 @@ export async function GET(request: Request) {
         coalesce(menu_options.display_names, '{}'::jsonb) as "displayNames",
         menu_options.price_delta::float as "priceDelta",
         coalesce(menu_option_store_settings.is_available, true) as "isAvailable",
+        coalesce(menu_option_store_settings.stock_status, case when menu_option_store_settings.is_available = false then 'unavailable' else 'available' end) as "stockStatus",
+        coalesce((
+          select jsonb_object_agg(platform_settings.platform, platform_settings.availability)
+          from menu_platform_availability_settings platform_settings
+          where platform_settings.store_id = ${selectedStoreId}
+            and platform_settings.target_kind = 'option'
+            and platform_settings.target_id = menu_options.id
+        ), '{}'::jsonb) as "platformAvailability",
         coalesce(menu_option_store_settings.status_note, '') as "statusNote"
       from menu_options
       join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
@@ -187,6 +208,9 @@ export async function PATCH(request: Request) {
   const kind = normalizeText(body.kind);
   const itemId = normalizeText(body.menuCatalogItemId);
   const optionId = normalizeText(body.menuOptionId);
+  const stockStatus = ["available", "low_stock", "unavailable"].includes(normalizeText(body.stockStatus))
+    ? normalizeText(body.stockStatus)
+    : body.isAvailable === false ? "unavailable" : "available";
   if (!storeId || (kind === "option" ? !optionId : !itemId)) {
     return Response.json({ error: "店舗と対象を選択してください。" }, { status: 400 });
   }
@@ -219,6 +243,7 @@ export async function PATCH(request: Request) {
         store_id,
         menu_option_id,
         is_available,
+        stock_status,
         status_note,
         updated_by,
         updated_at
@@ -228,6 +253,7 @@ export async function PATCH(request: Request) {
         ${storeId},
         ${optionId},
         ${body.isAvailable !== false},
+        ${stockStatus},
         ${normalizeText(body.statusNote)},
         ${session.id},
         now()
@@ -235,6 +261,7 @@ export async function PATCH(request: Request) {
       on conflict (store_id, menu_option_id)
       do update set
         is_available = excluded.is_available,
+        stock_status = excluded.stock_status,
         status_note = excluded.status_note,
         updated_by = excluded.updated_by,
         updated_at = now()
@@ -242,9 +269,11 @@ export async function PATCH(request: Request) {
         id::text,
         menu_option_id::text as "menuOptionId",
         is_available as "isAvailable",
+        stock_status as "stockStatus",
         status_note as "statusNote"
     `;
 
+    await publishPublicMenuUpdatedEvent(storeId).catch(() => undefined);
     return Response.json({ ok: true, setting: rows[0] });
   }
 
@@ -268,6 +297,7 @@ export async function PATCH(request: Request) {
       menu_catalog_item_id,
       website_enabled,
       is_available,
+      stock_status,
       status_note,
       updated_by,
       updated_at
@@ -278,6 +308,7 @@ export async function PATCH(request: Request) {
       ${itemId},
       ${body.websiteEnabled !== false},
       ${body.isAvailable !== false},
+      ${stockStatus},
       ${normalizeText(body.statusNote)},
       ${session.id},
       now()
@@ -286,6 +317,7 @@ export async function PATCH(request: Request) {
     do update set
       website_enabled = excluded.website_enabled,
       is_available = excluded.is_available,
+      stock_status = excluded.stock_status,
       status_note = excluded.status_note,
       updated_by = excluded.updated_by,
       updated_at = now()
@@ -294,8 +326,10 @@ export async function PATCH(request: Request) {
       menu_catalog_item_id::text as "menuCatalogItemId",
       website_enabled as "websiteEnabled",
       is_available as "isAvailable",
+      stock_status as "stockStatus",
       status_note as "statusNote"
   `;
 
+  await publishPublicMenuUpdatedEvent(storeId).catch(() => undefined);
   return Response.json({ ok: true, setting: rows[0] });
 }

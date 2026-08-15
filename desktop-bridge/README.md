@@ -68,10 +68,16 @@ Chrome 自体は閉じず、Bridge の検査・実行プロセスだけが接続
 /usr/local/bin/node src/voice-command.mjs restore --voice-confirm --shortcut '是または不是'
 ```
 
+快捷指令内如果保留“朗读文本”动作，必须同时明确选择“中文（中国大陆）”和
+`Ting-Ting`，不能只设置语言而让声音保持空白。Shortcuts 界面中的声音名是
+`Ting-Ting`，但 `/usr/bin/say` 命令使用的系统标识是 `Tingting`。Bridge 的确认与
+最终结果由脚本直接使用 `Tingting` 播报，并且不再把同一段确认文字交给 Shortcuts
+重复朗读，以防它回退到日语 Siri 声音。
+
 `stockout` は各サービスで翌日に戻らない永久在庫切れを使用します。商品名が見つからない、
 または複数候補になる場合は何も変更しません。ショートカットからの実行時は受付メッセージを
 すぐ返し、プラットフォームの完了待ちはバックグラウンドで継続します。完了後は Siri の
-セッションに依存せず、Mac の中国語音声 `Ting-Ting` で Web予約、Uber、Rocket Now、
+セッションに依存せず、Mac の中国語音声 `Tingting` で Web予約、Uber、Rocket Now、
 出前館それぞれの結果を読み上げます。結果は `~/Library/Logs/Foundr1 Desktop Bridge/voice.log`
 にも記録します。
 

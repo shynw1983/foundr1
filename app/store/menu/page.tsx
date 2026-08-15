@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, RotateCcw, Search, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, RotateCcw, Search, SlidersHorizontal, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import {
@@ -69,6 +69,8 @@ type StoreMenuItem = {
   posEnabled: boolean;
   deliveryEnabled: boolean;
   isAvailable: boolean;
+  stockStatus: StockStatus;
+  platformAvailability: PlatformAvailability;
   priceOverride: number | null;
   statusNote: string;
 };
@@ -85,6 +87,8 @@ type StoreMenuOption = {
   displayNames: Record<string, string>;
   priceDelta: number | null;
   isAvailable: boolean;
+  stockStatus: StockStatus;
+  platformAvailability: PlatformAvailability;
   statusNote: string;
 };
 
@@ -103,6 +107,41 @@ type StoreMenuOptionGroup = {
 };
 
 const optionCategoryKey = "__store_menu_options__";
+type StockStatus = "available" | "low_stock" | "unavailable";
+type PlatformKey = "foundr1" | "uber_eats" | "rocket_now" | "demae_can";
+type PlatformOverride = "follow" | "available" | "unavailable";
+type PlatformAvailability = Partial<Record<PlatformKey, Exclude<PlatformOverride, "follow">>>;
+
+const salesPlatforms: Array<{ key: PlatformKey; label: string }> = [
+  { key: "foundr1", label: "Web予約" },
+  { key: "uber_eats", label: "Uber" },
+  { key: "rocket_now", label: "ロケット" },
+  { key: "demae_can", label: "出前館" }
+];
+
+function statusText(language: StoreMenuLanguage, status: StockStatus) {
+  const labels = {
+    ja: { available: "販売", low_stock: "残りわずか", unavailable: "売切" },
+    "zh-Hans": { available: "销售", low_stock: "即将缺货", unavailable: "缺货" },
+    "zh-Hant": { available: "銷售", low_stock: "即將缺貨", unavailable: "缺貨" }
+  };
+  return labels[language][status];
+}
+
+function platformText(language: StoreMenuLanguage, platform: PlatformKey) {
+  const labels = {
+    ja: { foundr1: "Web予約", uber_eats: "Uber", rocket_now: "ロケット", demae_can: "出前館" },
+    "zh-Hans": { foundr1: "网站预约", uber_eats: "Uber", rocket_now: "火箭", demae_can: "出前馆" },
+    "zh-Hant": { foundr1: "網站預約", uber_eats: "Uber", rocket_now: "火箭", demae_can: "出前館" }
+  };
+  return labels[language][platform];
+}
+
+function effectiveAvailability(stockStatus: StockStatus, override: PlatformOverride) {
+  if (override === "available") return true;
+  if (override === "unavailable") return false;
+  return stockStatus !== "unavailable";
+}
 
 function stripEmoji(value: string) {
   return value
@@ -342,6 +381,12 @@ export default function StoreMenuPage() {
     feedbackLabel: string;
     targetKind: "item" | "option";
     isAvailable: boolean;
+    stockStatus?: StockStatus;
+    persistOverall?: boolean;
+    platforms?: Exclude<PlatformKey, "foundr1">[];
+    platformStates?: Partial<Record<Exclude<PlatformKey, "foundr1">, boolean>>;
+    overridePlatform?: PlatformKey;
+    overrideAvailability?: PlatformOverride;
   }) {
     const { feedbackLabel, ...requestInput } = input;
     const response = await fetch("/api/store/display/kitchen/inventory", {
@@ -374,17 +419,24 @@ export default function StoreMenuPage() {
     setSavingId(item.id);
     setMessage("");
     try {
-      if (typeof patch.isAvailable === "boolean") {
+      if (patch.stockStatus) {
+        const isAvailable = patch.stockStatus !== "unavailable";
+        const platformStates = Object.fromEntries(salesPlatforms
+          .filter((platform): platform is { key: Exclude<PlatformKey, "foundr1">; label: string } => platform.key !== "foundr1")
+          .map((platform) => [platform.key, effectiveAvailability(patch.stockStatus as StockStatus, item.platformAvailability[platform.key] ?? "follow")])) as Partial<Record<Exclude<PlatformKey, "foundr1">, boolean>>;
         const result = await applyDeliveryAvailability({
           brandId: item.brandId,
           ingredientLabel: item.name,
           feedbackLabel: itemName(item, language),
           targetKind: "item",
-          isAvailable: patch.isAvailable
+          isAvailable,
+          stockStatus: patch.stockStatus,
+          platforms: patch.stockStatus === "low_stock" ? [] : Object.keys(platformStates) as Exclude<PlatformKey, "foundr1">[],
+          platformStates
         });
         setItems((current) => current.map((entry) => (
           entry.id === item.id || result.targetIds.has(entry.id)
-            ? { ...entry, isAvailable: patch.isAvailable as boolean }
+            ? { ...entry, isAvailable, stockStatus: patch.stockStatus as StockStatus }
             : entry
         )));
         return;
@@ -397,6 +449,7 @@ export default function StoreMenuPage() {
           menuCatalogItemId: item.id,
           websiteEnabled: nextItem.websiteEnabled,
           isAvailable: nextItem.isAvailable,
+          stockStatus: nextItem.stockStatus,
           statusNote: nextItem.statusNote
         })
       });
@@ -418,17 +471,24 @@ export default function StoreMenuPage() {
     setSavingId(option.id);
     setMessage("");
     try {
-      if (typeof patch.isAvailable === "boolean") {
+      if (patch.stockStatus) {
+        const isAvailable = patch.stockStatus !== "unavailable";
+        const platformStates = Object.fromEntries(salesPlatforms
+          .filter((platform): platform is { key: Exclude<PlatformKey, "foundr1">; label: string } => platform.key !== "foundr1")
+          .map((platform) => [platform.key, effectiveAvailability(patch.stockStatus as StockStatus, option.platformAvailability[platform.key] ?? "follow")])) as Partial<Record<Exclude<PlatformKey, "foundr1">, boolean>>;
         const result = await applyDeliveryAvailability({
           brandId: option.brandId,
           ingredientLabel: option.name,
           feedbackLabel: localizedMenuName(option.name, option.displayNames, language),
           targetKind: "option",
-          isAvailable: patch.isAvailable
+          isAvailable,
+          stockStatus: patch.stockStatus,
+          platforms: patch.stockStatus === "low_stock" ? [] : Object.keys(platformStates) as Exclude<PlatformKey, "foundr1">[],
+          platformStates
         });
         setOptions((current) => current.map((entry) => (
           entry.id === option.id || result.targetIds.has(entry.id)
-            ? { ...entry, isAvailable: patch.isAvailable as boolean }
+            ? { ...entry, isAvailable, stockStatus: patch.stockStatus as StockStatus }
             : entry
         )));
         return;
@@ -441,6 +501,7 @@ export default function StoreMenuPage() {
           storeId: selectedStoreId,
           menuOptionId: option.id,
           isAvailable: nextOption.isAvailable,
+          stockStatus: nextOption.stockStatus,
           statusNote: nextOption.statusNote
         })
       });
@@ -451,6 +512,51 @@ export default function StoreMenuPage() {
       setMessage(error instanceof Error && error.message !== "save failed"
         ? error.message
         : "保存できませんでした。");
+    } finally {
+      setSavingId("");
+    }
+  }
+
+  async function savePlatformOverride(target: StoreMenuItem | StoreMenuOption, targetKind: "item" | "option", platform: PlatformKey, availability: PlatformOverride) {
+    const previous = target.platformAvailability;
+    const nextAvailability = { ...previous };
+    if (availability === "follow") delete nextAvailability[platform];
+    else nextAvailability[platform] = availability;
+    const update = <T extends StoreMenuItem | StoreMenuOption>(entry: T) => entry.id === target.id
+      ? { ...entry, platformAvailability: nextAvailability }
+      : entry;
+    if (targetKind === "item") setItems((current) => current.map(update) as StoreMenuItem[]);
+    else setOptions((current) => current.map(update) as StoreMenuOption[]);
+    setSavingId(`${target.id}:${platform}`);
+    setMessage("");
+    try {
+      const desiredAvailable = effectiveAvailability(target.stockStatus, availability);
+      const result = await applyDeliveryAvailability({
+        brandId: target.brandId,
+        ingredientLabel: target.name,
+        feedbackLabel: targetKind === "item"
+          ? itemName(target as StoreMenuItem, language)
+          : localizedMenuName(target.name, (target as StoreMenuOption).displayNames, language),
+        targetKind,
+        isAvailable: desiredAvailable,
+        persistOverall: false,
+        platforms: platform === "foundr1" ? [] : [platform],
+        platformStates: platform === "foundr1" ? {} : { [platform]: desiredAvailable },
+        overridePlatform: platform,
+        overrideAvailability: availability
+      });
+      const applyLinked = <T extends StoreMenuItem | StoreMenuOption>(entry: T) => result.targetIds.has(entry.id)
+        ? { ...entry, platformAvailability: nextAvailability }
+        : entry;
+      if (targetKind === "item") setItems((current) => current.map(applyLinked) as StoreMenuItem[]);
+      else setOptions((current) => current.map(applyLinked) as StoreMenuOption[]);
+    } catch (error) {
+      const rollback = <T extends StoreMenuItem | StoreMenuOption>(entry: T) => entry.id === target.id
+        ? { ...entry, platformAvailability: previous }
+        : entry;
+      if (targetKind === "item") setItems((current) => current.map(rollback) as StoreMenuItem[]);
+      else setOptions((current) => current.map(rollback) as StoreMenuOption[]);
+      setMessage(error instanceof Error ? error.message : "保存できませんでした。");
     } finally {
       setSavingId("");
     }
@@ -553,6 +659,7 @@ export default function StoreMenuPage() {
                       language={language}
                       savingId={savingId}
                       onSave={saveOption}
+                      onPlatformChange={(option, platform, availability) => savePlatformOverride(option, "option", platform, availability)}
                       onStatusNoteChange={(optionId, statusNote) => setOptions((current) => current.map((entry) => (
                         entry.id === optionId ? { ...entry, statusNote } : entry
                       )))}
@@ -577,6 +684,7 @@ export default function StoreMenuPage() {
                           language={language}
                           savingId={savingId}
                           onSave={saveOption}
+                          onPlatformChange={(option, platform, availability) => savePlatformOverride(option, "option", platform, availability)}
                           onStatusNoteChange={(optionId, statusNote) => setOptions((current) => current.map((entry) => (
                             entry.id === optionId ? { ...entry, statusNote } : entry
                           )))}
@@ -603,38 +711,31 @@ export default function StoreMenuPage() {
                       </div>
                       <div className="store-menu-status-actions">
                         <button
-                          className={item.isAvailable ? "store-status-button is-on" : "store-status-button"}
+                          className={item.stockStatus === "available" ? "store-status-button is-on" : "store-status-button"}
                           type="button"
                           disabled={savingId === item.id}
-                          onClick={() => void saveItem(item, { isAvailable: true })}
+                          onClick={() => void saveItem(item, { isAvailable: true, stockStatus: "available" })}
                         >
                           <CheckCircle2 size={17} />
-                          販売中
+                          <span data-i18n-ignore>{statusText(language, "available")}</span>
                         </button>
                         <button
-                          className={!item.isAvailable ? "store-status-button is-off" : "store-status-button"}
+                          className={item.stockStatus === "low_stock" ? "store-status-button is-low" : "store-status-button"}
                           type="button"
                           disabled={savingId === item.id}
-                          onClick={() => void saveItem(item, { isAvailable: false })}
+                          onClick={() => void saveItem(item, { isAvailable: true, stockStatus: "low_stock" })}
+                        >
+                          <AlertTriangle size={17} />
+                          <span data-i18n-ignore>{statusText(language, "low_stock")}</span>
+                        </button>
+                        <button
+                          className={item.stockStatus === "unavailable" ? "store-status-button is-off" : "store-status-button"}
+                          type="button"
+                          disabled={savingId === item.id}
+                          onClick={() => void saveItem(item, { isAvailable: false, stockStatus: "unavailable" })}
                         >
                           <XCircle size={17} />
-                          売切
-                        </button>
-                        <button
-                          className={item.websiteEnabled ? "store-status-button is-on" : "store-status-button"}
-                          type="button"
-                          disabled={savingId === item.id}
-                          onClick={() => void saveItem(item, { websiteEnabled: true })}
-                        >
-                          Web表示
-                        </button>
-                        <button
-                          className={!item.websiteEnabled ? "store-status-button is-off" : "store-status-button"}
-                          type="button"
-                          disabled={savingId === item.id}
-                          onClick={() => void saveItem(item, { websiteEnabled: false })}
-                        >
-                          Web非表示
+                          <span data-i18n-ignore>{statusText(language, "unavailable")}</span>
                         </button>
                       </div>
                       <div className="store-menu-note">
@@ -649,6 +750,12 @@ export default function StoreMenuPage() {
                           メモ保存
                         </button>
                       </div>
+                      <PlatformAvailabilityPanel
+                        target={item}
+                        language={language}
+                        savingId={savingId}
+                        onChange={(platform, availability) => savePlatformOverride(item, "item", platform, availability)}
+                      />
                     </article>
                   ))}
                   {!visibleItems.length ? <p className="empty-state">{loading ? "読み込み中..." : "商品がありません。"}</p> : null}
@@ -668,12 +775,14 @@ function StoreOptionGroup({
   language,
   savingId,
   onSave,
+  onPlatformChange,
   onStatusNoteChange
 }: {
   group: StoreMenuOptionGroup;
   language: StoreMenuLanguage;
   savingId: string;
   onSave: (option: StoreMenuOption, patch: Partial<StoreMenuOption>) => Promise<void>;
+  onPlatformChange: (option: StoreMenuOption, platform: PlatformKey, availability: PlatformOverride) => Promise<void>;
   onStatusNoteChange: (optionId: string, statusNote: string) => void;
 }) {
   const unavailableCount = group.options.filter((option) => !option.isAvailable).length;
@@ -697,6 +806,7 @@ function StoreOptionGroup({
             language={language}
             savingId={savingId}
             onSave={onSave}
+            onPlatformChange={onPlatformChange}
             onStatusNoteChange={onStatusNoteChange}
             key={option.id}
           />
@@ -711,12 +821,14 @@ function StoreOptionRow({
   language,
   savingId,
   onSave,
+  onPlatformChange,
   onStatusNoteChange
 }: {
   option: StoreMenuOption;
   language: StoreMenuLanguage;
   savingId: string;
   onSave: (option: StoreMenuOption, patch: Partial<StoreMenuOption>) => Promise<void>;
+  onPlatformChange: (option: StoreMenuOption, platform: PlatformKey, availability: PlatformOverride) => Promise<void>;
   onStatusNoteChange: (optionId: string, statusNote: string) => void;
 }) {
   return (
@@ -731,22 +843,31 @@ function StoreOptionRow({
       </div>
       <div className="store-menu-status-actions">
         <button
-          className={option.isAvailable ? "store-status-button is-on" : "store-status-button"}
+          className={option.stockStatus === "available" ? "store-status-button is-on" : "store-status-button"}
           type="button"
           disabled={savingId === option.id}
-          onClick={() => void onSave(option, { isAvailable: true })}
+          onClick={() => void onSave(option, { isAvailable: true, stockStatus: "available" })}
         >
           <CheckCircle2 size={17} />
-          販売中
+          <span data-i18n-ignore>{statusText(language, "available")}</span>
         </button>
         <button
-          className={!option.isAvailable ? "store-status-button is-off" : "store-status-button"}
+          className={option.stockStatus === "low_stock" ? "store-status-button is-low" : "store-status-button"}
           type="button"
           disabled={savingId === option.id}
-          onClick={() => void onSave(option, { isAvailable: false })}
+          onClick={() => void onSave(option, { isAvailable: true, stockStatus: "low_stock" })}
+        >
+          <AlertTriangle size={17} />
+          <span data-i18n-ignore>{statusText(language, "low_stock")}</span>
+        </button>
+        <button
+          className={option.stockStatus === "unavailable" ? "store-status-button is-off" : "store-status-button"}
+          type="button"
+          disabled={savingId === option.id}
+          onClick={() => void onSave(option, { isAvailable: false, stockStatus: "unavailable" })}
         >
           <XCircle size={17} />
-          売切
+          <span data-i18n-ignore>{statusText(language, "unavailable")}</span>
         </button>
       </div>
       <div className="store-menu-note">
@@ -759,6 +880,72 @@ function StoreOptionRow({
           メモ保存
         </button>
       </div>
+      <PlatformAvailabilityPanel
+        target={option}
+        language={language}
+        savingId={savingId}
+        onChange={(platform, availability) => onPlatformChange(option, platform, availability)}
+      />
     </article>
+  );
+}
+
+function PlatformAvailabilityPanel({
+  target,
+  language,
+  savingId,
+  onChange
+}: {
+  target: StoreMenuItem | StoreMenuOption;
+  language: StoreMenuLanguage;
+  savingId: string;
+  onChange: (platform: PlatformKey, availability: PlatformOverride) => Promise<void>;
+}) {
+  const exceptions = salesPlatforms.filter((platform) => target.platformAvailability[platform.key]);
+  const summary = exceptions.length
+    ? exceptions.map((platform) => `${platformText(language, platform.key)} ${target.platformAvailability[platform.key] === "available" ? statusText(language, "available") : statusText(language, "unavailable")}`).join("、")
+    : language === "ja" ? "全プラットフォームが全体設定に従う" : language === "zh-Hant" ? "所有平台跟隨整體設定" : "所有平台跟随整体设置";
+  const labels = language === "ja"
+    ? { title: "プラットフォーム別設定", follow: "全体設定に従う", available: "販売", unavailable: "売切", help: "市場施策など、例外が必要なプラットフォームだけ変更してください。" }
+    : language === "zh-Hant"
+      ? { title: "各平台設定", follow: "跟隨整體", available: "銷售", unavailable: "缺貨", help: "只需調整有市場策略等例外的平台。" }
+      : { title: "各平台设置", follow: "跟随整体", available: "销售", unavailable: "缺货", help: "只有市场策略等例外平台需要单独修改。" };
+  return (
+    <details className="store-menu-platform-settings">
+      <summary>
+        <span className="store-menu-platform-summary-title">
+          <SlidersHorizontal size={16} aria-hidden="true" />
+          <span data-i18n-ignore>{labels.title}</span>
+        </span>
+        <span className={exceptions.length ? "store-menu-platform-summary is-exception" : "store-menu-platform-summary"} data-i18n-ignore>{summary}</span>
+        <ChevronDown size={17} aria-hidden="true" />
+      </summary>
+      <div className="store-menu-platform-grid">
+        {salesPlatforms.map((platform) => {
+          const value = target.platformAvailability[platform.key] ?? "follow";
+          const available = effectiveAvailability(target.stockStatus, value);
+          return (
+            <label key={platform.key}>
+              <span>
+                <strong data-i18n-ignore>{platformText(language, platform.key)}</strong>
+                <small className={available ? "is-available" : "is-unavailable"} data-i18n-ignore>
+                  {available ? statusText(language, "available") : statusText(language, "unavailable")}
+                </small>
+              </span>
+              <select
+                value={value}
+                disabled={savingId === `${target.id}:${platform.key}`}
+                onChange={(event) => void onChange(platform.key, event.target.value as PlatformOverride)}
+              >
+                <option value="follow" data-i18n-ignore>{labels.follow}</option>
+                <option value="available" data-i18n-ignore>{labels.available}</option>
+                <option value="unavailable" data-i18n-ignore>{labels.unavailable}</option>
+              </select>
+            </label>
+          );
+        })}
+      </div>
+      <p data-i18n-ignore>{labels.help}</p>
+    </details>
   );
 }

@@ -28,6 +28,7 @@ const voiceLogDirectory = path.join(homedir(), "Library", "Logs", "Foundr1 Deskt
 const voiceLogFilename = path.join(voiceLogDirectory, "voice.log");
 const pendingDirectory = path.join(homedir(), "Library", "Application Support", "Foundr1 Desktop Bridge");
 const pendingFilename = path.join(pendingDirectory, `voice-pending-${action}.json`);
+const chineseVoice = String(process.env.FOUNDR1_CHINESE_VOICE ?? "Tingting").trim() || "Tingting";
 
 async function appendVoiceLog(message) {
   await mkdir(voiceLogDirectory, { recursive: true });
@@ -86,7 +87,7 @@ async function restartShortcut() {
 
 async function speakChinese(message) {
   await new Promise((resolve, reject) => {
-    const child = spawn("/usr/bin/say", ["-v", "Ting-Ting", message], { stdio: "ignore" });
+    const child = spawn("/usr/bin/say", ["-v", chineseVoice, "-r", "185", message], { stdio: "ignore" });
     child.once("error", reject);
     child.once("exit", (code) => code === 0 ? resolve() : reject(new Error(`say exited with code ${code}`)));
   });
@@ -181,10 +182,20 @@ try {
     console.log(formatVoiceAcknowledgement({ query, isAvailable: action === "restore" }));
   } else {
     const message = await run();
-    console.log(message);
+    if (shortcutMode && preview) {
+      // The Shortcuts "Speak Text" action can silently fall back to the Mac's
+      // Japanese Siri voice. Speak the confirmation here with an explicit
+      // zh-CN voice and return no text so Shortcuts cannot read it a second time.
+      await speakChinese(message);
+    } else {
+      console.log(message);
+    }
     if (backgroundMode) {
       await appendVoiceLog(message).catch(() => undefined);
-      await speakChinese(message);
+      await speakChinese(message).catch(async (error) => {
+        await appendVoiceLog(`中文播报失败 voice=${chineseVoice}: ${error instanceof Error ? error.message : String(error)}`).catch(() => undefined);
+        throw error;
+      });
     }
   }
 } catch (error) {
@@ -193,7 +204,9 @@ try {
   console.log(feedback);
   if (backgroundMode || voiceConfirmMode) {
     await appendVoiceLog(feedback).catch(() => undefined);
-    await speakChinese(feedback).catch(() => undefined);
+    await speakChinese(feedback).catch(async (voiceError) => {
+      await appendVoiceLog(`中文播报失败 voice=${chineseVoice}: ${voiceError instanceof Error ? voiceError.message : String(voiceError)}`).catch(() => undefined);
+    });
   }
   if (!shortcutMode) process.exitCode = 1;
 }

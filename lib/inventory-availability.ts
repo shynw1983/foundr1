@@ -21,6 +21,9 @@ export type InventoryAvailabilityResolution = {
   targets: Array<UberInventoryItemTarget | UberInventoryTarget>;
 };
 
+type InventoryPlatform = "uber_eats" | "rocket_now" | "demae_can";
+type InventoryStockStatus = "available" | "low_stock" | "unavailable";
+
 export async function loadInventoryAvailabilityTargets(
   storeId: string,
   brandId: string,
@@ -80,6 +83,14 @@ export async function applyInventoryAvailability(input: {
   storeId: string;
   resolution: InventoryAvailabilityResolution;
   isAvailable: boolean;
+  stockStatus?: InventoryStockStatus;
+  persistOverall?: boolean;
+  platforms?: InventoryPlatform[];
+  platformStates?: Partial<Record<InventoryPlatform, boolean>>;
+  platformOverride?: {
+    platform: "foundr1" | InventoryPlatform;
+    availability: "follow" | "available" | "unavailable";
+  };
   statusSource: string;
   syncSource?: "siri" | "store";
   feedbackLabel?: string;
@@ -89,38 +100,82 @@ export async function applyInventoryAvailability(input: {
   const syncRunId = randomUUID();
   const syncSource = input.syncSource ?? (input.statusSource === "Siri" ? "siri" : "store");
   const feedbackLabel = input.feedbackLabel?.trim() || resolution.ingredientLabel;
+  const stockStatus = input.stockStatus ?? (isAvailable ? "available" : "unavailable");
   const note = `${input.statusSource}: ${resolution.ingredientLabel}${isAvailable ? " 販売再開" : " 在庫切れ"}`;
   for (const target of resolution.targets) {
-    if (target.kind === "item") {
+    if (input.persistOverall !== false && target.kind === "item") {
       await sql`
         insert into menu_store_settings (
-          brand_id, store_id, menu_catalog_item_id, is_available, status_note, updated_by, updated_at
+          brand_id, store_id, menu_catalog_item_id, is_available, stock_status, status_note, updated_by, updated_at
         )
         values (
-          ${target.brandId}, ${storeId}, ${target.menuCatalogItemId}, ${isAvailable}, ${note}, ${input.updatedBy}, now()
+          ${target.brandId}, ${storeId}, ${target.menuCatalogItemId}, ${isAvailable}, ${stockStatus}, ${note}, ${input.updatedBy}, now()
         )
         on conflict (store_id, menu_catalog_item_id)
         do update set
           is_available = excluded.is_available,
+          stock_status = excluded.stock_status,
           status_note = excluded.status_note,
           updated_by = excluded.updated_by,
           updated_at = now()
       `;
-    } else {
+    } else if (input.persistOverall !== false && target.kind === "option") {
       await sql`
         insert into menu_option_store_settings (
-          brand_id, store_id, menu_option_id, is_available, status_note, updated_by, updated_at
+          brand_id, store_id, menu_option_id, is_available, stock_status, status_note, updated_by, updated_at
         )
         values (
-          ${target.brandId}, ${storeId}, ${target.menuOptionId}, ${isAvailable}, ${note}, ${input.updatedBy}, now()
+          ${target.brandId}, ${storeId}, ${target.menuOptionId}, ${isAvailable}, ${stockStatus}, ${note}, ${input.updatedBy}, now()
         )
         on conflict (store_id, menu_option_id)
         do update set
           is_available = excluded.is_available,
+          stock_status = excluded.stock_status,
           status_note = excluded.status_note,
           updated_by = excluded.updated_by,
           updated_at = now()
       `;
+    }
+    if (input.platformOverride) {
+      const targetId = target.kind === "item" ? target.menuCatalogItemId : target.menuOptionId;
+      if (input.platformOverride.platform === "foundr1") {
+        if (target.kind === "item") {
+          await sql`
+            insert into menu_store_settings (brand_id, store_id, menu_catalog_item_id, updated_by, updated_at)
+            values (${target.brandId}, ${storeId}, ${target.menuCatalogItemId}, ${input.updatedBy}, now())
+            on conflict (store_id, menu_catalog_item_id) do nothing
+          `;
+        } else {
+          await sql`
+            insert into menu_option_store_settings (brand_id, store_id, menu_option_id, updated_by, updated_at)
+            values (${target.brandId}, ${storeId}, ${target.menuOptionId}, ${input.updatedBy}, now())
+            on conflict (store_id, menu_option_id) do nothing
+          `;
+        }
+      }
+      if (input.platformOverride.availability === "follow") {
+        await sql`
+          delete from menu_platform_availability_settings
+          where store_id::text = ${storeId}
+            and target_kind = ${target.kind}
+            and target_id::text = ${targetId}
+            and platform = ${input.platformOverride.platform}
+        `;
+      } else {
+        await sql`
+          insert into menu_platform_availability_settings (
+            brand_id, store_id, target_kind, target_id, platform, availability, updated_by, updated_at
+          ) values (
+            ${target.brandId}, ${storeId}, ${target.kind}, ${targetId},
+            ${input.platformOverride.platform}, ${input.platformOverride.availability}, ${input.updatedBy}, now()
+          )
+          on conflict (store_id, target_kind, target_id, platform)
+          do update set
+            availability = excluded.availability,
+            updated_by = excluded.updated_by,
+            updated_at = now()
+        `;
+      }
     }
   }
 
@@ -131,18 +186,24 @@ export async function applyInventoryAvailability(input: {
       and source_platform in ('uber_eats', 'rocket_now', 'demae_can')
       and is_enabled = true
   `;
-  const configuredPlatforms = sourceRows
+  let configuredPlatforms = sourceRows
     .map((row) => String(row.platform))
     .filter((platform) => ["uber_eats", "rocket_now", "demae_can"].includes(platform));
   const platforms = configuredPlatforms.length ? configuredPlatforms : ["uber_eats"];
+  if (input.platforms) {
+    configuredPlatforms = platforms.filter((platform) => input.platforms?.includes(platform as InventoryPlatform));
+  } else {
+    configuredPlatforms = platforms;
+  }
   const commandRows: Array<{ id: string; platform: string; status: "pending" | "succeeded"; error: string }> = [];
-  for (const platform of platforms) {
+  for (const platform of configuredPlatforms) {
+    const platformIsAvailable = input.platformStates?.[platform as InventoryPlatform] ?? isAvailable;
     const platformCommandId = randomUUID();
     const operation = platform === "rocket_now"
-      ? (isAvailable ? "unhide" : "hide")
+      ? (platformIsAvailable ? "unhide" : "hide")
       : platform === "demae_can"
-        ? (isAvailable ? "available" : "stockout")
-        : (isAvailable ? "available" : "sold_out");
+        ? (platformIsAvailable ? "available" : "stockout")
+        : (platformIsAvailable ? "available" : "sold_out");
     const projectedTargets = projectInventoryTargetsForPlatform(
       platform as "uber_eats" | "rocket_now" | "demae_can",
       resolution.targets
@@ -181,7 +242,7 @@ export async function applyInventoryAvailability(input: {
       syncRunId,
       syncSource,
       feedbackLabel,
-      isAvailable,
+      isAvailable: platformIsAvailable,
       operation,
       soldOutMode: "indefinite",
       targets: commandTargets

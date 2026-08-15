@@ -227,6 +227,25 @@ export async function POST(request: Request) {
   const action = text(body.action, 40) || "preview";
   const targetKind = body.targetKind === "item" ? "item" : "option";
   const isAvailable = body.isAvailable === true;
+  const stockStatus = ["available", "low_stock", "unavailable"].includes(text(body.stockStatus, 30))
+    ? text(body.stockStatus, 30) as "available" | "low_stock" | "unavailable"
+    : isAvailable ? "available" : "unavailable";
+  const allowedPlatforms = ["uber_eats", "rocket_now", "demae_can"] as const;
+  const platforms = Array.isArray(body.platforms)
+    ? body.platforms.map((value) => text(value, 30)).filter((value): value is typeof allowedPlatforms[number] => allowedPlatforms.includes(value as typeof allowedPlatforms[number]))
+    : undefined;
+  const rawPlatformStates = body.platformStates && typeof body.platformStates === "object"
+    ? body.platformStates as Record<string, unknown>
+    : {};
+  const platformStates = Object.fromEntries(allowedPlatforms.flatMap((platform) => (
+    typeof rawPlatformStates[platform] === "boolean" ? [[platform, rawPlatformStates[platform]]] : []
+  ))) as Partial<Record<typeof allowedPlatforms[number], boolean>>;
+  const overridePlatform = ["foundr1", ...allowedPlatforms].includes(text(body.overridePlatform, 30))
+    ? text(body.overridePlatform, 30) as "foundr1" | typeof allowedPlatforms[number]
+    : "";
+  const overrideAvailability = ["follow", "available", "unavailable"].includes(text(body.overrideAvailability, 30))
+    ? text(body.overrideAvailability, 30) as "follow" | "available" | "unavailable"
+    : "";
   const statusSource = body.source === "sales_status" ? "販売状態" : "厨房画面";
   if (!storeId || !["preview", "apply", "audit"].includes(action)) {
     return Response.json({ error: "食材と操作内容を確認してください。" }, { status: 400 });
@@ -293,6 +312,13 @@ export async function POST(request: Request) {
     storeId,
     resolution: resolved,
     isAvailable,
+    stockStatus,
+    persistOverall: body.persistOverall !== false,
+    platforms,
+    platformStates,
+    platformOverride: overridePlatform && overrideAvailability
+      ? { platform: overridePlatform, availability: overrideAvailability }
+      : undefined,
     statusSource,
     syncSource: "store",
     feedbackLabel,
