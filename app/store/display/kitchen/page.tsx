@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
 import { useVisibleRefresh } from "../../components/useVisibleRefresh";
-import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../../lib/store-polling-client";
+import { createStoreFallbackPoller, rememberStoreBusinessHours, storeOrderAlertEventName } from "../../../../lib/store-polling-client";
 import { playStoreOrderAlertSound } from "../../../../lib/store-order-alert-sounds";
 import { defaultStoreModuleSettings, type StoreModuleSettings, type StoreOrderAlertSound } from "../../../../lib/module-setting-defaults";
 
@@ -478,6 +478,17 @@ export default function StoreKitchenPage() {
       if (newOrderNoticeTimerRef.current) window.clearTimeout(newOrderNoticeTimerRef.current);
       void audioContextRef.current?.close();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handlePreparationDueAlert = (event: Event) => {
+      const order = (event as CustomEvent<{ order?: { alertPhase?: string } }>).detail?.order;
+      if (order?.alertPhase === "scheduled_reminder") void playNewOrderAlert();
+    };
+    window.addEventListener(storeOrderAlertEventName, handlePreparationDueAlert);
+    return () => window.removeEventListener(storeOrderAlertEventName, handlePreparationDueAlert);
+    // playNewOrderAlert reads the current sound setting from refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

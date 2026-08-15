@@ -155,29 +155,24 @@ async function upsertCategory({
   hasWhipByDefault = false,
   sortOrder = 100
 }) {
-  const existing = externalId
-    ? await sql`
-        select id::text
-        from menu_categories
-        where brand_id = ${brandId}
-          and store_id is null
-          and external_id = ${externalId}
-        limit 1
-      `
-    : await sql`
-        select id::text
-        from menu_categories
-        where brand_id = ${brandId}
-          and store_id is null
-          and name = ${name}
-        limit 1
-      `;
+  const existing = await sql`
+    select id::text, coalesce(external_id, '') as "externalId"
+    from menu_categories
+    where brand_id = ${brandId}
+      and store_id is null
+      and (
+        (${externalId || null}::text is not null and lower(external_id) = lower(${externalId || null}))
+        or name = ${name}
+      )
+    order by case when lower(external_id) = lower(${externalId || ""}) then 0 else 1 end
+    limit 1
+  `;
 
   if (existing[0]) {
     const rows = await sql`
       update menu_categories
       set
-        external_id = ${externalId},
+        external_id = ${existing[0].externalId || externalId},
         name = ${name},
         note = ${note},
         is_tapioca_free = ${isTapiocaFree},
@@ -246,6 +241,7 @@ async function upsertItem({
   `;
 
   const schema = JSON.stringify({
+    ...(existing[0]?.variableSchema ?? {}),
     ...(variableSchema ?? {}),
     ...(existing[0]?.variableSchema?.websitePresentation
       ? { websitePresentation: existing[0].variableSchema.websitePresentation }
@@ -732,6 +728,7 @@ async function importMaamaa() {
     });
     await upsertOptions(groupId, group.choices, { affectsProcedure: group.affectsProcedure, dictionaries });
     groupCount += 1;
+    console.log(`[maamaa] imported option group ${group.key} (${group.choices.length} options)`);
   }
 
   let optionCount = fixedGroups.reduce((total, group) => total + group.choices.length, 0);
@@ -759,6 +756,7 @@ async function importMaamaa() {
     await upsertOptions(groupId, section.items, { affectsProcedure: true, dictionaries });
     groupCount += 1;
     optionCount += section.items.length;
+    console.log(`[maamaa] imported menu section ${section.id} (${section.items.length} options)`);
   }
 
   if (pruneMissing) {

@@ -356,6 +356,19 @@ export async function GET(request: Request) {
   const schedulingPeriod = getSchedulingPeriod(url.searchParams.get("period"));
   const month = schedulingPeriod.startDate.slice(0, 7);
   const monthRange = getMonthRange(month);
+  const requestedShiftMonthValue = url.searchParams.get("month") ?? "";
+  const requestedShiftMonth = /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedShiftMonthValue)
+    ? requestedShiftMonthValue
+    : getJstMonthLabel();
+  const usesMonthlyShiftRange = selfOnly && url.searchParams.get("shiftRange") === "month";
+  const requestedShiftMonthRange = getMonthRange(requestedShiftMonth);
+  const requestedShiftMonthEnd = new Date(`${requestedShiftMonthRange.endDate}T00:00:00Z`);
+  requestedShiftMonthEnd.setUTCDate(requestedShiftMonthEnd.getUTCDate() - 1);
+  const myShiftsPeriod = usesMonthlyShiftRange ? {
+    label: `${requestedShiftMonth} 月`,
+    startDate: requestedShiftMonthRange.startDate,
+    endDate: formatDateKey(requestedShiftMonthEnd)
+  } : schedulingPeriod;
   const schedulingDates = enumerateDates(schedulingPeriod.startDate, schedulingPeriod.endDate);
   const queryStartDate = schedulingPeriod.startDate;
   const schedulingEndExclusive = new Date(`${schedulingPeriod.endDate}T00:00:00+09:00`);
@@ -509,8 +522,8 @@ export async function GET(request: Request) {
     from timecard_shifts
     join employees on employees.id = timecard_shifts.employee_id
     where timecard_shifts.store_id::text = ${selectedStoreId}
-      and timecard_shifts.work_date >= ${queryStartDate}::date
-      and timecard_shifts.work_date < ${queryEndDate}::date
+      and timecard_shifts.work_date >= ${usesMonthlyShiftRange ? requestedShiftMonthRange.startDate : queryStartDate}::date
+      and timecard_shifts.work_date < ${usesMonthlyShiftRange ? requestedShiftMonthRange.endDate : queryEndDate}::date
       and (${canManageRequestScope} or timecard_shifts.employee_id::text = ${session.id})
     order by timecard_shifts.work_date asc, timecard_shifts.scheduled_start asc
   ` : [];
@@ -529,9 +542,17 @@ export async function GET(request: Request) {
       and timecard_shifts.work_date >= (${getJstDateLabel(new Date())}::date - interval '1 day')
       and timecard_shifts.scheduled_start is not null
       and (
-        timecard_shifts.work_date
-        + timecard_shifts.scheduled_start
-        + case when timecard_shifts.scheduled_start < '06:00'::time then interval '1 day' else interval '0 day' end
+        case
+          when timecard_shifts.scheduled_end is null then
+            timecard_shifts.work_date
+            + timecard_shifts.scheduled_start
+            + case when timecard_shifts.scheduled_start < '06:00'::time then interval '1 day' else interval '0 day' end
+          else
+            timecard_shifts.work_date
+            + timecard_shifts.scheduled_end
+            + case when timecard_shifts.scheduled_start < '06:00'::time then interval '1 day' else interval '0 day' end
+            + case when timecard_shifts.scheduled_end <= timecard_shifts.scheduled_start then interval '1 day' else interval '0 day' end
+        end
       ) >= (now() at time zone 'Asia/Tokyo')
     order by (
       timecard_shifts.work_date
@@ -566,6 +587,7 @@ export async function GET(request: Request) {
     submissionPeriod,
     submissionDates,
     schedulingPeriod,
+    myShiftsPeriod,
     schedulingDates,
     requests,
     monthlyShiftStats,

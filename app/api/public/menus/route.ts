@@ -137,17 +137,19 @@ export async function GET(request: Request) {
       menu_catalog_items.sort_order as "sortOrder",
       menu_catalog_items.updated_at as "updatedAt"
     from menu_catalog_items
-    left join menu_categories
-      on menu_categories.brand_id = menu_catalog_items.brand_id
-      and coalesce(menu_categories.store_id::text, '') = coalesce(menu_catalog_items.store_id::text, '')
-      and menu_categories.name = coalesce(nullif(menu_catalog_items.category, ''), '未分類')
     where menu_catalog_items.brand_id = ${brand.id}
       and menu_catalog_items.is_active = true
       and (
         menu_catalog_items.store_id is null
         or (${store?.id ?? null}::uuid is not null and menu_catalog_items.store_id = ${store?.id ?? null})
       )
-    order by coalesce(menu_categories.sort_order, 9999), menu_catalog_items.sort_order, menu_catalog_items.name
+    order by coalesce((
+      select min(menu_categories.sort_order)
+      from menu_categories
+      where menu_categories.brand_id = menu_catalog_items.brand_id
+        and coalesce(menu_categories.store_id::text, '') = coalesce(menu_catalog_items.store_id::text, '')
+        and menu_categories.name = coalesce(nullif(menu_catalog_items.category, ''), '未分類')
+    ), 9999), menu_catalog_items.sort_order, menu_catalog_items.name
   `;
 
   const categories = await sql`

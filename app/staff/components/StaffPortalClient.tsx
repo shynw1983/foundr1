@@ -3,6 +3,7 @@
 import {
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Clock3,
   Coffee,
@@ -97,6 +98,11 @@ type ShiftRequestPayload = {
   myShifts?: ShiftEntry[];
   nextShift?: ShiftEntry | null;
   schedulingPeriod?: {
+    label: string;
+    startDate: string;
+    endDate: string;
+  };
+  myShiftsPeriod?: {
     label: string;
     startDate: string;
     endDate: string;
@@ -222,6 +228,18 @@ function addDateDays(value: string, amount: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function addMonths(value: string, amount: number) {
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return getJstMonthLabel();
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + amount, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatMonthHeading(value: string) {
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  return match ? `${match[1]}年 ${match[2]}月` : value;
+}
+
 function isEarlyMorningShiftStart(value: string | null | undefined) {
   return Boolean(value && value < "06:00");
 }
@@ -300,7 +318,9 @@ function readStoredStoreId() {
 export function StaffPortalClient({ view }: { view: StaffView }) {
   const [timecard, setTimecard] = useState<TimecardPayload | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState("");
+  const [shiftMonth, setShiftMonth] = useState(getJstMonthLabel());
   const [shiftPayload, setShiftPayload] = useState<ShiftRequestPayload | null>(null);
+  const [isShiftLoading, setIsShiftLoading] = useState(false);
   const [availabilityDrafts, setAvailabilityDrafts] = useState<AvailabilityDayDraft[]>([]);
   const [payrolls, setPayrolls] = useState<PayrollItem[]>([]);
   const [documents, setDocuments] = useState<PrivacyConsentRecord[]>([]);
@@ -335,7 +355,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
   ), [timecard]);
   const myShifts = shiftPayload?.myShifts ?? [];
   const requests = shiftPayload?.requests ?? [];
-  const nextShift = shiftPayload?.nextShift ?? myShifts.find((shift) => shift.scheduledStart || shift.scheduledEnd) ?? null;
+  const nextShift = shiftPayload?.nextShift ?? null;
   const latestPayroll = payrolls[0] ?? null;
 
   async function loadTimecard(nextStoreId = selectedStoreId || readStoredStoreId()) {
@@ -358,15 +378,27 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
     if (nextSelectedStoreId) void loadShiftRequests(nextSelectedStoreId);
   }
 
-  async function loadShiftRequests(nextStoreId = selectedStoreId) {
+  async function loadShiftRequests(nextStoreId = selectedStoreId, nextMonth = shiftMonth) {
     if (!nextStoreId) return;
-    const params = new URLSearchParams({ storeId: nextStoreId, month: getJstMonthLabel(), selfOnly: "1", ts: String(Date.now()) });
-    const response = await fetch(`/api/timecard/shift-requests?${params.toString()}`, { cache: "no-store" });
-    if (!response.ok) return;
-    const body = await response.json().catch(() => ({})) as ShiftRequestPayload;
-    setShiftPayload(body);
-    setAvailabilityDrafts(createAvailabilityDrafts(body.submissionDates ?? [], body.requests ?? []));
-    setSwapTargetShiftId((current) => current || body.myShifts?.[0]?.id || "");
+    setIsShiftLoading(true);
+    try {
+      const params = new URLSearchParams({ storeId: nextStoreId, month: nextMonth, selfOnly: "1", ts: String(Date.now()) });
+      if (view === "shifts") params.set("shiftRange", "month");
+      const response = await fetch(`/api/timecard/shift-requests?${params.toString()}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const body = await response.json().catch(() => ({})) as ShiftRequestPayload;
+      setShiftPayload(body);
+      setAvailabilityDrafts(createAvailabilityDrafts(body.submissionDates ?? [], body.requests ?? []));
+      setSwapTargetShiftId((current) => current || body.myShifts?.[0]?.id || "");
+    } finally {
+      setIsShiftLoading(false);
+    }
+  }
+
+  function changeShiftMonth(nextMonth: string) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(nextMonth) || nextMonth === shiftMonth) return;
+    setShiftMonth(nextMonth);
+    void loadShiftRequests(selectedStoreId, nextMonth);
   }
 
   async function loadPayrolls() {
@@ -621,7 +653,13 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
       ) : null}
 
       {view === "shifts" ? (
-        <ShiftsView myShifts={myShifts} schedulingPeriod={shiftPayload?.schedulingPeriod ?? null} />
+        <ShiftsView
+          myShifts={myShifts}
+          month={shiftMonth}
+          period={shiftPayload?.myShiftsPeriod ?? null}
+          isLoading={isShiftLoading}
+          onChangeMonth={changeShiftMonth}
+        />
       ) : null}
 
       {view === "requests" ? (
@@ -807,7 +845,14 @@ function WorkHistory({ days }: { days: DailySummary[] }) {
   );
 }
 
-function ShiftsView({ myShifts, schedulingPeriod }: { myShifts: ShiftEntry[]; schedulingPeriod: ShiftRequestPayload["schedulingPeriod"] | null }) {
+function ShiftsView({ myShifts, month, period, isLoading, onChangeMonth }: {
+  myShifts: ShiftEntry[];
+  month: string;
+  period: ShiftRequestPayload["myShiftsPeriod"] | null;
+  isLoading: boolean;
+  onChangeMonth: (month: string) => void;
+}) {
+  const currentMonth = getJstMonthLabel();
   return (
     <section className="staff-page-stack">
       <article className="staff-panel">
@@ -815,11 +860,29 @@ function ShiftsView({ myShifts, schedulingPeriod }: { myShifts: ShiftEntry[]; sc
           <CalendarDays />
           <div>
             <h2>確定シフト</h2>
-            <p>{schedulingPeriod ? `${schedulingPeriod.label} / ${schedulingPeriod.startDate} - ${schedulingPeriod.endDate}` : "公開済みシフト"}</p>
+            <p>{period ? `${period.startDate} - ${period.endDate}` : "公開済みシフト"}</p>
+          </div>
+        </div>
+        <div className="timecard-month-navigator" aria-label="シフト月選択">
+          <strong className="timecard-month-heading">{formatMonthHeading(month)}</strong>
+          <div className="timecard-month-controls">
+            <button className="timecard-month-step" type="button" disabled={isLoading} aria-label="前月" onClick={() => onChangeMonth(addMonths(month, -1))}>
+              <ChevronLeft size={16} />
+            </button>
+            <label className="timecard-month-picker" aria-label="月を選択">
+              <CalendarDays size={15} />
+              <input type="month" value={month} disabled={isLoading} onChange={(event) => onChangeMonth(event.target.value)} />
+            </label>
+            <button className="timecard-month-today" type="button" disabled={isLoading || month === currentMonth} onClick={() => onChangeMonth(currentMonth)}>
+              今月
+            </button>
+            <button className="timecard-month-step" type="button" disabled={isLoading} aria-label="翌月" onClick={() => onChangeMonth(addMonths(month, 1))}>
+              <ChevronRight size={16} />
+            </button>
           </div>
         </div>
         <div className="staff-shift-list">
-          {myShifts.length ? myShifts.map((shift) => {
+          {isLoading ? <p className="empty-state-text">読み込み中...</p> : myShifts.length ? myShifts.map((shift) => {
             const display = getShiftDisplayParts(shift);
             return (
               <article className="staff-shift-row" key={shift.id}>
@@ -835,7 +898,7 @@ function ShiftsView({ myShifts, schedulingPeriod }: { myShifts: ShiftEntry[]; sc
                 </a>
               </article>
             );
-          }) : <p className="empty-state-text">この期間の確定シフトはまだありません。</p>}
+          }) : <p className="empty-state-text">この月の確定シフトはまだありません。</p>}
         </div>
       </article>
     </section>
