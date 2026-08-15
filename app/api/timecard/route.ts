@@ -496,6 +496,10 @@ async function getPayrollPerformanceOrders(storeIds: string[], startUtc: Date, e
       and status <> 'cancelled'
       and payment_status <> 'failed'
       and total > 0
+      and not (
+        source_order_id is not null
+        and source_platform in ('uber_eats', 'rocket_now', 'demae_can', 'wolt')
+      )
     order by ordered_at
   `;
   return rows.map((row) => ({

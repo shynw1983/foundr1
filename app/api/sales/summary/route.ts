@@ -378,6 +378,10 @@ export async function GET(request: Request) {
       and status not in ('cancelled', 'refund_pending')
       and payment_status in ('paid', 'partial_refunded')
       and total > 0
+      and not (
+        source_order_id is not null
+        and source_platform in ('uber_eats', 'rocket_now', 'demae_can', 'wolt')
+      )
     order by ordered_at asc
   ` : [];
   const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);

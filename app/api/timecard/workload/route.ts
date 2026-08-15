@@ -377,6 +377,10 @@ export async function GET(request: Request) {
       and status <> 'cancelled'
       and payment_status <> 'failed'
       and total > 0
+      and not (
+        source_order_id is not null
+        and source_platform in ('uber_eats', 'rocket_now', 'demae_can', 'wolt')
+      )
     order by ordered_at asc
   ` : [];
   const averageOrderTotal = orders.length > 0
