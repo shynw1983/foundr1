@@ -8,6 +8,8 @@
     "login": "node src/main.mjs login",
     "check:demae": "node src/main.mjs check demae_can",
     "credentials:demae": "node macos/store-demae-credentials.mjs",
+    "menu:audit:demae": "node scripts/normalize-demae-menu.mjs",
+    "menu:apply:demae": "node scripts/normalize-demae-menu.mjs --apply",
     "locate": "node src/main.mjs locate",
     "voice": "node src/voice-command.mjs",
     "install:mac": "node macos/install-launch-agent.mjs",
