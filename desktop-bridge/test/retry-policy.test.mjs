@@ -16,5 +16,7 @@ test("retries transient browser and platform page errors", () => {
 
 test("does not retry login or configuration errors", () => {
   assert.equal(isRetryableInventoryError("login required"), false);
+  assert.equal(isRetryableInventoryError("demae_can_login_credentials_rejected"), false);
+  assert.equal(isRetryableInventoryError("demae_can_credentials_missing"), false);
   assert.equal(isRetryableInventoryError("No enabled adapter for platform"), false);
 });

@@ -17,7 +17,8 @@
       "enabled": true
     },
     "demae_can": {
-      "enabled": true
+      "enabled": true,
+      "autoLogin": true
     }
   }
 }

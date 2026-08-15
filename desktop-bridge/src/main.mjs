@@ -44,6 +44,19 @@ async function inspectAll() {
   return results;
 }
 
+function platformStatusProblem(item) {
+  const label = item.platform === "demae_can" ? "出前馆" : item.platform;
+  const error = String(item.error ?? "");
+  if (/credentials_missing/u.test(error)) return `${label}: 尚未设置自动登录信息`;
+  if (/credentials_rejected/u.test(error)) return `${label}: 自动登录信息不正确`;
+  if (/account_locked/u.test(error)) return `${label}: 账号已锁定，需要人工处理`;
+  if (/password_expired/u.test(error)) return `${label}: 密码已过期，需要人工处理`;
+  if (/manual_verification_required/u.test(error)) return `${label}: 需要验证码或人工验证`;
+  if (/keychain_unavailable/u.test(error)) return `${label}: Mac 钥匙串暂时无法读取`;
+  if (/login/u.test(error) || item.loginRequired) return `${label}: 自动重新登录失败`;
+  return `${label}: 平台页面暂时不可用`;
+}
+
 async function shutdown() {
   await Promise.all([...sessions.values()].map((session) => session.disconnect()));
 }
@@ -157,7 +170,7 @@ for (;;) {
       const healthy = checks.every((item) => item.ok);
       await api.reportStatus({
         level: healthy ? "healthy" : "attention",
-        problem: healthy ? "" : checks.filter((item) => !item.ok).map((item) => `${item.platform}: login required`).join("; "),
+        problem: healthy ? "" : checks.filter((item) => !item.ok).map(platformStatusProblem).join("; "),
         realtimeConnected: false,
         accessibilityConnected: true,
         notificationConnected: false

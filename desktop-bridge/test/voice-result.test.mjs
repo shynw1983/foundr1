@@ -22,7 +22,9 @@ test("formats successful permanent stockout feedback", () => {
 });
 
 test("translates login failures into spoken feedback", () => {
-  assert.equal(readableVoiceError("demae_can: login required"), "需要重新登录");
+  assert.equal(readableVoiceError("demae_can: login required"), "自动重新登录失败");
+  assert.equal(readableVoiceError("demae_can_credentials_missing"), "尚未保存自动登录信息");
+  assert.equal(readableVoiceError("demae_can_login_account_locked"), "账号已被锁定，需要人工处理");
 });
 
 test("formats immediate restore acknowledgement for Siri", () => {

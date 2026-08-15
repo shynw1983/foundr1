@@ -1,7 +1,23 @@
 import { loginState, pageSummary, targetNameTiers } from "./common.mjs";
 import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
+import { loadDemaeCredentials } from "../demae-credentials.mjs";
 
 const STOCKOUT_URL = "https://partner.demae-can.com/merchant-admin/shop/stockout";
+const LOGIN_FAILURE_COOLDOWN_MS = 30 * 60 * 1000;
+
+function isLoginPage(summary) {
+  return /\/merchant-admin\/login(?:[/?#]|$)/u.test(summary.url)
+    || (/ログイン/u.test(summary.text) && /パスワード/u.test(summary.text));
+}
+
+async function fillInput(page, selector, value) {
+  const input = await page.waitForSelector(selector, { visible: true, timeout: 5000 }).catch(() => null);
+  if (!input) return false;
+  await input.click({ clickCount: 3 });
+  await input.press("Backspace");
+  await input.type(value);
+  return true;
+}
 
 async function waitForInventoryRows(page) {
   await page.waitForSelector("[class*=Styles_name__]", { visible: true, timeout: 30000 });
@@ -100,24 +116,108 @@ async function waitForVisibleForm(page, selector, errorCode) {
 }
 
 export class DemaeCanAdapter {
-  constructor(session) {
+  constructor(session, config = {}, credentialLoader = loadDemaeCredentials) {
     this.session = session;
+    this.config = config;
+    this.credentialLoader = credentialLoader;
+    this.loginPromise = null;
+    this.lastLoginFailureAt = 0;
+    this.lastLoginFailure = "";
+  }
+
+  async ensureAuthenticated(page) {
+    const initial = await pageSummary(page);
+    if (loginState(initial, "品切れ終売設定").ok) return page;
+    if (!isLoginPage(initial)) throw new Error("demae_can_page_unavailable");
+    if (this.config.autoLogin === false) throw new Error("demae_can_login_required");
+    if (this.lastLoginFailureAt && Date.now() - this.lastLoginFailureAt < LOGIN_FAILURE_COOLDOWN_MS) {
+      throw new Error(this.lastLoginFailure || "demae_can_login_cooldown");
+    }
+    if (this.loginPromise) return this.loginPromise;
+    this.loginPromise = this.login(page).catch((error) => {
+      this.lastLoginFailureAt = Date.now();
+      this.lastLoginFailure = error instanceof Error ? error.message : String(error);
+      throw error;
+    }).finally(() => {
+      this.loginPromise = null;
+    });
+    return this.loginPromise;
+  }
+
+  async login(page) {
+    const credentials = await this.credentialLoader();
+    const beforeLogin = await pageSummary(page);
+    if (/CAPTCHA|reCAPTCHA|画像認証|認証コード|ワンタイムパスワード/u.test(beforeLogin.text)) {
+      throw new Error("demae_can_login_manual_verification_required");
+    }
+    let hasCodeForm = await page.$('input[name="handleCd"]');
+    if (!hasCodeForm) {
+      await page.evaluate(() => {
+        const candidates = [...document.querySelectorAll("button, [role=tab]")];
+        const tab = candidates.find((element) => /コード|ログインID/u.test(element.textContent ?? ""));
+        if (tab instanceof HTMLElement) tab.click();
+      });
+      hasCodeForm = await page.waitForSelector('input[name="handleCd"]', { visible: true, timeout: 5000 }).catch(() => null);
+    }
+    if (!hasCodeForm) throw new Error("demae_can_login_form_missing");
+    const completed = [];
+    const codeForm = 'form:has(input[name="handleCd"])';
+    completed.push(await fillInput(page, `${codeForm} input[name="handleCd"]`, credentials.handleCode));
+    completed.push(await fillInput(page, `${codeForm} input[name="loginId"]`, credentials.loginId));
+    completed.push(await fillInput(page, `${codeForm} input[name="password"]`, credentials.password));
+    if (completed.some((value) => !value)) throw new Error("demae_can_login_form_missing");
+    const submitted = await page.evaluate(() => {
+      const form = document.querySelector('input[name="handleCd"]')?.closest("form");
+      const button = [...(form?.querySelectorAll("button") ?? [])]
+        .find((candidate) => candidate.textContent?.trim() === "ログイン");
+      if (!(button instanceof HTMLButtonElement)) return false;
+      button.click();
+      return true;
+    });
+    if (!submitted) throw new Error("demae_can_login_submit_missing");
+    await page.waitForFunction(() => {
+      const text = document.body?.innerText ?? "";
+      return text.includes("品切れ終売設定")
+        || text.includes("一致していません")
+        || text.includes("アカウントがロックされました")
+        || text.includes("仮パスワードの有効期限が切れています")
+        || !location.pathname.includes("/login");
+    }, { timeout: 30000 }).catch(() => undefined);
+    const result = await pageSummary(page);
+    if (/アカウントがロックされました/u.test(result.text)) throw new Error("demae_can_login_account_locked");
+    if (/一致していません/u.test(result.text)) throw new Error("demae_can_login_credentials_rejected");
+    if (/仮パスワードの有効期限が切れています/u.test(result.text)) throw new Error("demae_can_login_password_expired");
+    if (/CAPTCHA|reCAPTCHA|画像認証|認証コード|ワンタイムパスワード/u.test(result.text)) {
+      throw new Error("demae_can_login_manual_verification_required");
+    }
+    if (!loginState(result, "品切れ終売設定").ok) {
+      await page.goto(STOCKOUT_URL, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => undefined);
+      await page.waitForNetworkIdle({ idleTime: 500, timeout: 8000 }).catch(() => undefined);
+    }
+    const verified = await pageSummary(page);
+    if (!loginState(verified, "品切れ終売設定").ok) throw new Error("demae_can_login_failed");
+    this.lastLoginFailureAt = 0;
+    this.lastLoginFailure = "";
+    return page;
   }
 
   async inspect() {
     const page = await this.session.goto(STOCKOUT_URL);
+    await this.ensureAuthenticated(page);
     const summary = await pageSummary(page);
     return { platform: "demae_can", ...loginState(summary, "品切れ終売設定") };
   }
 
   async locateTargets(targets) {
     const page = await this.session.goto(STOCKOUT_URL);
+    await this.ensureAuthenticated(page);
     await waitForInventoryRows(page);
     return readRows(page, targets);
   }
 
   async setInventory(payload, located) {
     const page = await this.session.goto(STOCKOUT_URL);
+    await this.ensureAuthenticated(page);
     // locateTargets has just verified this same page. Reusing it is more reliable
     // than reloading Demae's slow inventory screen before every save.
     await waitForInventoryRows(page);

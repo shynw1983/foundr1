@@ -6,6 +6,8 @@
   "scripts": {
     "check": "node src/main.mjs check",
     "login": "node src/main.mjs login",
+    "check:demae": "node src/main.mjs check demae_can",
+    "credentials:demae": "node macos/store-demae-credentials.mjs",
     "locate": "node src/main.mjs locate",
     "voice": "node src/voice-command.mjs",
     "install:mac": "node macos/install-launch-agent.mjs",

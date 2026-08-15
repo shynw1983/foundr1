@@ -6,7 +6,11 @@ const platformLabels = {
 
 export function readableVoiceError(value) {
   const error = String(value ?? "").trim();
-  if (/login required|ログイン/i.test(error)) return "需要重新登录";
+  if (/credentials_missing/i.test(error)) return "尚未保存自动登录信息";
+  if (/credentials_rejected/i.test(error)) return "自动登录信息不正确";
+  if (/account_locked/i.test(error)) return "账号已被锁定，需要人工处理";
+  if (/password_expired/i.test(error)) return "密码已过期，需要人工处理";
+  if (/login required|demae_can_login|ログイン/i.test(error)) return "自动重新登录失败";
   if (/multiple target matches|複数の候補|多个候选/i.test(error)) return "找到多个同名商品";
   if (/target verification failed|対応する.*見つかりません/i.test(error)) return "找不到对应商品";
   if (/timed out|timeout/i.test(error)) return "平台页面响应超时";
@@ -22,8 +26,14 @@ export function formatVoiceFailure(value) {
   if (/複数の候補があります|多个候选|multiple/i.test(error)) {
     return "找到了多个相似商品，请说出更完整的商品名称。";
   }
-  if (/ログインしてください|login required|未登录/i.test(error)) {
-    return "操作失败，需要重新登录。";
+  if (/credentials_missing/i.test(error)) {
+    return "操作失败，尚未在 Mac 钥匙串中保存出前馆登录信息。";
+  }
+  if (/credentials_rejected|account_locked|password_expired/i.test(error)) {
+    return "操作失败，出前馆账号需要人工处理，请查看 Store App 里的具体状态。";
+  }
+  if (/ログインしてください|login required|demae_can_login|未登录/i.test(error)) {
+    return "操作失败，出前馆自动重新登录失败。";
   }
   if (/権限|permission|forbidden/i.test(error)) {
     return "操作失败，当前账号没有权限。";
