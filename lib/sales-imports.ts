@@ -10,6 +10,9 @@ export type SalesCsvOrder = {
   discount: number;
   adjustment: number;
   total: number;
+  status?: "completed" | "cancelled";
+  paymentStatus?: "paid" | "partial_refunded" | "refunded";
+  cancelledAt?: Date | null;
   rowCount: number;
   rawRows: Record<string, string>[];
 };
@@ -385,11 +388,18 @@ export function parseSmaregiSalesCsv(text: string): SalesCsvParseResult {
 }
 
 export function parseRocketNowSalesXlsx(bytes: Uint8Array): SalesCsvParseResult {
-  const workbook = XLSX.read(bytes, {
-    type: "buffer",
-    cellDates: false,
-    raw: false
-  });
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(bytes, {
+      type: "buffer",
+      cellDates: false,
+      raw: false
+    });
+  } catch {
+    throw new SalesCsvParserUpdateRequiredError(
+      "Rocket NowのExcelファイルを開けませんでした。Rocket Nowからダウンロードした販売データ（.xlsx / .xls）を選択してください。"
+    );
+  }
   const sheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === normalizeHeader("Sales Detail"))
     ?? workbook.SheetNames[0];
   const sheet = sheetName ? workbook.Sheets[sheetName] : null;
@@ -414,7 +424,12 @@ export function parseRocketNowSalesXlsx(bytes: Uint8Array): SalesCsvParseResult 
 
   const headers = rows[headerIndex].map((header) => header.trim());
   const dataRows = rows.slice(headerIndex + 1);
-  const groupedOrders = new Map<string, SalesCsvOrder>();
+  type RocketNowOrder = SalesCsvOrder & {
+    hasPay: boolean;
+    cancellationCount: number;
+    lastCancelledAt: Date | null;
+  };
+  const groupedOrders = new Map<string, RocketNowOrder>();
   const rawRows: SalesCsvParseResult["rawRows"] = [];
   let skippedRowCount = 0;
 
@@ -432,28 +447,41 @@ export function parseRocketNowSalesXlsx(bytes: Uint8Array): SalesCsvParseResult 
       raw
     });
 
-    if (!orderNo || !orderedAt || transactionType !== "PAY") {
+    if (!orderNo || !orderedAt || !["PAY", "CANCEL"].includes(transactionType)) {
       skippedRowCount += 1;
       return;
     }
 
-    const total = parseMoney(getValue(raw, rocketNowHeaderKeys.sales));
-    if (total <= 0) {
+    const parsedTotal = parseMoney(getValue(raw, rocketNowHeaderKeys.sales));
+    if ((transactionType === "PAY" && parsedTotal <= 0) || parsedTotal === 0) {
       skippedRowCount += 1;
       return;
     }
-    const tax = parseMoney(getValue(raw, rocketNowHeaderKeys.tax));
-    const discount = parseMoney(getValue(raw, rocketNowHeaderKeys.coupon));
+    const direction = transactionType === "CANCEL" ? -1 : 1;
+    const total = direction * Math.abs(parsedTotal);
+    const tax = direction * Math.abs(parseMoney(getValue(raw, rocketNowHeaderKeys.tax)));
+    const discount = direction * Math.abs(parseMoney(getValue(raw, rocketNowHeaderKeys.coupon)));
+    const subtotal = total - tax;
     const existing = groupedOrders.get(sourceExternalId);
 
     if (existing) {
-      existing.subtotal += Math.max(0, total - tax);
+      existing.subtotal += subtotal;
       existing.tax += tax;
       existing.discount += discount;
       existing.total += total;
+      existing.adjustment += transactionType === "CANCEL" ? total : 0;
       existing.rowCount += 1;
       existing.rawRows.push(raw);
-      if (orderedAt < existing.orderedAt) existing.orderedAt = orderedAt;
+      if (transactionType === "PAY" && (!existing.hasPay || orderedAt < existing.orderedAt)) {
+        existing.orderedAt = orderedAt;
+      }
+      if (transactionType === "CANCEL") {
+        existing.cancellationCount += 1;
+        if (!existing.lastCancelledAt || orderedAt > existing.lastCancelledAt) {
+          existing.lastCancelledAt = orderedAt;
+        }
+      }
+      existing.hasPay ||= transactionType === "PAY";
       return;
     }
 
@@ -462,17 +490,40 @@ export function parseRocketNowSalesXlsx(bytes: Uint8Array): SalesCsvParseResult 
       orderNo,
       storeName: getValue(raw, rocketNowHeaderKeys.storeName).trim(),
       orderedAt,
-      subtotal: Math.max(0, total - tax),
+      subtotal,
       tax,
       discount,
-      adjustment: 0,
+      adjustment: transactionType === "CANCEL" ? total : 0,
       total,
+      hasPay: transactionType === "PAY",
+      cancellationCount: transactionType === "CANCEL" ? 1 : 0,
+      lastCancelledAt: transactionType === "CANCEL" ? orderedAt : null,
       rowCount: 1,
       rawRows: [raw]
     });
   });
 
-  const orders = Array.from(groupedOrders.values()).sort((a, b) => a.orderedAt.getTime() - b.orderedAt.getTime());
+  const orders = Array.from(groupedOrders.values())
+    .map(({ hasPay: _hasPay, cancellationCount, lastCancelledAt, ...order }) => {
+      const isCancelled = order.total <= 0;
+      const total = Math.max(0, order.total);
+      const tax = Math.max(0, order.tax);
+      return {
+        ...order,
+        subtotal: Math.max(0, total - tax),
+        tax,
+        discount: Math.max(0, order.discount),
+        total,
+        status: isCancelled ? "cancelled" as const : "completed" as const,
+        paymentStatus: isCancelled
+          ? "refunded" as const
+          : cancellationCount > 0
+            ? "partial_refunded" as const
+            : "paid" as const,
+        cancelledAt: lastCancelledAt
+      };
+    })
+    .sort((a, b) => a.orderedAt.getTime() - b.orderedAt.getTime());
   if (orders.length === 0 && rawRows.length > 0) {
     throw new SalesCsvParserUpdateRequiredError(
       "Rocket Now Excelのヘッダーは検出できましたが、注文番号・取引日時・売上高を正しく解析できませんでした。Excel形式が変わっている可能性があるため、解析器の更新が必要です。"

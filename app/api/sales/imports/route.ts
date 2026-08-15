@@ -15,6 +15,20 @@ import {
 import { getSalesSourceDefinition } from "../../../../lib/sales-sources";
 
 const salesImportRoles = new Set(["owner", "manager"]);
+const maxSalesImportFileSizeBytes = 10 * 1024 * 1024;
+
+function validateSalesImportFile(file: File, sourcePlatform: string) {
+  if (file.size <= 0) return "空のファイルは取り込めません。";
+  if (file.size > maxSalesImportFileSizeBytes) return "売上ファイルは10MB以下にしてください。";
+
+  const fileName = file.name.toLowerCase();
+  if (sourcePlatform === "rocket_now") {
+    return fileName.endsWith(".xlsx") || fileName.endsWith(".xls")
+      ? null
+      : "Rocket Nowは販売データのExcelファイル（.xlsx / .xls）を選択してください。";
+  }
+  return fileName.endsWith(".csv") ? null : "CSVファイル（.csv）を選択してください。";
+}
 
 function decodeSalesCsv(bytes: Uint8Array, sourcePlatform: string) {
   if (sourcePlatform === "smaregi") {
@@ -218,6 +232,8 @@ export async function POST(request: Request) {
   if (!sourceDefinition?.importSupported) {
     return Response.json({ error: "この売上源の売上ファイル取込はまだ対応していません。" }, { status: 400 });
   }
+  const fileValidationError = validateSalesImportFile(file, sourcePlatform);
+  if (fileValidationError) return Response.json({ error: fileValidationError }, { status: 400 });
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const parsed = (() => {
@@ -364,6 +380,7 @@ export async function POST(request: Request) {
         ordered_at,
         paid_at,
         completed_at,
+        cancelled_at,
         subtotal,
         discount,
         tax,
@@ -379,11 +396,12 @@ export async function POST(request: Request) {
         ${String(source.sourceType || sourceDefinition?.sourceType || "delivery")},
         ${sourcePlatform},
         ${order.orderNo},
-        'completed',
-        'paid',
+        ${order.status ?? "completed"},
+        ${order.paymentStatus ?? "paid"},
         ${order.orderedAt.toISOString()},
         ${order.orderedAt.toISOString()},
-        ${order.orderedAt.toISOString()},
+        ${order.status === "cancelled" ? null : order.orderedAt.toISOString()},
+        ${order.cancelledAt?.toISOString() ?? null},
         ${order.subtotal},
         ${order.discount},
         ${order.tax},
@@ -411,6 +429,7 @@ export async function POST(request: Request) {
         ordered_at = excluded.ordered_at,
         paid_at = excluded.paid_at,
         completed_at = excluded.completed_at,
+        cancelled_at = excluded.cancelled_at,
         subtotal = excluded.subtotal,
         discount = excluded.discount,
         tax = excluded.tax,

@@ -253,6 +253,18 @@ function formatMoney(amount: number) {
   return new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 }).format(amount);
 }
 
+function getSalesImportFileAccept(sourcePlatform: string) {
+  return sourcePlatform === "rocket_now"
+    ? ".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+    : ".csv,text/csv";
+}
+
+function getSalesImportFileHint(sourcePlatform: string) {
+  return sourcePlatform === "rocket_now"
+    ? "Rocket Nowの販売データ Excel（.xlsx / .xls）を選択してください。キャンセル・一部返金も同じ注文に反映します。"
+    : "CSVファイル（.csv）を選択してください。";
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ja-JP", {
     timeZone: "Asia/Tokyo",
@@ -1151,11 +1163,12 @@ export default function SalesPage() {
                         {!selectedFile && deliveryPeriods.some((period) => !importedDeliveryPeriodMap.has(`${source.id}:${period.key}`)) ? (
                           <small className="sales-delivery-period-note">未取込の期間を選ぶ前に、下のファイル選択でCSV・Excelを選択してください。</small>
                         ) : null}
+                        <small className="sales-delivery-period-note">{getSalesImportFileHint(source.sourcePlatform)}</small>
                         {deliveryPeriods.length === 0 ? <small className="sales-delivery-period-note">対象月を選ぶと半月ごとの取込期間を表示します。</small> : null}
                         <div className="sales-source-upload-control">
                           <input
                             type="file"
-                            accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                            accept={getSalesImportFileAccept(source.sourcePlatform)}
                             disabled={!importState.canImport || Boolean(uploadingSourceId)}
                             onChange={(event) => {
                               const nextFile = event.target.files?.[0] ?? null;
@@ -1168,7 +1181,7 @@ export default function SalesPage() {
                       <div className="sales-source-upload-control">
                         <input
                           type="file"
-                          accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                          accept={getSalesImportFileAccept(source.sourcePlatform)}
                           disabled={!importState.canImport || Boolean(uploadingSourceId)}
                           onChange={(event) => {
                             const nextFile = event.target.files?.[0] ?? null;
