@@ -302,7 +302,14 @@ export async function GET(request: Request) {
         and status = 'pending'
         and available_at <= now()
         and attempts < 5
-      order by created_at
+      order by
+        case platform
+          when 'uber_eats' then 0
+          when 'rocket_now' then 1
+          when 'demae_can' then 2
+          else 3
+        end,
+        created_at
       for update skip locked
       limit 1
     )

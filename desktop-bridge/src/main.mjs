@@ -5,7 +5,10 @@ import { createAdapter } from "./adapters/index.mjs";
 import { BrowserSession } from "./browser-session.mjs";
 import { loadConfig } from "./config.mjs";
 import {
-  INVENTORY_COMMAND_MAX_ATTEMPTS,
+  DEMAE_CAN_CIRCUIT_FAILURE_THRESHOLD,
+  DEMAE_CAN_CIRCUIT_OPEN_MS,
+  inventoryCommandMaxAttempts,
+  isDemaeCanCircuitFailure,
   isRetryableInventoryError
 } from "./retry-policy.mjs";
 
@@ -25,6 +28,8 @@ if (requestedPlatform && !enabledPlatforms.length) {
 }
 const sessions = new Map();
 const adapters = new Map();
+let demaeCanConsecutiveTimeouts = 0;
+let demaeCanCircuitOpenUntil = 0;
 
 for (const platform of enabledPlatforms) {
   const session = new BrowserSession(config, platform);
@@ -73,13 +78,22 @@ async function executeInventoryCommand(command) {
   if (!adapter) throw new Error(`No enabled adapter for ${platform}`);
   const payload = command.payload && typeof command.payload === "object" ? command.payload : {};
   const targets = Array.isArray(payload.targets) ? payload.targets : [];
+  const manualRetry = Boolean(payload.manualRetryAt);
+  if (platform === "demae_can" && manualRetry) {
+    demaeCanConsecutiveTimeouts = 0;
+    demaeCanCircuitOpenUntil = 0;
+  }
+  if (platform === "demae_can" && Date.now() < demaeCanCircuitOpenUntil) {
+    throw new Error(`demae_can_circuit_open_until:${new Date(demaeCanCircuitOpenUntil).toISOString()}`);
+  }
+  const maxAttempts = inventoryCommandMaxAttempts(platform);
 
-  for (let attempt = 1; attempt <= INVENTORY_COMMAND_MAX_ATTEMPTS; attempt += 1) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       await reportProgress(command, {
         phase: "locating",
         attempt,
-        maxAttempts: INVENTORY_COMMAND_MAX_ATTEMPTS
+        maxAttempts
       });
       const located = await adapter.locateTargets(targets);
       const ambiguous = located.filter((item) => item.matches.length > 1);
@@ -98,9 +112,13 @@ async function executeInventoryCommand(command) {
       await reportProgress(command, {
         phase: "applying",
         attempt,
-        maxAttempts: INVENTORY_COMMAND_MAX_ATTEMPTS
+        maxAttempts
       });
       const result = await adapter.setInventory(payload, verified);
+      if (platform === "demae_can") {
+        demaeCanConsecutiveTimeouts = 0;
+        demaeCanCircuitOpenUntil = 0;
+      }
       return {
         ...result,
         matchedTargetCount: verified.length,
@@ -109,12 +127,20 @@ async function executeInventoryCommand(command) {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (attempt >= INVENTORY_COMMAND_MAX_ATTEMPTS || !isRetryableInventoryError(message)) throw error;
-      console.error(new Date().toISOString(), `${platform} retry ${attempt}/${INVENTORY_COMMAND_MAX_ATTEMPTS - 1}: ${message}`);
+      if (attempt >= maxAttempts || !isRetryableInventoryError(message)) {
+        if (platform === "demae_can" && isDemaeCanCircuitFailure(message)) {
+          demaeCanConsecutiveTimeouts += 1;
+          if (demaeCanConsecutiveTimeouts >= DEMAE_CAN_CIRCUIT_FAILURE_THRESHOLD) {
+            demaeCanCircuitOpenUntil = Date.now() + DEMAE_CAN_CIRCUIT_OPEN_MS;
+          }
+        }
+        throw error;
+      }
+      console.error(new Date().toISOString(), `${platform} retry ${attempt}/${maxAttempts - 1}: ${message}`);
       await reportProgress(command, {
         phase: "retrying",
         attempt: attempt + 1,
-        maxAttempts: INVENTORY_COMMAND_MAX_ATTEMPTS
+        maxAttempts
       }, message);
       await sessions.get(platform)?.disconnect();
       await delay(1500 * attempt);
@@ -165,6 +191,12 @@ let lastStatusAt = 0;
 for (;;) {
   let command = null;
   try {
+    command = await api.nextCommand();
+    if (command) {
+      const result = await executeInventoryCommand(command);
+      await api.acknowledge(command.id, "succeeded", result);
+      continue;
+    }
     if (Date.now() - lastStatusAt > 60000) {
       const checks = await inspectAll();
       const healthy = checks.every((item) => item.ok);
@@ -177,13 +209,7 @@ for (;;) {
       });
       lastStatusAt = Date.now();
     }
-    command = await api.nextCommand();
-    if (!command) {
-      await delay(config.pollIntervalMs);
-      continue;
-    }
-    const result = await executeInventoryCommand(command);
-    await api.acknowledge(command.id, "succeeded", result);
+    await delay(config.pollIntervalMs);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(new Date().toISOString(), message);

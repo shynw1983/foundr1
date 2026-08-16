@@ -42,6 +42,7 @@ export async function POST(request: Request) {
       claimed_at = null,
       claim_expires_at = null,
       completed_at = null,
+      payload = target.payload || jsonb_build_object('manualRetryAt', now()),
       result = ${JSON.stringify(progress)}::jsonb,
       last_error = '',
       updated_at = now()
