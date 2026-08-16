@@ -109,8 +109,8 @@ type StoreMenuOptionGroup = {
 const optionCategoryKey = "__store_menu_options__";
 type StockStatus = "available" | "low_stock" | "unavailable";
 type PlatformKey = "foundr1" | "uber_eats" | "rocket_now" | "demae_can";
-type PlatformOverride = "follow" | "available" | "unavailable";
-type PlatformAvailability = Partial<Record<PlatformKey, Exclude<PlatformOverride, "follow">>>;
+type PlatformOverride = "follow" | "available" | "unavailable" | "hidden";
+type PlatformAvailability = Partial<Record<PlatformKey, "available" | "unavailable">>;
 
 const salesPlatforms: Array<{ key: PlatformKey; label: string }> = [
   { key: "foundr1", label: "Web予約" },
@@ -139,7 +139,7 @@ function platformText(language: StoreMenuLanguage, platform: PlatformKey) {
 
 function effectiveAvailability(stockStatus: StockStatus, override: PlatformOverride) {
   if (override === "available") return true;
-  if (override === "unavailable") return false;
+  if (override === "unavailable" || override === "hidden") return false;
   return stockStatus !== "unavailable";
 }
 
@@ -386,7 +386,7 @@ export default function StoreMenuPage() {
     platforms?: Exclude<PlatformKey, "foundr1">[];
     platformStates?: Partial<Record<Exclude<PlatformKey, "foundr1">, boolean>>;
     overridePlatform?: PlatformKey;
-    overrideAvailability?: PlatformOverride;
+    overrideAvailability?: Exclude<PlatformOverride, "hidden">;
   }) {
     const { feedbackLabel, ...requestInput } = input;
     const response = await fetch("/api/store/display/kitchen/inventory", {
@@ -551,17 +551,47 @@ export default function StoreMenuPage() {
 
   async function savePlatformOverride(target: StoreMenuItem | StoreMenuOption, targetKind: "item" | "option", platform: PlatformKey, availability: PlatformOverride) {
     const previous = target.platformAvailability;
+    const previousWebsiteEnabled = targetKind === "item" ? (target as StoreMenuItem).websiteEnabled : undefined;
     const nextAvailability = { ...previous };
-    if (availability === "follow") delete nextAvailability[platform];
+    if (availability === "follow" || availability === "hidden") delete nextAvailability[platform];
     else nextAvailability[platform] = availability;
+    const nextWebsiteEnabled = platform === "foundr1" && targetKind === "item"
+      ? availability !== "hidden"
+      : previousWebsiteEnabled;
     const update = <T extends StoreMenuItem | StoreMenuOption>(entry: T) => entry.id === target.id
-      ? { ...entry, platformAvailability: nextAvailability }
+      ? {
+          ...entry,
+          platformAvailability: nextAvailability,
+          ...(targetKind === "item" && nextWebsiteEnabled !== undefined ? { websiteEnabled: nextWebsiteEnabled } : {})
+        }
       : entry;
     if (targetKind === "item") setItems((current) => current.map(update) as StoreMenuItem[]);
     else setOptions((current) => current.map(update) as StoreMenuOption[]);
     setSavingId(`${target.id}:${platform}`);
     setMessage("");
     try {
+      if (platform === "foundr1" && targetKind === "item") {
+        const item = target as StoreMenuItem;
+        const response = await fetch("/api/store/menu-settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            storeId: selectedStoreId,
+            menuCatalogItemId: item.id,
+            websiteEnabled: nextWebsiteEnabled,
+            isAvailable: item.isAvailable,
+            stockStatus: item.stockStatus,
+            statusNote: item.statusNote,
+            foundr1Availability: availability === "hidden" ? "follow" : availability
+          })
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+          throw new Error(String(body.error || "保存できませんでした。"));
+        }
+        return;
+      }
+      if (availability === "hidden") throw new Error("非表示はWeb予約の商品だけ設定できます。");
       const desiredAvailable = effectiveAvailability(target.stockStatus, availability);
       const result = await applyDeliveryAvailability({
         brandId: target.brandId,
@@ -584,7 +614,11 @@ export default function StoreMenuPage() {
       else setOptions((current) => current.map(applyLinked) as StoreMenuOption[]);
     } catch (error) {
       const rollback = <T extends StoreMenuItem | StoreMenuOption>(entry: T) => entry.id === target.id
-        ? { ...entry, platformAvailability: previous }
+        ? {
+            ...entry,
+            platformAvailability: previous,
+            ...(targetKind === "item" && previousWebsiteEnabled !== undefined ? { websiteEnabled: previousWebsiteEnabled } : {})
+          }
         : entry;
       if (targetKind === "item") setItems((current) => current.map(rollback) as StoreMenuItem[]);
       else setOptions((current) => current.map(rollback) as StoreMenuOption[]);
@@ -784,6 +818,7 @@ export default function StoreMenuPage() {
                       </div>
                       <PlatformAvailabilityPanel
                         target={item}
+                        targetKind="item"
                         language={language}
                         savingId={savingId}
                         onChange={(platform, availability) => savePlatformOverride(item, "item", platform, availability)}
@@ -914,6 +949,7 @@ function StoreOptionRow({
       </div>
       <PlatformAvailabilityPanel
         target={option}
+        targetKind="option"
         language={language}
         savingId={savingId}
         onChange={(platform, availability) => onPlatformChange(option, platform, availability)}
@@ -924,24 +960,36 @@ function StoreOptionRow({
 
 function PlatformAvailabilityPanel({
   target,
+  targetKind,
   language,
   savingId,
   onChange
 }: {
   target: StoreMenuItem | StoreMenuOption;
+  targetKind: "item" | "option";
   language: StoreMenuLanguage;
   savingId: string;
   onChange: (platform: PlatformKey, availability: PlatformOverride) => Promise<void>;
 }) {
-  const exceptions = salesPlatforms.filter((platform) => target.platformAvailability[platform.key]);
+  const valueForPlatform = (platform: PlatformKey): PlatformOverride => (
+    platform === "foundr1" && targetKind === "item" && (target as StoreMenuItem).websiteEnabled === false
+      ? "hidden"
+      : target.platformAvailability[platform] ?? "follow"
+  );
+  const exceptions = salesPlatforms.filter((platform) => valueForPlatform(platform.key) !== "follow");
+  const hiddenLabel = language === "ja" ? "非表示" : language === "zh-Hant" ? "隱藏" : "隐藏";
   const summary = exceptions.length
-    ? exceptions.map((platform) => `${platformText(language, platform.key)} ${target.platformAvailability[platform.key] === "available" ? statusText(language, "available") : statusText(language, "unavailable")}`).join("、")
+    ? exceptions.map((platform) => {
+        const value = valueForPlatform(platform.key);
+        const state = value === "hidden" ? hiddenLabel : value === "available" ? statusText(language, "available") : statusText(language, "unavailable");
+        return `${platformText(language, platform.key)} ${state}`;
+      }).join("、")
     : language === "ja" ? "全プラットフォームが全体設定に従う" : language === "zh-Hant" ? "所有平台跟隨整體設定" : "所有平台跟随整体设置";
   const labels = language === "ja"
-    ? { title: "プラットフォーム別設定", follow: "全体設定に従う", available: "販売", unavailable: "売切", help: "市場施策など、例外が必要なプラットフォームだけ変更してください。" }
+    ? { title: "プラットフォーム別設定", follow: "全体設定に従う", available: "販売", unavailable: "売切", hidden: "非表示", help: "市場施策など、例外が必要なプラットフォームだけ変更してください。Web予約の商品は非表示にもできます。" }
     : language === "zh-Hant"
-      ? { title: "各平台設定", follow: "跟隨整體", available: "銷售", unavailable: "缺貨", help: "只需調整有市場策略等例外的平台。" }
-      : { title: "各平台设置", follow: "跟随整体", available: "销售", unavailable: "缺货", help: "只有市场策略等例外平台需要单独修改。" };
+      ? { title: "各平台設定", follow: "跟隨整體", available: "銷售", unavailable: "缺貨", hidden: "隱藏", help: "只需調整有市場策略等例外的平台。網站預約商品也可以隱藏。" }
+      : { title: "各平台设置", follow: "跟随整体", available: "销售", unavailable: "缺货", hidden: "隐藏", help: "只有市场策略等例外平台需要单独修改。网站预约商品也可以隐藏。" };
   return (
     <details className="store-menu-platform-settings">
       <summary>
@@ -954,14 +1002,14 @@ function PlatformAvailabilityPanel({
       </summary>
       <div className="store-menu-platform-grid">
         {salesPlatforms.map((platform) => {
-          const value = target.platformAvailability[platform.key] ?? "follow";
+          const value = valueForPlatform(platform.key);
           const available = effectiveAvailability(target.stockStatus, value);
           return (
             <label key={platform.key}>
               <span>
                 <strong data-i18n-ignore>{platformText(language, platform.key)}</strong>
                 <small className={available ? "is-available" : "is-unavailable"} data-i18n-ignore>
-                  {available ? statusText(language, "available") : statusText(language, "unavailable")}
+                  {value === "hidden" ? labels.hidden : available ? statusText(language, "available") : statusText(language, "unavailable")}
                 </small>
               </span>
               <select
@@ -972,6 +1020,7 @@ function PlatformAvailabilityPanel({
                 <option value="follow" data-i18n-ignore>{labels.follow}</option>
                 <option value="available" data-i18n-ignore>{labels.available}</option>
                 <option value="unavailable" data-i18n-ignore>{labels.unavailable}</option>
+                {platform.key === "foundr1" && targetKind === "item" ? <option value="hidden" data-i18n-ignore>{labels.hidden}</option> : null}
               </select>
             </label>
           );

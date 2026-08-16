@@ -224,6 +224,9 @@ export async function PATCH(request: Request) {
     ? normalizeText(body.stockStatus)
     : body.isAvailable === false ? "unavailable" : "available";
   const isAvailable = stockStatus !== "unavailable";
+  const foundr1Availability = ["follow", "available", "unavailable"].includes(normalizeText(body.foundr1Availability))
+    ? normalizeText(body.foundr1Availability) as "follow" | "available" | "unavailable"
+    : "";
   if (!storeId || (kind === "option" ? !optionId : !itemId)) {
     return Response.json({ error: "店舗と対象を選択してください。" }, { status: 400 });
   }
@@ -342,6 +345,29 @@ export async function PATCH(request: Request) {
       stock_status as "stockStatus",
       status_note as "statusNote"
   `;
+
+  if (foundr1Availability === "follow") {
+    await sql`
+      delete from menu_platform_availability_settings
+      where store_id = ${storeId}
+        and target_kind = 'item'
+        and target_id = ${itemId}
+        and platform = 'foundr1'
+    `;
+  } else if (foundr1Availability) {
+    await sql`
+      insert into menu_platform_availability_settings (
+        brand_id, store_id, target_kind, target_id, platform, availability, updated_by, updated_at
+      ) values (
+        ${item.brandId}, ${storeId}, 'item', ${itemId}, 'foundr1', ${foundr1Availability}, ${session.id}, now()
+      )
+      on conflict (store_id, target_kind, target_id, platform)
+      do update set
+        availability = excluded.availability,
+        updated_by = excluded.updated_by,
+        updated_at = now()
+    `;
+  }
 
   await publishPublicMenuUpdatedEvent(storeId).catch(() => undefined);
   return Response.json({ ok: true, setting: rows[0] });
