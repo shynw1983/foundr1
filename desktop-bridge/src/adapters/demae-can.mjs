@@ -208,11 +208,37 @@ export class DemaeCanAdapter {
     return { platform: "demae_can", ...loginState(summary, "品切れ終売設定") };
   }
 
+  async refreshInventoryPage(page) {
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.waitForNetworkIdle({ idleTime: 500, timeout: 8000 }).catch(() => undefined);
+    await this.ensureAuthenticated(page);
+    await waitForInventoryRows(page);
+  }
+
+  async readInventoryRowsWithAuthRecovery(page, targets) {
+    let refreshed = false;
+    try {
+      await waitForInventoryRows(page);
+    } catch {
+      await this.refreshInventoryPage(page);
+      refreshed = true;
+    }
+
+    let located = await readRows(page, targets);
+    if (!refreshed && located.some((item) => item.matches.length === 0)) {
+      // Demae can leave the expired stockout page and its old DOM visible while
+      // showing only a small request-error notice. A hard reload is required to
+      // expose the login redirect, after which ensureAuthenticated can log in.
+      await this.refreshInventoryPage(page);
+      located = await readRows(page, targets);
+    }
+    return located;
+  }
+
   async locateTargets(targets) {
     const page = await this.session.goto(STOCKOUT_URL);
     await this.ensureAuthenticated(page);
-    await waitForInventoryRows(page);
-    return readRows(page, targets);
+    return this.readInventoryRowsWithAuthRecovery(page, targets);
   }
 
   async setInventory(payload, located) {
@@ -220,9 +246,15 @@ export class DemaeCanAdapter {
     await this.ensureAuthenticated(page);
     // locateTargets has just verified this same page. Reusing it is more reliable
     // than reloading Demae's slow inventory screen before every save.
-    await waitForInventoryRows(page);
     const desiredUnavailable = payload.isAvailable !== true;
-    const fresh = await readRows(page, located.map((item) => ({ label: item.label, aliases: item.names })));
+    const fresh = await this.readInventoryRowsWithAuthRecovery(
+      page,
+      located.map((item) => ({ label: item.label, aliases: item.names }))
+    );
+    const disappeared = fresh.filter((item) => item.matches.length === 0);
+    if (disappeared.length) {
+      throw new Error(`demae_can_target_disappeared:${disappeared.map((item) => item.label).join(",")}`);
+    }
     const changing = fresh.flatMap((item) => {
       const rowMatches = (item.matches[0]?.rowMatches ?? item.matches).filter((match) => desiredUnavailable
         ? match.permanentlyUnavailable !== true
