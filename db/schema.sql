@@ -2265,6 +2265,12 @@ create table if not exists menu_store_settings (
 alter table menu_store_settings add column if not exists table_order_enabled boolean not null default true;
 alter table menu_store_settings add column if not exists stock_status text not null default 'available';
 update menu_store_settings set stock_status = 'unavailable' where is_available = false and stock_status = 'available';
+update menu_store_settings set is_available = false where stock_status = 'unavailable' and is_available = true;
+alter table menu_store_settings drop constraint if exists menu_store_settings_availability_consistent;
+alter table menu_store_settings add constraint menu_store_settings_availability_consistent check (
+  stock_status in ('available', 'low_stock', 'unavailable')
+  and is_available = (stock_status <> 'unavailable')
+);
 
 create table if not exists menu_option_store_settings (
   id uuid primary key default gen_random_uuid(),
@@ -2282,6 +2288,12 @@ create table if not exists menu_option_store_settings (
 
 alter table menu_option_store_settings add column if not exists stock_status text not null default 'available';
 update menu_option_store_settings set stock_status = 'unavailable' where is_available = false and stock_status = 'available';
+update menu_option_store_settings set is_available = false where stock_status = 'unavailable' and is_available = true;
+alter table menu_option_store_settings drop constraint if exists menu_option_store_settings_availability_consistent;
+alter table menu_option_store_settings add constraint menu_option_store_settings_availability_consistent check (
+  stock_status in ('available', 'low_stock', 'unavailable')
+  and is_available = (stock_status <> 'unavailable')
+);
 
 create table if not exists menu_platform_availability_settings (
   id uuid primary key default gen_random_uuid(),

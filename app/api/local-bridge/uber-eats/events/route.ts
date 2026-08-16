@@ -449,12 +449,28 @@ async function syncInventoryUnavailable(storeId: string, payload: Record<string,
   if (target.kind === "option") {
     const settingRows = await sql`
       insert into menu_option_store_settings (
-        brand_id, store_id, menu_option_id, is_available, status_note, updated_at
+        brand_id, store_id, menu_option_id, is_available, stock_status, status_note, updated_at
       )
-      values (${target.brandId}, ${storeId}, ${target.id}, ${isAvailable}, ${statusNote}, now())
+      values (
+        ${target.brandId}, ${storeId}, ${target.id}, ${isAvailable},
+        ${isAvailable ? "available" : "unavailable"}, ${statusNote}, now()
+      )
       on conflict (store_id, menu_option_id)
-      do update set is_available = excluded.is_available, status_note = excluded.status_note, updated_at = now()
+      do update set
+        is_available = excluded.is_available,
+        stock_status = case
+          when excluded.is_available = false then 'unavailable'
+          when menu_option_store_settings.stock_status = 'low_stock' then 'low_stock'
+          else 'available'
+        end,
+        status_note = excluded.status_note,
+        updated_at = now()
       where menu_option_store_settings.is_available is distinct from excluded.is_available
+        or menu_option_store_settings.stock_status is distinct from case
+          when excluded.is_available = false then 'unavailable'
+          when menu_option_store_settings.stock_status = 'low_stock' then 'low_stock'
+          else 'available'
+        end
         or menu_option_store_settings.status_note is distinct from excluded.status_note
       returning id::text
     `;
@@ -462,12 +478,28 @@ async function syncInventoryUnavailable(storeId: string, payload: Record<string,
   } else {
     const settingRows = await sql`
       insert into menu_store_settings (
-        brand_id, store_id, menu_catalog_item_id, is_available, status_note, updated_at
+        brand_id, store_id, menu_catalog_item_id, is_available, stock_status, status_note, updated_at
       )
-      values (${target.brandId}, ${storeId}, ${target.id}, ${isAvailable}, ${statusNote}, now())
+      values (
+        ${target.brandId}, ${storeId}, ${target.id}, ${isAvailable},
+        ${isAvailable ? "available" : "unavailable"}, ${statusNote}, now()
+      )
       on conflict (store_id, menu_catalog_item_id)
-      do update set is_available = excluded.is_available, status_note = excluded.status_note, updated_at = now()
+      do update set
+        is_available = excluded.is_available,
+        stock_status = case
+          when excluded.is_available = false then 'unavailable'
+          when menu_store_settings.stock_status = 'low_stock' then 'low_stock'
+          else 'available'
+        end,
+        status_note = excluded.status_note,
+        updated_at = now()
       where menu_store_settings.is_available is distinct from excluded.is_available
+        or menu_store_settings.stock_status is distinct from case
+          when excluded.is_available = false then 'unavailable'
+          when menu_store_settings.stock_status = 'low_stock' then 'low_stock'
+          else 'available'
+        end
         or menu_store_settings.status_note is distinct from excluded.status_note
       returning id::text
     `;

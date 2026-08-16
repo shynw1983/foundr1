@@ -565,6 +565,8 @@ async function upsertStoreSetting(body: Record<string, unknown>, employeeId: str
 
   const priceOverride = parseOptionalNumber(body.priceOverride);
   const statusNote = String(body.statusNote ?? "").trim();
+  const isAvailable = body.isAvailable !== false;
+  const stockStatus = isAvailable ? "available" : "unavailable";
   const rows = await sql`
     insert into menu_store_settings (
       brand_id,
@@ -574,6 +576,7 @@ async function upsertStoreSetting(body: Record<string, unknown>, employeeId: str
       pos_enabled,
       delivery_enabled,
       is_available,
+      stock_status,
       price_override,
       status_note,
       updated_by,
@@ -586,7 +589,8 @@ async function upsertStoreSetting(body: Record<string, unknown>, employeeId: str
       ${body.websiteEnabled !== false},
       ${body.posEnabled !== false},
       ${body.deliveryEnabled === true},
-      ${body.isAvailable !== false},
+      ${isAvailable},
+      ${stockStatus},
       ${priceOverride},
       ${statusNote},
       ${employeeId},
@@ -599,6 +603,7 @@ async function upsertStoreSetting(body: Record<string, unknown>, employeeId: str
       pos_enabled = excluded.pos_enabled,
       delivery_enabled = excluded.delivery_enabled,
       is_available = excluded.is_available,
+      stock_status = excluded.stock_status,
       price_override = excluded.price_override,
       status_note = excluded.status_note,
       updated_by = excluded.updated_by,

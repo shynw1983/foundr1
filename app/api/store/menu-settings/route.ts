@@ -119,8 +119,14 @@ export async function GET(request: Request) {
         coalesce(menu_store_settings.website_enabled, true) as "websiteEnabled",
         coalesce(menu_store_settings.pos_enabled, true) as "posEnabled",
         coalesce(menu_store_settings.delivery_enabled, false) as "deliveryEnabled",
-        coalesce(menu_store_settings.is_available, true) as "isAvailable",
-        coalesce(menu_store_settings.stock_status, case when menu_store_settings.is_available = false then 'unavailable' else 'available' end) as "stockStatus",
+        case
+          when menu_store_settings.is_available = false or menu_store_settings.stock_status = 'unavailable' then false
+          else true
+        end as "isAvailable",
+        case
+          when menu_store_settings.is_available = false then 'unavailable'
+          else coalesce(menu_store_settings.stock_status, 'available')
+        end as "stockStatus",
         coalesce((
           select jsonb_object_agg(platform_settings.platform, platform_settings.availability)
           from menu_platform_availability_settings platform_settings
@@ -158,8 +164,14 @@ export async function GET(request: Request) {
         menu_options.name,
         coalesce(menu_options.display_names, '{}'::jsonb) as "displayNames",
         menu_options.price_delta::float as "priceDelta",
-        coalesce(menu_option_store_settings.is_available, true) as "isAvailable",
-        coalesce(menu_option_store_settings.stock_status, case when menu_option_store_settings.is_available = false then 'unavailable' else 'available' end) as "stockStatus",
+        case
+          when menu_option_store_settings.is_available = false or menu_option_store_settings.stock_status = 'unavailable' then false
+          else true
+        end as "isAvailable",
+        case
+          when menu_option_store_settings.is_available = false then 'unavailable'
+          else coalesce(menu_option_store_settings.stock_status, 'available')
+        end as "stockStatus",
         coalesce((
           select jsonb_object_agg(platform_settings.platform, platform_settings.availability)
           from menu_platform_availability_settings platform_settings
@@ -211,6 +223,7 @@ export async function PATCH(request: Request) {
   const stockStatus = ["available", "low_stock", "unavailable"].includes(normalizeText(body.stockStatus))
     ? normalizeText(body.stockStatus)
     : body.isAvailable === false ? "unavailable" : "available";
+  const isAvailable = stockStatus !== "unavailable";
   if (!storeId || (kind === "option" ? !optionId : !itemId)) {
     return Response.json({ error: "店舗と対象を選択してください。" }, { status: 400 });
   }
@@ -252,7 +265,7 @@ export async function PATCH(request: Request) {
         ${option.brandId},
         ${storeId},
         ${optionId},
-        ${body.isAvailable !== false},
+        ${isAvailable},
         ${stockStatus},
         ${normalizeText(body.statusNote)},
         ${session.id},
@@ -307,7 +320,7 @@ export async function PATCH(request: Request) {
       ${storeId},
       ${itemId},
       ${body.websiteEnabled !== false},
-      ${body.isAvailable !== false},
+      ${isAvailable},
       ${stockStatus},
       ${normalizeText(body.statusNote)},
       ${session.id},

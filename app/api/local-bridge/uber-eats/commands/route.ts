@@ -60,13 +60,14 @@ async function applyInventoryAuditResult(storeId: string, result: Record<string,
       where kind = 'option' and found = true
     )
     insert into menu_option_store_settings (
-      brand_id, store_id, menu_option_id, is_available, status_note, updated_at
+      brand_id, store_id, menu_option_id, is_available, stock_status, status_note, updated_at
     )
     select
       menu_option_groups.brand_id,
       ${storeId}::uuid,
       menu_options.id,
       audited."isAvailable",
+      case when audited."isAvailable" then 'available' else 'unavailable' end,
       'Uber Eats 手動完全チェック',
       now()
     from audited
@@ -78,6 +79,11 @@ async function applyInventoryAuditResult(storeId: string, result: Record<string,
     on conflict (store_id, menu_option_id)
     do update set
       is_available = excluded.is_available,
+      stock_status = case
+        when excluded.is_available = false then 'unavailable'
+        when menu_option_store_settings.stock_status = 'low_stock' then 'low_stock'
+        else 'available'
+      end,
       status_note = excluded.status_note,
       updated_at = now()
     returning id::text
@@ -95,13 +101,14 @@ async function applyInventoryAuditResult(storeId: string, result: Record<string,
       where kind = 'item' and found = true
     )
     insert into menu_store_settings (
-      brand_id, store_id, menu_catalog_item_id, is_available, status_note, updated_at
+      brand_id, store_id, menu_catalog_item_id, is_available, stock_status, status_note, updated_at
     )
     select
       menu_catalog_items.brand_id,
       ${storeId}::uuid,
       menu_catalog_items.id,
       audited."isAvailable",
+      case when audited."isAvailable" then 'available' else 'unavailable' end,
       'Uber Eats 手動完全チェック',
       now()
     from audited
@@ -112,6 +119,11 @@ async function applyInventoryAuditResult(storeId: string, result: Record<string,
     on conflict (store_id, menu_catalog_item_id)
     do update set
       is_available = excluded.is_available,
+      stock_status = case
+        when excluded.is_available = false then 'unavailable'
+        when menu_store_settings.stock_status = 'low_stock' then 'low_stock'
+        else 'available'
+      end,
       status_note = excluded.status_note,
       updated_at = now()
     returning id::text
