@@ -14,11 +14,16 @@ import {
   type UberInventoryTarget
 } from "./uber-inventory-targets";
 import { projectInventoryTargetsForPlatform } from "./inventory-platform-targets";
+import { loadDependentMenuItemTargets } from "./inventory-dependencies";
+
+type InventoryAvailabilityTarget = (UberInventoryItemTarget | UberInventoryTarget) & {
+  linkedByDependency?: boolean;
+};
 
 export type InventoryAvailabilityResolution = {
   inventoryKey: string;
   ingredientLabel: string;
-  targets: Array<UberInventoryItemTarget | UberInventoryTarget>;
+  targets: InventoryAvailabilityTarget[];
 };
 
 type InventoryPlatform = "uber_eats" | "rocket_now" | "demae_can";
@@ -30,6 +35,7 @@ export async function loadInventoryAvailabilityTargets(
   ingredientLabel: string,
   targetKind: "item" | "option"
 ): Promise<InventoryAvailabilityResolution> {
+  let resolution: InventoryAvailabilityResolution;
   if (targetKind === "item") {
     const rows = await sql`
       select
@@ -51,32 +57,42 @@ export async function loadInventoryAvailabilityTargets(
         and (${brandId} = '' or menu_catalog_items.brand_id::text = ${brandId})
       order by menu_catalog_items.sort_order
     `;
-    return resolveUberInventoryItemTarget(ingredientLabel, rows as UberInventoryItemRow[]);
+    resolution = resolveUberInventoryItemTarget(ingredientLabel, rows as UberInventoryItemRow[]);
+  } else {
+    const rows = await sql`
+      select
+        menu_options.id::text,
+        menu_option_groups.brand_id::text as "brandId",
+        menu_option_groups.group_key as "groupKey",
+        menu_options.option_key as "optionKey",
+        coalesce(menu_options.external_id, '') as "externalId",
+        menu_options.name,
+        menu_options.display_names as "displayNames",
+        coalesce(menu_option_store_settings.is_available, true) as "isAvailable"
+      from menu_options
+      join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
+      join store_brands
+        on store_brands.brand_id = menu_option_groups.brand_id
+        and store_brands.store_id::text = ${storeId}
+      left join menu_option_store_settings
+        on menu_option_store_settings.menu_option_id = menu_options.id
+        and menu_option_store_settings.store_id::text = ${storeId}
+      where menu_options.is_active = true
+        and menu_option_groups.is_active = true
+        and (${brandId} = '' or menu_option_groups.brand_id::text = ${brandId})
+      order by menu_option_groups.sort_order, menu_options.sort_order
+    `;
+    resolution = resolveUberInventoryTargets(ingredientLabel, rows as UberInventoryOptionRow[]);
   }
-  const rows = await sql`
-    select
-      menu_options.id::text,
-      menu_option_groups.brand_id::text as "brandId",
-      menu_option_groups.group_key as "groupKey",
-      menu_options.option_key as "optionKey",
-      coalesce(menu_options.external_id, '') as "externalId",
-      menu_options.name,
-      menu_options.display_names as "displayNames",
-      coalesce(menu_option_store_settings.is_available, true) as "isAvailable"
-    from menu_options
-    join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
-    join store_brands
-      on store_brands.brand_id = menu_option_groups.brand_id
-      and store_brands.store_id::text = ${storeId}
-    left join menu_option_store_settings
-      on menu_option_store_settings.menu_option_id = menu_options.id
-      and menu_option_store_settings.store_id::text = ${storeId}
-    where menu_options.is_active = true
-      and menu_option_groups.is_active = true
-      and (${brandId} = '' or menu_option_groups.brand_id::text = ${brandId})
-    order by menu_option_groups.sort_order, menu_options.sort_order
-  `;
-  return resolveUberInventoryTargets(ingredientLabel, rows as UberInventoryOptionRow[]);
+
+  if (!resolution.targets.length) return resolution;
+  const dependentItems = (await loadDependentMenuItemTargets({ storeId, brandId, ingredientLabel }))
+    .map((target) => ({ ...target, linkedByDependency: true }));
+  const targets = Array.from(new Map([
+    ...dependentItems,
+    ...resolution.targets
+  ].map((target) => [`${target.kind}:${target.targetId}`, target])).values());
+  return { ...resolution, targets };
 }
 
 export async function applyInventoryAvailability(input: {
@@ -102,42 +118,159 @@ export async function applyInventoryAvailability(input: {
   const feedbackLabel = input.feedbackLabel?.trim() || resolution.ingredientLabel;
   const stockStatus = input.stockStatus ?? (isAvailable ? "available" : "unavailable");
   const note = `${input.statusSource}: ${resolution.ingredientLabel}${isAvailable ? " 販売再開" : " 在庫切れ"}`;
-  for (const target of resolution.targets) {
-    if (input.persistOverall !== false && target.kind === "item") {
+  const effectiveAvailability = new Map<string, boolean>();
+  const targetRows = resolution.targets.map((target) => ({
+    target,
+    brandId: target.brandId,
+    targetKind: target.kind,
+    targetId: target.kind === "item" ? target.menuCatalogItemId : target.menuOptionId,
+    linked: target.linkedByDependency === true
+  }));
+  const persistRows = input.persistOverall === false
+    ? []
+    : targetRows.filter((row) => !(stockStatus === "low_stock" && row.linked));
+  const persistJson = JSON.stringify(persistRows.map(({ brandId, targetKind, targetId, linked }) => ({
+    brandId, targetKind, targetId, linked
+  })));
+
+  if (persistRows.length) {
+    if (!isAvailable && stockStatus === "unavailable") {
       await sql`
-        insert into menu_store_settings (
-          brand_id, store_id, menu_catalog_item_id, is_available, stock_status, status_note, updated_by, updated_at
+        with targets as (
+          select * from jsonb_to_recordset(${persistJson}::jsonb)
+            as x("brandId" text, "targetKind" text, "targetId" text, linked boolean)
         )
-        values (
-          ${target.brandId}, ${storeId}, ${target.menuCatalogItemId}, ${isAvailable}, ${stockStatus}, ${note}, ${input.updatedBy}, now()
+        insert into menu_inventory_availability_blocks (
+          store_id, brand_id, target_kind, target_id, inventory_key, source_label, updated_at
         )
-        on conflict (store_id, menu_catalog_item_id)
-        do update set
-          is_available = excluded.is_available,
-          stock_status = excluded.stock_status,
-          status_note = excluded.status_note,
-          updated_by = excluded.updated_by,
-          updated_at = now()
+        select
+          ${storeId}::uuid, targets."brandId"::uuid, targets."targetKind", targets."targetId"::uuid,
+          ${"manual-existing:"} || targets."targetId", '既存の手動欠品', now()
+        from targets
+        where targets.linked = true
+          and not exists (
+            select 1 from menu_inventory_availability_blocks blocks
+            where blocks.store_id::text = ${storeId}
+              and blocks.target_kind = targets."targetKind"
+              and blocks.target_id::text = targets."targetId"
+          )
+          and (
+            (targets."targetKind" = 'item' and exists (
+              select 1 from menu_store_settings settings
+              where settings.store_id::text = ${storeId}
+                and settings.menu_catalog_item_id::text = targets."targetId"
+                and settings.is_available = false
+            ))
+            or (targets."targetKind" = 'option' and exists (
+              select 1 from menu_option_store_settings settings
+              where settings.store_id::text = ${storeId}
+                and settings.menu_option_id::text = targets."targetId"
+                and settings.is_available = false
+            ))
+          )
+        on conflict do nothing
       `;
-    } else if (input.persistOverall !== false && target.kind === "option") {
       await sql`
-        insert into menu_option_store_settings (
-          brand_id, store_id, menu_option_id, is_available, stock_status, status_note, updated_by, updated_at
+        with targets as (
+          select * from jsonb_to_recordset(${persistJson}::jsonb)
+            as x("brandId" text, "targetKind" text, "targetId" text, linked boolean)
         )
-        values (
-          ${target.brandId}, ${storeId}, ${target.menuOptionId}, ${isAvailable}, ${stockStatus}, ${note}, ${input.updatedBy}, now()
+        insert into menu_inventory_availability_blocks (
+          store_id, brand_id, target_kind, target_id, inventory_key, source_label, updated_at
         )
-        on conflict (store_id, menu_option_id)
-        do update set
-          is_available = excluded.is_available,
-          stock_status = excluded.stock_status,
-          status_note = excluded.status_note,
-          updated_by = excluded.updated_by,
-          updated_at = now()
+        select
+          ${storeId}::uuid, targets."brandId"::uuid, targets."targetKind", targets."targetId"::uuid,
+          ${resolution.inventoryKey}, ${resolution.ingredientLabel}, now()
+        from targets
+        on conflict (store_id, target_kind, target_id, inventory_key)
+        do update set source_label = excluded.source_label, updated_at = now()
+      `;
+    } else {
+      await sql`
+        with targets as (
+          select * from jsonb_to_recordset(${persistJson}::jsonb)
+            as x("brandId" text, "targetKind" text, "targetId" text, linked boolean)
+        )
+        delete from menu_inventory_availability_blocks blocks
+        using targets
+        where blocks.store_id::text = ${storeId}
+          and blocks.target_kind = targets."targetKind"
+          and blocks.target_id::text = targets."targetId"
+          and (
+            blocks.inventory_key = ${resolution.inventoryKey}
+            or (targets.linked = false and blocks.inventory_key like 'manual-existing:%')
+          )
       `;
     }
+    const blockedRows = await sql`
+      with targets as (
+        select * from jsonb_to_recordset(${persistJson}::jsonb)
+          as x("brandId" text, "targetKind" text, "targetId" text, linked boolean)
+      )
+      select targets."targetKind" as "targetKind", targets."targetId" as "targetId"
+      from targets
+      where exists (
+        select 1 from menu_inventory_availability_blocks blocks
+        where blocks.store_id::text = ${storeId}
+          and blocks.target_kind = targets."targetKind"
+          and blocks.target_id::text = targets."targetId"
+      )
+    `;
+    const blocked = new Set(blockedRows.map((row) => `${row.targetKind}:${row.targetId}`));
+    for (const row of targetRows) {
+      effectiveAvailability.set(`${row.targetKind}:${row.targetId}`, persistRows.includes(row)
+        ? !blocked.has(`${row.targetKind}:${row.targetId}`)
+        : isAvailable);
+    }
+    const settingsRows = persistRows.map((row) => {
+      const available = effectiveAvailability.get(`${row.targetKind}:${row.targetId}`) !== false;
+      return {
+        brandId: row.brandId,
+        targetId: row.targetId,
+        isAvailable: available,
+        stockStatus: available
+          ? (stockStatus === "low_stock" && !row.linked ? "low_stock" : "available")
+          : "unavailable"
+      };
+    });
+    const itemSettings = JSON.stringify(settingsRows.filter((_, index) => persistRows[index]?.targetKind === "item"));
+    const optionSettings = JSON.stringify(settingsRows.filter((_, index) => persistRows[index]?.targetKind === "option"));
+    if (itemSettings !== "[]") await sql`
+      with settings as (
+        select * from jsonb_to_recordset(${itemSettings}::jsonb)
+          as x("brandId" text, "targetId" text, "isAvailable" boolean, "stockStatus" text)
+      )
+      insert into menu_store_settings (
+        brand_id, store_id, menu_catalog_item_id, is_available, stock_status, status_note, updated_by, updated_at
+      )
+      select settings."brandId"::uuid, ${storeId}::uuid, settings."targetId"::uuid,
+        settings."isAvailable", settings."stockStatus", ${note}, ${input.updatedBy}::uuid, now()
+      from settings
+      on conflict (store_id, menu_catalog_item_id)
+      do update set is_available = excluded.is_available, stock_status = excluded.stock_status,
+        status_note = excluded.status_note, updated_by = excluded.updated_by, updated_at = now()
+    `;
+    if (optionSettings !== "[]") await sql`
+      with settings as (
+        select * from jsonb_to_recordset(${optionSettings}::jsonb)
+          as x("brandId" text, "targetId" text, "isAvailable" boolean, "stockStatus" text)
+      )
+      insert into menu_option_store_settings (
+        brand_id, store_id, menu_option_id, is_available, stock_status, status_note, updated_by, updated_at
+      )
+      select settings."brandId"::uuid, ${storeId}::uuid, settings."targetId"::uuid,
+        settings."isAvailable", settings."stockStatus", ${note}, ${input.updatedBy}::uuid, now()
+      from settings
+      on conflict (store_id, menu_option_id)
+      do update set is_available = excluded.is_available, stock_status = excluded.stock_status,
+        status_note = excluded.status_note, updated_by = excluded.updated_by, updated_at = now()
+    `;
+  } else {
+    for (const row of targetRows) effectiveAvailability.set(`${row.targetKind}:${row.targetId}`, isAvailable);
+  }
+
+  for (const { target, targetId } of targetRows) {
     if (input.platformOverride) {
-      const targetId = target.kind === "item" ? target.menuCatalogItemId : target.menuOptionId;
       if (input.platformOverride.platform === "foundr1") {
         if (target.kind === "item") {
           await sql`
@@ -197,27 +330,10 @@ export async function applyInventoryAvailability(input: {
   }
   const commandRows: Array<{ id: string; platform: string; status: "pending" | "succeeded"; error: string }> = [];
   for (const platform of configuredPlatforms) {
-    const platformIsAvailable = input.platformStates?.[platform as InventoryPlatform] ?? isAvailable;
-    const platformCommandId = randomUUID();
-    const operation = platform === "rocket_now"
-      ? (platformIsAvailable ? "unhide" : "hide")
-      : platform === "demae_can"
-        ? (platformIsAvailable ? "available" : "stockout")
-        : (platformIsAvailable ? "available" : "sold_out");
     const projectedTargets = projectInventoryTargetsForPlatform(
       platform as "uber_eats" | "rocket_now" | "demae_can",
       resolution.targets
     );
-    const serializedTargets = projectedTargets.map((target) => ({
-      kind: target.kind,
-      targetId: target.targetId,
-      groupKey: target.kind === "option" ? target.groupKey : "",
-      label: target.label,
-      aliases: target.aliases
-    }));
-    const commandTargets = platform === "rocket_now" || platform === "demae_can"
-      ? Array.from(new Map(serializedTargets.map((target) => [target.label.trim(), target])).values())
-      : serializedTargets;
     await sql`
       update local_bridge_commands
       set
@@ -235,54 +351,76 @@ export async function applyInventoryAvailability(input: {
         and status = 'pending'
         and payload->>'inventoryKey' = ${resolution.inventoryKey}
     `;
-    const idempotencyKey = `${platform}:set_inventory:${storeId}:${resolution.inventoryKey}:${operation}:${platformCommandId}`;
-    const payload = JSON.stringify({
-      inventoryKey: resolution.inventoryKey,
-      ingredientLabel: resolution.ingredientLabel,
-      syncRunId,
-      syncSource,
-      feedbackLabel,
-      isAvailable: platformIsAvailable,
-      operation,
-      soldOutMode: "indefinite",
-      targets: commandTargets
-    });
-    if (!commandTargets.length) {
-      await sql`
+    const requestedAvailable = input.platformStates?.[platform as InventoryPlatform] ?? isAvailable;
+    const groups = new Map<string, typeof projectedTargets>();
+    for (const target of projectedTargets) {
+      const effective = effectiveAvailability.get(`${target.kind}:${target.targetId}`) ?? isAvailable;
+      const desiredAvailable = input.persistOverall === false
+        ? requestedAvailable
+        : requestedAvailable && effective;
+      const kindGroup = platform === "rocket_now" ? target.kind : "all";
+      const key = `${desiredAvailable ? "available" : "unavailable"}:${kindGroup}`;
+      groups.set(key, [...(groups.get(key) ?? []), target]);
+    }
+    if (!groups.size) groups.set(`${requestedAvailable ? "available" : "unavailable"}:all`, []);
+
+    for (const [groupKey, groupedTargets] of groups) {
+      const desiredAvailable = groupKey.startsWith("available:");
+      const platformCommandId = randomUUID();
+      const operation = platform === "rocket_now"
+        ? (desiredAvailable ? "unhide" : "hide")
+        : platform === "demae_can"
+          ? (desiredAvailable ? "available" : "stockout")
+          : (desiredAvailable ? "available" : "sold_out");
+      const serializedTargets = groupedTargets.map((target) => ({
+        kind: target.kind,
+        targetId: target.targetId,
+        groupKey: target.kind === "option" ? target.groupKey : "",
+        label: target.label,
+        aliases: target.aliases
+      }));
+      const commandTargets = platform === "rocket_now" || platform === "demae_can"
+        ? Array.from(new Map(serializedTargets.map((target) => [target.label.trim(), target])).values())
+        : serializedTargets;
+      const idempotencyKey = `${platform}:set_inventory:${storeId}:${resolution.inventoryKey}:${operation}:${groupKey}:${platformCommandId}`;
+      const payload = JSON.stringify({
+        inventoryKey: resolution.inventoryKey,
+        ingredientLabel: resolution.ingredientLabel,
+        syncRunId,
+        syncSource,
+        feedbackLabel,
+        isAvailable: desiredAvailable,
+        operation,
+        soldOutMode: "indefinite",
+        targets: commandTargets
+      });
+      if (!commandTargets.length) {
+        await sql`
+          insert into local_bridge_commands (
+            id, store_id, platform, command_type, idempotency_key, payload,
+            status, completed_at, result, updated_at
+          )
+          values (
+            ${platformCommandId}, ${storeId}, ${platform}, 'set_inventory_availability',
+            ${idempotencyKey}, ${payload}::jsonb, 'succeeded', now(),
+            ${JSON.stringify({ outcome: "not_applicable", changed: 0 })}::jsonb, now()
+          )
+        `;
+        commandRows.push({ id: platformCommandId, platform, status: "succeeded", error: "该平台未上架（不适用）" });
+        continue;
+      }
+      const rows = await sql`
         insert into local_bridge_commands (
-          id, store_id, platform, command_type, idempotency_key, payload,
-          status, completed_at, result, updated_at
+          id, store_id, platform, command_type, idempotency_key, payload
         )
         values (
           ${platformCommandId}, ${storeId}, ${platform}, 'set_inventory_availability',
-          ${idempotencyKey}, ${payload}::jsonb, 'succeeded', now(),
-          ${JSON.stringify({ outcome: "not_applicable", changed: 0 })}::jsonb, now()
+          ${idempotencyKey}, ${payload}::jsonb
         )
+        returning id::text
       `;
-      commandRows.push({
-        id: platformCommandId,
-        platform,
-        status: "succeeded",
-        error: "该平台未上架（不适用）"
-      });
-      continue;
+      commandRows.push({ id: String(rows[0]?.id ?? platformCommandId), platform, status: "pending", error: "" });
     }
-    const rows = await sql`
-      insert into local_bridge_commands (
-        id, store_id, platform, command_type, idempotency_key, payload
-      )
-      values (
-        ${platformCommandId}, ${storeId}, ${platform}, 'set_inventory_availability',
-        ${idempotencyKey}, ${payload}::jsonb
-      )
-      returning id::text
-    `;
-    commandRows.push({
-      id: String(rows[0]?.id ?? platformCommandId),
-      platform,
-      status: "pending",
-      error: ""
-    });
   }
   const syncRun = {
     id: syncRunId,
@@ -303,5 +441,16 @@ export async function applyInventoryAvailability(input: {
   await publishBridgeCommandAvailable(storeId).catch(() => undefined);
   await publishBridgeInventorySyncStarted(storeId, syncRun).catch(() => undefined);
   await publishPublicMenuUpdatedEvent(storeId).catch(() => undefined);
-  return { commands: commandRows, note, syncRun };
+  return {
+    commands: commandRows,
+    note,
+    syncRun,
+    targetStates: resolution.targets
+      .filter((target) => !(stockStatus === "low_stock" && target.linkedByDependency === true))
+      .map((target) => ({
+        targetId: target.targetId,
+        kind: target.kind,
+        isAvailable: effectiveAvailability.get(`${target.kind}:${target.targetId}`) ?? isAvailable
+      }))
+  };
 }

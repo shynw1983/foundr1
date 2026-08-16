@@ -329,6 +329,7 @@ export async function POST(request: Request) {
     commandId: applied.commands[0]?.id ?? "",
     commands: applied.commands,
     syncRun: applied.syncRun,
+    targetStates: applied.targetStates,
     isAvailable,
     ...resolved
   });

@@ -2297,6 +2297,22 @@ create table if not exists menu_platform_availability_settings (
   unique (store_id, target_kind, target_id, platform)
 );
 
+-- Availability dependencies are authored by the shared procedure/BOM sources.
+-- This table stores only the current blockers, so restoring one ingredient
+-- cannot accidentally restore a menu target that is still blocked by another.
+create table if not exists menu_inventory_availability_blocks (
+  store_id uuid not null references stores(id) on delete cascade,
+  brand_id uuid not null references brands(id) on delete cascade,
+  target_kind text not null,
+  target_id uuid not null,
+  inventory_key text not null,
+  source_label text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (store_id, target_kind, target_id, inventory_key),
+  check (target_kind in ('item', 'option'))
+);
+
 create table if not exists menu_external_platforms (
   id uuid primary key default gen_random_uuid(),
   brand_id uuid not null references brands(id) on delete cascade,
@@ -3913,6 +3929,8 @@ create index if not exists idx_menu_option_store_settings_brand_store on menu_op
 create index if not exists idx_menu_store_settings_low_stock on menu_store_settings(store_id, stock_status) where stock_status = 'low_stock';
 create index if not exists idx_menu_option_store_settings_low_stock on menu_option_store_settings(store_id, stock_status) where stock_status = 'low_stock';
 create index if not exists idx_menu_platform_availability_target on menu_platform_availability_settings(store_id, target_kind, target_id);
+create index if not exists idx_menu_inventory_blocks_target on menu_inventory_availability_blocks(store_id, target_kind, target_id);
+create index if not exists idx_menu_inventory_blocks_key on menu_inventory_availability_blocks(store_id, inventory_key);
 create index if not exists idx_menu_external_platforms_brand_store on menu_external_platforms(brand_id, store_id, is_active);
 create unique index if not exists idx_menu_external_platforms_unique_scope
   on menu_external_platforms (

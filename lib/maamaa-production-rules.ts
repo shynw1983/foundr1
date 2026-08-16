@@ -43,6 +43,7 @@ export type MaamaaSetItem = {
   quantity?: string;
   unit?: string;
   note?: string;
+  affectsAvailability?: boolean;
 };
 
 export type MaamaaSetRule = {
@@ -803,7 +804,8 @@ function normalizeSetItem(value: unknown): MaamaaSetItem | null {
     productSubcategory: String(source.productSubcategory ?? "").trim() || undefined,
     quantity: String(source.quantity ?? "").trim() || undefined,
     unit: String(source.unit ?? "").trim() || undefined,
-    note: String(source.note ?? "").trim() || undefined
+    note: String(source.note ?? "").trim() || undefined,
+    affectsAvailability: source.affectsAvailability !== false
   };
 }
 

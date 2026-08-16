@@ -407,10 +407,18 @@ export default function StoreMenuPage() {
         target && typeof target === "object" ? String((target as Record<string, unknown>).targetId ?? "") : ""
       )).filter(Boolean)
     );
+    const targetStates = new Map<string, { kind: "item" | "option"; isAvailable: boolean }>();
+    for (const value of Array.isArray(body.targetStates) ? body.targetStates : []) {
+      if (!value || typeof value !== "object") continue;
+      const state = value as Record<string, unknown>;
+      const targetId = String(state.targetId ?? "");
+      const kind = state.kind === "item" ? "item" : state.kind === "option" ? "option" : null;
+      if (targetId && kind) targetStates.set(targetId, { kind, isAvailable: state.isAvailable === true });
+    }
     if (body.syncRun && typeof body.syncRun === "object") {
       announceStoreInventorySync(body.syncRun as StoreInventorySyncRun);
     }
-    return { targetIds };
+    return { targetIds, targetStates };
   }
 
   async function saveItem(item: StoreMenuItem, patch: Partial<StoreMenuItem>) {
@@ -434,11 +442,23 @@ export default function StoreMenuPage() {
           platforms: patch.stockStatus === "low_stock" ? [] : Object.keys(platformStates) as Exclude<PlatformKey, "foundr1">[],
           platformStates
         });
-        setItems((current) => current.map((entry) => (
-          entry.id === item.id || result.targetIds.has(entry.id)
-            ? { ...entry, isAvailable, stockStatus: patch.stockStatus as StockStatus }
-            : entry
-        )));
+        setItems((current) => current.map((entry) => {
+          const state = result.targetStates.get(entry.id);
+          if (!state || state.kind !== "item") return entry;
+          return {
+            ...entry,
+            isAvailable: state.isAvailable,
+            stockStatus: entry.id === item.id
+              ? patch.stockStatus as StockStatus
+              : state.isAvailable ? "available" : "unavailable"
+          };
+        }));
+        setOptions((current) => current.map((entry) => {
+          const state = result.targetStates.get(entry.id);
+          return state?.kind === "option"
+            ? { ...entry, isAvailable: state.isAvailable, stockStatus: state.isAvailable ? "available" : "unavailable" }
+            : entry;
+        }));
         return;
       }
       const response = await fetch("/api/store/menu-settings", {
@@ -486,11 +506,23 @@ export default function StoreMenuPage() {
           platforms: patch.stockStatus === "low_stock" ? [] : Object.keys(platformStates) as Exclude<PlatformKey, "foundr1">[],
           platformStates
         });
-        setOptions((current) => current.map((entry) => (
-          entry.id === option.id || result.targetIds.has(entry.id)
-            ? { ...entry, isAvailable, stockStatus: patch.stockStatus as StockStatus }
-            : entry
-        )));
+        setOptions((current) => current.map((entry) => {
+          const state = result.targetStates.get(entry.id);
+          if (!state || state.kind !== "option") return entry;
+          return {
+            ...entry,
+            isAvailable: state.isAvailable,
+            stockStatus: entry.id === option.id
+              ? patch.stockStatus as StockStatus
+              : state.isAvailable ? "available" : "unavailable"
+          };
+        }));
+        setItems((current) => current.map((entry) => {
+          const state = result.targetStates.get(entry.id);
+          return state?.kind === "item"
+            ? { ...entry, isAvailable: state.isAvailable, stockStatus: state.isAvailable ? "available" : "unavailable" }
+            : entry;
+        }));
         return;
       }
       const response = await fetch("/api/store/menu-settings", {
