@@ -14,7 +14,7 @@ import {
   type UberInventoryTarget
 } from "./uber-inventory-targets";
 import { projectInventoryTargetsForPlatform } from "./inventory-platform-targets";
-import { loadDependentMenuItemTargets } from "./inventory-dependencies";
+import { loadLinkedMenuTargets } from "./menu-availability-links";
 
 type InventoryAvailabilityTarget = (UberInventoryItemTarget | UberInventoryTarget) & {
   linkedByDependency?: boolean;
@@ -86,7 +86,7 @@ export async function loadInventoryAvailabilityTargets(
   }
 
   if (!resolution.targets.length) return resolution;
-  const dependentItems = (await loadDependentMenuItemTargets({ storeId, brandId, ingredientLabel }))
+  const dependentItems = (await loadLinkedMenuTargets({ storeId, brandId, sourceTargets: resolution.targets }))
     .map((target) => ({ ...target, linkedByDependency: true }));
   const targets = Array.from(new Map([
     ...dependentItems,

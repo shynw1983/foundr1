@@ -35,7 +35,6 @@ type ProcedureActionPayload = {
   unit?: string;
   targetText?: string;
   standardText?: string;
-  affectsAvailability?: boolean;
   note?: string;
 };
 
@@ -227,7 +226,6 @@ async function readProcedures(session: EmployeeSession, mode: string) {
           coalesce(procedure_step_actions.target_text, '') as "targetText",
           coalesce(procedure_step_actions.standard_text, '') as "standardText",
           procedure_step_actions.condition_json as "conditionJson",
-          procedure_step_actions.affects_availability as "affectsAvailability",
           coalesce(procedure_step_actions.note, '') as note,
           procedure_step_actions.sort_order as "sortOrder"
         from procedure_step_actions
@@ -752,7 +750,6 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
           target_text,
           standard_text,
           condition_json,
-          affects_availability,
           note,
           sort_order
         )
@@ -772,7 +769,6 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
           ${String(action.targetText ?? "").trim()},
           ${String(action.standardText ?? "").trim()},
           ${conditionJson}::jsonb,
-          ${action.affectsAvailability === true},
           ${String(action.note ?? "").trim()},
           ${actionIndex}
         )

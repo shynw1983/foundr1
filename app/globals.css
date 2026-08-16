@@ -9397,6 +9397,92 @@ body :where(
   margin-top: 12px;
 }
 
+.menu-availability-link-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.menu-availability-link-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr) auto auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.menu-availability-link-form > label:not(.menu-inline-check) {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.menu-availability-link-form > label > span:first-child {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.menu-availability-link-arrow {
+  display: grid;
+  place-items: center;
+  min-height: 42px;
+  color: var(--green);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.menu-availability-link-list {
+  display: grid;
+  gap: 8px;
+}
+
+.menu-availability-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfc;
+  padding: 10px;
+}
+
+.menu-availability-link-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.menu-availability-link-row > b {
+  color: var(--green);
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .menu-availability-link-form {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+
+  .menu-availability-link-form .menu-inline-check,
+  .menu-availability-link-form > button {
+    grid-column: auto / span 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .menu-availability-link-form,
+  .menu-availability-link-row {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-availability-link-arrow,
+  .menu-availability-link-row > b {
+    min-height: 0;
+    justify-self: start;
+    transform: rotate(90deg);
+  }
+}
+
 .menu-publish-preview {
   display: grid;
   gap: 12px;

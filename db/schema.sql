@@ -2309,9 +2309,26 @@ create table if not exists menu_platform_availability_settings (
   unique (store_id, target_kind, target_id, platform)
 );
 
--- Availability dependencies are authored by the shared procedure/BOM sources.
--- This table stores only the current blockers, so restoring one ingredient
+-- Availability links are authored explicitly between menu items/options.
+-- This table stores the current blockers, so restoring one menu target
 -- cannot accidentally restore a menu target that is still blocked by another.
+create table if not exists menu_availability_links (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid not null references brands(id) on delete cascade,
+  source_kind text not null,
+  source_id uuid not null,
+  dependent_kind text not null,
+  dependent_id uuid not null,
+  is_bidirectional boolean not null default false,
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (source_kind, source_id, dependent_kind, dependent_id),
+  check (source_kind in ('item', 'option')),
+  check (dependent_kind in ('item', 'option')),
+  check (source_kind <> dependent_kind or source_id <> dependent_id)
+);
+
 create table if not exists menu_inventory_availability_blocks (
   store_id uuid not null references stores(id) on delete cascade,
   brand_id uuid not null references brands(id) on delete cascade,
@@ -3441,7 +3458,6 @@ create table if not exists procedure_step_actions (
   target_text text,
   standard_text text,
   condition_json jsonb not null default '{}'::jsonb,
-  affects_availability boolean not null default false,
   note text,
   sort_order integer not null default 0
 );
@@ -3450,7 +3466,6 @@ alter table procedure_step_actions add column if not exists material_id uuid ref
 alter table procedure_step_actions add column if not exists equipment_product_id uuid references products(id) on delete restrict;
 alter table procedure_step_actions add column if not exists container_product_id uuid references products(id) on delete restrict;
 alter table procedure_step_actions add column if not exists condition_json jsonb not null default '{}'::jsonb;
-alter table procedure_step_actions add column if not exists affects_availability boolean not null default false;
 
 insert into procedure_materials (name, material_type, category, subcategory, unit, note, sort_order)
 values
@@ -3945,6 +3960,7 @@ create index if not exists idx_menu_option_store_settings_low_stock on menu_opti
 create index if not exists idx_menu_platform_availability_target on menu_platform_availability_settings(store_id, target_kind, target_id);
 create index if not exists idx_menu_inventory_blocks_target on menu_inventory_availability_blocks(store_id, target_kind, target_id);
 create index if not exists idx_menu_inventory_blocks_key on menu_inventory_availability_blocks(store_id, inventory_key);
+create index if not exists idx_menu_availability_links_source on menu_availability_links(brand_id, source_kind, source_id);
 create index if not exists idx_menu_external_platforms_brand_store on menu_external_platforms(brand_id, store_id, is_active);
 create unique index if not exists idx_menu_external_platforms_unique_scope
   on menu_external_platforms (

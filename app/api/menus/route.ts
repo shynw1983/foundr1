@@ -283,7 +283,7 @@ async function readMenuAdminData() {
 
   await ensureDefaultExternalPlatforms(brands.map((brand) => String(brand.id)));
 
-  const [externalPlatforms, syncTasks] = await Promise.all([
+  const [externalPlatforms, syncTasks, availabilityLinks] = await Promise.all([
     sql`
       select
         id::text,
@@ -326,10 +326,22 @@ async function readMenuAdminData() {
         case when menu_change_sync_tasks.status = 'pending' then 0 else 1 end,
         menu_change_sync_tasks.created_at desc
       limit 200
+    `,
+    sql`
+      select
+        id::text,
+        brand_id::text as "brandId",
+        source_kind as "sourceKind",
+        source_id::text as "sourceId",
+        dependent_kind as "dependentKind",
+        dependent_id::text as "dependentId",
+        is_bidirectional as "isBidirectional"
+      from menu_availability_links
+      order by created_at, id
     `
   ]);
 
-  return { brands, stores, sources, categories, items, groups, options, storeSettings, itemOptionGroups, externalPlatforms, syncTasks };
+  return { brands, stores, sources, categories, items, groups, options, storeSettings, itemOptionGroups, externalPlatforms, syncTasks, availabilityLinks };
 }
 
 export async function GET() {
@@ -361,8 +373,9 @@ export async function POST(request: Request) {
     else if (kind === "sortOrder") result = await updateSortOrder(body, session.id);
     else if (kind === "externalPlatform") result = await upsertExternalPlatform(body);
     else if (kind === "completeSyncTask") result = await completeSyncTask(body, session.id);
+    else if (kind === "availabilityLink") result = await upsertAvailabilityLink(body, session.id);
     else return Response.json({ error: "保存対象が不正です。" }, { status: 400 });
-    if (!["externalPlatform", "completeSyncTask"].includes(kind)) publishAllPublicMenuUpdatesAfterResponse();
+    if (!["externalPlatform", "completeSyncTask", "availabilityLink"].includes(kind)) publishAllPublicMenuUpdatesAfterResponse();
     return Response.json(result);
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "保存できませんでした。" }, { status: 400 });
@@ -385,9 +398,10 @@ export async function DELETE(request: Request) {
   else if (body.kind === "group") await deleteGroup(id, session.id);
   else if (body.kind === "option") await deleteOption(id, session.id);
   else if (body.kind === "storeSetting") await sql`delete from menu_store_settings where id = ${id}`;
+  else if (body.kind === "availabilityLink") await sql`delete from menu_availability_links where id = ${id}`;
   else return Response.json({ error: "削除対象が不正です。" }, { status: 400 });
 
-  publishAllPublicMenuUpdatesAfterResponse();
+  if (body.kind !== "availabilityLink") publishAllPublicMenuUpdatesAfterResponse();
   return Response.json({ ok: true });
 }
 
@@ -553,6 +567,59 @@ async function completeSyncTask(body: Record<string, unknown>, employeeId: strin
   `;
 
   return { ok: true, id };
+}
+
+async function getMenuTargetBrandId(kind: string, id: string) {
+  const rows = kind === "item"
+    ? await sql`select brand_id::text as "brandId" from menu_catalog_items where id::text = ${id} limit 1`
+    : kind === "option"
+      ? await sql`
+          select menu_option_groups.brand_id::text as "brandId"
+          from menu_options
+          join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
+          where menu_options.id::text = ${id}
+          limit 1
+        `
+      : [];
+  return String(rows[0]?.brandId ?? "");
+}
+
+async function upsertAvailabilityLink(body: Record<string, unknown>, employeeId: string) {
+  const sourceKind = String(body.sourceKind ?? "");
+  const sourceId = cleanOptionalId(body.sourceId);
+  const dependentKind = String(body.dependentKind ?? "");
+  const dependentId = cleanOptionalId(body.dependentId);
+  if (!sourceId || !dependentId || !["item", "option"].includes(sourceKind) || !["item", "option"].includes(dependentKind)) {
+    throw new Error("起点と連動先のメニューを選択してください。");
+  }
+  if (sourceKind === dependentKind && sourceId === dependentId) {
+    throw new Error("同じメニュー同士は連動できません。");
+  }
+
+  const [sourceBrandId, dependentBrandId] = await Promise.all([
+    getMenuTargetBrandId(sourceKind, sourceId),
+    getMenuTargetBrandId(dependentKind, dependentId)
+  ]);
+  if (!sourceBrandId || sourceBrandId !== dependentBrandId) {
+    throw new Error("同じブランド内のメニューを選択してください。");
+  }
+
+  const rows = await sql`
+    insert into menu_availability_links (
+      brand_id, source_kind, source_id, dependent_kind, dependent_id,
+      is_bidirectional, created_by, updated_at
+    )
+    values (
+      ${sourceBrandId}, ${sourceKind}, ${sourceId}, ${dependentKind}, ${dependentId},
+      ${body.isBidirectional === true}, ${employeeId}, now()
+    )
+    on conflict (source_kind, source_id, dependent_kind, dependent_id)
+    do update set
+      is_bidirectional = excluded.is_bidirectional,
+      updated_at = now()
+    returning id::text
+  `;
+  return { ok: true, id: rows[0]?.id };
 }
 
 async function upsertStoreSetting(body: Record<string, unknown>, employeeId: string) {

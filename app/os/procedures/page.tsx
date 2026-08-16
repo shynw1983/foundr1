@@ -118,7 +118,6 @@ type ProcedureAction = {
   unit: string;
   targetText: string;
   standardText: string;
-  affectsAvailability: boolean;
   note: string;
 };
 
@@ -292,7 +291,6 @@ const emptyAction: ProcedureAction = {
   unit: "",
   targetText: "",
   standardText: "",
-  affectsAvailability: false,
   note: ""
 };
 
@@ -964,7 +962,7 @@ export default function ProcedureAdminPage() {
 
   function getMaamaaSetEditorItems(rule: MaamaaSetRule): MaamaaSetItem[] {
     if (rule.items?.length) return rule.items;
-    return rule.defaultItems.map((item) => ({ productName: item, affectsAvailability: false }));
+    return rule.defaultItems.map((item) => ({ productName: item }));
   }
 
   function updateMaamaaSetItems(index: number, items: MaamaaSetItem[]) {
@@ -994,7 +992,7 @@ export default function ProcedureAdminPage() {
   function addMaamaaSetItem(ruleIndex: number) {
     const rule = maamaaReferenceSettings.setRules[ruleIndex];
     if (!rule) return;
-    updateMaamaaSetItems(ruleIndex, [...getMaamaaSetEditorItems(rule), { productName: "", affectsAvailability: false }]);
+    updateMaamaaSetItems(ruleIndex, [...getMaamaaSetEditorItems(rule), { productName: "" }]);
   }
 
   function removeMaamaaSetItem(ruleIndex: number, itemIndex: number) {
@@ -1545,18 +1543,6 @@ export default function ProcedureAdminPage() {
                                   <span>単位</span>
                                   <input value={item.unit ?? ""} onChange={(event) => updateMaamaaSetItem(selectedMaamaaReferenceItem.index, itemIndex, { unit: event.target.value })} placeholder="g" disabled={!canEdit} />
                                 </label>
-                                <label>
-                                  <span>販売状態</span>
-                                  <span className="procedure-setting-toggle">
-                                    <input
-                                      type="checkbox"
-                                      checked={item.affectsAvailability === true}
-                                      onChange={(event) => updateMaamaaSetItem(selectedMaamaaReferenceItem.index, itemIndex, { affectsAvailability: event.target.checked })}
-                                      disabled={!canEdit}
-                                    />
-                                    欠品時にセットも停止
-                                  </span>
-                                </label>
                                 <button className="danger-button" type="button" onClick={() => removeMaamaaSetItem(selectedMaamaaReferenceItem.index, itemIndex)} disabled={!canEdit}>
                                   <Trash2 size={14} />
                                 </button>
@@ -1925,21 +1911,6 @@ export default function ProcedureAdminPage() {
                                     <input value={action.unit} onChange={(event) => updateStepAction(stepIndex, actionIndex, { unit: event.target.value })} placeholder="g / ml / 個" disabled={!canEdit} />
                                   </label>
                                 </>
-                              ) : null}
-
-                              {selectedProduct?.sourceType === "product" && selectedProduct.usageType === "ingredient" ? (
-                                <label>
-                                  <span>販売状態との連動</span>
-                                  <span className="procedure-setting-toggle">
-                                    <input
-                                      type="checkbox"
-                                      checked={action.affectsAvailability === true}
-                                      onChange={(event) => updateStepAction(stepIndex, actionIndex, { affectsAvailability: event.target.checked })}
-                                      disabled={!canEdit}
-                                    />
-                                    この原料の欠品時に商品を停止
-                                  </span>
-                                </label>
                               ) : null}
 
                               {shouldShowActionField(actionKey, "equipment") ? (

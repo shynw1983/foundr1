@@ -10,6 +10,7 @@ import {
   FileText,
   Languages,
   Lightbulb,
+  Link2,
   LogOut,
   MenuSquare,
   PackageCheck,
@@ -165,6 +166,16 @@ type MenuSyncTask = {
   completedAt: string | null;
 };
 
+type MenuAvailabilityLink = {
+  id: string;
+  brandId: string;
+  sourceKind: "item" | "option";
+  sourceId: string;
+  dependentKind: "item" | "option";
+  dependentId: string;
+  isBidirectional: boolean;
+};
+
 type MenuAdminData = {
   brands: OptionItem[];
   stores: StoreOption[];
@@ -176,6 +187,7 @@ type MenuAdminData = {
   itemOptionGroups: MenuItemOptionGroup[];
   externalPlatforms: MenuExternalPlatform[];
   syncTasks: MenuSyncTask[];
+  availabilityLinks: MenuAvailabilityLink[];
 };
 
 type MenuPublishPreviewChange = {
@@ -591,7 +603,8 @@ export default function MenuAdminPage() {
     options: [],
     itemOptionGroups: [],
     externalPlatforms: [],
-    syncTasks: []
+    syncTasks: [],
+    availabilityLinks: []
   });
   const [activeBrandId, setActiveBrandId] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -617,6 +630,12 @@ export default function MenuAdminPage() {
   const [translationBusy, setTranslationBusy] = useState<"preview" | "apply" | "">("");
   const [publishPreview, setPublishPreview] = useState<MenuPublishPreview | null>(null);
   const [publishPreviewStatus, setPublishPreviewStatus] = useState<"loading" | "error" | "">("");
+  const [availabilityLinkDraft, setAvailabilityLinkDraft] = useState({
+    sourceKey: "",
+    dependentKey: "",
+    isBidirectional: false
+  });
+  const [availabilityLinkSaving, setAvailabilityLinkSaving] = useState(false);
 
   async function loadPublishPreview(brandId: string) {
     if (!brandId) {
@@ -715,6 +734,26 @@ export default function MenuAdminPage() {
   )), [activeBrandId, data.externalPlatforms, data.syncTasks]);
   const pendingSyncTasks = brandSyncTasks.filter((task) => task.status === "pending");
   const completedSyncTasks = brandSyncTasks.filter((task) => task.status === "completed").slice(0, 8);
+  const availabilityTargetOptions = useMemo(() => {
+    const itemOptions = data.items
+      .filter((item) => item.brandId === activeBrandId && !item.storeId && item.isActive)
+      .map((item) => ({ key: `item:${item.id}`, label: `商品 / ${item.name}` }));
+    const groupsById = new Map(data.groups.map((group) => [group.id, group]));
+    const optionOptions = data.options
+      .filter((option) => {
+        const group = groupsById.get(option.optionGroupId);
+        return option.isActive && group?.isActive && group.brandId === activeBrandId;
+      })
+      .map((option) => {
+        const group = groupsById.get(option.optionGroupId)!;
+        return { key: `option:${option.id}`, label: `選択肢 / ${group.name} / ${option.name}` };
+      });
+    return [...itemOptions, ...optionOptions].sort((a, b) => a.label.localeCompare(b.label, "ja"));
+  }, [activeBrandId, data.groups, data.items, data.options]);
+  const availabilityTargetLabels = useMemo(() => new Map(
+    availabilityTargetOptions.map((option) => [option.key, option.label])
+  ), [availabilityTargetOptions]);
+  const brandAvailabilityLinks = data.availabilityLinks.filter((link) => link.brandId === activeBrandId);
 
   const visibleGroups = useMemo(() => {
     const explicitLinks = data.itemOptionGroups
@@ -766,6 +805,7 @@ export default function MenuAdminPage() {
     setGroupDraft({ ...emptyGroup, brandId });
     setOptionDraft(emptyOption);
     setActiveOptionGroupId("");
+    setAvailabilityLinkDraft({ sourceKey: "", dependentKey: "", isBidirectional: false });
     void loadPublishPreview(brandId);
   }
 
@@ -965,6 +1005,61 @@ export default function MenuAdminPage() {
       return next;
     });
     setMessage("外部プラットフォーム反映済みにしました。");
+    await loadMenus(selectedItemId);
+  }
+
+  async function saveAvailabilityLink() {
+    const [sourceKind, sourceId] = availabilityLinkDraft.sourceKey.split(":") as ["item" | "option", string];
+    const [dependentKind, dependentId] = availabilityLinkDraft.dependentKey.split(":") as ["item" | "option", string];
+    if (!sourceId || !dependentId) {
+      setMessage("起点と連動先を選択してください。");
+      return;
+    }
+    if (availabilityLinkDraft.sourceKey === availabilityLinkDraft.dependentKey) {
+      setMessage("同じメニュー同士は連動できません。");
+      return;
+    }
+    setAvailabilityLinkSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/menus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "availabilityLink",
+          sourceKind,
+          sourceId,
+          dependentKind,
+          dependentId,
+          isBidirectional: availabilityLinkDraft.isBidirectional
+        })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(result.error || "販売状態の連動を保存できませんでした。");
+        return;
+      }
+      setAvailabilityLinkDraft({ sourceKey: "", dependentKey: "", isBidirectional: false });
+      setMessage("販売状態の連動を保存しました。");
+      await loadMenus(selectedItemId);
+    } catch {
+      setMessage("通信エラーで販売状態の連動を保存できませんでした。");
+    } finally {
+      setAvailabilityLinkSaving(false);
+    }
+  }
+
+  async function deleteAvailabilityLink(id: string) {
+    const response = await fetch("/api/menus", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "availabilityLink", id })
+    });
+    if (!response.ok) {
+      setMessage("販売状態の連動を削除できませんでした。");
+      return;
+    }
+    setMessage("販売状態の連動を削除しました。");
     await loadMenus(selectedItemId);
   }
 
@@ -1434,6 +1529,84 @@ export default function MenuAdminPage() {
           </div>
           {translationStatus ? <p className="menu-auto-translation-status">{translationStatus}</p> : null}
         </section>
+
+        <details className="menu-sync-panel menu-availability-link-panel">
+          <summary className="section-heading menu-sync-summary">
+            <span className="menu-sync-summary-title">
+              <span className="eyebrow">Availability Links</span>
+              <span className="menu-sync-summary-heading">販売状態の連動</span>
+            </span>
+            <span className="menu-sync-summary-actions">
+              <span className="menu-sync-count">設定 {brandAvailabilityLinks.length}件</span>
+              <ChevronDown className="menu-sync-chevron" size={20} aria-hidden="true" />
+            </span>
+          </summary>
+          <div className="menu-sync-body">
+            <p className="menu-availability-link-help">
+              メニュー商品・選択肢の名前どうしを直接つなぎます。商品マスタ、食材 SKU、操作手順からは自動判定しません。
+            </p>
+            <div className="menu-availability-link-form">
+              <label>
+                <span>起点</span>
+                <select
+                  value={availabilityLinkDraft.sourceKey}
+                  onChange={(event) => setAvailabilityLinkDraft((current) => ({ ...current, sourceKey: event.target.value }))}
+                >
+                  <option value="">メニュー名を選択</option>
+                  {availabilityTargetOptions.map((option) => <option value={option.key} key={option.key}>{option.label}</option>)}
+                </select>
+              </label>
+              <span className="menu-availability-link-arrow" aria-hidden="true">
+                {availabilityLinkDraft.isBidirectional ? "⇄" : "→"}
+              </span>
+              <label>
+                <span>連動先</span>
+                <select
+                  value={availabilityLinkDraft.dependentKey}
+                  onChange={(event) => setAvailabilityLinkDraft((current) => ({ ...current, dependentKey: event.target.value }))}
+                >
+                  <option value="">メニュー名を選択</option>
+                  {availabilityTargetOptions.map((option) => <option value={option.key} key={option.key}>{option.label}</option>)}
+                </select>
+              </label>
+              <label className="checkbox-group menu-inline-check">
+                <input
+                  type="checkbox"
+                  checked={availabilityLinkDraft.isBidirectional}
+                  onChange={(event) => setAvailabilityLinkDraft((current) => ({ ...current, isBidirectional: event.target.checked }))}
+                />
+                <span>相互連動</span>
+              </label>
+              <button
+                className="primary-button compact-button"
+                type="button"
+                disabled={availabilityLinkSaving || !availabilityLinkDraft.sourceKey || !availabilityLinkDraft.dependentKey}
+                onClick={() => void saveAvailabilityLink()}
+              >
+                <Link2 size={15} />
+                {availabilityLinkSaving ? "保存中" : "追加"}
+              </button>
+            </div>
+            <div className="menu-availability-link-list">
+              {brandAvailabilityLinks.map((link) => {
+                const sourceKey = `${link.sourceKind}:${link.sourceId}`;
+                const dependentKey = `${link.dependentKind}:${link.dependentId}`;
+                return (
+                  <div className="menu-availability-link-row" key={link.id}>
+                    <span>{availabilityTargetLabels.get(sourceKey) || "削除済みメニュー"}</span>
+                    <b aria-label={link.isBidirectional ? "相互連動" : "片方向"}>{link.isBidirectional ? "⇄" : "→"}</b>
+                    <span>{availabilityTargetLabels.get(dependentKey) || "削除済みメニュー"}</span>
+                    <button className="danger-button compact-button" type="button" onClick={() => void deleteAvailabilityLink(link.id)}>
+                      <Trash2 size={14} />
+                      削除
+                    </button>
+                  </div>
+                );
+              })}
+              {!brandAvailabilityLinks.length ? <p className="empty-state">まだ連動はありません。必要な組み合わせだけ追加してください。</p> : null}
+            </div>
+          </div>
+        </details>
 
         <details className="menu-sync-panel" open>
           <summary className="section-heading menu-sync-summary">
