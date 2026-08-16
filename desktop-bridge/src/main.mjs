@@ -9,7 +9,8 @@ import {
   DEMAE_CAN_CIRCUIT_OPEN_MS,
   inventoryCommandMaxAttempts,
   isDemaeCanCircuitFailure,
-  isRetryableInventoryError
+  isRetryableInventoryError,
+  partialInventoryTargetError
 } from "./retry-policy.mjs";
 
 const mode = process.argv[2] ?? "check";
@@ -115,6 +116,8 @@ async function executeInventoryCommand(command) {
         maxAttempts
       });
       const result = await adapter.setInventory(payload, verified);
+      const partialError = partialInventoryTargetError(missing.map((item) => item.label), verified.length);
+      if (partialError) throw new Error(partialError);
       if (platform === "demae_can") {
         demaeCanConsecutiveTimeouts = 0;
         demaeCanCircuitOpenUntil = 0;

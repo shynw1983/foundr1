@@ -21,3 +21,9 @@ export function isRetryableInventoryError(value) {
   }
   return true;
 }
+
+export function partialInventoryTargetError(missingLabels, matchedCount) {
+  const labels = Array.from(new Set((missingLabels ?? []).map(String).map((label) => label.trim()).filter(Boolean)));
+  if (!labels.length) return "";
+  return `部分商品未找到，已处理其余${Math.max(0, Number(matchedCount) || 0)}项；正在重试：${labels.join("、")}`;
+}

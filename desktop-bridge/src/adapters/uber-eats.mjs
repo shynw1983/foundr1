@@ -1,7 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 import { CdpPage } from "../cdp-page.mjs";
-import { loginState, platformUiChanged, targetNameTiers } from "./common.mjs";
+import { loginState, normalizeText, platformUiChanged, targetNameTiers } from "./common.mjs";
 
 const UBER_ORIGIN = "https://merchants.ubereats.com/";
 const NORMALIZE_SOURCE = `const normalize = (value) => String(value ?? "")
@@ -23,6 +23,26 @@ export function preferCurrentUberMatches(matches) {
   const highest = Math.max(...scored.map((entry) => entry.score));
   const preferred = scored.filter((entry) => entry.score === highest).map((entry) => entry.match);
   return preferred.length === 1 ? preferred : matches;
+}
+
+function itemPath(value) {
+  try {
+    return new URL(String(value ?? "")).pathname.replace(/\/$/u, "");
+  } catch {
+    return "";
+  }
+}
+
+export function uberItemDetailMatches(item, state) {
+  if (!itemPath(item?.matches?.[0]?.href) || itemPath(item?.matches?.[0]?.href) !== itemPath(state?.url)) return false;
+  const currentParts = normalizeText(state?.itemName)
+    .split(/[|｜]/u)
+    .map((part) => part.trim().toLocaleLowerCase())
+    .filter(Boolean);
+  const expectedNames = [item?.label, ...(Array.isArray(item?.names) ? item.names : [])]
+    .map((name) => normalizeText(name).toLocaleLowerCase())
+    .filter(Boolean);
+  return Boolean(state?.found) && expectedNames.some((name) => currentParts.includes(name));
 }
 
 export class UberEatsAdapter {
@@ -137,11 +157,64 @@ export class UberEatsAdapter {
     }
   }
 
-  async readSoldOutState(page) {
+  async readItemDetailState(page) {
     return page.evaluate(`(() => {
       const checkbox = document.querySelector('input[name="itemSuspensionState"]');
-      return checkbox instanceof HTMLInputElement ? { found: true, checked: checkbox.checked } : { found: false, checked: false };
+      const nameInput = document.querySelector('input[name="name"]');
+      const duration = [...document.querySelectorAll('input[role="combobox"][aria-label^="Selected "]')]
+        .map((input) => input.getAttribute("aria-label")?.match(/^Selected (.+?)\.\s*$/u)?.[1] ?? "")
+        .find(Boolean) ?? "";
+      return checkbox instanceof HTMLInputElement && nameInput instanceof HTMLInputElement
+        ? { found: true, checked: checkbox.checked, itemName: nameInput.value, duration, url: location.href }
+        : { found: false, checked: false, itemName: "", duration: "", url: location.href };
     })()`);
+  }
+
+  async openInventoryItem(page, item) {
+    const href = item.matches[0]?.href;
+    if (!href) throw platformUiChanged("uber_eats", `item_link:${item.label}`);
+    await page.navigate(href);
+    const deadline = Date.now() + 20000;
+    let state = null;
+    while (Date.now() < deadline) {
+      try {
+        state = await this.readItemDetailState(page);
+        if (uberItemDetailMatches(item, state)) return state;
+      } catch {
+        // Uber may briefly replace the document while the next item is loading.
+      }
+      await delay(250);
+    }
+    throw new Error(`uber_eats_item_identity_timeout:${item.label}:${state?.itemName ?? ""}`);
+  }
+
+  async ensureIndefiniteSoldOut(page) {
+    const current = await this.readItemDetailState(page);
+    if (current.duration === "期限を設定しない") return;
+    await page.waitFor(`[...document.querySelectorAll('input[role="combobox"][aria-label^="Selected "]')]
+      .some((input) => input.getClientRects().length)`);
+    const opened = await page.evaluate(`(() => {
+      const combo = [...document.querySelectorAll('input[role="combobox"][aria-label^="Selected "]')]
+        .find((input) => input.getClientRects().length);
+      const trigger = combo?.parentElement?.parentElement?.querySelector('[value]');
+      if (!(trigger instanceof HTMLElement)) return false;
+      trigger.click();
+      return true;
+    })()`);
+    if (!opened) throw platformUiChanged("uber_eats", "sold_out_duration_control");
+    await page.waitFor(`[...document.querySelectorAll('[role="option"]')]
+      .some((option) => option.getClientRects().length && option.textContent?.trim() === ${JSON.stringify("期限を設定しない")})`);
+    const selected = await page.evaluate(`(() => {
+      const option = [...document.querySelectorAll('[role="option"]')]
+        .find((candidate) => candidate.getClientRects().length
+          && candidate.textContent?.trim() === ${JSON.stringify("期限を設定しない")});
+      if (!(option instanceof HTMLElement)) return false;
+      option.click();
+      return true;
+    })()`);
+    if (!selected) throw platformUiChanged("uber_eats", "sold_out_duration_option");
+    await page.waitFor(`[...document.querySelectorAll('input[role="combobox"][aria-label^="Selected "]')]
+      .some((input) => input.getAttribute("aria-label")?.includes(${JSON.stringify("期限を設定しない")}))`);
   }
 
   async setInventory(payload, located) {
@@ -150,20 +223,32 @@ export class UberEatsAdapter {
     let changed = 0;
     try {
       for (const item of located) {
-        const href = item.matches[0]?.href;
-        if (!href) throw platformUiChanged("uber_eats", `item_link:${item.label}`);
-        await page.navigate(href);
-        await page.waitFor(`Boolean(document.querySelector('input[name="itemSuspensionState"]'))`);
-        const before = await this.readSoldOutState(page);
+        const before = await this.openInventoryItem(page, item);
         if (!before.found) throw platformUiChanged("uber_eats", `sold_out_control:${item.label}`);
-        if (before.checked === desiredSoldOut) continue;
+        const durationNeedsUpdate = desiredSoldOut
+          && payload.soldOutMode === "indefinite"
+          && before.duration !== "期限を設定しない";
+        if (before.checked === desiredSoldOut && !durationNeedsUpdate) continue;
+        if (before.checked !== desiredSoldOut) {
+          const toggled = await page.evaluate(`(() => {
+            const checkbox = document.querySelector('input[name="itemSuspensionState"]');
+            if (!(checkbox instanceof HTMLInputElement)) return false;
+            checkbox.click();
+            return true;
+          })()`);
+          if (!toggled) throw platformUiChanged("uber_eats", `sold_out_control:${item.label}`);
+        }
+        if (desiredSoldOut && payload.soldOutMode === "indefinite") {
+          await this.ensureIndefiniteSoldOut(page);
+        }
+        await page.waitFor(`[...document.querySelectorAll("button")]
+          .some((button) => button.getClientRects().length && !button.disabled
+            && /^(保存|保存する)$/u.test(button.textContent?.trim() ?? ""))`);
         const saved = await page.evaluate(`(() => {
           const checkbox = document.querySelector('input[name="itemSuspensionState"]');
-          if (!(checkbox instanceof HTMLInputElement)) return false;
-          checkbox.click();
           const save = [...document.querySelectorAll("button")]
             .find((button) => button.getClientRects().length && !button.disabled && /^(保存|保存する)$/u.test(button.textContent?.trim() ?? ""));
-          if (!(save instanceof HTMLButtonElement)) return false;
+          if (!(checkbox instanceof HTMLInputElement) || !(save instanceof HTMLButtonElement)) return false;
           save.click();
           return true;
         })()`);
@@ -171,10 +256,11 @@ export class UberEatsAdapter {
         await delay(1500);
         await page.navigate(this.itemsUrl());
         await page.waitFor(`Boolean(document.querySelector('a[href*="/items/"]'))`);
-        await page.navigate(href);
-        await page.waitFor(`Boolean(document.querySelector('input[name="itemSuspensionState"]'))`);
-        const after = await this.readSoldOutState(page);
-        if (!after.found || after.checked !== desiredSoldOut) {
+        const after = await this.openInventoryItem(page, item);
+        const durationVerified = !desiredSoldOut
+          || payload.soldOutMode !== "indefinite"
+          || after.duration === "期限を設定しない";
+        if (!after.found || after.checked !== desiredSoldOut || !durationVerified) {
           throw new Error(`uber_eats_verification_failed:${item.label}`);
         }
         changed += 1;

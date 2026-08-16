@@ -11,6 +11,8 @@ const DEBUG_PORTS = {
   demae_can: 9333
 };
 
+const browserLaunches = new Map();
+
 export function pagePreferenceScore(platform, url) {
   const value = String(url ?? "").toLowerCase();
   if (platform === "demae_can" && value.includes("partner.demae-can.com")) {
@@ -52,6 +54,15 @@ export class BrowserSession {
       .then((response) => response.ok)
       .catch(() => false);
     if (active) return debuggingPort;
+    const existingLaunch = browserLaunches.get(debuggingPort);
+    if (existingLaunch) return existingLaunch;
+    const launch = this.launchBrowser(debuggingPort, endpoint)
+      .finally(() => browserLaunches.delete(debuggingPort));
+    browserLaunches.set(debuggingPort, launch);
+    return launch;
+  }
+
+  async launchBrowser(debuggingPort, endpoint) {
     const userDataDir = path.join(this.config.chromeProfilesRoot, this.platform);
     await mkdir(userDataDir, { recursive: true });
     const headless = this.config.platforms[this.platform]?.headless === true;
@@ -83,13 +94,16 @@ export class BrowserSession {
       stdio: "ignore"
     });
     chromeProcess.unref();
-    for (let attempt = 0; attempt < 40; attempt += 1) {
+    // After an unexpected shutdown Chrome may need extra time to recover its
+    // profile. Keep one launch in flight instead of starting competing copies.
+    for (let attempt = 0; attempt < 120; attempt += 1) {
       const ready = await fetch(endpoint, { signal: AbortSignal.timeout(1000) })
         .then((response) => response.ok)
         .catch(() => false);
       if (ready) return debuggingPort;
       await delay(250);
     }
+    if (chromeProcess.exitCode === null) chromeProcess.kill("SIGTERM");
     throw new Error(`Chrome did not start for ${this.platform}`);
   }
 

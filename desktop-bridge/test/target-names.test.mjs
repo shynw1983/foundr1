@@ -4,7 +4,7 @@ import test from "node:test";
 import { normalizeText, targetNameTiers } from "../src/adapters/common.mjs";
 import { withPlatformTargetAliases } from "../src/adapters/platform-target-aliases.mjs";
 import { uniqueLocatedRows } from "../src/adapters/rocket-now.mjs";
-import { preferCurrentUberMatches } from "../src/adapters/uber-eats.mjs";
+import { preferCurrentUberMatches, uberItemDetailMatches } from "../src/adapters/uber-eats.mjs";
 
 test("normalizes decorative vinegar text used differently by platforms", () => {
   assert.equal(
@@ -98,6 +98,15 @@ test("adds Rocket aliases from the current published menu", () => {
   ]);
 });
 
+test("adds Rocket-safe aliases for published option names", () => {
+  const projected = withPlatformTargetAliases("rocket_now", {
+    label: "【旨味が爆発💥】ぶつ切りたこ🐙（約50g）",
+    aliases: []
+  });
+
+  assert.deepEqual(projected.aliases, ["【旨味が爆発】ぶつ切りたこ約50g"]);
+});
+
 test("prefers the current Uber menu record over a legacy duplicate", () => {
   const current = {
     href: "current",
@@ -115,4 +124,28 @@ test("prefers the current Uber menu record over a legacy duplicate", () => {
   };
 
   assert.deepEqual(preferCurrentUberMatches([legacy, current]), [current]);
+});
+
+test("waits for the expected Uber item identity before trusting its sold-out state", () => {
+  const item = {
+    label: "【おすすめ❗️】もちもち板春雨50g",
+    names: ["もちもち板春雨50g"],
+    matches: [{ href: "https://merchants.ubereats.com/manager/menumaker/store/items/wide-noodle" }]
+  };
+
+  assert.equal(uberItemDetailMatches(item, {
+    found: true,
+    url: "https://merchants.ubereats.com/manager/menumaker/store/items/previous-item",
+    itemName: "前の商品"
+  }), false);
+  assert.equal(uberItemDetailMatches(item, {
+    found: true,
+    url: "https://merchants.ubereats.com/manager/menumaker/store/items/wide-noodle",
+    itemName: "さつまいも板春雨50g｜红薯宽粉｜Wide Sweet Potato Noodles"
+  }), false);
+  assert.equal(uberItemDetailMatches(item, {
+    found: true,
+    url: "https://merchants.ubereats.com/manager/menumaker/store/items/wide-noodle",
+    itemName: "【おすすめ❗️】もちもち板春雨50g｜宽粉｜Wide Sweet Potato Noodles"
+  }), true);
 });

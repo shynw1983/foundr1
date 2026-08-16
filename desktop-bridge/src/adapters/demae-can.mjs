@@ -387,7 +387,16 @@ export class DemaeCanAdapter {
     try {
       await waitForRows(page, changing, desiredUnavailable);
     } catch {
-      throw new Error("demae_can_verification_timeout");
+      // Some option names occur in many menus. Demae may accept the save but
+      // leave stale row text in the current DOM, especially after bulk changes.
+      // Reload once and verify the server-rendered state before reporting a
+      // failure or repeating the mutation.
+      try {
+        await this.refreshInventoryPage(page);
+        await waitForRows(page, changing, desiredUnavailable);
+      } catch {
+        throw new Error("demae_can_verification_timeout");
+      }
     }
     return { outcome: "applied", changed: changing.length, desiredUnavailable };
   }

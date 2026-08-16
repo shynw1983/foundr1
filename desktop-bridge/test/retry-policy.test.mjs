@@ -7,7 +7,8 @@ import {
   INVENTORY_COMMAND_MAX_ATTEMPTS,
   inventoryCommandMaxAttempts,
   isDemaeCanCircuitFailure,
-  isRetryableInventoryError
+  isRetryableInventoryError,
+  partialInventoryTargetError
 } from "../src/retry-policy.mjs";
 
 test("retries transient browser and platform page errors", () => {
@@ -36,4 +37,11 @@ test("does not retry login or configuration errors", () => {
   assert.equal(isRetryableInventoryError("demae_can_circuit_open_until:2026-08-16T11:00:00.000Z"), false);
   assert.equal(isRetryableInventoryError("No enabled adapter for platform"), false);
   assert.equal(isRetryableInventoryError("platform_ui_changed:demae_can:apply_button"), false);
+});
+
+test("does not report a partially matched inventory batch as successful", () => {
+  const error = partialInventoryTargetError(["宽粉", "宽粉", "香醋"], 18);
+  assert.equal(error, "部分商品未找到，已处理其余18项；正在重试：宽粉、香醋");
+  assert.equal(isRetryableInventoryError(error), true);
+  assert.equal(partialInventoryTargetError([], 20), "");
 });
