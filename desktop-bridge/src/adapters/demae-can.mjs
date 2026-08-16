@@ -78,10 +78,36 @@ async function clickRows(page, items) {
     const clicked = await page.evaluate((ids) => ids.every((id) => {
       const checkbox = document.getElementById(id);
       if (!(checkbox instanceof HTMLInputElement)) return false;
-      checkbox.click();
-      return true;
+      if (!checkbox.checked) checkbox.click();
+      if (!checkbox.checked) {
+        const label = checkbox.closest("label");
+        if (label instanceof HTMLLabelElement) label.click();
+      }
+      return checkbox.checked;
     }), rowIds);
-    if (!clicked) throw new Error(`demae_can_checkbox_missing:${item.label}`);
+    if (!clicked) throw new Error(`demae_can_row_selection_failed:${item.label}`);
+  }
+}
+
+async function waitForInventoryActionModal(page) {
+  try {
+    await page.waitForFunction(() => {
+      const visible = (element) => {
+        const rect = element?.getBoundingClientRect();
+        return Boolean(rect && rect.width > 0 && rect.height > 0);
+      };
+      const stableControls = [
+        document.querySelector('[data-key="stockoutSetting"]'),
+        document.querySelector('[data-key="stockoutDelete"]'),
+        document.querySelector('form[class*="StockoutSetting_form"]'),
+        document.querySelector('form[class*="StockoutDelete_form"]')
+      ];
+      if (stableControls.some(visible)) return true;
+      return [...document.querySelectorAll('[role="dialog"], [aria-modal="true"]')]
+        .some((dialog) => visible(dialog) && /品切れ|終売|解除|適用/u.test(dialog.textContent ?? ""));
+    }, { timeout: 10000 });
+  } catch {
+    throw new Error("demae_can_inventory_modal_timeout");
   }
 }
 
@@ -267,7 +293,7 @@ export class DemaeCanAdapter {
     if (!changing.length) return { outcome: "already_applied", changed: 0, desiredUnavailable };
 
     await clickRows(page, changing);
-    await page.waitForSelector("[class*=FloatingModal_isOpen]", { visible: true, timeout: 10000 });
+    await waitForInventoryActionModal(page);
     if (desiredUnavailable) {
       const opened = await page.evaluate(() => {
         const tab = document.querySelector('[data-key="stockoutSetting"]');
