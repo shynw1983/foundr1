@@ -51,8 +51,8 @@ function productNames(product: InventoryDependencyProduct | undefined, fallback 
 
 function setItems(rule: MaamaaSetRule): MaamaaSetItem[] {
   return rule.items?.length
-    ? rule.items.filter((item) => item.affectsAvailability !== false)
-    : rule.defaultItems.map((productName) => ({ productName } satisfies MaamaaSetItem));
+    ? rule.items.filter((item) => item.affectsAvailability === true)
+    : [];
 }
 
 export function dependentSetRuleNames(

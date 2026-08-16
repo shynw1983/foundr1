@@ -71,10 +71,7 @@ export async function loadDependentMenuItemTargets(input: {
         from procedure_steps
         join procedure_step_actions on procedure_step_actions.procedure_step_id = procedure_steps.id
         where procedure_step_actions.product_id is not null
-        union
-        select procedure_steps.procedure_book_id, procedure_step_products.product_id
-        from procedure_steps
-        join procedure_step_products on procedure_step_products.procedure_step_id = procedure_steps.id
+          and procedure_step_actions.affects_availability = true
       )
       select distinct
         procedure_books.menu_catalog_item_id::text as "menuCatalogItemId",

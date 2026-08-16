@@ -3429,6 +3429,7 @@ create table if not exists procedure_step_actions (
   target_text text,
   standard_text text,
   condition_json jsonb not null default '{}'::jsonb,
+  affects_availability boolean not null default false,
   note text,
   sort_order integer not null default 0
 );
@@ -3437,6 +3438,7 @@ alter table procedure_step_actions add column if not exists material_id uuid ref
 alter table procedure_step_actions add column if not exists equipment_product_id uuid references products(id) on delete restrict;
 alter table procedure_step_actions add column if not exists container_product_id uuid references products(id) on delete restrict;
 alter table procedure_step_actions add column if not exists condition_json jsonb not null default '{}'::jsonb;
+alter table procedure_step_actions add column if not exists affects_availability boolean not null default false;
 
 insert into procedure_materials (name, material_type, category, subcategory, unit, note, sort_order)
 values

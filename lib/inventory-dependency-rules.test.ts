@@ -11,10 +11,10 @@ const settings: MaamaaProductionReferenceSettings = {
   productionRules: [],
   seasoningRules: [],
   setRules: [
-    { name: "セットメニュー共通", defaultItems: ["板春雨50g"] },
-    { name: "牛肉マーラータン", defaultItems: ["牛肉80g", "青梗菜30g"] },
-    { name: "ラムマーラータン", defaultItems: ["ラム肉80g", "青梗菜30g"] },
-    { name: "野菜マーラータン", defaultItems: ["青梗菜30g"] }
+    { name: "セットメニュー共通", defaultItems: ["板春雨50g"], items: [{ productName: "板春雨50g", affectsAvailability: true }] },
+    { name: "牛肉マーラータン", defaultItems: ["牛肉80g", "青梗菜30g"], items: [{ productName: "牛肉80g", affectsAvailability: true }] },
+    { name: "ラムマーラータン", defaultItems: ["ラム肉80g", "青梗菜30g"], items: [{ productName: "ラム肉80g", affectsAvailability: true }] },
+    { name: "野菜マーラータン", defaultItems: ["青梗菜30g"], items: [{ productName: "青梗菜30g", affectsAvailability: false }] }
   ]
 };
 
@@ -45,4 +45,12 @@ test("allows a procedure item to opt out of sales availability linking", () => {
       : rule)
   };
   assert.deepEqual(dependentSetRuleNames("牛肉スライス 50g", customized), []);
+});
+
+test("does not infer availability linking from legacy recipe text", () => {
+  const legacy: MaamaaProductionReferenceSettings = {
+    ...settings,
+    setRules: [{ name: "牛肉マーラータン", defaultItems: ["牛肉80g"] }]
+  };
+  assert.deepEqual(dependentSetRuleNames("牛肉スライス 50g", legacy), []);
 });

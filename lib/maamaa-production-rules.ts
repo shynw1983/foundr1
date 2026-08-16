@@ -805,7 +805,7 @@ function normalizeSetItem(value: unknown): MaamaaSetItem | null {
     quantity: String(source.quantity ?? "").trim() || undefined,
     unit: String(source.unit ?? "").trim() || undefined,
     note: String(source.note ?? "").trim() || undefined,
-    affectsAvailability: source.affectsAvailability !== false
+    affectsAvailability: source.affectsAvailability === true
   };
 }
 
