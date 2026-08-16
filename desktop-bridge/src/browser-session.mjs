@@ -11,10 +11,19 @@ const DEBUG_PORTS = {
   demae_can: 9333
 };
 
-async function firstWebPage(browser) {
+export function pagePreferenceScore(platform, url) {
+  const value = String(url ?? "").toLowerCase();
+  if (platform === "demae_can" && value.includes("partner.demae-can.com")) {
+    if (value.includes("/shop/stockout") || value.includes("to=%2fshop%2fstockout")) return 30;
+    return 20;
+  }
+  return value === "about:blank" ? 0 : 10;
+}
+
+async function firstWebPage(browser, platform) {
   const targets = browser.targets()
     .filter((target) => target.type() === "page")
-    .sort((left, right) => Number(right.url() !== "about:blank") - Number(left.url() !== "about:blank"));
+    .sort((left, right) => pagePreferenceScore(platform, right.url()) - pagePreferenceScore(platform, left.url()));
   for (const target of targets) {
     const page = await target.page().catch(() => null);
     if (page) return page;
@@ -93,7 +102,7 @@ export class BrowserSession {
         defaultViewport: null,
         targetFilter: (target) => !target.url().startsWith("chrome://")
       });
-      this.page = await firstWebPage(this.browser);
+      this.page = await firstWebPage(this.browser, this.platform);
       this.page.setDefaultTimeout(15000);
       return this.page;
     } catch {
@@ -117,7 +126,7 @@ export class BrowserSession {
     if (!this.browser) {
       throw new Error(`Chrome did not start for ${this.platform}: ${lastError instanceof Error ? lastError.message : lastError}`);
     }
-    this.page = await firstWebPage(this.browser);
+    this.page = await firstWebPage(this.browser, this.platform);
     this.page.setDefaultTimeout(15000);
     return this.page;
   }

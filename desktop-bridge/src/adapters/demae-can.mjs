@@ -10,13 +10,20 @@ function isLoginPage(summary) {
     || (/ログイン/u.test(summary.text) && /パスワード/u.test(summary.text));
 }
 
-async function fillInput(page, selector, value) {
+export async function fillInput(page, selector, value) {
   const input = await page.waitForSelector(selector, { visible: true, timeout: 5000 }).catch(() => null);
   if (!input) return false;
-  await input.click({ clickCount: 3 });
-  await input.press("Backspace");
-  await input.type(value);
-  return true;
+  await input.dispose?.().catch(() => undefined);
+  return page.evaluate(({ selectorValue, inputValue }) => {
+    const element = document.querySelector(selectorValue);
+    if (!(element instanceof HTMLInputElement)) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    if (!setter) return false;
+    setter.call(element, inputValue);
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+    return element.value === inputValue;
+  }, { selectorValue: selector, inputValue: value });
 }
 
 async function waitForInventoryRows(page) {
