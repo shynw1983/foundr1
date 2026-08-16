@@ -1,4 +1,4 @@
-import { loginState, pageSummary, targetNameTiers } from "./common.mjs";
+import { loginState, pageSummary, platformUiChanged, targetNameTiers } from "./common.mjs";
 import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 import { loadDemaeCredentials } from "../demae-credentials.mjs";
 
@@ -20,7 +20,16 @@ async function fillInput(page, selector, value) {
 }
 
 async function waitForInventoryRows(page) {
-  await page.waitForSelector("[class*=Styles_name__]", { visible: true, timeout: 30000 });
+  if (typeof page.waitForFunction !== "function") {
+    await page.waitForSelector("[class*=Styles_name__]", { visible: true, timeout: 30000 });
+    return;
+  }
+  await page.waitForFunction(() => {
+    const visible = (element) => Boolean(element?.getClientRects().length);
+    return [...document.querySelectorAll("[class*=Styles_name__]")].some(visible)
+      || [...document.querySelectorAll('label input[type="checkbox"]')]
+        .some((input) => visible(input.closest("label")));
+  }, { timeout: 30000 });
 }
 
 async function readRows(page, targets) {
@@ -31,16 +40,25 @@ async function readRows(page, targets) {
   return page.evaluate((items) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll("[class*=Styles_name__]")];
+    const checkboxRows = [...document.querySelectorAll('label input[type="checkbox"]')]
+      .map((input) => input.closest("label"))
+      .filter((row) => row?.getClientRects().length);
+    const rowParts = (row) => (row?.innerText ?? row?.textContent ?? "")
+      .split(/\n|[|｜]/u).map(normalize).filter(Boolean);
     return items.map((item) => {
       const findRows = (names) => {
         const wanted = names.map(normalize);
-        return titles
+        const primary = titles
           .filter((title) => {
             const titleParts = normalize(title.textContent).split(/[|｜]/u).map((part) => part.trim());
             return wanted.some((name) => titleParts.includes(name));
           })
-          .map((title) => title.closest("label[class*=TableSubRow_tableSubRow]"))
+          .map((title) => title.closest("label") ?? title.closest("tr") ?? title.parentElement)
           .filter(Boolean);
+        if (primary.length) return primary;
+        return checkboxRows
+          .filter((row) => wanted.some((name) => rowParts(row).includes(name)))
+          .sort((left, right) => normalize(left.textContent).length - normalize(right.textContent).length);
       };
       const exactRows = findRows(item.exactNames);
       const fallbackRows = exactRows.length ? [] : findRows(item.fallbackNames);
@@ -85,7 +103,7 @@ async function clickRows(page, items) {
       }
       return checkbox.checked;
     }), rowIds);
-    if (!clicked) throw new Error(`demae_can_row_selection_failed:${item.label}`);
+    if (!clicked) throw platformUiChanged("demae_can", `row_selection:${item.label}`);
   }
 }
 
@@ -115,14 +133,22 @@ async function waitForRows(page, items, permanentlyUnavailable) {
   await page.waitForFunction(({ requested, expectedPermanentlyUnavailable }) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll("[class*=Styles_name__]")];
+    const checkboxRows = [...document.querySelectorAll('label input[type="checkbox"]')]
+      .map((input) => input.closest("label"))
+      .filter((row) => row?.getClientRects().length);
+    const rowParts = (row) => (row?.innerText ?? row?.textContent ?? "")
+      .split(/\n|[|｜]/u).map(normalize).filter(Boolean);
     return requested.every((item) => {
       const wanted = item.names.map(normalize);
-      const matching = titles.filter((candidate) => {
+      const matchingTitles = titles.filter((candidate) => {
         const titleParts = normalize(candidate.textContent).split(/[|｜]/u).map((part) => part.trim());
         return wanted.some((name) => titleParts.includes(name));
       });
-      return matching.length > 0 && matching.every((title) => {
-        const rowText = normalize(title.closest("label[class*=TableSubRow_tableSubRow]")?.textContent);
+      const matching = matchingTitles.length
+        ? matchingTitles.map((title) => title.closest("label") ?? title.closest("tr") ?? title.parentElement).filter(Boolean)
+        : checkboxRows.filter((row) => wanted.some((name) => rowParts(row).includes(name)));
+      return matching.length > 0 && matching.every((row) => {
+        const rowText = normalize(row.textContent);
         return expectedPermanentlyUnavailable ? /終売|無期限/u.test(rowText) : !/品切れ|終売/u.test(rowText);
       });
     });
@@ -279,7 +305,7 @@ export class DemaeCanAdapter {
     );
     const disappeared = fresh.filter((item) => item.matches.length === 0);
     if (disappeared.length) {
-      throw new Error(`demae_can_target_disappeared:${disappeared.map((item) => item.label).join(",")}`);
+      throw platformUiChanged("demae_can", `target_disappeared:${disappeared.map((item) => item.label).join(",")}`);
     }
     const changing = fresh.flatMap((item) => {
       const rowMatches = (item.matches[0]?.rowMatches ?? item.matches).filter((match) => desiredUnavailable

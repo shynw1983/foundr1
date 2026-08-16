@@ -1,7 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 import { CdpPage } from "../cdp-page.mjs";
-import { loginState, targetNameTiers } from "./common.mjs";
+import { loginState, platformUiChanged, targetNameTiers } from "./common.mjs";
 
 const UBER_ORIGIN = "https://merchants.ubereats.com/";
 const NORMALIZE_SOURCE = `const normalize = (value) => String(value ?? "")
@@ -81,7 +81,18 @@ export class UberEatsAdapter {
             const found = anchors
               .filter((anchor) => normalize(anchor.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())))
               .map((anchor) => {
-                const lines = (anchor.closest(".cw.bd.il.r6.cu")?.innerText ?? "")
+                let record = anchor.closest('tr, [role="row"], .cw.bd.il.r6.cu');
+                if (!record) {
+                  let current = anchor.parentElement;
+                  for (let depth = 0; current && depth < 6; depth += 1, current = current.parentElement) {
+                    const text = current.innerText ?? current.textContent ?? "";
+                    if (text.length < 1600 && text.split("\\n").filter(Boolean).length >= 2) {
+                      record = current;
+                      break;
+                    }
+                  }
+                }
+                const lines = (record?.innerText ?? "")
                   .split("\\n").map((line) => line.trim()).filter(Boolean);
                 const price = Number(String(lines[1] ?? "").replace(/[^0-9]/g, "")) || 0;
                 return {
@@ -140,11 +151,11 @@ export class UberEatsAdapter {
     try {
       for (const item of located) {
         const href = item.matches[0]?.href;
-        if (!href) throw new Error(`uber_eats_item_link_missing:${item.label}`);
+        if (!href) throw platformUiChanged("uber_eats", `item_link:${item.label}`);
         await page.navigate(href);
         await page.waitFor(`Boolean(document.querySelector('input[name="itemSuspensionState"]'))`);
         const before = await this.readSoldOutState(page);
-        if (!before.found) throw new Error(`uber_eats_sold_out_control_missing:${item.label}`);
+        if (!before.found) throw platformUiChanged("uber_eats", `sold_out_control:${item.label}`);
         if (before.checked === desiredSoldOut) continue;
         const saved = await page.evaluate(`(() => {
           const checkbox = document.querySelector('input[name="itemSuspensionState"]');
@@ -156,7 +167,7 @@ export class UberEatsAdapter {
           save.click();
           return true;
         })()`);
-        if (!saved) throw new Error(`uber_eats_save_button_missing:${item.label}`);
+        if (!saved) throw platformUiChanged("uber_eats", `save_button:${item.label}`);
         await delay(1500);
         await page.navigate(this.itemsUrl());
         await page.waitFor(`Boolean(document.querySelector('a[href*="/items/"]'))`);

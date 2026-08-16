@@ -60,6 +60,7 @@ function syncCopy(language: StoreMenuLanguage) {
       login: "需要重新登录该平台。",
       target: "找不到对应的商品或选项。",
       multipleTargets: "找到多个同名商品或选项，Bridge 为避免改错已停止。",
+      pageChanged: "平台页面结构已更新，Bridge 已安全停止，未继续盲目点击。",
       pageTimeout: "平台页面响应超时。",
       expired: "同步任务已过期。",
       generic: "同步失败。",
@@ -89,6 +90,7 @@ function syncCopy(language: StoreMenuLanguage) {
       login: "需要重新登入該平台。",
       target: "找不到對應的商品或選項。",
       multipleTargets: "找到多個同名商品或選項，Bridge 為避免改錯已停止。",
+      pageChanged: "平台頁面結構已更新，Bridge 已安全停止，未繼續盲目點擊。",
       pageTimeout: "平台頁面回應逾時。",
       expired: "同步工作已過期。",
       generic: "同步失敗。",
@@ -117,6 +119,7 @@ function syncCopy(language: StoreMenuLanguage) {
     login: "このプラットフォームへの再ログインが必要です。",
     target: "対応する商品・オプションが見つかりません。",
     multipleTargets: "同名の商品・オプションが複数あるため、誤操作防止のため停止しました。",
+    pageChanged: "プラットフォーム画面の構造が更新されたため、Bridgeは安全に停止しました。",
     pageTimeout: "プラットフォーム画面の応答がタイムアウトしました。",
     expired: "同期処理の有効期限が切れました。",
     generic: "同期に失敗しました。",
@@ -154,6 +157,7 @@ function readableSyncError(error: string, language: StoreMenuLanguage) {
   if (/login required|ログイン/i.test(error)) return copy.login;
   if (/multiple target matches|複数の候補|多个候选/i.test(error)) return copy.multipleTargets;
   if (/target verification failed|対応する.*見つかりません/i.test(error)) return copy.target;
+  if (/platform_ui_changed/i.test(error)) return copy.pageChanged;
   if (/timeout|timed out|waiting failed|waiting for selector|verification_timeout|condition timed out/i.test(error)) return copy.pageTimeout;
   if (/expired|有効期限/i.test(error)) return copy.expired;
   return error.trim() || copy.generic;

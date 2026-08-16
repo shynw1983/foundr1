@@ -68,6 +68,10 @@ export function loginState(summary, expectedText) {
   };
 }
 
+export function platformUiChanged(platform, stage) {
+  return new Error(`platform_ui_changed:${platform}:${stage}`);
+}
+
 export async function exactVisibleMatches(page, names, selector) {
   const wanted = names.map(normalizeText);
   return page.evaluate(({ wantedValues, selectorValue }) => {

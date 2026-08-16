@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 
-import { loginState, pageSummary, targetNameTiers } from "./common.mjs";
+import { loginState, pageSummary, platformUiChanged, targetNameTiers } from "./common.mjs";
 import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 
 const OOS_URL = "https://store.rocketnow.co.jp/merchant/management/oos";
@@ -16,7 +16,12 @@ async function waitForInventoryRows(page, targetKind) {
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      await page.waitForSelector(INVENTORY_ROW_SELECTOR, { visible: true, timeout: 25000 });
+      await page.waitForFunction((selector) => {
+        const visible = (element) => Boolean(element?.getClientRects().length);
+        return [...document.querySelectorAll(selector)].some(visible)
+          || [...document.querySelectorAll('input[type="checkbox"]')]
+            .some((input) => visible(input.closest("label, [role=row], li")));
+      }, { timeout: 25000 }, INVENTORY_ROW_SELECTOR);
       return;
     } catch (error) {
       if (attempt > 0) throw error;
@@ -29,18 +34,20 @@ async function waitForInventoryRows(page, targetKind) {
 async function selectInventoryTab(page, targetKind) {
   const tabLabel = targetKind === "option" ? "オプション" : "メニュー";
   const selected = await page.evaluate((label) => {
-    const tab = [...document.querySelectorAll(".selectable-tab")]
+    const tab = [...document.querySelectorAll('.selectable-tab, [role="tab"], button')]
       .find((candidate) => candidate.textContent?.trim() === label);
     if (!(tab instanceof HTMLElement)) return false;
-    if (!tab.classList.contains("selected")) tab.click();
+    if (!tab.classList.contains("selected") && tab.getAttribute("aria-selected") !== "true") tab.click();
     return true;
   }, tabLabel);
-  if (!selected) throw new Error(`rocket_now_inventory_tab_missing:${targetKind}`);
+  if (!selected) throw platformUiChanged("rocket_now", `inventory_tab:${targetKind}`);
   await page.waitForFunction(
-    (label) => [...document.querySelectorAll(".selectable-tab")]
-      .some((candidate) => candidate.textContent?.trim() === label && candidate.classList.contains("selected")),
+    ({ label, suffix }) => location.pathname.endsWith(suffix)
+      || [...document.querySelectorAll('.selectable-tab, [role="tab"], button')]
+        .some((candidate) => candidate.textContent?.trim() === label
+          && (candidate.classList.contains("selected") || candidate.getAttribute("aria-selected") === "true")),
     { timeout: 10000 },
-    tabLabel
+    { label: tabLabel, suffix: targetKind === "option" ? "/option" : "/menu" }
   );
   await waitForInventoryRows(page, targetKind);
 }
@@ -53,13 +60,30 @@ async function readRows(page, targets) {
   return page.evaluate((items) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
+    const rowFor = (element) => {
+      const stable = element?.closest('label, [role="row"], li, div[class*=e1iqhfx24]');
+      if (stable && stable.querySelector('input[type="checkbox"], input[type="checkBox"]')) return stable;
+      let current = element?.parentElement;
+      for (let depth = 0; current && depth < 7; depth += 1, current = current.parentElement) {
+        const text = normalize(current.textContent);
+        if (text.length < 1200 && current.querySelector('input[type="checkbox"], input[type="checkBox"]')) return current;
+      }
+      return null;
+    };
+    const checkboxRows = [...document.querySelectorAll('input[type="checkbox"], input[type="checkBox"]')]
+      .map(rowFor).filter((row) => row?.getClientRects().length);
+    const rowParts = (row) => (row?.innerText ?? row?.textContent ?? "")
+      .split(/\n|[|｜]/u).map(normalize).filter(Boolean);
     return items.map((item) => {
       const findRows = (names) => {
         const wanted = new Set(names.map(normalize));
-        return titles
+        const primary = titles
           .filter((title) => normalize(title.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())))
-          .map((title) => title.closest("div[class*=e1iqhfx24]"))
+          .map(rowFor)
           .filter(Boolean);
+        const found = primary.length ? primary : checkboxRows
+          .filter((row) => rowParts(row).some((part) => wanted.has(part)));
+        return [...new Set(found)];
       };
       const exactRows = findRows(item.exactNames);
       const fallbackRows = exactRows.length ? [] : findRows(item.fallbackNames);
@@ -92,11 +116,26 @@ async function waitForRows(page, items, hidden, targetKind) {
   const verify = async () => page.waitForFunction(({ requested, expectedHidden }) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
+    const rowFor = (element) => {
+      const stable = element?.closest('label, [role="row"], li, div[class*=e1iqhfx24]');
+      if (stable && stable.querySelector('input[type="checkbox"], input[type="checkBox"]')) return stable;
+      let current = element?.parentElement;
+      for (let depth = 0; current && depth < 7; depth += 1, current = current.parentElement) {
+        if (normalize(current.textContent).length < 1200 && current.querySelector('input[type="checkbox"], input[type="checkBox"]')) return current;
+      }
+      return null;
+    };
+    const checkboxRows = [...document.querySelectorAll('input[type="checkbox"], input[type="checkBox"]')]
+      .map(rowFor).filter((row) => row?.getClientRects().length);
+    const rowParts = (row) => (row?.innerText ?? row?.textContent ?? "")
+      .split(/\n|[|｜]/u).map(normalize).filter(Boolean);
     return requested.every((item) => {
       const wanted = new Set(item.names.map(normalize));
-      const matching = titles.filter((candidate) => normalize(candidate.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())));
-      return matching.length > 0 && matching.every((title) => {
-        const row = title.closest("div[class*=e1iqhfx24]");
+      const matchingTitles = titles.filter((candidate) => normalize(candidate.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())));
+      const matching = matchingTitles.length
+        ? matchingTitles.map(rowFor).filter(Boolean)
+        : checkboxRows.filter((row) => rowParts(row).some((part) => wanted.has(part)));
+      return matching.length > 0 && matching.every((row) => {
         return Boolean(row) && normalize(row.textContent).includes("非表示") === expectedHidden;
       });
     });
@@ -166,14 +205,17 @@ export class RocketNowAdapter {
       for (const item of uniqueChanging) {
         const clicked = await page.evaluate((checkboxId) => {
           const checkbox = document.getElementById(checkboxId);
-          const row = checkbox?.closest("div[class*=e1iqhfx24]");
+          let row = checkbox?.closest('label, [role="row"], li, div[class*=e1iqhfx24]');
+          for (let depth = 0; row && depth < 7 && ![...row.querySelectorAll("button")].some((button) => button.textContent?.trim() === "解除"); depth += 1) {
+            row = row.parentElement;
+          }
           const button = [...(row?.querySelectorAll("button") ?? [])]
             .find((candidate) => candidate.textContent?.trim() === "解除");
           if (!(button instanceof HTMLButtonElement)) return false;
           button.click();
           return true;
         }, item.matches[0].checkboxId);
-        if (!clicked) throw new Error(`rocket_now_unhide_button_missing:${item.label}`);
+        if (!clicked) throw platformUiChanged("rocket_now", `unhide_button:${item.label}`);
         await waitForRows(page, [item], false, targetKind);
       }
       return { outcome: "applied", changed: uniqueChanging.length, desiredHidden };
@@ -181,17 +223,20 @@ export class RocketNowAdapter {
 
     for (const item of uniqueChanging) {
       const checkboxId = item.matches[0].checkboxId;
-      if (!checkboxId) throw new Error(`rocket_now_checkbox_missing:${item.label}`);
+      if (!checkboxId) throw platformUiChanged("rocket_now", `checkbox:${item.label}`);
       await page.evaluate((id) => document.getElementById(id)?.click(), checkboxId);
       await page.waitForSelector('[data-testid="FloatingPopup"]', { visible: true, timeout: 10000 });
       const selectedHide = await page.evaluate(() => {
         const popup = document.querySelector('[data-testid="FloatingPopup"]');
-        const trigger = popup?.querySelector(":scope > div > div");
+        if (document.querySelector('input[type="radio"][value="HIDE"]')) return true;
+        const trigger = [...(popup?.querySelectorAll('[role="combobox"], button, [tabindex="0"]') ?? [])]
+          .find((candidate) => candidate.getClientRects().length && /表示|売り切れ|ステータス/u.test(candidate.textContent ?? ""))
+          ?? popup?.querySelector(":scope > div > div");
         if (!(trigger instanceof HTMLElement)) return false;
         trigger.click();
         return true;
       });
-      if (!selectedHide) throw new Error("rocket_now_status_picker_missing");
+      if (!selectedHide) throw platformUiChanged("rocket_now", "status_picker");
       await delay(250);
       const hideSelected = await page.evaluate(() => {
         const input = document.querySelector('input[type="radio"][value="HIDE"]');
@@ -199,7 +244,7 @@ export class RocketNowAdapter {
         input.click();
         return input.checked;
       });
-      if (!hideSelected) throw new Error("rocket_now_hide_option_missing");
+      if (!hideSelected) throw platformUiChanged("rocket_now", "hide_option");
       const applied = await page.evaluate(() => {
         const popup = document.querySelector('[data-testid="FloatingPopup"]');
         const button = [...(popup?.querySelectorAll("button") ?? [])]
@@ -208,7 +253,7 @@ export class RocketNowAdapter {
         button.click();
         return true;
       });
-      if (!applied) throw new Error("rocket_now_apply_button_missing");
+      if (!applied) throw platformUiChanged("rocket_now", "apply_button");
       await waitForRows(page, [item], true, targetKind);
     }
     return { outcome: "applied", changed: uniqueChanging.length, desiredHidden };
