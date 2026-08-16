@@ -25,6 +25,14 @@ export function preferCurrentUberMatches(matches) {
   return preferred.length === 1 ? preferred : matches;
 }
 
+export function parseUberSoldOutDuration(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^Selected\s+/iu, "")
+    .replace(/[.。．\s]+$/gu, "")
+    .trim();
+}
+
 function itemPath(value) {
   try {
     return new URL(String(value ?? "")).pathname.replace(/\/$/u, "");
@@ -162,7 +170,11 @@ export class UberEatsAdapter {
       const checkbox = document.querySelector('input[name="itemSuspensionState"]');
       const nameInput = document.querySelector('input[name="name"]');
       const duration = [...document.querySelectorAll('input[role="combobox"][aria-label^="Selected "]')]
-        .map((input) => input.getAttribute("aria-label")?.match(/^Selected (.+?)\.\s*$/u)?.[1] ?? "")
+        .map((input) => String(input.getAttribute("aria-label") ?? "")
+          .trim()
+          .replace(/^Selected\\s+/iu, "")
+          .replace(/[.。．\\s]+$/gu, "")
+          .trim())
         .find(Boolean) ?? "";
       return checkbox instanceof HTMLInputElement && nameInput instanceof HTMLInputElement
         ? { found: true, checked: checkbox.checked, itemName: nameInput.value, duration, url: location.href }
@@ -173,7 +185,12 @@ export class UberEatsAdapter {
   async openInventoryItem(page, item) {
     const href = item.matches[0]?.href;
     if (!href) throw platformUiChanged("uber_eats", `item_link:${item.label}`);
-    await page.navigate(href);
+    await Promise.race([
+      page.navigate(href),
+      delay(30000).then(() => {
+        throw new Error(`uber_eats_item_navigation_timeout:${item.label}`);
+      })
+    ]);
     const deadline = Date.now() + 20000;
     let state = null;
     while (Date.now() < deadline) {
@@ -203,11 +220,12 @@ export class UberEatsAdapter {
     })()`);
     if (!opened) throw platformUiChanged("uber_eats", "sold_out_duration_control");
     await page.waitFor(`[...document.querySelectorAll('[role="option"]')]
-      .some((option) => option.getClientRects().length && option.textContent?.trim() === ${JSON.stringify("期限を設定しない")})`);
+      .some((option) => option.getClientRects().length
+        && String(option.textContent ?? "").trim().replace(/[.。．\\s]+$/gu, "") === ${JSON.stringify("期限を設定しない")})`);
     const selected = await page.evaluate(`(() => {
       const option = [...document.querySelectorAll('[role="option"]')]
         .find((candidate) => candidate.getClientRects().length
-          && candidate.textContent?.trim() === ${JSON.stringify("期限を設定しない")});
+          && String(candidate.textContent ?? "").trim().replace(/[.。．\\s]+$/gu, "") === ${JSON.stringify("期限を設定しない")});
       if (!(option instanceof HTMLElement)) return false;
       option.click();
       return true;

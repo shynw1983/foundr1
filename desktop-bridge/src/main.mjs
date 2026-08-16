@@ -10,7 +10,8 @@ import {
   inventoryCommandMaxAttempts,
   isDemaeCanCircuitFailure,
   isRetryableInventoryError,
-  partialInventoryTargetError
+  partialInventoryTargetError,
+  shouldRestartDemaeCanBrowser
 } from "./retry-policy.mjs";
 
 const mode = process.argv[2] ?? "check";
@@ -145,7 +146,11 @@ async function executeInventoryCommand(command) {
         attempt: attempt + 1,
         maxAttempts
       }, message);
-      await sessions.get(platform)?.disconnect();
+      if (platform === "demae_can" && shouldRestartDemaeCanBrowser(message)) {
+        await sessions.get(platform)?.close();
+      } else {
+        await sessions.get(platform)?.disconnect();
+      }
       await delay(1500 * attempt);
     }
   }

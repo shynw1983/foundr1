@@ -162,15 +162,91 @@ async function waitForRows(page, items, permanentlyUnavailable) {
   }, { timeout: 15000 }, { requested: items, expectedPermanentlyUnavailable: permanentlyUnavailable });
 }
 
-async function waitForVisibleForm(page, selector, errorCode) {
+async function waitForVisibleForm(page, selector, errorCode, timeout = 5000) {
   try {
     await page.waitForFunction((formSelector) => {
       const form = document.querySelector(formSelector);
       const rect = form?.getBoundingClientRect();
       return Boolean(rect && rect.width > 0 && rect.height > 0);
-    }, { timeout: 5000 }, selector);
+    }, { timeout }, selector);
   } catch {
     throw new Error(errorCode);
+  }
+}
+
+async function openInventoryActionForm(page, tabKey, formSelector, missingCode, timeoutCode) {
+  const opened = await page.evaluate((key) => {
+    const tab = [...document.querySelectorAll(`[data-key="${key}"]`)]
+      .find((candidate) => candidate.getClientRects().length);
+    if (!(tab instanceof HTMLElement)) return false;
+    tab.click();
+    return true;
+  }, tabKey);
+  if (!opened) throw new Error(missingCode);
+
+  try {
+    await waitForVisibleForm(page, formSelector, timeoutCode, 750);
+    return;
+  } catch {
+    // Demae's fixed table layer can cover the visible tab. In that state a
+    // normal DOM click is ignored even though the React tab is rendered.
+  }
+
+  const activated = await page.evaluate((key) => {
+    const tab = [...document.querySelectorAll(`[data-key="${key}"]`)]
+      .find((candidate) => candidate.getClientRects().length);
+    if (!(tab instanceof HTMLElement)) return false;
+    const propsKey = Object.keys(tab).find((name) => name.startsWith("__reactProps$"));
+    const handler = propsKey ? tab[propsKey]?.onClick : null;
+    if (typeof handler !== "function") return false;
+    handler({ currentTarget: tab, target: tab, preventDefault() {}, stopPropagation() {} });
+    return true;
+  }, tabKey);
+  if (!activated) throw new Error(missingCode);
+  await waitForVisibleForm(page, formSelector, timeoutCode);
+}
+
+async function waitForConfirmationButton(page, timeout = 5000) {
+  await page.waitForFunction(() => [...document.querySelectorAll("button")].some((button) => {
+    const rect = button.getBoundingClientRect();
+    return button.textContent?.trim() === "確定" && rect.width > 0 && rect.height > 0;
+  }), { timeout });
+}
+
+async function submitInventoryActionForm(page, formSelector) {
+  const submitted = await page.evaluate((selector) => {
+    const form = [...document.querySelectorAll(selector)]
+      .find((candidate) => candidate.getClientRects().length);
+    const button = [...(form?.querySelectorAll("button") ?? [])]
+      .find((candidate) => candidate.textContent?.trim() === "適用");
+    if (!(button instanceof HTMLButtonElement)) return false;
+    button.click();
+    return true;
+  }, formSelector);
+  if (!submitted) throw new Error("demae_can_apply_button_missing");
+
+  try {
+    await waitForConfirmationButton(page, 1000);
+    return;
+  } catch {
+    // The same fixed layer can swallow the form's synthetic submit event.
+  }
+
+  const invoked = await page.evaluate((selector) => {
+    const form = [...document.querySelectorAll(selector)]
+      .find((candidate) => candidate.getClientRects().length);
+    if (!(form instanceof HTMLFormElement)) return false;
+    const propsKey = Object.keys(form).find((name) => name.startsWith("__reactProps$"));
+    const handler = propsKey ? form[propsKey]?.onSubmit : null;
+    if (typeof handler !== "function") return false;
+    handler({ currentTarget: form, target: form, preventDefault() {}, stopPropagation() {} });
+    return true;
+  }, formSelector);
+  if (!invoked) throw new Error("demae_can_apply_button_missing");
+  try {
+    await waitForConfirmationButton(page);
+  } catch {
+    throw new Error("demae_can_confirmation_timeout");
   }
 }
 
@@ -303,8 +379,12 @@ export class DemaeCanAdapter {
   async setInventory(payload, located) {
     const page = await this.session.goto(STOCKOUT_URL);
     await this.ensureAuthenticated(page);
-    // locateTargets has just verified this same page. Reusing it is more reliable
-    // than reloading Demae's slow inventory screen before every save.
+    // Demae leaves the previous selection layer and action modal mounted after
+    // some saves. Reusing that DOM makes the next action unable to open its
+    // inventory modal. Start every mutation from a freshly rendered page so a
+    // previous command cannot poison the next one; refreshInventoryPage also
+    // exposes an expired session and runs the normal login recovery.
+    await this.refreshInventoryPage(page);
     const desiredUnavailable = payload.isAvailable !== true;
     const fresh = await this.readInventoryRowsWithAuthRecovery(
       page,
@@ -328,14 +408,13 @@ export class DemaeCanAdapter {
     await clickRows(page, changing);
     await waitForInventoryActionModal(page);
     if (desiredUnavailable) {
-      const opened = await page.evaluate(() => {
-        const tab = document.querySelector('[data-key="stockoutSetting"]');
-        if (!(tab instanceof HTMLElement)) return false;
-        tab.click();
-        return true;
-      });
-      if (!opened) throw new Error("demae_can_stockout_tab_missing");
-      await waitForVisibleForm(page, "form[class*=StockoutSetting_form]", "demae_can_stockout_form_timeout");
+      await openInventoryActionForm(
+        page,
+        "stockoutSetting",
+        "form[class*=StockoutSetting_form]",
+        "demae_can_stockout_tab_missing",
+        "demae_can_stockout_form_timeout"
+      );
       const selected = await page.evaluate(() => {
         const form = document.querySelector("form[class*=StockoutSetting_form]");
         const labels = [...(form?.querySelectorAll("label") ?? [])];
@@ -347,33 +426,18 @@ export class DemaeCanAdapter {
       });
       if (!selected) throw new Error("demae_can_indefinite_option_missing");
     } else {
-      const opened = await page.evaluate(() => {
-        const tab = document.querySelector('[data-key="stockoutDelete"]');
-        if (!(tab instanceof HTMLElement)) return false;
-        tab.click();
-        return true;
-      });
-      if (!opened) throw new Error("demae_can_restore_tab_missing");
-      await waitForVisibleForm(page, "form[class*=StockoutDelete_form]", "demae_can_restore_form_timeout");
+      await openInventoryActionForm(
+        page,
+        "stockoutDelete",
+        "form[class*=StockoutDelete_form]",
+        "demae_can_restore_tab_missing",
+        "demae_can_restore_form_timeout"
+      );
     }
-    const submitted = await page.evaluate((restoring) => {
-      const selector = restoring ? "form[class*=StockoutDelete_form]" : "form[class*=StockoutSetting_form]";
-      const form = document.querySelector(selector);
-      const button = [...(form?.querySelectorAll("button") ?? [])]
-        .find((candidate) => candidate.textContent?.trim() === "適用");
-      if (!(button instanceof HTMLButtonElement)) return false;
-      button.click();
-      return true;
-    }, !desiredUnavailable);
-    if (!submitted) throw new Error("demae_can_apply_button_missing");
-    try {
-      await page.waitForFunction(() => [...document.querySelectorAll("button")].some((button) => {
-        const rect = button.getBoundingClientRect();
-        return button.textContent?.trim() === "確定" && rect.width > 0 && rect.height > 0;
-      }), { timeout: 5000 });
-    } catch {
-      throw new Error("demae_can_confirmation_timeout");
-    }
+    await submitInventoryActionForm(
+      page,
+      desiredUnavailable ? "form[class*=StockoutSetting_form]" : "form[class*=StockoutDelete_form]"
+    );
     const confirmed = await page.evaluate(() => {
       const button = [...document.querySelectorAll("button")].find((candidate) => {
         const rect = candidate.getBoundingClientRect();

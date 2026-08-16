@@ -3,12 +3,14 @@ import test from "node:test";
 
 import {
   DEMAE_CAN_CIRCUIT_FAILURE_THRESHOLD,
+  DEMAE_CAN_COMMAND_MAX_ATTEMPTS,
   DEMAE_CAN_CIRCUIT_OPEN_MS,
   INVENTORY_COMMAND_MAX_ATTEMPTS,
   inventoryCommandMaxAttempts,
   isDemaeCanCircuitFailure,
   isRetryableInventoryError,
-  partialInventoryTargetError
+  partialInventoryTargetError,
+  shouldRestartDemaeCanBrowser
 } from "../src/retry-policy.mjs";
 
 test("retries transient browser and platform page errors", () => {
@@ -19,8 +21,9 @@ test("retries transient browser and platform page errors", () => {
   assert.equal(isRetryableInventoryError("Target verification failed: 商品=0"), true);
 });
 
-test("fails a Demae Can timeout quickly while retaining retries for other platforms", () => {
-  assert.equal(inventoryCommandMaxAttempts("demae_can"), 1);
+test("restarts Demae Can once while retaining wider retries for other platforms", () => {
+  assert.equal(DEMAE_CAN_COMMAND_MAX_ATTEMPTS, 2);
+  assert.equal(inventoryCommandMaxAttempts("demae_can"), DEMAE_CAN_COMMAND_MAX_ATTEMPTS);
   assert.equal(inventoryCommandMaxAttempts("uber_eats"), INVENTORY_COMMAND_MAX_ATTEMPTS);
   assert.equal(inventoryCommandMaxAttempts("rocket_now"), INVENTORY_COMMAND_MAX_ATTEMPTS);
   assert.equal(DEMAE_CAN_CIRCUIT_FAILURE_THRESHOLD, 2);
@@ -28,6 +31,9 @@ test("fails a Demae Can timeout quickly while retaining retries for other platfo
   assert.equal(isDemaeCanCircuitFailure("Runtime.callFunctionOn timed out"), true);
   assert.equal(isDemaeCanCircuitFailure("Waiting for selector failed"), true);
   assert.equal(isDemaeCanCircuitFailure("login required"), false);
+  assert.equal(shouldRestartDemaeCanBrowser("demae_can_inventory_modal_timeout"), true);
+  assert.equal(shouldRestartDemaeCanBrowser("demae_can_page_unavailable"), true);
+  assert.equal(shouldRestartDemaeCanBrowser("demae_can_login_credentials_rejected"), false);
 });
 
 test("does not retry login or configuration errors", () => {

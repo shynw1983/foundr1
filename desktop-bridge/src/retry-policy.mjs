@@ -1,5 +1,5 @@
 export const INVENTORY_COMMAND_MAX_ATTEMPTS = 3;
-export const DEMAE_CAN_COMMAND_MAX_ATTEMPTS = 1;
+export const DEMAE_CAN_COMMAND_MAX_ATTEMPTS = 2;
 export const DEMAE_CAN_CIRCUIT_FAILURE_THRESHOLD = 2;
 export const DEMAE_CAN_CIRCUIT_OPEN_MS = 15 * 60 * 1000;
 
@@ -11,6 +11,10 @@ export function inventoryCommandMaxAttempts(platform) {
 
 export function isDemaeCanCircuitFailure(value) {
   return /timed out|timeout|waiting for selector|verification_timeout|protocoltimeout/i.test(String(value ?? ""));
+}
+
+export function shouldRestartDemaeCanBrowser(value) {
+  return /page_unavailable|timed out|timeout|waiting for selector|protocoltimeout|cdp |websocket|navigated or closed/i.test(String(value ?? ""));
 }
 
 export function isRetryableInventoryError(value) {

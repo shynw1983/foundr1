@@ -4,7 +4,11 @@ import test from "node:test";
 import { normalizeText, targetNameTiers } from "../src/adapters/common.mjs";
 import { withPlatformTargetAliases } from "../src/adapters/platform-target-aliases.mjs";
 import { uniqueLocatedRows } from "../src/adapters/rocket-now.mjs";
-import { preferCurrentUberMatches, uberItemDetailMatches } from "../src/adapters/uber-eats.mjs";
+import {
+  parseUberSoldOutDuration,
+  preferCurrentUberMatches,
+  uberItemDetailMatches
+} from "../src/adapters/uber-eats.mjs";
 
 test("normalizes decorative vinegar text used differently by platforms", () => {
   assert.equal(
@@ -107,6 +111,22 @@ test("adds Rocket-safe aliases for published option names", () => {
   assert.deepEqual(projected.aliases, ["【旨味が爆発】ぶつ切りたこ約50g"]);
 });
 
+test("does not reuse Demae's single quail egg for the absent ten-egg bundle", () => {
+  const projected = withPlatformTargetAliases("demae_can", {
+    label: "🥇山盛りうずら×🔟",
+    aliases: []
+  });
+
+  assert.deepEqual(projected.aliases, []);
+});
+
+test("does not reuse Rocket rows for absent logical products", () => {
+  const quail = withPlatformTargetAliases("rocket_now", { label: "🥇山盛りうずら×🔟", aliases: [] });
+  const shrimp = withPlatformTargetAliases("rocket_now", { label: "大海老1匹", aliases: [] });
+  assert.equal(quail.aliases.includes("うずらの卵1個"), false);
+  assert.equal(shrimp.aliases.includes("むき海老 大"), false);
+});
+
 test("prefers the current Uber menu record over a legacy duplicate", () => {
   const current = {
     href: "current",
@@ -124,6 +144,12 @@ test("prefers the current Uber menu record over a legacy duplicate", () => {
   };
 
   assert.deepEqual(preferCurrentUberMatches([legacy, current]), [current]);
+});
+
+test("normalizes Uber sold-out duration labels before permanent-state verification", () => {
+  assert.equal(parseUberSoldOutDuration("Selected 期限を設定しない."), "期限を設定しない");
+  assert.equal(parseUberSoldOutDuration("Selected 期限を設定しない..  "), "期限を設定しない");
+  assert.equal(parseUberSoldOutDuration("Selected 本日。"), "本日");
 });
 
 test("waits for the expected Uber item identity before trusting its sold-out state", () => {
