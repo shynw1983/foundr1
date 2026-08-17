@@ -12190,6 +12190,101 @@ body :where(
   padding: 0;
 }
 
+.store-menu-status-filter {
+  display: grid;
+  gap: 6px;
+  min-width: min(430px, 100%);
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.store-menu-status-filter legend {
+  margin: 0 0 6px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.store-menu-status-filter > div {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(82px, 1fr));
+  gap: 5px;
+}
+
+.store-menu-status-filter button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 9px;
+  background: white;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.store-menu-status-filter button span,
+.store-menu-status-filter button small {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.store-menu-status-filter button small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  padding: 0 5px;
+  background: #eef2f0;
+  font-size: 11px;
+}
+
+.store-menu-status-filter button:hover,
+.store-menu-status-filter button:focus-visible {
+  border-color: rgba(33, 116, 91, 0.45);
+}
+
+.store-menu-status-filter button.is-active {
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.store-menu-status-filter button.is-active.is-low_stock {
+  border-color: rgba(169, 101, 20, 0.52);
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.store-menu-status-filter button.is-active.is-unavailable {
+  border-color: rgba(188, 54, 54, 0.45);
+  background: #fff4f4;
+  color: #a72f2f;
+}
+
+.store-menu-status-filter button.is-active small {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 640px) {
+  .store-menu-status-filter {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .store-menu-status-filter > div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .store-menu-layout {
   display: grid;
   grid-template-columns: minmax(190px, 0.26fr) minmax(0, 1fr);

@@ -108,6 +108,7 @@ type StoreMenuOptionGroup = {
 
 const optionCategoryKey = "__store_menu_options__";
 type StockStatus = "available" | "low_stock" | "unavailable";
+type StockStatusFilter = "all" | StockStatus;
 type PlatformKey = "foundr1" | "uber_eats" | "rocket_now" | "demae_can";
 type PlatformOverride = "follow" | "available" | "unavailable" | "hidden";
 type PlatformAvailability = Partial<Record<PlatformKey, "available" | "unavailable">>;
@@ -124,6 +125,15 @@ function statusText(language: StoreMenuLanguage, status: StockStatus) {
     ja: { available: "販売", low_stock: "残りわずか", unavailable: "売切" },
     "zh-Hans": { available: "销售", low_stock: "即将缺货", unavailable: "缺货" },
     "zh-Hant": { available: "銷售", low_stock: "即將缺貨", unavailable: "缺貨" }
+  };
+  return labels[language][status];
+}
+
+function statusFilterText(language: StoreMenuLanguage, status: StockStatusFilter) {
+  const labels = {
+    ja: { all: "すべて", available: "販売中", low_stock: "残りわずか", unavailable: "売切" },
+    "zh-Hans": { all: "全部", available: "销售中", low_stock: "即将缺货", unavailable: "已缺货" },
+    "zh-Hant": { all: "全部", available: "銷售中", low_stock: "即將缺貨", unavailable: "已缺貨" }
   };
   return labels[language][status];
 }
@@ -247,6 +257,7 @@ export default function StoreMenuPage() {
     }
   });
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StockStatusFilter>("all");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
   const [message, setMessage] = useState("");
@@ -335,6 +346,7 @@ export default function StoreMenuPage() {
     return items.filter((item) => {
       if (selectedBrandId && item.brandId !== selectedBrandId) return false;
       if (selectedCategory !== null && itemCategory(item) !== selectedCategory) return false;
+      if (statusFilter !== "all" && item.stockStatus !== statusFilter) return false;
       if (normalizedQuery && ![
         itemName(item, language),
         item.name,
@@ -342,7 +354,7 @@ export default function StoreMenuPage() {
       ].some((value) => value.toLowerCase().includes(normalizedQuery))) return false;
       return true;
     });
-  }, [items, language, query, selectedBrandId, selectedCategory]);
+  }, [items, language, query, selectedBrandId, selectedCategory, statusFilter]);
 
   const categoryItems = useMemo(() => items.filter((item) => !selectedBrandId || item.brandId === selectedBrandId), [items, selectedBrandId]);
   const categorySummaries = useMemo(() => getCategories(categoryItems, categories, selectedBrandId), [categories, categoryItems, selectedBrandId]);
@@ -353,21 +365,34 @@ export default function StoreMenuPage() {
   const visibleOptions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return optionItems.filter((option) => (
-      !normalizedQuery ||
-      [
+      (statusFilter === "all" || option.stockStatus === statusFilter) && (
+        !normalizedQuery || [
         localizedMenuName(option.name, option.displayNames, language),
         localizedMenuName(option.groupName, option.groupDisplayNames, language),
         option.name,
         option.groupName,
         ...Object.values(option.displayNames ?? {}),
         ...Object.values(option.groupDisplayNames ?? {})
-      ].some((value) => value.toLowerCase().includes(normalizedQuery))
+        ].some((value) => value.toLowerCase().includes(normalizedQuery))
+      )
     ));
-  }, [language, optionItems, query]);
+  }, [language, optionItems, query, statusFilter]);
   const visibleOptionGroups = useMemo(() => groupMenuOptions(visibleOptions), [visibleOptions]);
   const isOptionCategory = selectedCategory === optionCategoryKey;
   const showOptionCategory = settings.availability.targets.options && settings.availability.optionDisplayMode === "separate_category";
   const showMixedOptions = settings.availability.targets.options && settings.availability.optionDisplayMode === "mixed";
+  const categoryStatusTargets = selectedCategory === null
+    ? categoryItems
+    : categoryItems.filter((item) => itemCategory(item) === selectedCategory);
+  const statusFilterTargets = isOptionCategory
+    ? optionItems
+    : showMixedOptions ? [...categoryStatusTargets, ...optionItems] : categoryStatusTargets;
+  const statusFilterCounts = {
+    all: statusFilterTargets.length,
+    available: statusFilterTargets.filter((target) => target.stockStatus === "available").length,
+    low_stock: statusFilterTargets.filter((target) => target.stockStatus === "low_stock").length,
+    unavailable: statusFilterTargets.filter((target) => target.stockStatus === "unavailable").length
+  };
 
   useEffect(() => {
     if (selectedCategory === optionCategoryKey && !showOptionCategory) {
@@ -671,6 +696,23 @@ export default function StoreMenuPage() {
               {brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
             </select>
           </label>
+          <fieldset className="store-menu-status-filter">
+            <legend data-i18n-ignore>{language === "ja" ? "販売状態" : language === "zh-Hant" ? "銷售狀態" : "销售状态"}</legend>
+            <div>
+              {(["all", "available", "low_stock", "unavailable"] as StockStatusFilter[]).map((status) => (
+                <button
+                  className={statusFilter === status ? `is-active is-${status}` : `is-${status}`}
+                  type="button"
+                  aria-pressed={statusFilter === status}
+                  onClick={() => setStatusFilter(status)}
+                  key={status}
+                >
+                  <span data-i18n-ignore>{statusFilterText(language, status)}</span>
+                  <small>{statusFilterCounts[status]}</small>
+                </button>
+              ))}
+            </div>
+          </fieldset>
           <label className="store-menu-search">
             <span>検索</span>
             <div>
