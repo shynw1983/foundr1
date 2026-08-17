@@ -108,7 +108,7 @@
       ]
     },
     {
-      "accessibleName": "🍜麺の種類を選ぶ 13 オプション Chevron right",
+      "accessibleName": "🍜麺の種類を選ぶ 14 オプション Chevron right",
       "rows": [
         {
           "name": "【おすすめ❗️】もちもち板春雨50g｜宽粉｜넓적당면｜Wide Sweet Potato Noodles",
@@ -133,6 +133,10 @@
         {
           "name": "【数量限定】山芋粉皮（丸）50g｜圆形山药粉皮｜둥근 참마 당면｜Round Chinese Yam Starch Sheets",
           "priceText": "¥176"
+        },
+        {
+          "name": "さつまいも板春雨50g｜红薯宽粉｜고구마 넓적당면｜Wide Sweet Potato Noodles",
+          "priceText": "¥216"
         },
         {
           "name": "さつまいも麺50g｜红薯粉｜고구마당면｜Sweet Potato Noodles",

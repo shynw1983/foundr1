@@ -9,8 +9,7 @@ type InventoryPlatform = "uber_eats" | "rocket_now" | "demae_can";
 const EXCLUDED_LABELS: Record<InventoryPlatform, Set<string>> = {
   uber_eats: new Set([
     "夏限定・新定番！クセになる冷やし麻辣拌のピリ辛＆濃厚ハーモニー",
-    "🦆合鴨あぶりスモーク",
-    "さつまいも板春雨50g"
+    "🦆合鴨あぶりスモーク"
   ]),
   demae_can: new Set([
     "シビレ⚡️⚡️",

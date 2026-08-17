@@ -32,10 +32,10 @@ test("excludes an option that is no longer published on Uber", () => {
   assert.equal(projectInventoryTargetsForPlatform("demae_can", [target]).length, 1);
 });
 
-test("does not map an absent Uber noodle through a shared translation", () => {
+test("keeps a republished Uber noodle in the platform target list", () => {
   const target = item("さつまいも板春雨50g");
 
-  assert.equal(projectInventoryTargetsForPlatform("uber_eats", [target]).length, 0);
+  assert.equal(projectInventoryTargetsForPlatform("uber_eats", [target]).length, 1);
   assert.equal(projectInventoryTargetsForPlatform("rocket_now", [target]).length, 1);
   assert.equal(projectInventoryTargetsForPlatform("demae_can", [target]).length, 1);
 });

@@ -7,6 +7,7 @@ import { uniqueLocatedRows } from "../src/adapters/rocket-now.mjs";
 import {
   parseUberSoldOutDuration,
   preferCurrentUberMatches,
+  uberTargetNameTiers,
   uberItemDetailMatches
 } from "../src/adapters/uber-eats.mjs";
 
@@ -27,6 +28,18 @@ test("keeps Japanese source variants ahead of shared translated aliases", () => 
   assert.deepEqual(tiers.exactNames, ["さつまいも板春雨50g"]);
   assert.deepEqual(tiers.fallbackNames, ["さつまいも板春雨"]);
   assert.deepEqual(tiers.aliasNames, ["红薯宽粉", "Wide Sweet Potato Noodles"]);
+});
+
+test("requires the republished sweet-potato wide noodle to match its full Uber name", () => {
+  const tiers = uberTargetNameTiers({
+    label: "さつまいも板春雨50g",
+    aliases: ["红薯宽粉", "Wide Sweet Potato Noodles"]
+  });
+
+  assert.deepEqual(tiers.exactNames, ["さつまいも板春雨50g"]);
+  assert.deepEqual(tiers.primaryNames, ["さつまいも板春雨50g"]);
+  assert.deepEqual(tiers.fallbackNames, []);
+  assert.deepEqual(tiers.aliasNames, []);
 });
 
 test("keeps an exact weighted noodle name ahead of a legacy weightless title", () => {

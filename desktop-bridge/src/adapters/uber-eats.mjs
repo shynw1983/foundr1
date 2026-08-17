@@ -4,6 +4,9 @@ import { CdpPage } from "../cdp-page.mjs";
 import { loginState, normalizeText, platformUiChanged, targetNameTiers } from "./common.mjs";
 
 const UBER_ORIGIN = "https://merchants.ubereats.com/";
+const STRICT_EXACT_UBER_LABELS = new Set([
+  normalizeText("さつまいも板春雨50g")
+]);
 const NORMALIZE_SOURCE = `const normalize = (value) => String(value ?? "")
   .normalize("NFKC")
   .replace(/【[^】]*】|\\[[^\\]]*\\]/g, " ")
@@ -23,6 +26,17 @@ export function preferCurrentUberMatches(matches) {
   const highest = Math.max(...scored.map((entry) => entry.score));
   const preferred = scored.filter((entry) => entry.score === highest).map((entry) => entry.match);
   return preferred.length === 1 ? preferred : matches;
+}
+
+export function uberTargetNameTiers(target) {
+  const tiers = targetNameTiers(target);
+  if (!STRICT_EXACT_UBER_LABELS.has(normalizeText(target?.label))) return tiers;
+  return {
+    ...tiers,
+    primaryNames: tiers.exactNames,
+    fallbackNames: [],
+    aliasNames: []
+  };
 }
 
 export function parseUberSoldOutDuration(value) {
@@ -97,7 +111,7 @@ export class UberEatsAdapter {
     const page = await this.connect();
     try {
       await this.openItemsPage(page);
-      const requested = targets.map((target) => ({ label: target.label, ...targetNameTiers(target) }));
+      const requested = targets.map((target) => ({ label: target.label, ...uberTargetNameTiers(target) }));
       return await page.evaluate(`(() => {
         ${NORMALIZE_SOURCE}
         const items = ${JSON.stringify(requested)};

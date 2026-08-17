@@ -428,8 +428,7 @@
           "websitePrice": 170,
           "uberName": "さつまいも板春雨50g｜红薯宽粉｜고구마 넓적당면｜Wide Sweet Potato Noodles",
           "uberPrice": 216,
-          "matchedExisting": true,
-          "preserveWhenMissing": true
+          "matchedExisting": true
         },
         {
           "optionKey": "round-yam-sheet",
