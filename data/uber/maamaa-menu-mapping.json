@@ -2,7 +2,7 @@
   "source": {
     "platform": "uber_eats",
     "storeId": "d6205da2-b809-531c-a7b2-d9cf505cf1c0",
-    "capturedAt": "2026-08-08",
+    "capturedAt": "2026-08-17",
     "pricingRule": {
       "multiplier": 0.8,
       "roundingUnit": 10
@@ -428,7 +428,8 @@
           "websitePrice": 170,
           "uberName": "さつまいも板春雨50g｜红薯宽粉｜고구마 넓적당면｜Wide Sweet Potato Noodles",
           "uberPrice": 216,
-          "matchedExisting": true
+          "matchedExisting": true,
+          "preserveWhenMissing": true
         },
         {
           "optionKey": "round-yam-sheet",
@@ -481,6 +482,19 @@
           "uberName": "【大盛り】刀削麺100g｜刀削面｜칼국수면｜Knife-Shaved Noodles",
           "uberPrice": 276,
           "matchedExisting": true
+        },
+        {
+          "optionKey": "hot-pot-wide-noodle",
+          "name": "火鍋板春雨",
+          "displayNames": {
+            "zh": "火锅宽粉",
+            "ko": "훠궈 넓적당면",
+            "en": "Hot Pot Potato Wide Noodles"
+          },
+          "websitePrice": 170,
+          "uberName": "火鍋板春雨｜火锅宽粉｜훠궈 넓적당면｜Hot Pot Potato Wide Noodles",
+          "uberPrice": 216,
+          "matchedExisting": false
         }
       ]
     },
@@ -909,19 +923,6 @@
           "matchedExisting": true
         },
         {
-          "optionKey": "plain-wonton",
-          "name": "ワンタン",
-          "displayNames": {
-            "zh": "云吞",
-            "ko": "완탕",
-            "en": "Wontons"
-          },
-          "websitePrice": 170,
-          "uberName": "ワンタン｜云吞｜완탕｜ Wontons",
-          "uberPrice": 216,
-          "matchedExisting": true
-        },
-        {
           "optionKey": "soft-boiled-egg",
           "name": "半熟味玉",
           "displayNames": {
@@ -959,6 +960,45 @@
           "uberName": "軟骨入り鶏肉団子｜鸡软骨丸｜닭연골 완자｜Chicken Cartilage Meatball",
           "uberPrice": 216,
           "matchedExisting": true
+        },
+        {
+          "optionKey": "plain-wonton",
+          "name": "海老ワンタン",
+          "displayNames": {
+            "zh": "虾肉云吞",
+            "ko": "새우 완탕",
+            "en": "Shrimp Wonton"
+          },
+          "websitePrice": 170,
+          "uberName": "海老ワンタン｜虾肉云吞｜새우 완탕｜Shrimp Wonton",
+          "uberPrice": 216,
+          "matchedExisting": true
+        },
+        {
+          "optionKey": "shredded-tofu-skin",
+          "name": "豆腐皮の細切り",
+          "displayNames": {
+            "zh": "百叶丝",
+            "ko": "두부채",
+            "en": "Shredded Tofu Skin"
+          },
+          "websitePrice": 170,
+          "uberName": "豆腐皮の細切り｜百叶丝｜두부채｜Shredded Tofu Skin",
+          "uberPrice": 216,
+          "matchedExisting": false
+        },
+        {
+          "optionKey": "kelp-knots-3",
+          "name": "昆布結び3個",
+          "displayNames": {
+            "zh": "海带结3个",
+            "ko": "다시마 매듭 3개",
+            "en": "3 Kelp Knots"
+          },
+          "websitePrice": 220,
+          "uberName": "昆布結び3個｜海带结3个｜다시마 매듭 3개｜3 Kelp Knots",
+          "uberPrice": 276,
+          "matchedExisting": false
         }
       ]
     },
@@ -1131,7 +1171,7 @@
           },
           "websitePrice": 320,
           "uberName": "パクチー｜香菜｜고수｜Cilantro",
-          "uberPrice": 399,
+          "uberPrice": 406,
           "matchedExisting": true
         },
         {
@@ -1181,9 +1221,9 @@
             "ko": "양배추 롤",
             "en": "Cabbage Roll"
           },
-          "websitePrice": 240,
+          "websitePrice": 250,
           "uberName": "ロールキャベツ1個｜卷心菜卷｜양배추 롤｜Cabbage Roll",
-          "uberPrice": 300,
+          "uberPrice": 316,
           "matchedExisting": true
         },
         {
@@ -1353,19 +1393,6 @@
           "websitePrice": 260,
           "uberName": "白きくらげ｜银耳｜흰목이버섯｜White Fungus",
           "uberPrice": 326,
-          "matchedExisting": true
-        },
-        {
-          "optionKey": "beef-slice",
-          "name": "牛肉スライス(1人前約50g)",
-          "displayNames": {
-            "zh": "牛肉片",
-            "ko": "소고기 슬라이스",
-            "en": "Sliced Beef"
-          },
-          "websitePrice": 350,
-          "uberName": "牛肉スライス(1人前約50g)｜牛肉片｜소고기 슬라이스｜Sliced Beef",
-          "uberPrice": 439,
           "matchedExisting": true
         },
         {
@@ -1567,6 +1594,19 @@
           "uberName": "空心菜｜空心菜｜공심채｜Water Spinach",
           "uberPrice": 276,
           "matchedExisting": true
+        },
+        {
+          "optionKey": "half-onion",
+          "name": "玉ねぎ1/2個",
+          "displayNames": {
+            "zh": "半颗洋葱",
+            "ko": "양파 반 개",
+            "en": "Half an Onion"
+          },
+          "websitePrice": 170,
+          "uberName": "玉ねぎ1/2個｜半颗洋葱｜양파 반 개｜Half an Onion",
+          "uberPrice": 216,
+          "matchedExisting": false
         }
       ]
     },
@@ -1668,9 +1708,9 @@
             "ko": "소양",
             "en": "Beef Tripe"
           },
-          "websitePrice": 480,
+          "websitePrice": 560,
           "uberName": "牛ハチノス約50g｜牛肚｜소양｜Beef Tripe",
-          "uberPrice": 599,
+          "uberPrice": 699,
           "matchedExisting": true
         },
         {
@@ -1894,6 +1934,45 @@
           "uberName": "辛子明太子｜明太子｜명란｜Spicy Pollock Roe",
           "uberPrice": 399,
           "matchedExisting": true
+        },
+        {
+          "optionKey": "beef-slice",
+          "name": "【厳選】牛肉スライス(1人前約50g)",
+          "displayNames": {
+            "zh": "牛肉片",
+            "ko": "소고기 슬라이스",
+            "en": "Sliced Beef"
+          },
+          "websitePrice": 400,
+          "uberName": "【厳選】牛肉スライス(1人前約50g)｜牛肉片｜소고기 슬라이스｜Sliced Beef",
+          "uberPrice": 499,
+          "matchedExisting": true
+        },
+        {
+          "optionKey": "large-peeled-shrimp",
+          "name": "むき海老（大）",
+          "displayNames": {
+            "zh": "大虾仁",
+            "ko": "대형 새우살",
+            "en": "Large Peeled Shrimp"
+          },
+          "websitePrice": 480,
+          "uberName": "むき海老（大）｜大虾仁｜대형 새우살｜Large Peeled Shrimp",
+          "uberPrice": 599,
+          "matchedExisting": false
+        },
+        {
+          "optionKey": "chicken-thigh",
+          "name": "鶏もも肉",
+          "displayNames": {
+            "zh": "鸡腿肉",
+            "ko": "닭다리살",
+            "en": "Chicken Thigh"
+          },
+          "websitePrice": 320,
+          "uberName": "鶏もも肉｜鸡腿肉｜닭다리살｜Chicken Thigh",
+          "uberPrice": 399,
+          "matchedExisting": false
         }
       ]
     },
@@ -1927,19 +2006,6 @@
           "matchedExisting": true
         },
         {
-          "optionKey": "frankfurt",
-          "name": "【数量限定𓃟】糸島豚の特大フランクフルト1本",
-          "displayNames": {
-            "zh": "糸岛猪特大香肠",
-            "ko": "이토시마 돼지 특대 프랑크푸르트",
-            "en": "Extra Large Itoshima Pork Frankfurter"
-          },
-          "websitePrice": 1000,
-          "uberName": "【数量限定𓃟】糸島豚の特大フランクフルト1本｜糸岛猪特大香肠｜이토시마 돼지 특대 프랑크푸르트｜Extra Large Itoshima Pork Frankfurter",
-          "uberPrice": 1250,
-          "matchedExisting": true
-        },
-        {
           "optionKey": "camembert",
           "name": "【極上🧀】丸ごとカマンベール",
           "displayNames": {
@@ -1950,19 +2016,6 @@
           "websitePrice": 1020,
           "uberName": "【極上🧀】丸ごとカマンベール｜整颗卡芒贝尔奶酪｜통 카망베르 치즈｜Whole Camembert Cheese",
           "uberPrice": 1280,
-          "matchedExisting": true
-        },
-        {
-          "optionKey": "seafood-set",
-          "name": "特選海鮮3種盛り👑（大えび1匹、ほたて1個、イカリング約50g）",
-          "displayNames": {
-            "zh": "精选三种海鲜拼盘（大虾1只、扇贝1个、鱿鱼圈约50克）",
-            "ko": "특선 해산물 3종 모둠 (왕새우 1마리, 가리비 1개, 오징어 링 약 50g)",
-            "en": "Premium Seafood Trio (1 King Prawns, 1 Scallop, Approx. 50g Squid Rings)"
-          },
-          "websitePrice": 1340,
-          "uberName": "特選海鮮3種盛り👑（大えび1匹、ほたて1個、イカリング約50g）｜精选三种海鲜拼盘（大虾1只、扇贝1个、鱿鱼圈约50克）｜특선 해산물 3종 모둠 (왕새우 1마리, 가리비 1개, 오징어 링 약 50g)｜Premium Seafood Trio (1 King Prawns, 1 Scallop, Approx. 50g Squid Rings)",
-          "uberPrice": 1680,
           "matchedExisting": true
         },
         {
@@ -1977,6 +2030,71 @@
           "uberName": "【ご褒美🫕】丸ごとモッツァレラ１個｜马苏里拉芝士｜모차렐라 치즈｜Mozzarella Cheese Ball",
           "uberPrice": 1280,
           "matchedExisting": true
+        },
+        {
+          "optionKey": "frankfurt",
+          "name": "【数量限定𓃟】糸島豚の特大フランクフルト半本",
+          "displayNames": {
+            "zh": "糸岛猪特大香肠半根",
+            "ko": "이토시마 돼지 특대 프랑크푸르트 소시지 반 개",
+            "en": "Half of an Extra Large Itoshima Pork Frankfurter"
+          },
+          "websitePrice": 480,
+          "uberName": "【数量限定𓃟】糸島豚の特大フランクフルト半本｜糸岛猪特大香肠半根｜이토시마 돼지 특대 프랑크푸르트 소시지 반 개｜Half of an Extra Large Itoshima Pork Frankfurter",
+          "uberPrice": 599,
+          "matchedExisting": true
+        },
+        {
+          "optionKey": "seafood-set",
+          "name": "特選海鮮3種盛り👑（大えび1匹、ほたて1個、ヤリイカリング約50g）",
+          "displayNames": {
+            "zh": "精选三种海鲜拼盘（大虾1只、扇贝1个、枪乌贼圈约50克）",
+            "ko": "특선 해산물 3종 모둠 (왕새우 1마리, 가리비 1개, 한치 링 약 50g)",
+            "en": "Premium Seafood Trio (1 King Prawn, 1 Scallop, Approx. 50g Spear Squid Rings)"
+          },
+          "websitePrice": 1340,
+          "uberName": "特選海鮮3種盛り👑（大えび1匹、ほたて1個、ヤリイカリング約50g）｜精选三种海鲜拼盘（大虾1只、扇贝1个、鱿鱼圈约50克）｜특선 해산물 3종 모둠 (왕새우 1마리, 가리비 1개, 오징어 링 약 50g)｜Premium Seafood Trio (1 King Prawns, 1 Scallop, Approx. 50g Squid Rings)",
+          "uberPrice": 1680,
+          "matchedExisting": true
+        },
+        {
+          "optionKey": "random-vegetable-trio",
+          "name": "おまかせ野菜3種盛り👑（小松菜、ほうれん草、レタス、空心菜、青梗菜の5種類からランダムで3種類）",
+          "displayNames": {
+            "zh": "蔬菜随机三种拼盘（从小松菜、菠菜、生菜、空心菜、上海青5种蔬菜中随机选择3种）",
+            "ko": "랜덤 채소 3종 모둠（고마쓰나, 시금치, 상추, 공심채, 청경채 5종 중 랜덤으로 3종 선택）",
+            "en": "Random Vegetable Trio (3 randomly selected from: Komatsuna Greens, Spinach, Lettuce, Water Spinach, Bok Choy)"
+          },
+          "websitePrice": 640,
+          "uberName": "おまかせ野菜3種盛り👑（小松菜、ほうれん草、レタス、空心菜、青梗菜の5種類からランダムで3種類）｜蔬菜随机三种拼盘（从小松菜、菠菜、生菜、空心菜、上海青5种蔬菜中随机选择3种）｜랜덤 채소 3종 모둠（고마쓰나, 시금치, 상추, 공심채, 청경채 5종 중 랜덤으로 3종 선택）｜Random Vegetable Trio (3 randomly selected from: Komatsuna Greens, Spinach, Lettuce, Water Spinach, Bok Choy)",
+          "uberPrice": 799,
+          "matchedExisting": false
+        },
+        {
+          "optionKey": "tofu-products-trio",
+          "name": "大豆製品3種盛り👑（乾燥腐竹4本、揚げ腐竹1個、油揚げ1個）",
+          "displayNames": {
+            "zh": "豆制品三种拼盘（干腐竹4根、鲜炸腐竹1个、油豆腐1个）",
+            "ko": "두부 제품 3종 모둠 (건조 푸주 4개, 튀긴 푸주 1개, 유부 1개)",
+            "en": "Premium Tofu Products Trio (4 Dried Tofu Skins, 1 Fried Tofu Skin, 1 Fried Tofu)"
+          },
+          "websitePrice": 480,
+          "uberName": "大豆製品3種盛り👑（乾燥腐竹4本、揚げ腐竹1個、油揚げ1個）｜豆制品三种拼盘（干腐竹4根、鲜炸腐竹1个、油豆腐1个）｜두부 제품 3종 모둠 (건조 푸주 4개, 튀긴 푸주 1개, 유부 1개)｜Premium Tofu Products Trio (4 Dried Tofu Skins, 1 Fried Tofu Skin, 1 Fried Tofu)",
+          "uberPrice": 599,
+          "matchedExisting": false
+        },
+        {
+          "optionKey": "gout-seafood-five",
+          "name": "痛風海鮮5種盛り👑（広島県産牡蠣3個、丸ごとホタテ1個、大海老1尾、あさり身約50g、ぶつ切りたこ約50g）",
+          "displayNames": {
+            "zh": "痛风海鲜五重奏👑（广岛县产牡蛎3个、整颗扇贝1个、大虾1只、蛤蜊约50克、章鱼块约50克）",
+            "ko": "통풍 해산물 5종 모둠（히로시마산 굴 3개, 통 가리비 1개, 왕새우 1마리, 바지락살 약 50g, 문어 조각 약 50g）",
+            "en": "Ultimate Seafood 5-Item Platter (3 Hiroshima Oysters, 1 Whole Scallop, 1 King Prawn, Approx. 50g Clam Meat, Approx. 50g Octopus Pieces)"
+          },
+          "websitePrice": 1780,
+          "uberName": "痛風海鮮5種盛り👑（広島県産牡蠣3個、丸ごとホタテ1個、大海老1尾、あさり身約50g、ぶつ切りたこ約50g）｜痛风海鲜五重奏👑（广岛县产牡蛎3个、整颗扇贝1个、大虾1只、蛤蜊约50克、章鱼块约50克）｜통풍 해산물 5종 모둠（히로시마산 굴 3개, 통 가리비 1개, 왕새우 1마리, 바지락살 약 50g, 문어 조각 약 50g）｜Ultimate Seafood 5-Item Platter (3 Hiroshima Oysters, 1 Whole Scallop, 1 King Prawn, Approx. 50g Clam Meat, Approx. 50g Octopus Pieces)",
+          "uberPrice": 2222,
+          "matchedExisting": false
         }
       ]
     },

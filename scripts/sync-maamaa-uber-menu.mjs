@@ -1,11 +1,17 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { neon } from "@neondatabase/serverless";
 import { loadLocalEnv } from "./db-env.mjs";
 
 const repoRoot = new URL("../", import.meta.url);
-const defaultSnapshotPath = new URL("../data/uber/maamaa-menu-2026-08-08.json", import.meta.url);
+const snapshotDirectory = new URL("../data/uber/", import.meta.url);
+const latestSnapshotName = (await readdir(snapshotDirectory))
+  .filter((name) => /^maamaa-menu-\d{4}-\d{2}-\d{2}\.json$/.test(name))
+  .sort()
+  .at(-1);
+if (!latestSnapshotName) throw new Error("No dated maamaa Uber menu snapshot was found.");
+const defaultSnapshotPath = new URL(latestSnapshotName, snapshotDirectory);
 const mappingPath = new URL("../data/uber/maamaa-menu-mapping.json", import.meta.url);
 const maamaaMenuPath = "/Users/wushengyin/Desktop/maamaa/src/data/malatang-menu.ts";
 const applyChanges = process.argv.includes("--apply");
@@ -201,7 +207,7 @@ const catalogResult = spawnSync(
 if (catalogResult.status !== 0) process.exit(catalogResult.status ?? 1);
 const result = spawnSync(
   process.execPath,
-  ["scripts/import-brand-menus.mjs", "--brand", "maamaa"],
+  ["scripts/import-brand-menus.mjs", "--brand", "maamaa", "--prune"],
   { cwd: new URL(".", repoRoot), encoding: "utf8", stdio: "inherit" }
 );
 if (result.status !== 0) process.exit(result.status ?? 1);

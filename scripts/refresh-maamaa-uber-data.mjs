@@ -8,7 +8,6 @@ if (!rowsPath) throw new Error("Usage: node scripts/refresh-maamaa-uber-data.mjs
 const repoRoot = new URL("../", import.meta.url);
 const mappingPath = new URL("../data/uber/maamaa-menu-mapping.json", import.meta.url);
 const catalogPath = new URL("../data/uber/maamaa-catalog.json", import.meta.url);
-const snapshotPath = new URL("../data/uber/maamaa-menu-2026-08-08.json", import.meta.url);
 const maamaaMenuPath = "/Users/wushengyin/Desktop/maamaa/src/data/malatang-menu.ts";
 
 const input = JSON.parse(await readFile(rowsPath, "utf8"));
@@ -16,6 +15,7 @@ const rows = Array.isArray(input.rows) ? input.rows : [];
 if (rows.length < 150) throw new Error(`Uber row snapshot is incomplete: ${rows.length}`);
 
 const capturedAt = String(input.capturedAt || "2026-08-08");
+const snapshotPath = new URL(`../data/uber/maamaa-menu-${capturedAt}.json`, import.meta.url);
 const priceOf = (row) => Number(String(row?.price || "").replace(/[^0-9]/g, ""));
 const websitePrice = (uberPrice) => Math.round((Number(uberPrice) * 0.8) / 10) * 10;
 const splitLocalizedName = (value) => {
@@ -51,9 +51,14 @@ const groupDefinitions = [
   { groupKey: "drink", usage: "【王道で最強💪悪魔的ペアリング😈🥤💞汗だくからの大復活✨️】冷え冷えコーラ" },
   { groupKey: "limited", usage: "⏳限定トッピング" },
 ];
+const excludedUberRows = new Set([
+  "noodles:火锅宽粉",
+  "noodles:紫薯年糕",
+  "noodles:芝士年糕",
+]);
 const rowsByGroup = new Map(groupDefinitions.map((group) => [
   group.groupKey,
-  rows.filter((row) => row.usage === group.usage),
+  rows.filter((row) => row.usage === group.usage && !excludedUberRows.has(`${group.groupKey}:${row.name}`)),
 ]));
 
 const additions = [
@@ -62,11 +67,52 @@ const additions = [
   { groupKey: "base", optionKey: "shiitake-pork-meatball", uberName: "椎茸入り豚肉団子" },
   { groupKey: "base", optionKey: "chicken-cartilage-meatball", uberName: "軟骨入り鶏肉団子" },
   { groupKey: "premium", optionKey: "spicy-pollock-roe", uberName: "辛子明太子" },
+  { groupKey: "noodles", optionKey: "hot-pot-wide-noodle", uberName: "火鍋板春雨" },
+  { groupKey: "base", optionKey: "kelp-knots-3", uberName: "昆布結び3個" },
+  { groupKey: "base", optionKey: "shredded-tofu-skin", uberName: "豆腐皮の細切り" },
+  { groupKey: "standard", optionKey: "half-onion", uberName: "玉ねぎ1/2個" },
+  { groupKey: "premium", optionKey: "large-peeled-shrimp", uberName: "むき海老（大）" },
+  { groupKey: "premium", optionKey: "chicken-thigh", uberName: "鶏もも肉" },
+  { groupKey: "vip", optionKey: "random-vegetable-trio", uberName: "おまかせ野菜3種盛り" },
+  { groupKey: "vip", optionKey: "tofu-products-trio", uberName: "大豆製品3種盛り" },
+  { groupKey: "vip", optionKey: "gout-seafood-five", uberName: "痛風海鮮5種盛り" },
 ];
+
+const replacements = [
+  { optionKey: "plain-wonton", fromGroupKey: "base", toGroupKey: "base", uberName: "海老ワンタン" },
+  { optionKey: "beef-slice", fromGroupKey: "standard", toGroupKey: "premium", uberName: "【厳選】牛肉スライス(1人前約50g)" },
+  { optionKey: "frankfurt", fromGroupKey: "vip", toGroupKey: "vip", uberName: "【数量限定𓃟】糸島豚の特大フランクフルト半本" },
+  { optionKey: "seafood-set", fromGroupKey: "vip", toGroupKey: "vip", uberName: "特選海鮮3種盛り👑（大えび1匹、ほたて1個、ヤリイカリング約50g）" },
+];
+
+const displayNameOverrides = new Map([
+  ["seafood-set", {
+    zh: "精选三种海鲜拼盘（大虾1只、扇贝1个、枪乌贼圈约50克）",
+    ko: "특선 해산물 3종 모둠 (왕새우 1마리, 가리비 1개, 한치 링 약 50g)",
+    en: "Premium Seafood Trio (1 King Prawn, 1 Scallop, Approx. 50g Spear Squid Rings)",
+  }],
+]);
 
 const mapping = JSON.parse(await readFile(mappingPath, "utf8"));
 mapping.source.capturedAt = capturedAt;
 mapping.source.pricingRule = { multiplier: 0.8, roundingUnit: 10 };
+
+for (const replacement of replacements) {
+  const fromGroup = mapping.groups.find((group) => group.groupKey === replacement.fromGroupKey);
+  const toGroup = mapping.groups.find((group) => group.groupKey === replacement.toGroupKey);
+  if (!fromGroup || !toGroup) throw new Error(`Missing replacement group for ${replacement.optionKey}`);
+  let option = toGroup.options.find((entry) => entry.optionKey === replacement.optionKey);
+  if (!option) {
+    const optionIndex = fromGroup.options.findIndex((entry) => entry.optionKey === replacement.optionKey);
+    if (optionIndex < 0) throw new Error(`Missing replacement option: ${replacement.optionKey}`);
+    [option] = fromGroup.options.splice(optionIndex, 1);
+    toGroup.options.push(option);
+  } else if (fromGroup !== toGroup) {
+    fromGroup.options = fromGroup.options.filter((entry) => entry.optionKey !== replacement.optionKey);
+  }
+  option.name = replacement.uberName;
+  option.uberName = replacement.uberName;
+}
 
 const rowForMappedOption = (groupKey, option) => {
   const candidates = rowsByGroup.get(groupKey) || [];
@@ -89,7 +135,7 @@ for (const group of mapping.groups) {
     if (!row) continue;
     const localized = splitLocalizedName(row.name);
     option.name = localized.name;
-    option.displayNames = localized.displayNames;
+    option.displayNames = displayNameOverrides.get(option.optionKey) || localized.displayNames;
     option.uberName = row.name;
     option.uberPrice = priceOf(row);
     option.websitePrice = websitePrice(option.uberPrice);
@@ -101,8 +147,12 @@ for (const addition of additions) {
   const group = mapping.groups.find((entry) => entry.groupKey === addition.groupKey);
   if (!group) throw new Error(`Missing mapping group: ${addition.groupKey}`);
   if (group.options.some((option) => option.optionKey === addition.optionKey)) continue;
+  const additionKey = normalizeName(addition.uberName);
   const matches = (rowsByGroup.get(addition.groupKey) || [])
-    .filter((row) => normalizeName(row.name) === normalizeName(addition.uberName));
+    .filter((row) => {
+      const rowKey = normalizeName(row.name);
+      return rowKey === additionKey || rowKey.startsWith(additionKey);
+    });
   if (matches.length !== 1) throw new Error(`Could not find new Uber option: ${addition.uberName}`);
   const row = matches[0];
   const localized = splitLocalizedName(row.name);
@@ -225,15 +275,29 @@ const newSourceOptions = additions.map((addition) => {
     .find((entry) => entry.optionKey === addition.optionKey);
   return { ...addition, option };
 });
-for (const addition of newSourceOptions.filter((entry) => entry.groupKey === "base" && entry.option)) {
+const sourceAnchorByGroup = {
+  noodles: "knife-shaved-noodle",
+  base: "traditional-tofu-skin",
+  standard: "cabbage-roll",
+  premium: "mussels",
+  vip: "seafood-set",
+};
+for (const addition of newSourceOptions.filter((entry) => entry.option)) {
   if (menuSource.includes(`id: ${JSON.stringify(addition.optionKey)}`)) continue;
-  const anchor = /^(\s*)\{ id: "traditional-tofu-skin"[^\n]+$/m;
+  const anchorId = sourceAnchorByGroup[addition.groupKey];
+  if (!anchorId) throw new Error(`Missing website source anchor for ${addition.groupKey}:${addition.optionKey}`);
+  const anchor = new RegExp(`^(\\s*)\\{ id: ${JSON.stringify(anchorId)}[^\\n]+$`, "m");
+  if (!anchor.test(menuSource)) throw new Error(`Could not find website source anchor: ${anchorId}`);
   menuSource = menuSource.replace(anchor, (line, indent) => `${line}\n${indent}{ id: ${JSON.stringify(addition.optionKey)}, name: ${JSON.stringify(addition.option.name)}, displayNames: ${JSON.stringify(addition.option.displayNames)}, price: ${addition.option.websitePrice} },`);
 }
-for (const addition of newSourceOptions.filter((entry) => entry.groupKey === "premium" && entry.option)) {
-  if (menuSource.includes(`id: ${JSON.stringify(addition.optionKey)}`)) continue;
-  const anchor = /^(\s*)\{ id: "mussels"[^\n]+$/m;
-  menuSource = menuSource.replace(anchor, (line, indent) => `${line}\n${indent}{ id: ${JSON.stringify(addition.optionKey)}, name: ${JSON.stringify(addition.option.name)}, displayNames: ${JSON.stringify(addition.option.displayNames)}, price: ${addition.option.websitePrice} },`);
+
+const movedBeefSlice = mapping.groups.find((group) => group.groupKey === "premium")?.options
+  .find((option) => option.optionKey === "beef-slice");
+if (!movedBeefSlice) throw new Error("The reviewed beef slice mapping is missing.");
+menuSource = menuSource.replace(/^\s*\{ id: "beef-slice"[^\n]+\n/m, "");
+if (!menuSource.includes('id: "beef-slice"')) {
+  const premiumAnchor = /^(\s*)\{ id: "mussels"[^\n]+$/m;
+  menuSource = menuSource.replace(premiumAnchor, (line, indent) => `${line}\n${indent}{ id: "beef-slice", name: ${JSON.stringify(movedBeefSlice.name)}, displayNames: ${JSON.stringify(movedBeefSlice.displayNames)}, price: ${movedBeefSlice.websitePrice} },`);
 }
 
 const updateProductBlock = (source, product) => {
