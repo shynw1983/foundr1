@@ -303,6 +303,7 @@ export async function GET(request: Request) {
         and available_at <= now()
         and attempts < 5
       order by
+        case when payload->>'syncSource' = 'scheduled' then 1 else 0 end,
         case platform
           when 'uber_eats' then 0
           when 'rocket_now' then 1

@@ -14,7 +14,8 @@
       "storeUuid": "UBER STORE UUID"
     },
     "rocket_now": {
-      "enabled": true
+      "enabled": true,
+      "storeId": "ROCKET NOW MERCHANT STORE ID"
     },
     "demae_can": {
       "enabled": true,

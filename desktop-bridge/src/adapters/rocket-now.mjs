@@ -6,6 +6,13 @@ import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 const OOS_URL = "https://store.rocketnow.co.jp/merchant/management/oos";
 const INVENTORY_ROW_SELECTOR = ".nested-checkbox-list__sub_title";
 
+export function rocketInventoryUrl(storeId, targetKind = "item") {
+  const merchantStoreId = String(storeId ?? "").trim();
+  if (!/^\d+$/.test(merchantStoreId)) return OOS_URL;
+  const tab = targetKind === "option" ? "option" : "menu";
+  return `${OOS_URL}/${merchantStoreId}/${tab}`;
+}
+
 async function waitForInventoryRows(page, targetKind) {
   const routeSuffix = targetKind === "option" ? "/option" : "/menu";
   await page.waitForFunction(
@@ -33,21 +40,51 @@ async function waitForInventoryRows(page, targetKind) {
 
 async function selectInventoryTab(page, targetKind) {
   const tabLabel = targetKind === "option" ? "オプション" : "メニュー";
-  const selected = await page.evaluate((label) => {
+  const routeSuffix = targetKind === "option" ? "/option" : "/menu";
+
+  // Rocket renders the route before the tab bar on slower machines. If the
+  // browser is already on the requested inventory page, waiting for the rows
+  // is enough and avoids misclassifying the still-rendering tab as a UI change.
+  const alreadyOnTargetRoute = await page.evaluate(
+    (suffix) => window.location.pathname.endsWith(suffix),
+    routeSuffix
+  );
+  if (alreadyOnTargetRoute) {
+    await waitForInventoryRows(page, targetKind);
+    return;
+  }
+
+  try {
+    await page.waitForFunction(({ label, suffix }) => {
+      if (window.location.pathname.endsWith(suffix)) return true;
+      return [...document.querySelectorAll('.selectable-tab, [role="tab"], button')]
+        .some((candidate) => candidate.getClientRects().length
+          && candidate.textContent?.trim() === label);
+    }, { timeout: 20000 }, { label: tabLabel, suffix: routeSuffix });
+  } catch {
+    // A temporarily missing tab is a loading timeout and must remain retryable.
+    // platform_ui_changed is reserved for controls that disappear after the
+    // inventory page has fully loaded.
+    throw new Error(`rocket_now_inventory_tab_timeout:${targetKind}`);
+  }
+
+  const selected = await page.evaluate(({ label, suffix }) => {
+    if (window.location.pathname.endsWith(suffix)) return true;
     const tab = [...document.querySelectorAll('.selectable-tab, [role="tab"], button')]
-      .find((candidate) => candidate.textContent?.trim() === label);
+      .find((candidate) => candidate.getClientRects().length
+        && candidate.textContent?.trim() === label);
     if (!(tab instanceof HTMLElement)) return false;
     if (!tab.classList.contains("selected") && tab.getAttribute("aria-selected") !== "true") tab.click();
     return true;
-  }, tabLabel);
-  if (!selected) throw platformUiChanged("rocket_now", `inventory_tab:${targetKind}`);
+  }, { label: tabLabel, suffix: routeSuffix });
+  if (!selected) throw new Error(`rocket_now_inventory_tab_timeout:${targetKind}`);
   await page.waitForFunction(
     ({ label, suffix }) => location.pathname.endsWith(suffix)
       || [...document.querySelectorAll('.selectable-tab, [role="tab"], button')]
         .some((candidate) => candidate.textContent?.trim() === label
           && (candidate.classList.contains("selected") || candidate.getAttribute("aria-selected") === "true")),
     { timeout: 10000 },
-    { label: tabLabel, suffix: targetKind === "option" ? "/option" : "/menu" }
+    { label: tabLabel, suffix: routeSuffix }
   );
   await waitForInventoryRows(page, targetKind);
 }
@@ -166,26 +203,31 @@ export function uniqueLocatedRows(items) {
 }
 
 export class RocketNowAdapter {
-  constructor(session) {
+  constructor(session, config = {}) {
     this.session = session;
+    this.config = config;
+  }
+
+  inventoryUrl(targetKind) {
+    return rocketInventoryUrl(this.config.storeId, targetKind);
   }
 
   async inspect() {
-    const page = await this.session.goto(OOS_URL);
+    const page = await this.session.goto(this.inventoryUrl("item"));
     const summary = await pageSummary(page);
     return { platform: "rocket_now", ...loginState(summary, "売り切れ・非表示") };
   }
 
   async locateTargets(targets) {
-    const page = await this.session.goto(OOS_URL);
     const targetKind = targets.every((target) => target.kind === "option") ? "option" : "item";
+    const page = await this.session.goto(this.inventoryUrl(targetKind));
     await selectInventoryTab(page, targetKind);
     return readRows(page, targets);
   }
 
   async setInventory(payload, located) {
-    const page = await this.session.goto(OOS_URL);
     const targetKind = located.every((item) => item.kind === "option") ? "option" : "item";
+    const page = await this.session.goto(this.inventoryUrl(targetKind));
     await selectInventoryTab(page, targetKind);
     const desiredHidden = payload.isAvailable !== true;
     const fresh = await readRows(page, located.map((item) => ({ kind: item.kind, label: item.label, aliases: item.names })));

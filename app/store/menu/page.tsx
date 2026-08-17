@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, ChevronDown, RotateCcw, Search, SlidersHorizontal, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, History, RotateCcw, Search, SlidersHorizontal, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import {
@@ -648,10 +648,16 @@ export default function StoreMenuPage() {
             <h2>本日の販売状態</h2>
             <p data-i18n-ignore>{storeMenuDescription(language)}</p>
           </div>
-          <button className="secondary-button" type="button" onClick={() => void load(selectedStoreId)}>
-            <RotateCcw size={16} />
-            更新
-          </button>
+          <div className="store-menu-head-actions">
+            <a className="secondary-button" href="/store/menu/inventory-history">
+              <History size={16} />
+              <span data-i18n-ignore>{language === "ja" ? "同期履歴" : language === "zh-Hant" ? "同步履歷" : "同步履历"}</span>
+            </a>
+            <button className="secondary-button" type="button" onClick={() => void load(selectedStoreId)}>
+              <RotateCcw size={16} />
+              更新
+            </button>
+          </div>
         </div>
 
         <div className="store-menu-controls panel">

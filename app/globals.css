@@ -11919,6 +11919,214 @@ body :where(
   justify-content: space-between;
 }
 
+.store-menu-head-actions,
+.store-inventory-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.store-inventory-history-page {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.store-inventory-history-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.store-inventory-history-head h2 {
+  margin: 7px 0 3px;
+}
+
+.store-inventory-history-head p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.store-inventory-history-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.store-inventory-history-actions select {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 30px 0 10px;
+  background: white;
+  color: var(--ink);
+}
+
+.store-inventory-history-list {
+  padding: 0;
+  overflow: hidden;
+}
+
+.store-inventory-history-row {
+  display: grid;
+  grid-template-columns: minmax(128px, .72fr) minmax(180px, 1.25fr) minmax(280px, 2fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.store-inventory-history-row:last-child {
+  border-bottom: 0;
+}
+
+.store-inventory-history-time,
+.store-inventory-history-operation {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.store-inventory-history-time strong,
+.store-inventory-history-operation strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.store-inventory-history-time span,
+.store-inventory-history-operation span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.store-inventory-history-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.store-inventory-history-platforms > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 29px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 4px 7px;
+  background: #f8faf9;
+}
+
+.store-inventory-history-platforms > span.is-succeeded {
+  border-color: rgba(33, 116, 91, 0.24);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.store-inventory-history-platforms > span.is-processing {
+  border-color: rgba(169, 101, 20, 0.24);
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.store-inventory-history-platforms > span.is-failed {
+  border-color: rgba(188, 54, 54, 0.24);
+  background: #fff4f4;
+  color: #a72f2f;
+}
+
+.store-inventory-history-platforms strong,
+.store-inventory-history-platforms small {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.store-inventory-history-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 82px;
+  border-radius: 999px;
+  padding: 6px 9px;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.store-inventory-history-status.is-succeeded {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.store-inventory-history-status.is-processing {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.store-inventory-history-status.is-failed {
+  background: #fff0f0;
+  color: #a72f2f;
+}
+
+@media (max-width: 920px) {
+  .store-inventory-history-row {
+    grid-template-columns: minmax(120px, .8fr) minmax(180px, 1.2fr) auto;
+  }
+
+  .store-inventory-history-platforms {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 640px) {
+  .store-menu-head-actions,
+  .store-inventory-history-head,
+  .store-inventory-history-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .store-menu-head-actions .secondary-button,
+  .store-inventory-history-actions .secondary-button {
+    justify-content: center;
+  }
+
+  .store-inventory-history-row {
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+
+  .store-inventory-history-operation,
+  .store-inventory-history-platforms {
+    grid-column: 1 / -1;
+  }
+
+  .store-inventory-history-operation {
+    grid-row: 2;
+  }
+
+  .store-inventory-history-platforms {
+    grid-row: 3;
+  }
+
+  .store-inventory-history-status {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
 .store-menu-head h2,
 .store-menu-list-head h2 {
   margin: 0;

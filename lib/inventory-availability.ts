@@ -334,6 +334,49 @@ export async function applyInventoryAvailability(input: {
       platform as "uber_eats" | "rocket_now" | "demae_can",
       resolution.targets
     );
+    const projectedTargetIds = JSON.stringify(projectedTargets.map((target) => ({ targetId: target.targetId })));
+    // A manual change made while the 08:00 reconciliation is still queued must
+    // win. Remove the affected targets from pending scheduled batches; the new
+    // manual command below then becomes the final desired state.
+    await sql`
+      update local_bridge_commands scheduled
+      set
+        payload = jsonb_set(
+          scheduled.payload,
+          '{targets}',
+          coalesce((
+            select jsonb_agg(target)
+            from jsonb_array_elements(coalesce(scheduled.payload->'targets', '[]'::jsonb)) target
+            where not exists (
+              select 1
+              from jsonb_array_elements(${projectedTargetIds}::jsonb) changed
+              where changed->>'targetId' = target->>'targetId'
+            )
+          ), '[]'::jsonb),
+          true
+        ),
+        updated_at = now()
+      where scheduled.store_id::text = ${storeId}
+        and scheduled.platform = ${platform}
+        and scheduled.command_type = 'set_inventory_availability'
+        and scheduled.status = 'pending'
+        and scheduled.payload->>'syncSource' = 'scheduled'
+    `;
+    await sql`
+      update local_bridge_commands
+      set
+        status = 'succeeded',
+        completed_at = now(),
+        result = jsonb_build_object('outcome', 'superseded_by_manual_change', 'changed', 0),
+        last_error = '',
+        updated_at = now()
+      where store_id::text = ${storeId}
+        and platform = ${platform}
+        and command_type = 'set_inventory_availability'
+        and status = 'pending'
+        and payload->>'syncSource' = 'scheduled'
+        and jsonb_array_length(coalesce(payload->'targets', '[]'::jsonb)) = 0
+    `;
     await sql`
       update local_bridge_commands
       set
@@ -388,6 +431,8 @@ export async function applyInventoryAvailability(input: {
         ingredientLabel: resolution.ingredientLabel,
         syncRunId,
         syncSource,
+        requestedBy: input.updatedBy,
+        statusSource: input.statusSource,
         feedbackLabel,
         isAvailable: desiredAvailable,
         operation,
@@ -422,6 +467,31 @@ export async function applyInventoryAvailability(input: {
       commandRows.push({ id: String(rows[0]?.id ?? platformCommandId), platform, status: "pending", error: "" });
     }
   }
+  const historyAction = input.platformOverride
+    ? "platform_override"
+    : stockStatus === "low_stock"
+      ? "low_stock"
+      : isAvailable ? "available" : "unavailable";
+  await sql`
+    insert into menu_inventory_sync_runs (
+      id, store_id, run_type, action, item_label, inventory_key,
+      source, requested_by, details
+    ) values (
+      ${syncRunId}, ${storeId}, 'availability_change', ${historyAction},
+      ${feedbackLabel}, ${resolution.inventoryKey}, ${syncSource}, ${input.updatedBy},
+      ${JSON.stringify({
+        statusSource: input.statusSource,
+        stockStatus,
+        isAvailable,
+        persistOverall: input.persistOverall !== false,
+        platforms: configuredPlatforms,
+        platformStates: input.platformStates ?? {},
+        platformOverride: input.platformOverride ?? null,
+        targetCount: resolution.targets.length
+      })}::jsonb
+    )
+    on conflict (id) do nothing
+  `;
   const syncRun = {
     id: syncRunId,
     itemLabel: feedbackLabel,

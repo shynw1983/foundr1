@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { normalizeText, targetNameTiers } from "../src/adapters/common.mjs";
 import { withPlatformTargetAliases } from "../src/adapters/platform-target-aliases.mjs";
-import { uniqueLocatedRows } from "../src/adapters/rocket-now.mjs";
+import { rocketInventoryUrl, uniqueLocatedRows } from "../src/adapters/rocket-now.mjs";
 import {
   parseUberSoldOutDuration,
   preferCurrentUberMatches,
@@ -15,6 +15,17 @@ test("normalizes decorative vinegar text used differently by platforms", () => {
   assert.equal(
     normalizeText("【別添容器】香酢👈️超おすすめです🤫"),
     normalizeText("香酢超おすすめです")
+  );
+});
+
+test("opens Rocket inventory directly on the configured merchant store", () => {
+  assert.equal(
+    rocketInventoryUrl("118575", "option"),
+    "https://store.rocketnow.co.jp/merchant/management/oos/118575/option"
+  );
+  assert.equal(
+    rocketInventoryUrl("118575", "item"),
+    "https://store.rocketnow.co.jp/merchant/management/oos/118575/menu"
   );
 });
 

@@ -2342,6 +2342,29 @@ create table if not exists menu_inventory_availability_blocks (
   check (target_kind in ('item', 'option'))
 );
 
+create table if not exists menu_inventory_sync_runs (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  run_type text not null default 'availability_change',
+  action text not null,
+  item_label text not null default '',
+  inventory_key text not null default '',
+  source text not null default 'store',
+  requested_by uuid references employees(id) on delete set null,
+  scheduled_for date,
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  check (run_type in ('availability_change', 'full_sync')),
+  check (action in ('available', 'low_stock', 'unavailable', 'platform_override', 'full_sync')),
+  check (source in ('store', 'siri', 'scheduled', 'system'))
+);
+
+create index if not exists menu_inventory_sync_runs_store_created_idx
+  on menu_inventory_sync_runs(store_id, created_at desc);
+create unique index if not exists menu_inventory_sync_runs_scheduled_day_idx
+  on menu_inventory_sync_runs(store_id, scheduled_for)
+  where source = 'scheduled' and scheduled_for is not null;
+
 create table if not exists menu_external_platforms (
   id uuid primary key default gen_random_uuid(),
   brand_id uuid not null references brands(id) on delete cascade,

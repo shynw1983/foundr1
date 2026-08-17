@@ -43,6 +43,7 @@ test("does not retry login or configuration errors", () => {
   assert.equal(isRetryableInventoryError("demae_can_circuit_open_until:2026-08-16T11:00:00.000Z"), false);
   assert.equal(isRetryableInventoryError("No enabled adapter for platform"), false);
   assert.equal(isRetryableInventoryError("platform_ui_changed:demae_can:apply_button"), false);
+  assert.equal(isRetryableInventoryError("rocket_now_inventory_tab_timeout:option"), true);
 });
 
 test("does not report a partially matched inventory batch as successful", () => {
