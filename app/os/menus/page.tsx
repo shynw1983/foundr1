@@ -203,6 +203,25 @@ type MenuPublishBatch = {
   createdByName: string;
 };
 
+type MenuPlatformImportCandidate = {
+  id: string;
+  brandId: string;
+  storeId: string;
+  externalPlatformId: string;
+  platformKey: string;
+  platformName: string;
+  targetType: "item" | "option";
+  externalId: string;
+  externalParentId: string;
+  observedName: string;
+  observedPayload: Record<string, unknown>;
+  status: "pending" | "ignored";
+  adoptedTargetId: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  resolvedAt: string | null;
+};
+
 type MenuAvailabilityLink = {
   id: string;
   brandId: string;
@@ -227,6 +246,7 @@ type MenuAdminData = {
   availabilityLinks: MenuAvailabilityLink[];
   platformTargetSettings: MenuPlatformTargetSetting[];
   publishBatches: MenuPublishBatch[];
+  platformImportCandidates: MenuPlatformImportCandidate[];
 };
 
 type MenuPublishPreviewChange = {
@@ -238,6 +258,8 @@ type MenuPublishPreviewChange = {
   summary: string;
   currentValue?: string;
   projectedValue?: string;
+  currentState?: Record<string, unknown>;
+  projectedState?: Record<string, unknown>;
   confidence: "confirmed" | "provisional";
   requiresExplicitConfirmation?: boolean;
 };
@@ -674,7 +696,8 @@ export default function MenuAdminPage() {
     syncTasks: [],
     availabilityLinks: [],
     platformTargetSettings: [],
-    publishBatches: []
+    publishBatches: [],
+    platformImportCandidates: []
   });
   const [activeBrandId, setActiveBrandId] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -810,6 +833,44 @@ export default function MenuAdminPage() {
     if (response.ok) await loadMenus(selectedItemId);
   }
 
+  async function adoptPlatformDifference(platform: MenuPublishPreviewPlatform, change: MenuPublishPreviewChange) {
+    if (!change.targetId) return;
+    const externalPlatform = brandExternalPlatforms.find((entry) => entry.platformKey === platform.platformKey);
+    if (!externalPlatform) return;
+    const response = await fetch("/api/menus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "adoptPlatformState",
+        brandId: activeBrandId,
+        externalPlatformId: externalPlatform.id,
+        targetType: change.targetType,
+        targetId: change.targetId,
+        adoptName: change.kind === "rename",
+        adoptPrice: change.kind === "reprice",
+        adoptAvailability: change.kind === "update" || change.kind === "disable"
+      })
+    });
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    setMessage(response.ok ? `${platform.platformName} の現在値を OS の個別設定に取り込みました。` : result.error || "プラットフォームの現在値を取り込めませんでした。");
+    if (response.ok) await loadMenus(selectedItemId);
+  }
+
+  async function resolvePlatformCandidate(candidate: MenuPlatformImportCandidate, action: "ignore" | "restore" | "create_draft") {
+    const response = await fetch("/api/menus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "platformImportCandidate", id: candidate.id, action })
+    });
+    const result = await response.json().catch(() => ({})) as { error?: string; itemId?: string };
+    if (!response.ok) {
+      setMessage(result.error || "プラットフォーム独自データを処理できませんでした。");
+      return;
+    }
+    setMessage(action === "create_draft" ? "OS に未公開の商品下書きを作成しました。" : action === "ignore" ? "プラットフォーム専用として保持します。" : "確認待ちに戻しました。");
+    await loadMenus(result.itemId || selectedItemId);
+  }
+
   async function savePlatformTargetSetting(platform: MenuExternalPlatform, targetType: "item" | "option", targetId: string, patch: Partial<MenuPlatformTargetSetting>) {
     if (!targetId) return;
     const current = data.platformTargetSettings.find((setting) => (
@@ -893,7 +954,8 @@ export default function MenuAdminPage() {
         externalPlatforms: nextData.externalPlatforms,
         syncTasks: nextData.syncTasks,
         platformTargetSettings: nextData.platformTargetSettings,
-        publishBatches: nextData.publishBatches
+        publishBatches: nextData.publishBatches,
+        platformImportCandidates: nextData.platformImportCandidates
       }));
       const stillRunning = nextData.syncTasks.some((task) => (
         task.brandId === activeBrandId
@@ -957,6 +1019,9 @@ export default function MenuAdminPage() {
   const brandPublishBatches = data.publishBatches.filter((batch) => (
     batch.brandId === activeBrandId && (!publishStoreId || batch.storeId === publishStoreId)
   )).slice(0, 6);
+  const brandPlatformCandidates = data.platformImportCandidates.filter((candidate) => (
+    candidate.brandId === activeBrandId && (!publishStoreId || !candidate.storeId || candidate.storeId === publishStoreId)
+  ));
   const availabilityTargetOptions = useMemo(() => {
     const itemOptions = data.items
       .filter((item) => item.brandId === activeBrandId && !item.storeId && item.isActive)
@@ -1967,6 +2032,15 @@ export default function MenuAdminPage() {
                                         {change.projectedValue ? `予定: ${change.projectedValue}` : ""}
                                       </small>
                                     ) : null}
+                                    {change.targetId && ["rename", "reprice", "update", "disable"].includes(change.kind) ? (
+                                      <button
+                                        className="menu-publish-adopt-button"
+                                        type="button"
+                                        onClick={() => void adoptPlatformDifference(platform, change)}
+                                      >
+                                        プラットフォーム現在値を採用
+                                      </button>
+                                    ) : null}
                                   </div>
                                   {change.confidence === "provisional" ? <em>要確認</em> : null}
                                 </div>
@@ -1980,6 +2054,39 @@ export default function MenuAdminPage() {
                 </div>
               ) : publishPreviewStatus === "loading" ? <p className="empty-state">プラットフォーム別の差分を比較しています。</p> : null}
             </section>
+            {brandPlatformCandidates.length ? (
+              <details className="menu-platform-candidate-panel">
+                <summary>
+                  <span>プラットフォームで見つかった OS 未登録データ</span>
+                  <b>{brandPlatformCandidates.filter((candidate) => candidate.status === "pending").length}件確認待ち</b>
+                </summary>
+                <p>スタッフがプラットフォーム側で追加した可能性があります。自動削除・自動上書きはしません。</p>
+                <div className="menu-platform-candidate-list">
+                  {brandPlatformCandidates.map((candidate) => (
+                    <div className={`menu-platform-candidate-row is-${candidate.status}`} key={candidate.id}>
+                      <div>
+                        <strong>{candidate.observedName || "名称不明"}</strong>
+                        <span>{candidate.platformName} / {candidate.targetType === "item" ? "商品" : "選択肢"}</span>
+                        <small>最終確認 {formatDateTime(candidate.lastSeenAt)} / ID {candidate.externalId}</small>
+                      </div>
+                      <span>{candidate.status === "ignored" ? "プラットフォーム専用" : "確認待ち"}</span>
+                      <div className="menu-platform-candidate-actions">
+                        {candidate.status === "ignored" ? (
+                          <button className="secondary-button compact-button" type="button" onClick={() => void resolvePlatformCandidate(candidate, "restore")}>再確認する</button>
+                        ) : (
+                          <>
+                            {candidate.targetType === "item" && (candidate.observedPayload.metadata as Record<string, unknown> | undefined)?.kindConfidence !== "unknown" ? (
+                              <button className="primary-button compact-button" type="button" onClick={() => void resolvePlatformCandidate(candidate, "create_draft")}>OS に下書き作成</button>
+                            ) : null}
+                            <button className="secondary-button compact-button" type="button" onClick={() => void resolvePlatformCandidate(candidate, "ignore")}>プラットフォーム専用</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ) : null}
             <div className="menu-platform-list">
               {brandExternalPlatforms.map((platform) => (
                 <div className="menu-platform-row" key={platform.id}>

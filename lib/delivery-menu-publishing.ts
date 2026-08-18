@@ -171,6 +171,9 @@ export function projectDeliveryName(
   rule: DeliveryPlatformRule = deliveryPlatformRules[platformKey]
 ) {
   const sourceName = String(setting?.nameOverride ?? "").trim() || name.trim();
+  if (setting?.nameOverride && setting.placementConfig?.useExactNameOverride === true) {
+    return applyEmojiRule(sourceName, rule, setting);
+  }
   if (rule.nameMode === "japanese") return applyEmojiRule(sourceName, rule, setting);
   return [sourceName, ...multilingualOrder.map((language) => displayNames[language])]
     .map((value) => applyEmojiRule(String(value ?? ""), rule, setting))

@@ -97,6 +97,72 @@ async function readRows(page, targets) {
   }, requested);
 }
 
+async function readAllRows(page, targets) {
+  const requested = targets.map((target) => {
+    const projected = withPlatformTargetAliases("demae_can", target);
+    const tiers = targetNameTiers(projected);
+    return {
+      targetId: target.targetId,
+      kind: target.kind,
+      groupKey: target.groupKey ?? "",
+      optionKey: target.optionKey ?? "",
+     sourceBasePrice: target.sourceBasePrice ?? null,
+     label: target.label,
+      knownExternalIds: Array.isArray(target.knownExternalIds) ? target.knownExternalIds : [],
+     names: [...tiers.exactNames, ...tiers.fallbackNames, ...tiers.aliasNames]
+    };
+  });
+  return page.evaluate((items) => {
+    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const targetRows = items.map((item) => ({ ...item, normalizedNames: [...new Set(item.names.map(normalize).filter(Boolean))] }));
+    const titles = [...document.querySelectorAll("[class*=Styles_name__]")].filter((title) => title.getClientRects().length);
+    const grouped = new Map();
+    for (const title of titles) {
+      const name = String(title.textContent ?? "").trim();
+      const key = normalize(name);
+      const row = title.closest("label") ?? title.closest("tr") ?? title.parentElement;
+      if (!key || !row) continue;
+      const current = grouped.get(key) ?? { name, rows: [] };
+      current.rows.push(row);
+      grouped.set(key, current);
+    }
+   const entries = [...grouped.entries()].map(([normalizedName, group]) => {
+      const rowIds = [...new Set(group.rows.map((row) => row.querySelector('input[type="checkbox"]')?.id ?? "").filter(Boolean))].sort();
+      const externalId = rowIds.join(",") || "unknown:" + normalizedName;
+     const parts = normalizedName.split(/[|｜]/u).map((part) => part.trim()).filter(Boolean);
+      const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.some((knownId) => knownId === externalId || rowIds.includes(knownId)));
+      const candidates = mappedCandidates.length
+        ? mappedCandidates
+        : targetRows.filter((target) => target.normalizedNames.some((name) => parts.includes(name)));
+     const target = candidates.length === 1 ? candidates[0] : null;
+      const text = group.rows.map((row) => normalize(row.textContent)).join(" ");
+      return {
+        targetId: target?.targetId ?? "",
+        externalId,
+        groupKey: target?.groupKey ?? "",
+        optionKey: target?.optionKey ?? "",
+        name: group.name,
+        price: null,
+        sourceBasePrice: target?.sourceBasePrice ?? null,
+        isActive: !/品切れ|終売/u.test(text),
+        observedKind: target?.kind ?? "item",
+        metadata: {
+         rowIds,
+         physicalRowCount: group.rows.length,
+          matchBasis: mappedCandidates.length ? "external_id" : "name",
+          kindConfidence: target ? "mapped" : "unknown",
+         ambiguousTargetIds: candidates.length > 1 ? candidates.map((candidate) => candidate.targetId) : []
+        }
+      };
+    });
+    const matchedCounts = Object.fromEntries(targetRows.map((target) => [target.targetId, entries.filter((entry) => entry.targetId === target.targetId).length]));
+    return {
+      entries,
+      missingTargets: targetRows.filter((target) => matchedCounts[target.targetId] !== 1).map((target) => target.label)
+    };
+  }, requested);
+}
+
 async function clickRows(page, items) {
   for (const item of items) {
     const rowIds = (item.matches[0]?.rowMatches ?? item.matches)
@@ -468,34 +534,24 @@ export class DemaeCanAdapter {
 
   async captureMenuSnapshot(payload) {
     const targets = Array.isArray(payload.targets) ? payload.targets : [];
-    const located = await this.locateTargets(targets);
-    const entries = located.flatMap((item) => {
-      if (item.matches.length !== 1) return [];
-      const target = targets.find((candidate) => candidate.kind === item.kind && candidate.label === item.label)
-        ?? targets.find((candidate) => candidate.label === item.label);
-      const match = item.matches[0];
-      return [{
-        targetId: target?.targetId ?? "",
-        externalId: match.rowId || `${target?.kind ?? "item"}:${target?.externalId ?? item.label}`,
-        groupKey: target?.groupKey ?? "",
-        optionKey: target?.optionKey ?? "",
-        name: item.label,
-        price: null,
-        sourceBasePrice: target?.sourceBasePrice ?? null,
-        isActive: match.unavailable !== true
-      }];
-    });
-    const missingTargets = located.filter((item) => item.matches.length !== 1).map((item) => item.label);
+    const page = await this.session.goto(STOCKOUT_URL);
+    await this.ensureAuthenticated(page);
+    const scan = await this.readInventoryRowsWithAuthRecovery(page, targets);
+    if (scan.some((item) => item.matches.length === 0)) await this.refreshInventoryPage(page);
+    const result = await readAllRows(page, targets);
+    const entries = result.entries;
+    const missingTargets = result.missingTargets;
     return {
       outcome: "captured",
       snapshot: {
-        items: entries.filter((entry) => targets.find((target) => target.targetId === entry.targetId)?.kind === "item"),
-        options: entries.filter((entry) => targets.find((target) => target.targetId === entry.targetId)?.kind === "option"),
+        items: entries.filter((entry) => entry.observedKind === "item"),
+        options: entries.filter((entry) => entry.observedKind === "option"),
         complete: missingTargets.length === 0,
-        missingTargets
+        missingTargets,
+        scanMode: "full_platform"
       },
       targetCount: targets.length,
-      matchedCount: entries.length,
+      matchedCount: entries.filter((entry) => entry.targetId).length,
       missingTargets
     };
   }

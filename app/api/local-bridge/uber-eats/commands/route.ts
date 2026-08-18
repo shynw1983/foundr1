@@ -325,11 +325,36 @@ async function applyMenuSnapshotResult(input: {
     ...(Array.isArray(snapshot.items) ? snapshot.items.map((entry) => ({ targetType: "item", entry })) : []),
     ...(Array.isArray(snapshot.options) ? snapshot.options.map((entry) => ({ targetType: "option", entry })) : [])
   ];
+  await sql`
+    update menu_platform_import_candidates
+    set status = 'not_seen', updated_at = now()
+    where external_platform_id = ${externalPlatformId} and status = 'pending'
+  `;
   for (const value of observed) {
     const entry = value.entry && typeof value.entry === "object" ? value.entry as Record<string, unknown> : {};
     const targetId = cleanText(entry.targetId, 80);
     const externalId = cleanText(entry.externalId, 240);
-    if (!targetId || !externalId) continue;
+    if (!externalId) continue;
+    if (!targetId) {
+      await sql`
+        insert into menu_platform_import_candidates (
+          brand_id, store_id, external_platform_id, target_type, external_id,
+          external_parent_id, observed_name, observed_payload, status, last_seen_at, updated_at
+        ) values (
+          ${brandId}, null, ${externalPlatformId}, ${value.targetType}, ${externalId},
+          ${cleanText(entry.externalParentId, 240)}, ${cleanText(entry.name, 500)},
+          ${JSON.stringify(entry)}::jsonb, 'pending', now(), now()
+        )
+        on conflict (external_platform_id, target_type, external_id) do update set
+          external_parent_id = excluded.external_parent_id,
+          observed_name = excluded.observed_name,
+          observed_payload = excluded.observed_payload,
+          status = case when menu_platform_import_candidates.status = 'not_seen' then 'pending' else menu_platform_import_candidates.status end,
+          last_seen_at = now(),
+          updated_at = now()
+      `;
+      continue;
+    }
     await sql`
       insert into menu_platform_object_mappings (
         brand_id, store_id, external_platform_id, target_type, target_id,

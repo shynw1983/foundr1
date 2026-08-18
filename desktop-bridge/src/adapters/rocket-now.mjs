@@ -149,6 +149,81 @@ async function readRows(page, targets) {
   }, requested);
 }
 
+async function readAllRows(page, targets, targetKind) {
+  const requested = targets.map((target) => {
+    const projected = withPlatformTargetAliases("rocket_now", target);
+    const tiers = targetNameTiers(projected);
+    return {
+      targetId: target.targetId,
+      kind: target.kind,
+      groupKey: target.groupKey ?? "",
+      optionKey: target.optionKey ?? "",
+     sourceBasePrice: target.sourceBasePrice ?? null,
+     label: target.label,
+      knownExternalIds: Array.isArray(target.knownExternalIds) ? target.knownExternalIds : [],
+     names: [...tiers.exactNames, ...tiers.fallbackNames, ...tiers.aliasNames]
+    };
+  });
+  return page.evaluate(({ targets: items, defaultKind }) => {
+    const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const targetRows = items.map((item) => ({ ...item, normalizedNames: [...new Set(item.names.map(normalize).filter(Boolean))] }));
+    const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")]
+      .filter((title) => title.getClientRects().length);
+    const rowFor = (element) => {
+      const stable = element?.closest('label, [role="row"], li, div[class*=e1iqhfx24]');
+      if (stable && stable.querySelector('input[type="checkbox"], input[type="checkBox"]')) return stable;
+      let current = element?.parentElement;
+      for (let depth = 0; current && depth < 7; depth += 1, current = current.parentElement) {
+        if (normalize(current.textContent).length < 1200 && current.querySelector('input[type="checkbox"], input[type="checkBox"]')) return current;
+      }
+      return null;
+    };
+    const grouped = new Map();
+    for (const title of titles) {
+      const name = String(title.textContent ?? "").trim();
+      const key = normalize(name);
+      const row = rowFor(title);
+      if (!key || !row) continue;
+      const current = grouped.get(key) ?? { name, rows: [] };
+      current.rows.push(row);
+      grouped.set(key, current);
+    }
+   const entries = [...grouped.entries()].map(([normalizedName, group]) => {
+      const checkboxIds = [...new Set(group.rows.map((row) => row.querySelector('input[type="checkbox"], input[type="checkBox"]')?.id ?? "").filter(Boolean))].sort();
+      const externalId = checkboxIds.join(",") || defaultKind + ":" + normalizedName;
+     const parts = normalizedName.split(/[|｜]/u).map((part) => part.trim()).filter(Boolean);
+      const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.some((knownId) => knownId === externalId || checkboxIds.includes(knownId)));
+      const candidates = mappedCandidates.length
+        ? mappedCandidates
+        : targetRows.filter((target) => target.normalizedNames.some((name) => parts.includes(name)));
+     const target = candidates.length === 1 ? candidates[0] : null;
+      return {
+        targetId: target?.targetId ?? "",
+        externalId,
+        groupKey: target?.groupKey ?? "",
+        optionKey: target?.optionKey ?? "",
+        name: group.name,
+        price: null,
+        sourceBasePrice: target?.sourceBasePrice ?? null,
+        isActive: group.rows.every((row) => !normalize(row.textContent).includes("非表示")),
+        observedKind: target?.kind ?? defaultKind,
+        metadata: {
+         checkboxIds,
+         physicalRowCount: group.rows.length,
+          matchBasis: mappedCandidates.length ? "external_id" : "name",
+          kindConfidence: target ? "mapped" : "tab",
+         ambiguousTargetIds: candidates.length > 1 ? candidates.map((candidate) => candidate.targetId) : []
+        }
+      };
+    });
+    const matchedCounts = Object.fromEntries(targetRows.map((target) => [target.targetId, entries.filter((entry) => entry.targetId === target.targetId).length]));
+    return {
+      entries,
+      missingTargets: targetRows.filter((target) => matchedCounts[target.targetId] !== 1).map((target) => target.label)
+    };
+  }, { targets: requested, defaultKind: targetKind });
+}
+
 async function waitForRows(page, items, hidden, targetKind) {
   const verify = async () => page.waitForFunction(({ requested, expectedHidden }) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
@@ -303,38 +378,27 @@ export class RocketNowAdapter {
 
   async captureMenuSnapshot(payload) {
     const targets = Array.isArray(payload.targets) ? payload.targets : [];
-    const located = [];
+    const entries = [];
+    const missingTargets = [];
     for (const kind of ["item", "option"]) {
       const kindTargets = targets.filter((target) => target.kind === kind);
-      if (kindTargets.length) located.push(...await this.locateTargets(kindTargets));
+      const page = await this.session.goto(this.inventoryUrl(kind));
+      await selectInventoryTab(page, kind);
+      const scan = await readAllRows(page, kindTargets, kind);
+      entries.push(...scan.entries);
+      missingTargets.push(...scan.missingTargets);
     }
-    const entries = located.flatMap((item) => {
-      if (item.matches.length !== 1) return [];
-      const target = targets.find((candidate) => candidate.kind === item.kind && candidate.label === item.label)
-        ?? targets.find((candidate) => candidate.label === item.label);
-      const match = item.matches[0];
-      return [{
-        targetId: target?.targetId ?? "",
-        externalId: match.checkboxId || `${target?.kind ?? "item"}:${target?.externalId ?? item.label}`,
-        groupKey: target?.groupKey ?? "",
-        optionKey: target?.optionKey ?? "",
-        name: item.label,
-        price: null,
-        sourceBasePrice: target?.sourceBasePrice ?? null,
-        isActive: match.hidden !== true
-      }];
-    });
-    const missingTargets = located.filter((item) => item.matches.length !== 1).map((item) => item.label);
     return {
       outcome: "captured",
       snapshot: {
-        items: entries.filter((entry) => targets.find((target) => target.targetId === entry.targetId)?.kind === "item"),
-        options: entries.filter((entry) => targets.find((target) => target.targetId === entry.targetId)?.kind === "option"),
+        items: entries.filter((entry) => entry.observedKind === "item"),
+        options: entries.filter((entry) => entry.observedKind === "option"),
         complete: missingTargets.length === 0,
-        missingTargets
+        missingTargets,
+        scanMode: "full_platform"
       },
       targetCount: targets.length,
-      matchedCount: entries.length,
+      matchedCount: entries.filter((entry) => entry.targetId).length,
       missingTargets
     };
   }

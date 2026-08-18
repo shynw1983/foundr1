@@ -284,7 +284,7 @@ async function readMenuAdminData() {
 
   await ensureDefaultExternalPlatforms(brands.map((brand) => String(brand.id)));
 
-  const [externalPlatforms, syncTasks, availabilityLinks, platformTargetSettings, publishBatches] = await Promise.all([
+  const [externalPlatforms, syncTasks, availabilityLinks, platformTargetSettings, publishBatches, platformImportCandidates] = await Promise.all([
     sql`
       select
         id::text,
@@ -378,10 +378,28 @@ async function readMenuAdminData() {
       where batches.created_at > now() - interval '30 days'
       order by batches.created_at desc
       limit 100
+    `,
+    sql`
+      select candidates.id::text, candidates.brand_id::text as "brandId",
+        coalesce(candidates.store_id::text, '') as "storeId",
+        candidates.external_platform_id::text as "externalPlatformId",
+        platforms.platform_key as "platformKey", platforms.name as "platformName",
+        candidates.target_type as "targetType", candidates.external_id as "externalId",
+        candidates.external_parent_id as "externalParentId", candidates.observed_name as "observedName",
+        candidates.observed_payload as "observedPayload", candidates.status,
+        coalesce(candidates.adopted_target_id::text, '') as "adoptedTargetId",
+        candidates.first_seen_at as "firstSeenAt", candidates.last_seen_at as "lastSeenAt",
+        candidates.resolved_at as "resolvedAt"
+      from menu_platform_import_candidates candidates
+      join menu_external_platforms platforms on platforms.id = candidates.external_platform_id
+      where candidates.status in ('pending', 'ignored')
+        and candidates.last_seen_at > now() - interval '90 days'
+      order by case when candidates.status = 'pending' then 0 else 1 end, candidates.last_seen_at desc
+      limit 300
     `
   ]);
 
-  return { brands, stores, sources, categories, items, groups, options, storeSettings, itemOptionGroups, externalPlatforms, syncTasks, availabilityLinks, platformTargetSettings, publishBatches };
+  return { brands, stores, sources, categories, items, groups, options, storeSettings, itemOptionGroups, externalPlatforms, syncTasks, availabilityLinks, platformTargetSettings, publishBatches, platformImportCandidates };
 }
 
 export async function GET() {
@@ -413,10 +431,12 @@ export async function POST(request: Request) {
     else if (kind === "sortOrder") result = await updateSortOrder(body, session.id);
     else if (kind === "externalPlatform") result = await upsertExternalPlatform(body);
     else if (kind === "platformTargetSetting") result = await upsertPlatformTargetSetting(body, session.id);
+    else if (kind === "adoptPlatformState") result = await adoptPlatformState(body, session.id);
+    else if (kind === "platformImportCandidate") result = await resolvePlatformImportCandidate(body, session.id);
     else if (kind === "completeSyncTask") result = await completeSyncTask(body, session.id);
     else if (kind === "availabilityLink") result = await upsertAvailabilityLink(body, session.id);
     else return Response.json({ error: "保存対象が不正です。" }, { status: 400 });
-    if (!["externalPlatform", "platformTargetSetting", "completeSyncTask", "availabilityLink"].includes(kind)) publishAllPublicMenuUpdatesAfterResponse();
+    if (!["externalPlatform", "platformTargetSetting", "adoptPlatformState", "platformImportCandidate", "completeSyncTask", "availabilityLink"].includes(kind)) publishAllPublicMenuUpdatesAfterResponse();
     return Response.json(result);
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "保存できませんでした。" }, { status: 400 });
@@ -643,6 +663,146 @@ async function upsertPlatformTargetSetting(body: Record<string, unknown>, employ
     returning id::text
   `;
   return { ok: true, id: rows[0]?.id };
+}
+
+async function adoptPlatformState(body: Record<string, unknown>, employeeId: string) {
+  const brandId = cleanOptionalId(body.brandId);
+  const externalPlatformId = cleanOptionalId(body.externalPlatformId);
+  const targetType = String(body.targetType ?? "");
+  const targetId = cleanOptionalId(body.targetId);
+  if (!brandId || !externalPlatformId || !targetId || !["item", "option"].includes(targetType)) {
+    throw new Error("取り込むプラットフォーム差分を選択してください。");
+  }
+  const snapshotRows = await sql`
+    select snapshots.payload
+    from menu_platform_snapshots snapshots
+    where snapshots.brand_id = ${brandId} and snapshots.external_platform_id = ${externalPlatformId}
+      and snapshots.snapshot_type = 'baseline'
+    order by snapshots.captured_at desc
+    limit 1
+  `;
+  const payload = snapshotRows[0]?.payload && typeof snapshotRows[0].payload === "object"
+    ? snapshotRows[0].payload as Record<string, unknown>
+    : {};
+  const entries = targetType === "item" ? payload.items : payload.options;
+  const observed = (Array.isArray(entries) ? entries : []).find((entry) => (
+    entry && typeof entry === "object" && String((entry as Record<string, unknown>).targetId ?? "") === targetId
+  )) as Record<string, unknown> | undefined;
+  if (!observed) throw new Error("最新のプラットフォーム回読値が見つかりません。先に現在メニューを取り込んでください。");
+  const existingRows = await sql`
+    select is_enabled as "isEnabled", name_override as "nameOverride",
+      description_override as "descriptionOverride", price_override::float as "priceOverride",
+      emoji_mode as "emojiMode", coalesce(placement_config, '{}'::jsonb) as "placementConfig"
+    from menu_platform_target_settings
+    where external_platform_id = ${externalPlatformId} and target_type = ${targetType} and target_id = ${targetId}
+    limit 1
+  `;
+  const existing = existingRows[0] ?? {};
+  const adoptName = body.adoptName === true;
+  const adoptPrice = body.adoptPrice === true;
+  const adoptAvailability = body.adoptAvailability === true;
+  const placementConfig = existing.placementConfig && typeof existing.placementConfig === "object"
+    ? existing.placementConfig as Record<string, unknown>
+    : {};
+  await sql`
+    insert into menu_platform_target_settings (
+      brand_id, store_id, external_platform_id, target_type, target_id,
+      is_enabled, name_override, description_override, price_override,
+      emoji_mode, placement_config, updated_by, updated_at
+    ) values (
+      ${brandId}, null, ${externalPlatformId}, ${targetType}, ${targetId},
+      ${adoptAvailability ? observed.isActive !== false : existing.isEnabled !== false},
+      ${adoptName ? String(observed.name ?? "") : String(existing.nameOverride ?? "")},
+      ${String(existing.descriptionOverride ?? "")},
+      ${adoptPrice && observed.price !== null && observed.price !== undefined ? Number(observed.price) : existing.priceOverride ?? null},
+      ${String(existing.emojiMode ?? "follow")},
+      ${JSON.stringify(adoptName ? { ...placementConfig, useExactNameOverride: true } : placementConfig)}::jsonb,
+      ${employeeId}, now()
+    )
+    on conflict (external_platform_id, target_type, target_id) do update set
+      is_enabled = excluded.is_enabled,
+      name_override = excluded.name_override,
+      description_override = excluded.description_override,
+      price_override = excluded.price_override,
+      emoji_mode = excluded.emoji_mode,
+      placement_config = excluded.placement_config,
+      updated_by = excluded.updated_by,
+      updated_at = now()
+  `;
+  return { ok: true, targetId };
+}
+
+async function resolvePlatformImportCandidate(body: Record<string, unknown>, employeeId: string) {
+  const id = cleanOptionalId(body.id);
+  const action = String(body.action ?? "");
+  if (!id || !["ignore", "restore", "create_draft"].includes(action)) throw new Error("プラットフォーム独自商品と処理方法を選択してください。");
+  const rows = await sql`
+    select candidates.*, platforms.platform_key as "platformKey"
+    from menu_platform_import_candidates candidates
+    join menu_external_platforms platforms on platforms.id = candidates.external_platform_id
+    where candidates.id = ${id}
+    limit 1
+  `;
+  const candidate = rows[0];
+  if (!candidate) throw new Error("プラットフォーム独自商品が見つかりません。");
+  if (action === "ignore" || action === "restore") {
+    await sql`
+      update menu_platform_import_candidates
+      set status = ${action === "ignore" ? "ignored" : "pending"}, resolved_by = ${action === "ignore" ? employeeId : null}::uuid,
+        resolved_at = ${action === "ignore" ? new Date().toISOString() : null}::timestamptz, updated_at = now()
+      where id = ${id}
+    `;
+    return { ok: true, id };
+  }
+  if (String(candidate.target_type) !== "item") throw new Error("選択肢は所属グループの確認が必要です。OS の選択肢設定から追加してください。");
+  const observed = candidate.observed_payload && typeof candidate.observed_payload === "object"
+    ? candidate.observed_payload as Record<string, unknown>
+    : {};
+  const observedMetadata = observed.metadata && typeof observed.metadata === "object"
+    ? observed.metadata as Record<string, unknown>
+    : {};
+  if (observedMetadata.kindConfidence === "unknown") {
+    throw new Error("出前館では商品と選択肢の所属を自動判定できません。OS のメニュー設定で所属先を確認してから追加してください。");
+  }
+  const name = String(candidate.observed_name || observed.name || "プラットフォーム取込商品").trim();
+  const platformKey = String(candidate.platformKey ?? "");
+  const rule = deliveryPlatformRules[platformKey as DeliveryMenuPlatformKey];
+  const observedPrice = observed.price === null || observed.price === undefined ? null : Number(observed.price);
+  const basePrice = observedPrice === null ? null : Math.round(observedPrice / Number(rule?.priceMultiplier || 1));
+  const itemId = crypto.randomUUID();
+  await sql.transaction([
+    sql`
+      insert into menu_catalog_items (
+        id, brand_id, store_id, external_id, item_kind, name, category,
+        description, base_price, variable_schema, sort_order, is_active, updated_at
+      ) values (
+        ${itemId}, ${String(candidate.brand_id)}, null, ${`platform-import-${id}`}, 'fixed_product', ${name},
+        'プラットフォーム取込下書き', 'プラットフォーム全量回読から作成した未公開下書きです。', ${basePrice},
+        ${JSON.stringify({ platformImport: { platformKey, candidateId: id, externalId: candidate.external_id } })}::jsonb,
+        9990, false, now()
+      )
+    `,
+    sql`
+      update menu_platform_import_candidates
+      set status = 'adopted', adopted_target_id = ${itemId}, resolved_by = ${employeeId},
+        resolved_at = now(), updated_at = now()
+      where id = ${id}
+    `,
+    sql`
+      insert into menu_platform_object_mappings (
+        brand_id, store_id, external_platform_id, target_type, target_id,
+        external_id, external_parent_id, external_name, last_observed_state, last_verified_at, updated_at
+      ) values (
+        ${String(candidate.brand_id)}, null, ${String(candidate.external_platform_id)}, 'item', ${itemId},
+        ${String(candidate.external_id)}, ${String(candidate.external_parent_id ?? "")}, ${name},
+        ${JSON.stringify(observed)}::jsonb, now(), now()
+      )
+      on conflict (external_platform_id, target_type, external_id) do update set
+        target_id = excluded.target_id, external_name = excluded.external_name,
+        last_observed_state = excluded.last_observed_state, last_verified_at = now(), updated_at = now()
+    `
+  ]);
+  return { ok: true, id, itemId };
 }
 
 async function completeSyncTask(body: Record<string, unknown>, employeeId: string) {

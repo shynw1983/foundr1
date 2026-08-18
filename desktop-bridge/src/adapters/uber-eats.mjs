@@ -306,41 +306,92 @@ export class UberEatsAdapter {
 
   async captureMenuSnapshot(payload) {
     const targets = Array.isArray(payload.targets) ? payload.targets : [];
-    const located = await this.locateTargets(targets);
-    const byLabel = new Map(targets.map((target) => [`${target.kind}:${target.label}`, target]));
-    const entries = located.flatMap((item) => {
-      if (item.matches.length !== 1) return [];
-      const target = byLabel.get(`${item.kind ?? "item"}:${item.label}`)
-        ?? targets.find((candidate) => candidate.label === item.label);
-      const match = item.matches[0];
-      let externalId = String(match.href ?? "");
-      try {
-        externalId = new URL(externalId).pathname;
-      } catch {
-        // Keep the observed stable value if Uber changes the link format.
-      }
-      return [{
-        targetId: target?.targetId ?? "",
-        externalId,
-        groupKey: target?.groupKey ?? "",
-        optionKey: target?.optionKey ?? "",
-        name: match.text || item.label,
-        price: Number(match.price) || null,
-        sourceBasePrice: target?.sourceBasePrice ?? null,
-        isActive: true
-      }];
-    });
-    const missingTargets = located.filter((item) => item.matches.length !== 1).map((item) => item.label);
+    const page = await this.connect();
+    let scan;
+    try {
+      await this.openItemsPage(page);
+      const requested = targets.map((target) => {
+        const tiers = uberTargetNameTiers(target);
+        return {
+          targetId: target.targetId,
+          kind: target.kind,
+          groupKey: target.groupKey ?? "",
+          optionKey: target.optionKey ?? "",
+         sourceBasePrice: target.sourceBasePrice ?? null,
+         label: target.label,
+          knownExternalIds: Array.isArray(target.knownExternalIds) ? target.knownExternalIds : [],
+         names: [...tiers.exactNames, ...tiers.fallbackNames, ...tiers.aliasNames]
+        };
+      });
+      scan = await page.evaluate(`(() => {
+        ${NORMALIZE_SOURCE}
+        const targets = ${JSON.stringify(requested)};
+        const targetRows = targets.map((target) => ({
+          ...target,
+          normalizedNames: [...new Set(target.names.map(normalize).filter(Boolean))]
+        }));
+        const anchors = [...document.querySelectorAll('a[href*="/items/"]')]
+          .filter((anchor) => anchor.getClientRects().length);
+        const unique = [...new Map(anchors.map((anchor) => [anchor.href, anchor])).values()];
+        const entries = unique.map((anchor) => {
+          let record = anchor.closest('tr, [role="row"], .cw.bd.il.r6.cu');
+          if (!record) {
+            let current = anchor.parentElement;
+            for (let depth = 0; current && depth < 6; depth += 1, current = current.parentElement) {
+              const text = current.innerText ?? current.textContent ?? "";
+              if (text.length < 1600 && text.split("\\n").filter(Boolean).length >= 2) { record = current; break; }
+            }
+         }
+         const rawName = String(anchor.textContent ?? "").trim();
+          const externalId = new URL(anchor.href).pathname.replace(/\\/$/u, "");
+         const nameParts = normalize(rawName).split(/[|｜]/u).map((part) => part.trim()).filter(Boolean);
+          const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.includes(externalId));
+          const candidates = mappedCandidates.length
+            ? mappedCandidates
+            : targetRows.filter((target) => target.normalizedNames.some((name) => nameParts.includes(name)));
+          const target = candidates.length === 1 ? candidates[0] : null;
+          const lines = (record?.innerText ?? "").split("\\n").map((line) => line.trim()).filter(Boolean);
+          const price = Number(String(lines[1] ?? "").replace(/[^0-9]/g, "")) || null;
+          return {
+            targetId: target?.targetId ?? "",
+            externalId,
+            groupKey: target?.groupKey ?? "",
+            optionKey: target?.optionKey ?? "",
+            name: rawName,
+            price,
+            sourceBasePrice: target?.sourceBasePrice ?? null,
+            isActive: !/売り切れ|販売停止|非表示/u.test(record?.innerText ?? ""),
+            observedKind: target?.kind ?? "item",
+           metadata: {
+             href: anchor.href,
+              matchBasis: mappedCandidates.length ? "external_id" : "name",
+              kindConfidence: target ? "mapped" : "page",
+             ambiguousTargetIds: candidates.length > 1 ? candidates.map((candidate) => candidate.targetId) : []
+            }
+          };
+        });
+        const matchedCounts = Object.fromEntries(targetRows.map((target) => [target.targetId, entries.filter((entry) => entry.targetId === target.targetId).length]));
+        return {
+          entries,
+          missingTargets: targetRows.filter((target) => matchedCounts[target.targetId] !== 1).map((target) => target.label)
+        };
+      })()`);
+    } finally {
+      page.close();
+    }
+    const entries = scan.entries;
+    const missingTargets = scan.missingTargets;
     return {
       outcome: "captured",
       snapshot: {
-        items: entries.filter((entry) => targets.find((target) => target.targetId === entry.targetId)?.kind === "item"),
-        options: entries.filter((entry) => targets.find((target) => target.targetId === entry.targetId)?.kind === "option"),
+        items: entries.filter((entry) => entry.observedKind === "item"),
+        options: entries.filter((entry) => entry.observedKind === "option"),
         complete: missingTargets.length === 0,
-        missingTargets
+        missingTargets,
+        scanMode: "full_platform"
       },
       targetCount: targets.length,
-      matchedCount: entries.length,
+      matchedCount: entries.filter((entry) => entry.targetId).length,
       missingTargets
     };
   }

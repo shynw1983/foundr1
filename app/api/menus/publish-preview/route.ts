@@ -329,7 +329,7 @@ export async function POST(request: Request) {
   if (!storeRows.length) return Response.json({ error: "この店舗にはブランドの配信権限がありません。" }, { status: 403 });
 
   if (action === "capture") {
-    const [itemRows, optionRows, platformRows, disabledTargetRows] = await Promise.all([
+    const [itemRows, optionRows, platformRows, disabledTargetRows, mappingRows] = await Promise.all([
       sql`
         select id::text as "targetId", 'item' as kind, name as label,
           coalesce(display_names, '{}'::jsonb) as "displayNames", external_id as "externalId",
@@ -358,13 +358,26 @@ export async function POST(request: Request) {
         from menu_platform_target_settings settings
         join menu_external_platforms platforms on platforms.id = settings.external_platform_id
         where settings.brand_id = ${brandId} and settings.store_id is null and settings.is_enabled = false
+      `,
+      sql`
+        select platforms.platform_key as "platformKey", mappings.target_type as "targetType",
+          mappings.target_id::text as "targetId", mappings.external_id as "externalId"
+        from menu_platform_object_mappings mappings
+        join menu_external_platforms platforms on platforms.id = mappings.external_platform_id
+        where mappings.brand_id = ${brandId} and mappings.store_id is null
       `
     ]);
     if (platformRows.length !== requestedPlatforms.length) {
       return Response.json({ error: "有効な外部プラットフォーム設定が不足しています。" }, { status: 409 });
     }
     const targets = [...itemRows, ...optionRows].map((row) => ({
-      ...row,
+      targetId: String(row.targetId),
+      kind: String(row.kind),
+      label: String(row.label),
+      externalId: String(row.externalId ?? ""),
+      groupKey: String(row.groupKey ?? ""),
+      optionKey: String(row.optionKey ?? ""),
+      sourceBasePrice: row.sourceBasePrice === null || row.sourceBasePrice === undefined ? null : Number(row.sourceBasePrice),
       aliases: Object.values((row.displayNames && typeof row.displayNames === "object" ? row.displayNames : {}) as Record<string, unknown>)
         .map(String).filter(Boolean)
     }));
@@ -372,11 +385,20 @@ export async function POST(request: Request) {
     for (const platform of platformRows) {
       const commandId = crypto.randomUUID();
       const taskId = crypto.randomUUID();
-      const platformTargets = targets.filter((target) => !disabledTargetRows.some((setting) => (
-        String(setting.platformKey) === String(platform.platformKey)
-        && String(setting.targetType) === String(target.kind)
-        && String(setting.targetId) === String(target.targetId)
-      )));
+      const platformTargets = targets
+        .filter((target) => !disabledTargetRows.some((setting) => (
+          String(setting.platformKey) === String(platform.platformKey)
+          && String(setting.targetType) === String(target.kind)
+          && String(setting.targetId) === String(target.targetId)
+        )))
+        .map((target) => ({
+          ...target,
+          knownExternalIds: mappingRows.filter((mapping) => (
+            String(mapping.platformKey) === String(platform.platformKey)
+            && String(mapping.targetType) === String(target.kind)
+            && String(mapping.targetId) === String(target.targetId)
+          )).map((mapping) => String(mapping.externalId))
+        }));
       queries.push(sql`
         insert into local_bridge_commands (
           id, store_id, platform, command_type, idempotency_key, payload, status, available_at, updated_at

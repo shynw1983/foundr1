@@ -37,6 +37,114 @@ function operationFor(platform: InventoryPlatform, isAvailable: boolean) {
   return isAvailable ? "available" : "sold_out";
 }
 
+async function scheduleMenuPlatformScansForStore(input: {
+  storeId: string;
+  scheduledFor: string;
+  source: "scheduled" | "system";
+}) {
+  const [platformRows, itemRows, optionRows, disabledRows, mappingRows] = await Promise.all([
+    sql`
+      select platforms.id::text as "externalPlatformId", platforms.brand_id::text as "brandId",
+        platforms.platform_key as "platformKey", platforms.rule_version as "ruleVersion"
+      from menu_external_platforms platforms
+      join store_brands on store_brands.brand_id = platforms.brand_id and store_brands.store_id::text = ${input.storeId}
+      join store_sales_sources sources on sources.store_id = store_brands.store_id
+        and sources.source_platform = platforms.platform_key and sources.is_enabled = true
+      where platforms.store_id is null and platforms.is_active = true
+        and platforms.platform_key in ('uber_eats', 'rocket_now', 'demae_can')
+      group by platforms.id, platforms.brand_id, platforms.platform_key, platforms.rule_version
+    `,
+    sql`
+      select id::text as "targetId", brand_id::text as "brandId", 'item' as kind, name as label,
+        coalesce(display_names, '{}'::jsonb) as "displayNames", coalesce(external_id, '') as "externalId",
+        base_price::float as "sourceBasePrice"
+      from menu_catalog_items
+      where store_id is null and is_active = true
+    `,
+    sql`
+      select options.id::text as "targetId", groups.brand_id::text as "brandId", 'option' as kind,
+        options.name as label, coalesce(options.display_names, '{}'::jsonb) as "displayNames",
+        coalesce(options.external_id, '') as "externalId", groups.group_key as "groupKey",
+        options.option_key as "optionKey", options.price_delta::float as "sourceBasePrice"
+      from menu_options options
+      join menu_option_groups groups on groups.id = options.option_group_id
+      where groups.is_active = true and options.is_active = true
+    `,
+    sql`
+      select platforms.platform_key as "platformKey", settings.target_type as "targetType", settings.target_id::text as "targetId"
+      from menu_platform_target_settings settings
+      join menu_external_platforms platforms on platforms.id = settings.external_platform_id
+      where settings.store_id is null and settings.is_enabled = false
+    `,
+    sql`
+      select mappings.brand_id::text as "brandId", platforms.platform_key as "platformKey",
+        mappings.target_type as "targetType", mappings.target_id::text as "targetId", mappings.external_id as "externalId"
+      from menu_platform_object_mappings mappings
+      join menu_external_platforms platforms on platforms.id = mappings.external_platform_id
+      where mappings.store_id is null
+    `
+  ]);
+  let commandCount = 0;
+  for (const platform of platformRows) {
+    const brandId = String(platform.brandId);
+    const platformKey = String(platform.platformKey) as InventoryPlatform;
+    const targets = [...itemRows, ...optionRows]
+      .filter((row) => String(row.brandId) === brandId)
+      .filter((row) => !disabledRows.some((setting) => (
+        String(setting.platformKey) === platformKey
+        && String(setting.targetType) === String(row.kind)
+        && String(setting.targetId) === String(row.targetId)
+      )))
+      .map((row) => ({
+        ...row,
+        aliases: Array.from(new Set([
+          String(row.label),
+          ...Object.values(row.displayNames && typeof row.displayNames === "object" ? row.displayNames as Record<string, unknown> : {}).map(String)
+        ].map((value) => value.trim()).filter(Boolean))),
+        knownExternalIds: mappingRows.filter((mapping) => (
+          String(mapping.brandId) === brandId
+          && String(mapping.platformKey) === platformKey
+          && String(mapping.targetType) === String(row.kind)
+          && String(mapping.targetId) === String(row.targetId)
+        )).map((mapping) => String(mapping.externalId))
+      }));
+    const commandId = randomUUID();
+    const inserted = await sql`
+      insert into local_bridge_commands (
+        id, store_id, platform, command_type, idempotency_key, payload, status, available_at, updated_at
+      ) values (
+        ${commandId}, ${input.storeId}, ${platformKey}, 'capture_menu_snapshot',
+        ${`${platformKey}:daily_menu_snapshot:${input.storeId}:${brandId}:${input.scheduledFor}`},
+        ${JSON.stringify({
+          brandId,
+          platformKey,
+          ruleVersion: String(platform.ruleVersion ?? ""),
+          scanSource: input.source,
+          scheduledFor: input.scheduledFor,
+          targets
+        })}::jsonb,
+        'pending', now(), now()
+      )
+      on conflict (idempotency_key) do nothing
+      returning id::text
+    `;
+    if (!inserted[0]) continue;
+    await sql`
+      insert into menu_change_sync_tasks (
+        brand_id, store_id, external_platform_id, target_type, target_label,
+        change_kind, change_summary, status, phase, rule_version, command_id,
+        max_attempts, updated_at
+      ) values (
+        ${brandId}, ${input.storeId}, ${String(platform.externalPlatformId)}, 'other', '毎日プラットフォーム全量回読',
+        'update', '08:00 の在庫同期後に全メニューを回読し、プラットフォーム側の直接変更を確認します。',
+        'queued', 'queued', ${String(platform.ruleVersion ?? "")}, ${commandId}, 3, now()
+      )
+    `;
+    commandCount += 1;
+  }
+  return commandCount;
+}
+
 async function loadFullSyncTargets(storeId: string) {
   const itemRows = await sql`
     select
@@ -219,18 +327,24 @@ export async function scheduleFullInventorySyncForStore(input: {
       }
     }
 
+    const menuScanCommandCount = await scheduleMenuPlatformScansForStore({
+      storeId: input.storeId,
+      scheduledFor,
+      source
+    });
     await sql`
       update menu_inventory_sync_runs
       set details = details || ${JSON.stringify({
         phase: commands.length ? "queued" : "complete",
         platforms,
         commandCount: commands.length,
+        menuScanCommandCount,
         targetCount: totalTargets
       })}::jsonb
       where id = ${runId}
     `;
-    if (commands.length) await publishBridgeCommandAvailable(input.storeId).catch(() => undefined);
-    return { runId, existing: false, commandCount: commands.length, targetCount: totalTargets };
+    if (commands.length || menuScanCommandCount) await publishBridgeCommandAvailable(input.storeId).catch(() => undefined);
+    return { runId, existing: false, commandCount: commands.length, menuScanCommandCount, targetCount: totalTargets };
   } catch (error) {
     await sql`
       update menu_inventory_sync_runs

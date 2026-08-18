@@ -2436,6 +2436,29 @@ create table if not exists menu_platform_snapshots (
   check (snapshot_type in ('baseline', 'pre_publish', 'target', 'verification', 'drift'))
 );
 
+create table if not exists menu_platform_import_candidates (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid not null references brands(id) on delete cascade,
+  store_id uuid references stores(id) on delete cascade,
+  external_platform_id uuid not null references menu_external_platforms(id) on delete cascade,
+  target_type text not null,
+  external_id text not null,
+  external_parent_id text not null default '',
+  observed_name text not null default '',
+  observed_payload jsonb not null default '{}'::jsonb,
+  status text not null default 'pending',
+  adopted_target_id uuid,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  resolved_by uuid references employees(id) on delete set null,
+  resolved_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (external_platform_id, target_type, external_id),
+  check (target_type in ('item', 'option')),
+  check (status in ('pending', 'ignored', 'adopted', 'not_seen'))
+);
+
 create table if not exists menu_publish_batches (
   id uuid primary key default gen_random_uuid(),
   brand_id uuid not null references brands(id) on delete cascade,
@@ -4085,6 +4108,7 @@ create index if not exists idx_menu_publish_batches_brand_created on menu_publis
 create index if not exists idx_menu_platform_target_settings_target on menu_platform_target_settings(brand_id, target_type, target_id);
 create index if not exists idx_menu_platform_object_mappings_target on menu_platform_object_mappings(brand_id, target_type, target_id);
 create index if not exists idx_menu_platform_snapshots_latest on menu_platform_snapshots(external_platform_id, snapshot_type, captured_at desc);
+create index if not exists idx_menu_platform_import_candidates_status on menu_platform_import_candidates(brand_id, status, last_seen_at desc);
 create index if not exists idx_menu_change_sync_tasks_batch on menu_change_sync_tasks(publish_batch_id, status, created_at);
 create unique index if not exists idx_menu_change_sync_tasks_pending_unique
   on menu_change_sync_tasks (

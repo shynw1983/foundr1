@@ -24,6 +24,15 @@ test("applies platform emoji and price rules with per-target overrides", () => {
   assert.equal(projectDeliveryPrice("demae_can", 170), 170);
 });
 
+test("keeps an adopted platform name exact instead of appending translations again", () => {
+  assert.equal(projectDeliveryName(
+    "uber_eats",
+    "トウモロコシ麺",
+    { zh: "玉米面", ko: "옥수수면", en: "Corn noodles" },
+    { nameOverride: "プラットフォームで直接編集した名称｜Custom name", placementConfig: { useExactNameOverride: true } }
+  ), "プラットフォームで直接編集した名称｜Custom name");
+});
+
 test("reports confirmed Uber name differences without mutating platform data", () => {
   const preview = buildDeliveryMenuPublishPreview({
     items: [{ id: "1", externalId: "corn", name: "トウモロコシ麺", displayNames: { zh: "玉米面", ko: "옥수수면", en: "Corn noodles" }, basePrice: 170, isActive: true }],

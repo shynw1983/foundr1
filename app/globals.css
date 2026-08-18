@@ -9745,6 +9745,98 @@ body :where(
   white-space: nowrap;
 }
 
+.menu-publish-adopt-button {
+  justify-self: start;
+  border: 0;
+  padding: 2px 0;
+  color: var(--green);
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.menu-publish-adopt-button:hover {
+  text-decoration: underline;
+}
+
+.menu-platform-candidate-panel {
+  border: 1px solid color-mix(in srgb, var(--amber) 30%, var(--line));
+  border-radius: 8px;
+  padding: 11px;
+  background: color-mix(in srgb, var(--amber-soft) 45%, white);
+}
+
+.menu-platform-candidate-panel > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.menu-platform-candidate-panel > summary b {
+  color: #805500;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.menu-platform-candidate-panel > p {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.menu-platform-candidate-list {
+  display: grid;
+  gap: 7px;
+}
+
+.menu-platform-candidate-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+}
+
+.menu-platform-candidate-row > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.menu-platform-candidate-row > div:first-child span,
+.menu-platform-candidate-row > div:first-child small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.menu-platform-candidate-row > span {
+  color: #805500;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.menu-platform-candidate-row.is-ignored {
+  opacity: 0.7;
+}
+
+.menu-platform-candidate-actions {
+  display: flex;
+  gap: 7px;
+}
+
 .menu-publish-change-kind {
   padding: 3px 5px;
   border-radius: 4px;
@@ -9793,6 +9885,15 @@ body :where(
 
   .menu-publish-change-row > em {
     grid-column: 2;
+  }
+
+  .menu-platform-candidate-row {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-platform-candidate-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 
