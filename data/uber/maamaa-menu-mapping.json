@@ -613,6 +613,20 @@
           "matchedExisting": true
         },
         {
+          "optionKey": "replace-hot-pot-wide-noodle",
+          "name": "火鍋板春雨に変更",
+          "displayNames": {
+            "zh": "更换为火锅宽粉",
+            "ko": "훠궈 넓적당면으로 변경",
+            "en": "Change to Hot Pot Potato Wide Noodles"
+          },
+          "websitePrice": 170,
+          "uberName": "火鍋板春雨に変更｜更换为火锅宽粉｜훠궈 넓적당면으로 변경｜Change to Hot Pot Potato Wide Noodles",
+          "uberPrice": 216,
+          "externalId": "replace-hot-pot-wide-noodle",
+          "matchedExisting": true
+        },
+        {
           "optionKey": "replace-soybean-sprouts-noodle",
           "name": "【ヘルシー】小大豆もやしに変更",
           "displayNames": {

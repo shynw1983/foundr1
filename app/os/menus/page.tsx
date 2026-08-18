@@ -144,6 +144,8 @@ type MenuExternalPlatform = {
   platformKey: string;
   name: string;
   managementUrl: string;
+  ruleVersion: string;
+  ruleConfig: Record<string, unknown>;
   isActive: boolean;
 };
 
@@ -158,12 +160,47 @@ type MenuSyncTask = {
   targetLabel: string;
   changeKind: string;
   changeSummary: string;
-  status: "pending" | "completed";
+  status: "pending" | "queued" | "processing" | "retrying" | "failed" | "succeeded" | "completed";
+  phase: string;
+  attempts: number;
+  maxAttempts: number;
+  errorCode: string;
+  errorDetail: string;
+  isRetryable: boolean;
+  commandId: string;
+  publishBatchId: string;
+  verifiedAt: string | null;
   createdByName: string;
   completedByName: string;
   completionNote: string;
   createdAt: string;
   completedAt: string | null;
+};
+
+type MenuPlatformTargetSetting = {
+  id: string;
+  brandId: string;
+  storeId: string;
+  externalPlatformId: string;
+  targetType: "item" | "option" | "category" | "option_group";
+  targetId: string;
+  isEnabled: boolean;
+  nameOverride: string;
+  descriptionOverride: string;
+  priceOverride: number | null;
+  emojiMode: "follow" | "show" | "hide";
+  placementConfig: Record<string, unknown>;
+};
+
+type MenuPublishBatch = {
+  id: string;
+  brandId: string;
+  storeId: string;
+  status: string;
+  requestedPlatforms: string[];
+  createdAt: string;
+  completedAt: string | null;
+  createdByName: string;
 };
 
 type MenuAvailabilityLink = {
@@ -188,17 +225,21 @@ type MenuAdminData = {
   externalPlatforms: MenuExternalPlatform[];
   syncTasks: MenuSyncTask[];
   availabilityLinks: MenuAvailabilityLink[];
+  platformTargetSettings: MenuPlatformTargetSetting[];
+  publishBatches: MenuPublishBatch[];
 };
 
 type MenuPublishPreviewChange = {
   id: string;
   targetType: "item" | "option" | "category" | "option_group" | "other";
+  targetId?: string;
   targetLabel: string;
   kind: "create" | "rename" | "reprice" | "update" | "move" | "disable" | "delete";
   summary: string;
   currentValue?: string;
   projectedValue?: string;
   confidence: "confirmed" | "provisional";
+  requiresExplicitConfirmation?: boolean;
 };
 
 type MenuPublishPreviewPlatform = {
@@ -218,6 +259,7 @@ type MenuPublishPreview = {
   brandId: string;
   brandName: string;
   platforms: MenuPublishPreviewPlatform[];
+  externalPlatforms: Array<{ id: string; platformKey: string; ruleVersion: string }>;
 };
 
 type MenuTranslationDraftEntry = {
@@ -462,6 +504,32 @@ function getPublishChangeLabel(kind: MenuPublishPreviewChange["kind"]) {
   } as const)[kind];
 }
 
+function getMenuTaskStatus(task: MenuSyncTask) {
+  if (task.status === "queued") return "待機中";
+  if (task.status === "processing") {
+    if (task.phase === "verifying") return "回読確認中";
+    if (task.phase === "applying") return "反映中";
+    if (task.phase === "locating") return "対象確認中";
+    return "処理中";
+  }
+  if (task.status === "retrying") return `再試行中 ${task.attempts}/${task.maxAttempts}`;
+  if (task.status === "failed") {
+    if (/login|credentials|account_locked|password_expired/u.test(`${task.errorCode} ${task.errorDetail}`)) return "ログイン要確認";
+    if (/timeout/u.test(`${task.errorCode} ${task.errorDetail}`)) return "タイムアウト";
+    if (/verification|mismatch/u.test(`${task.errorCode} ${task.errorDetail}`)) return "回読不一致";
+    return "失敗";
+  }
+  if (task.status === "succeeded") return "確認済み";
+  if (task.status === "completed") return "手動反映済み";
+  return "未反映";
+}
+
+function getPlatformRuleSummary(platformKey: MenuPublishPreviewPlatform["platformKey"]) {
+  if (platformKey === "uber_eats") return "日本語＋中・韓・英 / Emoji可 / OS価格×1.25";
+  if (platformKey === "rocket_now") return "日本語のみ / Emojiなし / OS価格×1.25 / 選択肢上限で分割";
+  return "日本語＋中・韓・英 / Emojiなし / OS基本価格";
+}
+
 function getCategoryCounts(items: MenuItem[], categories: MenuCategory[], brandId: string): MenuCategorySummary[] {
   const counts = new Map<string, number>();
   const categoryMasters = new Map<string, MenuCategory>();
@@ -604,7 +672,9 @@ export default function MenuAdminPage() {
     itemOptionGroups: [],
     externalPlatforms: [],
     syncTasks: [],
-    availabilityLinks: []
+    availabilityLinks: [],
+    platformTargetSettings: [],
+    publishBatches: []
   });
   const [activeBrandId, setActiveBrandId] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -630,6 +700,9 @@ export default function MenuAdminPage() {
   const [translationBusy, setTranslationBusy] = useState<"preview" | "apply" | "">("");
   const [publishPreview, setPublishPreview] = useState<MenuPublishPreview | null>(null);
   const [publishPreviewStatus, setPublishPreviewStatus] = useState<"loading" | "error" | "">("");
+  const [publishStoreId, setPublishStoreId] = useState("");
+  const [selectedPublishPlatforms, setSelectedPublishPlatforms] = useState<string[]>([]);
+  const [publishAction, setPublishAction] = useState<"publishing" | "capturing" | "">("");
   const [availabilityLinkDraft, setAvailabilityLinkDraft] = useState({
     sourceKey: "",
     dependentKey: "",
@@ -657,6 +730,119 @@ export default function MenuAdminPage() {
     }
   }
 
+  async function startMenuPublish(confirmDestructive = false) {
+    if (!activeBrandId || !publishStoreId || !selectedPublishPlatforms.length) {
+      setMessage("店舗と配信先を選択してください。");
+      return;
+    }
+    setPublishAction("publishing");
+    setMessage("");
+    try {
+      const response = await fetch("/api/menus/publish-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "publish",
+          brandId: activeBrandId,
+          storeId: publishStoreId,
+          platformKeys: selectedPublishPlatforms,
+          confirmDestructive
+        })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string; requiresDestructiveConfirmation?: boolean; totalChanges?: number };
+      if (!response.ok && result.requiresDestructiveConfirmation && !confirmDestructive) {
+        if (confirm(`${result.error}\n停止・削除を含めて配信しますか。`)) await startMenuPublish(true);
+        return;
+      }
+      if (!response.ok) {
+        setMessage(result.error || "メニュー配信を開始できませんでした。");
+        return;
+      }
+      setMessage(`メニュー配信を開始しました（差分 ${result.totalChanges ?? 0}件）。`);
+      await loadMenus(selectedItemId);
+    } catch {
+      setMessage("通信エラーでメニュー配信を開始できませんでした。");
+    } finally {
+      setPublishAction("");
+    }
+  }
+
+  async function capturePlatformBaseline() {
+    if (!activeBrandId || !publishStoreId || !selectedPublishPlatforms.length) {
+      setMessage("店舗と取込先を選択してください。");
+      return;
+    }
+    setPublishAction("capturing");
+    setMessage("");
+    try {
+      const response = await fetch("/api/menus/publish-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "capture",
+          brandId: activeBrandId,
+          storeId: publishStoreId,
+          platformKeys: selectedPublishPlatforms
+        })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(result.error || "プラットフォーム基準取込を開始できませんでした。");
+        return;
+      }
+      setMessage("プラットフォームの現在メニューを Bridge で取込中です。");
+      await loadMenus(selectedItemId);
+    } catch {
+      setMessage("通信エラーで基準取込を開始できませんでした。");
+    } finally {
+      setPublishAction("");
+    }
+  }
+
+  async function retryPublishTask(task: MenuSyncTask) {
+    const response = await fetch("/api/menus/publish-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "retry", taskId: task.id })
+    });
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    setMessage(response.ok ? `${task.platformName} の失敗タスクを再試行します。` : result.error || "再試行できませんでした。");
+    if (response.ok) await loadMenus(selectedItemId);
+  }
+
+  async function savePlatformTargetSetting(platform: MenuExternalPlatform, targetType: "item" | "option", targetId: string, patch: Partial<MenuPlatformTargetSetting>) {
+    if (!targetId) return;
+    const current = data.platformTargetSettings.find((setting) => (
+      setting.externalPlatformId === platform.id && setting.targetType === targetType && setting.targetId === targetId
+    ));
+    const response = await fetch("/api/menus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "platformTargetSetting",
+        brandId: activeBrandId,
+        storeId: "",
+        externalPlatformId: platform.id,
+        targetType,
+        targetId,
+        isEnabled: current?.isEnabled ?? true,
+        nameOverride: current?.nameOverride ?? "",
+        descriptionOverride: current?.descriptionOverride ?? "",
+        priceOverride: current?.priceOverride ?? null,
+        emojiMode: current?.emojiMode ?? "follow",
+        placementConfig: current?.placementConfig ?? {},
+        ...patch
+      })
+    });
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setMessage(result.error || "プラットフォーム個別設定を保存できませんでした。");
+      return;
+    }
+    setMessage(`${platform.name} の個別設定を保存しました。`);
+    await loadMenus(selectedItemId);
+  }
+
   async function loadMenus(nextSelectedItemId = selectedItemId) {
     setLoading(true);
     const response = await fetch("/api/menus");
@@ -673,6 +859,11 @@ export default function MenuAdminPage() {
 
     setData(nextData);
     setActiveBrandId(nextBrandId);
+    const eligibleStores = nextData.stores.filter((store) => store.brandIds.includes(nextBrandId));
+    setPublishStoreId((current) => eligibleStores.some((store) => store.id === current) ? current : eligibleStores[0]?.id ?? "");
+    setSelectedPublishPlatforms((current) => current.length ? current : nextData.externalPlatforms
+      .filter((platform) => platform.brandId === nextBrandId && !platform.storeId && platform.isActive)
+      .map((platform) => platform.platformKey));
     setSelectedItemId(nextItem?.id ?? "");
     setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId: nextBrandId, storeId: "" });
     setDetailMode("item");
@@ -685,6 +876,34 @@ export default function MenuAdminPage() {
     void loadMenus("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const hasRunningMenuTask = data.syncTasks.some((task) => (
+      task.brandId === activeBrandId
+      && (!publishStoreId || !task.storeId || task.storeId === publishStoreId)
+      && ["queued", "processing", "retrying"].includes(task.status)
+    ));
+    if (!hasRunningMenuTask) return;
+    const timer = window.setInterval(async () => {
+      const response = await fetch("/api/menus", { cache: "no-store" }).catch(() => null);
+      if (!response?.ok) return;
+      const nextData = await response.json() as MenuAdminData;
+      setData((current) => ({
+        ...current,
+        externalPlatforms: nextData.externalPlatforms,
+        syncTasks: nextData.syncTasks,
+        platformTargetSettings: nextData.platformTargetSettings,
+        publishBatches: nextData.publishBatches
+      }));
+      const stillRunning = nextData.syncTasks.some((task) => (
+        task.brandId === activeBrandId
+        && (!publishStoreId || !task.storeId || task.storeId === publishStoreId)
+        && ["queued", "processing", "retrying"].includes(task.status)
+      ));
+      if (!stillRunning) void loadPublishPreview(activeBrandId);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [activeBrandId, data.syncTasks, publishStoreId]);
 
   const filteredItems = useMemo(() => {
     const categoryOrders = new Map(
@@ -727,13 +946,17 @@ export default function MenuAdminPage() {
   const brandExternalPlatforms = useMemo(() => data.externalPlatforms.filter((platform) => (
     platform.brandId === activeBrandId && !platform.storeId && supportedDeliveryPlatformKeys.has(platform.platformKey)
   )), [activeBrandId, data.externalPlatforms]);
+  const publishStores = useMemo(() => data.stores.filter((store) => store.brandIds.includes(activeBrandId)), [activeBrandId, data.stores]);
   const brandSyncTasks = useMemo(() => data.syncTasks.filter((task) => (
     task.brandId === activeBrandId
-      && !task.storeId
+      && (!task.storeId || !publishStoreId || task.storeId === publishStoreId)
       && supportedDeliveryPlatformKeys.has(data.externalPlatforms.find((platform) => platform.id === task.externalPlatformId)?.platformKey ?? "")
-  )), [activeBrandId, data.externalPlatforms, data.syncTasks]);
-  const pendingSyncTasks = brandSyncTasks.filter((task) => task.status === "pending");
-  const completedSyncTasks = brandSyncTasks.filter((task) => task.status === "completed").slice(0, 8);
+  )), [activeBrandId, data.externalPlatforms, data.syncTasks, publishStoreId]);
+  const pendingSyncTasks = brandSyncTasks.filter((task) => ["pending", "queued", "processing", "retrying", "failed"].includes(task.status));
+  const completedSyncTasks = brandSyncTasks.filter((task) => ["completed", "succeeded"].includes(task.status)).slice(0, 8);
+  const brandPublishBatches = data.publishBatches.filter((batch) => (
+    batch.brandId === activeBrandId && (!publishStoreId || batch.storeId === publishStoreId)
+  )).slice(0, 6);
   const availabilityTargetOptions = useMemo(() => {
     const itemOptions = data.items
       .filter((item) => item.brandId === activeBrandId && !item.storeId && item.isActive)
@@ -805,6 +1028,11 @@ export default function MenuAdminPage() {
     setGroupDraft({ ...emptyGroup, brandId });
     setOptionDraft(emptyOption);
     setActiveOptionGroupId("");
+    const eligibleStores = data.stores.filter((store) => store.brandIds.includes(brandId));
+    setPublishStoreId(eligibleStores[0]?.id ?? "");
+    setSelectedPublishPlatforms(data.externalPlatforms
+      .filter((platform) => platform.brandId === brandId && !platform.storeId && platform.isActive)
+      .map((platform) => platform.platformKey));
     setAvailabilityLinkDraft({ sourceKey: "", dependentKey: "", isBidirectional: false });
     void loadPublishPreview(brandId);
   }
@@ -1626,7 +1854,7 @@ export default function MenuAdminPage() {
               <div className="menu-publish-preview-head">
                 <div>
                   <strong>配信前差分プレビュー</strong>
-                  <span>現在は確認専用です。この画面から外部プラットフォームを変更しません。</span>
+                  <span>OS を正として、基準取込 → 差分確認 → Bridge 反映 → 回読検証の順に実行します。</span>
                 </div>
                 <button
                   className="secondary-button compact-button"
@@ -1637,6 +1865,50 @@ export default function MenuAdminPage() {
                   <RefreshCw className={publishPreviewStatus === "loading" ? "is-spinning" : ""} size={15} />
                   {publishPreviewStatus === "loading" ? "比較中" : "再比較"}
                 </button>
+              </div>
+              <div className="menu-publish-controls">
+                <label>
+                  <span>対象店舗</span>
+                  <select value={publishStoreId} onChange={(event) => setPublishStoreId(event.target.value)}>
+                    <option value="">店舗を選択</option>
+                    {publishStores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
+                  </select>
+                </label>
+                <fieldset>
+                  <legend>配信先</legend>
+                  {brandExternalPlatforms.filter((platform) => platform.isActive).map((platform) => (
+                    <label className="checkbox-group menu-inline-check" key={platform.id}>
+                      <input
+                        type="checkbox"
+                        checked={selectedPublishPlatforms.includes(platform.platformKey)}
+                        onChange={(event) => setSelectedPublishPlatforms((current) => event.target.checked
+                          ? Array.from(new Set([...current, platform.platformKey]))
+                          : current.filter((key) => key !== platform.platformKey))}
+                      />
+                      <span>{platform.name}</span>
+                    </label>
+                  ))}
+                </fieldset>
+                <div className="menu-publish-control-actions">
+                  <button
+                    className="secondary-button compact-button"
+                    type="button"
+                    disabled={Boolean(publishAction) || !publishStoreId || !selectedPublishPlatforms.length}
+                    onClick={() => void capturePlatformBaseline()}
+                  >
+                    <RefreshCw className={publishAction === "capturing" ? "is-spinning" : ""} size={15} />
+                    {publishAction === "capturing" ? "取込中" : "現在メニューを取込"}
+                  </button>
+                  <button
+                    className="primary-button compact-button"
+                    type="button"
+                    disabled={Boolean(publishAction) || !publishStoreId || !selectedPublishPlatforms.length}
+                    onClick={() => void startMenuPublish()}
+                  >
+                    <Upload size={15} />
+                    {publishAction === "publishing" ? "配信開始中" : "差分を配信"}
+                  </button>
+                </div>
               </div>
               {publishPreviewStatus === "error" ? (
                 <p className="menu-publish-preview-error">差分を読み込めませんでした。再比較してください。</p>
@@ -1659,6 +1931,7 @@ export default function MenuAdminPage() {
                             {platform.baselineStatus === "ready" ? "基準取込済み" : "基準未取込"}
                           </span>
                         </div>
+                        <p className="menu-publish-rule-summary">{getPlatformRuleSummary(platform.platformKey)}</p>
                         <div className="menu-publish-counts">
                           {(["create", "rename", "reprice", "update", "move", "disable", "delete"] as const).map((kind) => (
                             counts[kind] ? <span key={kind}><b>{counts[kind]}</b>{getPublishChangeLabel(kind)}</span> : null
@@ -1716,7 +1989,7 @@ export default function MenuAdminPage() {
                       checked={platform.isActive}
                       onChange={(event) => void saveExternalPlatform(platform, { isActive: event.target.checked })}
                     />
-                    <span>{platform.name}</span>
+                    <span>{platform.name}<small>{platform.ruleVersion}</small></span>
                   </label>
                   <input
                     value={platform.managementUrl}
@@ -1741,23 +2014,53 @@ export default function MenuAdminPage() {
               ))}
               {!brandExternalPlatforms.length ? <p className="empty-state">ブランドを選ぶと Uber Eats などの反映先が表示されます。</p> : null}
             </div>
+            {brandPublishBatches.length ? (
+              <div className="menu-publish-batch-list">
+                {brandPublishBatches.map((batch) => (
+                  <div className="menu-publish-batch-row" key={batch.id}>
+                    <div>
+                      <strong>{formatDateTime(batch.createdAt)} のメニュー配信</strong>
+                      <small>{batch.requestedPlatforms.map((key) => brandExternalPlatforms.find((platform) => platform.platformKey === key)?.name || key).join(" / ")}</small>
+                    </div>
+                    <span className={`is-${batch.status}`}>{({
+                      queued: "待機中",
+                      processing: "同期中",
+                      succeeded: "全平台確認済み",
+                      partially_succeeded: "一部失敗",
+                      failed: "失敗"
+                    } as Record<string, string>)[batch.status] || batch.status}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <div className="menu-sync-task-list">
               {pendingSyncTasks.map((task) => (
-                <div className="menu-sync-task-row" key={task.id}>
+                <div className={`menu-sync-task-row is-${task.status}`} key={task.id}>
                   <div>
                     <strong>{task.platformName} / {task.targetLabel}</strong>
                     <span>{task.changeSummary}</span>
                     <small>{formatDateTime(task.createdAt)} {task.createdByName ? ` / ${task.createdByName}` : ""}</small>
+                    {task.errorDetail ? <small className="menu-sync-task-error">{task.errorDetail}</small> : null}
                   </div>
-                  <input
-                    value={syncCompletionNotes[task.id] || ""}
-                    onChange={(event) => setSyncCompletionNotes((current) => ({ ...current, [task.id]: event.target.value }))}
-                    placeholder="反映メモ"
-                  />
-                  <button className="primary-button compact-button" type="button" onClick={() => void completeSyncTask(task)}>
-                    <CheckCircle2 size={15} />
-                    反映済み
-                  </button>
+                  <span className={`menu-sync-task-status is-${task.status}`}>{getMenuTaskStatus(task)}</span>
+                  {task.status === "pending" ? (
+                    <div className="menu-sync-manual-actions">
+                      <input
+                        value={syncCompletionNotes[task.id] || ""}
+                        onChange={(event) => setSyncCompletionNotes((current) => ({ ...current, [task.id]: event.target.value }))}
+                        placeholder="反映メモ"
+                      />
+                      <button className="primary-button compact-button" type="button" onClick={() => void completeSyncTask(task)}>
+                        <CheckCircle2 size={15} />
+                        手動反映済み
+                      </button>
+                    </div>
+                  ) : task.status === "failed" && task.isRetryable ? (
+                    <button className="secondary-button compact-button" type="button" onClick={() => void retryPublishTask(task)}>
+                      <RefreshCw size={15} />
+                      再試行
+                    </button>
+                  ) : <span />}
                 </div>
               ))}
               {!pendingSyncTasks.length ? <p className="empty-state">現在、外部プラットフォームへ反映待ちの変更はありません。</p> : null}
@@ -2188,6 +2491,52 @@ export default function MenuAdminPage() {
                           ))}
                         </div>
                       </div>
+                      {optionDraft.id ? (
+                        <details className="menu-option-platform-settings">
+                          <summary>外部プラットフォーム個別設定</summary>
+                          <div className="menu-platform-target-grid">
+                            {brandExternalPlatforms.map((platform) => {
+                              const setting = data.platformTargetSettings.find((entry) => (
+                                entry.externalPlatformId === platform.id && entry.targetType === "option" && entry.targetId === optionDraft.id
+                              ));
+                              return (
+                                <fieldset key={platform.id}>
+                                  <legend>{platform.name}</legend>
+                                  <label className="checkbox-group menu-inline-check">
+                                    <input
+                                      type="checkbox"
+                                      checked={setting?.isEnabled ?? true}
+                                      onChange={(event) => void savePlatformTargetSetting(platform, "option", optionDraft.id, { isEnabled: event.target.checked })}
+                                    />
+                                    <span>このプラットフォームで販売</span>
+                                  </label>
+                                  <label>
+                                    <span>名称上書き</span>
+                                    <input
+                                      key={`${setting?.id ?? platform.id}:option-name`}
+                                      defaultValue={setting?.nameOverride ?? ""}
+                                      onBlur={(event) => void savePlatformTargetSetting(platform, "option", optionDraft.id, { nameOverride: event.target.value })}
+                                      placeholder="共通ルールに従う"
+                                    />
+                                  </label>
+                                  <label>
+                                    <span>価格上書き</span>
+                                    <input
+                                      key={`${setting?.id ?? platform.id}:option-price`}
+                                      defaultValue={setting?.priceOverride ?? ""}
+                                      inputMode="decimal"
+                                      onBlur={(event) => void savePlatformTargetSetting(platform, "option", optionDraft.id, {
+                                        priceOverride: event.target.value.trim() ? Number(event.target.value) : null
+                                      })}
+                                      placeholder="自動計算"
+                                    />
+                                  </label>
+                                </fieldset>
+                              );
+                            })}
+                          </div>
+                        </details>
+                      ) : null}
                       <div className="photo-upload-box menu-photo-upload">
                         <div className="product-photo-preview">
                           {optionDraft.imageUrl ? <img src={optionDraft.imageUrl} alt="" /> : <span>No image</span>}
@@ -2413,6 +2762,66 @@ export default function MenuAdminPage() {
                   </div>
                 </div>
               </section>
+              {itemDraft.id ? (
+                <section className="menu-platform-target-panel">
+                  <div>
+                    <strong>外部プラットフォーム個別設定</strong>
+                    <p>通常は共通ルールに従います。市場都合で販売有無・名称・価格・Emoji だけ個別に上書きできます。</p>
+                  </div>
+                  <div className="menu-platform-target-grid">
+                    {brandExternalPlatforms.map((platform) => {
+                      const setting = data.platformTargetSettings.find((entry) => (
+                        entry.externalPlatformId === platform.id && entry.targetType === "item" && entry.targetId === itemDraft.id
+                      ));
+                      return (
+                        <fieldset key={platform.id}>
+                          <legend>{platform.name}</legend>
+                          <label className="checkbox-group menu-inline-check">
+                            <input
+                              type="checkbox"
+                              checked={setting?.isEnabled ?? true}
+                              onChange={(event) => void savePlatformTargetSetting(platform, "item", itemDraft.id, { isEnabled: event.target.checked })}
+                            />
+                            <span>このプラットフォームで販売</span>
+                          </label>
+                          <label>
+                            <span>名称上書き</span>
+                            <input
+                              key={`${setting?.id ?? platform.id}:name`}
+                              defaultValue={setting?.nameOverride ?? ""}
+                              onBlur={(event) => void savePlatformTargetSetting(platform, "item", itemDraft.id, { nameOverride: event.target.value })}
+                              placeholder="共通ルールに従う"
+                            />
+                          </label>
+                          <label>
+                            <span>価格上書き</span>
+                            <input
+                              key={`${setting?.id ?? platform.id}:price`}
+                              defaultValue={setting?.priceOverride ?? ""}
+                              inputMode="decimal"
+                              onBlur={(event) => void savePlatformTargetSetting(platform, "item", itemDraft.id, {
+                                priceOverride: event.target.value.trim() ? Number(event.target.value) : null
+                              })}
+                              placeholder="自動計算"
+                            />
+                          </label>
+                          <label>
+                            <span>Emoji</span>
+                            <select
+                              value={setting?.emojiMode ?? "follow"}
+                              onChange={(event) => void savePlatformTargetSetting(platform, "item", itemDraft.id, { emojiMode: event.target.value as MenuPlatformTargetSetting["emojiMode"] })}
+                            >
+                              <option value="follow">プラットフォーム規則</option>
+                              <option value="show">表示</option>
+                              <option value="hide">非表示</option>
+                            </select>
+                          </label>
+                        </fieldset>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
               <div className="menu-translation-panel">
                 <div>
                   <strong>販促プレフィックスの多言語表示</strong>

@@ -134,6 +134,222 @@ async function applyInventoryAuditResult(storeId: string, result: Record<string,
   };
 }
 
+async function updateMenuPublishBatch(batchId: string) {
+  if (!batchId) return;
+  await sql`
+    update menu_publish_batches batches
+    set
+      status = case
+        when exists (select 1 from menu_change_sync_tasks tasks where tasks.publish_batch_id = batches.id and tasks.status in ('queued', 'pending', 'processing', 'retrying')) then 'processing'
+        when exists (select 1 from menu_change_sync_tasks tasks where tasks.publish_batch_id = batches.id and tasks.status = 'failed')
+          and exists (select 1 from menu_change_sync_tasks tasks where tasks.publish_batch_id = batches.id and tasks.status = 'succeeded') then 'partially_succeeded'
+        when exists (select 1 from menu_change_sync_tasks tasks where tasks.publish_batch_id = batches.id and tasks.status = 'failed') then 'failed'
+        else 'succeeded'
+      end,
+      completed_at = case
+        when exists (select 1 from menu_change_sync_tasks tasks where tasks.publish_batch_id = batches.id and tasks.status in ('queued', 'pending', 'processing', 'retrying')) then null
+        else now()
+      end,
+      updated_at = now()
+    where batches.id = ${batchId}
+  `;
+}
+
+async function reconcileMenuPublishBatches(storeId: string) {
+  await sql`
+    update menu_publish_batches batches
+    set status = case
+      when exists (select 1 from menu_change_sync_tasks tasks where tasks.publish_batch_id = batches.id and tasks.status in ('queued', 'pending', 'processing', 'retrying')) then 'processing'
+      when exists (select 1 from menu_change_sync_tasks tasks where tasks.publish_batch_id = batches.id and tasks.status = 'failed')
+        and exists (select 1 from menu_change_sync_tasks tasks where tasks.publish_batch_id = batches.id and tasks.status = 'succeeded') then 'partially_succeeded'
+      when exists (select 1 from menu_change_sync_tasks tasks where tasks.publish_batch_id = batches.id and tasks.status = 'failed') then 'failed'
+      else 'succeeded'
+    end,
+    completed_at = case
+      when exists (select 1 from menu_change_sync_tasks tasks where tasks.publish_batch_id = batches.id and tasks.status in ('queued', 'pending', 'processing', 'retrying')) then null
+      else now()
+    end,
+    updated_at = now()
+    where batches.store_id::text = ${storeId}
+      and batches.status in ('queued', 'processing')
+  `;
+}
+
+async function applyMenuPublishResult(input: {
+  commandId: string;
+  storeId: string;
+  platform: string;
+  payload: Record<string, unknown>;
+  result: Record<string, unknown>;
+}) {
+  const batchId = cleanText(input.payload.batchId, 80);
+  const brandId = cleanText(input.payload.brandId, 80);
+  const ruleVersion = cleanText(input.payload.ruleVersion, 80);
+  const platformRows = await sql`
+    select id::text
+    from menu_external_platforms
+    where brand_id::text = ${brandId} and store_id is null and platform_key = ${input.platform}
+    limit 1
+  `;
+  const externalPlatformId = String(platformRows[0]?.id ?? "");
+  const snapshot = input.result.snapshot && typeof input.result.snapshot === "object"
+    ? input.result.snapshot as Record<string, unknown>
+    : {};
+  if (externalPlatformId && (Array.isArray(snapshot.items) || Array.isArray(snapshot.options))) {
+    await sql`
+      insert into menu_platform_snapshots (
+        brand_id, store_id, external_platform_id, snapshot_type, rule_version, payload, captured_at
+      ) values (
+        ${brandId}, null, ${externalPlatformId}, 'verification', ${ruleVersion}, ${JSON.stringify(snapshot)}::jsonb, now()
+      )
+    `;
+    const baselineRows = await sql`
+      select payload
+      from menu_platform_snapshots
+      where brand_id = ${brandId} and store_id is null and external_platform_id = ${externalPlatformId}
+        and snapshot_type = 'baseline'
+      order by captured_at desc
+      limit 1
+    `;
+    const previous = baselineRows[0]?.payload && typeof baselineRows[0].payload === "object"
+      ? baselineRows[0].payload as Record<string, unknown>
+      : {};
+    const mergeEntries = (oldEntries: unknown, changedEntries: unknown) => {
+      const merged = new Map<string, Record<string, unknown>>();
+      for (const value of Array.isArray(oldEntries) ? oldEntries : []) {
+        if (!value || typeof value !== "object") continue;
+        const entry = value as Record<string, unknown>;
+        merged.set(cleanText(entry.targetId || entry.externalId, 240), entry);
+      }
+      for (const value of Array.isArray(changedEntries) ? changedEntries : []) {
+        if (!value || typeof value !== "object") continue;
+        const entry = value as Record<string, unknown>;
+        merged.set(cleanText(entry.targetId || entry.externalId, 240), entry);
+      }
+      return [...merged.values()];
+    };
+    const mergedSnapshot = {
+      ...previous,
+      items: mergeEntries(previous.items, snapshot.items),
+      options: mergeEntries(previous.options, snapshot.options),
+      complete: previous.complete !== false,
+      missingTargets: Array.isArray(previous.missingTargets) ? previous.missingTargets : []
+    };
+    await sql`
+      insert into menu_platform_snapshots (
+        brand_id, store_id, external_platform_id, snapshot_type, rule_version, payload, captured_at
+      ) values (
+        ${brandId}, null, ${externalPlatformId}, 'baseline', ${ruleVersion}, ${JSON.stringify(mergedSnapshot)}::jsonb, now()
+      )
+    `;
+    const observed = [
+      ...(Array.isArray(snapshot.items) ? snapshot.items.map((entry) => ({ targetType: "item", entry })) : []),
+      ...(Array.isArray(snapshot.options) ? snapshot.options.map((entry) => ({ targetType: "option", entry })) : [])
+    ];
+    for (const value of observed) {
+      const entry = value.entry && typeof value.entry === "object" ? value.entry as Record<string, unknown> : {};
+      const targetId = cleanText(entry.targetId, 80);
+      const externalId = cleanText(entry.externalId, 240);
+      if (!targetId || !externalId) continue;
+      await sql`
+        insert into menu_platform_object_mappings (
+          brand_id, store_id, external_platform_id, target_type, target_id,
+          external_id, external_parent_id, external_name, last_observed_state, last_verified_at, updated_at
+        ) values (
+          ${brandId}, null, ${externalPlatformId}, ${value.targetType}, ${targetId},
+          ${externalId}, ${cleanText(entry.externalParentId, 240)}, ${cleanText(entry.name, 500)},
+          ${JSON.stringify(entry)}::jsonb, now(), now()
+        )
+        on conflict (external_platform_id, target_type, target_id) do update set
+          external_id = excluded.external_id,
+          external_parent_id = excluded.external_parent_id,
+          external_name = excluded.external_name,
+          last_observed_state = excluded.last_observed_state,
+          last_verified_at = now(),
+          updated_at = now()
+      `;
+    }
+  }
+  await sql`
+    update menu_change_sync_tasks
+    set status = 'succeeded', phase = 'verified', verified_at = now(), completed_at = now(),
+      completion_note = 'Bridge で反映・回読検証済み', error_code = '', error_detail = '', updated_at = now()
+    where command_id = ${input.commandId}
+  `;
+  const publishedChanges = Array.isArray(input.payload.changes) ? input.payload.changes : [];
+  for (const value of publishedChanges) {
+    const change = value && typeof value === "object" ? value as Record<string, unknown> : {};
+    const targetId = cleanText(change.targetId, 80);
+    if (!targetId || !externalPlatformId) continue;
+    await sql`
+      update menu_change_sync_tasks
+      set status = 'completed', completed_at = now(), verified_at = now(),
+        completion_note = 'Bridge 配信で解消済み', updated_at = now()
+      where brand_id = ${brandId} and store_id is null and external_platform_id = ${externalPlatformId}
+        and target_id::text = ${targetId} and status = 'pending'
+    `;
+  }
+  await updateMenuPublishBatch(batchId);
+}
+
+async function applyMenuSnapshotResult(input: {
+  storeId: string;
+  platform: string;
+  payload: Record<string, unknown>;
+  result: Record<string, unknown>;
+}) {
+  const brandId = cleanText(input.payload.brandId, 80);
+  const ruleVersion = cleanText(input.payload.ruleVersion, 80);
+  const snapshot = input.result.snapshot && typeof input.result.snapshot === "object"
+    ? input.result.snapshot as Record<string, unknown>
+    : {};
+  if (!brandId || (!Array.isArray(snapshot.items) && !Array.isArray(snapshot.options))) {
+    throw new Error("menu_snapshot_result_invalid");
+  }
+  const platformRows = await sql`
+    select id::text
+    from menu_external_platforms
+    where brand_id::text = ${brandId} and store_id is null and platform_key = ${input.platform}
+    limit 1
+  `;
+  const externalPlatformId = String(platformRows[0]?.id ?? "");
+  if (!externalPlatformId) throw new Error("menu_snapshot_platform_missing");
+  await sql`
+    insert into menu_platform_snapshots (
+      brand_id, store_id, external_platform_id, snapshot_type, rule_version, payload, captured_at
+    ) values (
+      ${brandId}, null, ${externalPlatformId}, 'baseline', ${ruleVersion}, ${JSON.stringify(snapshot)}::jsonb, now()
+    )
+  `;
+  const observed = [
+    ...(Array.isArray(snapshot.items) ? snapshot.items.map((entry) => ({ targetType: "item", entry })) : []),
+    ...(Array.isArray(snapshot.options) ? snapshot.options.map((entry) => ({ targetType: "option", entry })) : [])
+  ];
+  for (const value of observed) {
+    const entry = value.entry && typeof value.entry === "object" ? value.entry as Record<string, unknown> : {};
+    const targetId = cleanText(entry.targetId, 80);
+    const externalId = cleanText(entry.externalId, 240);
+    if (!targetId || !externalId) continue;
+    await sql`
+      insert into menu_platform_object_mappings (
+        brand_id, store_id, external_platform_id, target_type, target_id,
+        external_id, external_parent_id, external_name, last_observed_state, last_verified_at, updated_at
+      ) values (
+        ${brandId}, null, ${externalPlatformId}, ${value.targetType}, ${targetId},
+        ${externalId}, ${cleanText(entry.externalParentId, 240)}, ${cleanText(entry.name, 500)},
+        ${JSON.stringify(entry)}::jsonb, now(), now()
+      )
+      on conflict (external_platform_id, target_type, target_id) do update set
+        external_id = excluded.external_id,
+        external_parent_id = excluded.external_parent_id,
+        external_name = excluded.external_name,
+        last_observed_state = excluded.last_observed_state,
+        last_verified_at = now(),
+        updated_at = now()
+    `;
+  }
+}
+
 export async function GET(request: Request) {
   const authorization = await authorize(request);
   if (!authorization.authorized || !authorization.storeId) {
@@ -173,8 +389,8 @@ export async function GET(request: Request) {
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
       and (
-        (${authorization.isDesktop} and command_type = 'set_inventory_availability')
-        or (${authorization.isDesktop} = false and command_type <> 'set_inventory_availability')
+        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
+        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
       )
       and status in ('pending', 'processing')
       and created_at < now() - interval '2 hours'
@@ -183,13 +399,13 @@ export async function GET(request: Request) {
   await sql`
     update local_bridge_commands
     set
-      status = case when attempts >= 5 then 'failed' else 'pending' end,
-      available_at = case when attempts >= 5 then available_at else now() end,
+      status = case when (command_type in ('publish_menu_changes', 'capture_menu_snapshot') and attempts >= 3) or attempts >= 5 then 'failed' else 'pending' end,
+      available_at = case when (command_type in ('publish_menu_changes', 'capture_menu_snapshot') and attempts >= 3) or attempts >= 5 then available_at else now() end,
       claimed_by_device_id = null,
       claimed_at = null,
       claim_expires_at = null,
       last_error = case
-        when attempts >= 5 then coalesce(nullif(last_error, ''), 'Bridge command timed out.')
+        when (command_type in ('publish_menu_changes', 'capture_menu_snapshot') and attempts >= 3) or attempts >= 5 then coalesce(nullif(last_error, ''), 'Bridge command timed out.')
         else last_error
       end,
       updated_at = now()
@@ -200,12 +416,30 @@ export async function GET(request: Request) {
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
       and (
-        (${authorization.isDesktop} and command_type = 'set_inventory_availability')
-        or (${authorization.isDesktop} = false and command_type <> 'set_inventory_availability')
+        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
+        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
       )
       and status = 'processing'
       and claim_expires_at < now()
   `;
+
+  await sql`
+    update menu_change_sync_tasks tasks
+    set
+      status = case commands.status when 'pending' then case when commands.attempts > 0 then 'retrying' else 'queued' end when 'processing' then 'processing' when 'failed' then 'failed' else tasks.status end,
+      phase = case commands.status when 'pending' then case when commands.attempts > 0 then 'retrying' else 'queued' end when 'processing' then 'processing' when 'failed' then 'failed' else tasks.phase end,
+      attempts = commands.attempts,
+      error_detail = commands.last_error,
+      completed_at = case when commands.status = 'failed' then coalesce(tasks.completed_at, now()) else tasks.completed_at end,
+      updated_at = now()
+    from local_bridge_commands commands
+    where tasks.command_id = commands.id
+      and commands.store_id::text = ${authorization.storeId}
+      and commands.command_type in ('publish_menu_changes', 'capture_menu_snapshot')
+      and tasks.status in ('queued', 'pending', 'processing', 'retrying')
+      and commands.status in ('pending', 'processing', 'failed')
+  `;
+  await reconcileMenuPublishBatches(authorization.storeId);
 
   // Inventory availability is a desired state, not a sequence of actions. Keep
   // only the newest command that has not started. Never supersede a processing
@@ -242,6 +476,18 @@ export async function GET(request: Request) {
           and newer.created_at > stale.created_at
       )
   `;
+  await sql`
+    update menu_change_sync_tasks tasks
+    set status = 'failed', phase = 'timeout', error_code = 'bridge_timeout',
+      error_detail = 'Bridge command expired before execution.', is_retryable = true,
+      completed_at = now(), updated_at = now()
+    from local_bridge_commands commands
+    where tasks.command_id = commands.id
+      and commands.store_id::text = ${authorization.storeId}
+      and commands.status = 'failed'
+      and commands.last_error = 'Bridge command expired before execution.'
+      and tasks.status in ('queued', 'processing', 'retrying')
+  `;
 
   const existing = await sql`
     select
@@ -258,8 +504,8 @@ export async function GET(request: Request) {
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
       and (
-        (${authorization.isDesktop} and command_type = 'set_inventory_availability')
-        or (${authorization.isDesktop} = false and command_type <> 'set_inventory_availability')
+        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
+        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
       )
       and status = 'processing'
       and (
@@ -280,7 +526,7 @@ export async function GET(request: Request) {
       claimed_by_device_id = ${authorization.deviceId || null}::uuid,
       claimed_at = now(),
       claim_expires_at = now() + case
-        when command_type = 'audit_inventory' then interval '30 minutes'
+        when command_type in ('audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot') then interval '30 minutes'
         when command_type = 'set_inventory_availability'
           and (${authorization.isDesktop} or platform = 'rocket_now') then interval '15 minutes'
         else interval '2 minutes'
@@ -296,8 +542,8 @@ export async function GET(request: Request) {
           or (platform = 'demae_can' and ${authorization.supportsDemae})
         )
         and (
-          (${authorization.isDesktop} and command_type = 'set_inventory_availability')
-          or (${authorization.isDesktop} = false and command_type <> 'set_inventory_availability')
+          (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
+          or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
         )
         and status = 'pending'
         and available_at <= now()
@@ -354,7 +600,7 @@ export async function POST(request: Request) {
   }
 
   const commandRows = await sql`
-    select command_type as "commandType", platform
+    select command_type as "commandType", platform, payload, attempts
     from local_bridge_commands
     where id::text = ${commandId}
       and store_id::text = ${authorization.storeId}
@@ -384,6 +630,16 @@ export async function POST(request: Request) {
       returning id::text, platform
     `;
     if (!progressRows[0]) return Response.json({ error: "Command is no longer claimable." }, { status: 409 });
+    if (["publish_menu_changes", "capture_menu_snapshot"].includes(String(commandRows[0].commandType))) {
+      const progress = result.progress && typeof result.progress === "object" ? result.progress as Record<string, unknown> : {};
+      await sql`
+        update menu_change_sync_tasks
+        set status = 'processing', phase = ${cleanText(progress.phase || "processing", 60)},
+          attempts = ${Number(commandRows[0].attempts ?? 1)}, error_detail = ${error}, updated_at = now()
+        where command_id = ${commandId}
+      `;
+      await updateMenuPublishBatch(cleanText((commandRows[0].payload as Record<string, unknown>)?.batchId, 80));
+    }
     await publishBridgeCommandUpdated(authorization.storeId, {
       id: commandId,
       platform: String(progressRows[0].platform ?? commandRows[0].platform ?? "uber_eats"),
@@ -420,7 +676,9 @@ export async function POST(request: Request) {
     update local_bridge_commands
     set
       status = case
-        when command_type in ('mark_order_ready', 'set_inventory_availability') or attempts >= 5 then 'failed'
+        when command_type in ('mark_order_ready', 'set_inventory_availability')
+          or (command_type in ('publish_menu_changes', 'capture_menu_snapshot') and attempts >= 3)
+          or attempts >= 5 then 'failed'
         else 'pending'
       end,
       available_at = now() + interval '15 seconds',
@@ -430,7 +688,9 @@ export async function POST(request: Request) {
       claimed_at = null,
       claim_expires_at = null,
       completed_at = case
-        when command_type in ('mark_order_ready', 'set_inventory_availability') or attempts >= 5 then now()
+        when command_type in ('mark_order_ready', 'set_inventory_availability')
+          or (command_type in ('publish_menu_changes', 'capture_menu_snapshot') and attempts >= 3)
+          or attempts >= 5 then now()
         else null
       end,
       updated_at = now()
@@ -449,6 +709,59 @@ export async function POST(request: Request) {
       audit: true,
       ...auditSummary
     }).catch(() => undefined);
+  }
+  if (status === "succeeded" && String(rows[0].commandType) === "capture_menu_snapshot") {
+    const payload = commandRows[0].payload && typeof commandRows[0].payload === "object"
+      ? commandRows[0].payload as Record<string, unknown>
+      : {};
+    await applyMenuSnapshotResult({
+      storeId: authorization.storeId,
+      platform: String(rows[0].platform ?? commandRows[0].platform ?? ""),
+      payload,
+      result
+    });
+    await sql`
+      update menu_change_sync_tasks
+      set status = 'succeeded', phase = 'verified', verified_at = now(), completed_at = now(),
+        completion_note = 'Bridge で基準取込済み', error_code = '', error_detail = '', updated_at = now()
+      where command_id = ${commandId}
+    `;
+  }
+  if (String(rows[0].commandType) === "publish_menu_changes") {
+    const payload = commandRows[0].payload && typeof commandRows[0].payload === "object"
+      ? commandRows[0].payload as Record<string, unknown>
+      : {};
+    if (String(rows[0].status) === "succeeded") {
+      await applyMenuPublishResult({
+        commandId,
+        storeId: authorization.storeId,
+        platform: String(rows[0].platform ?? commandRows[0].platform ?? ""),
+        payload,
+        result
+      });
+    } else {
+      const retrying = String(rows[0].status) === "pending";
+      await sql`
+        update menu_change_sync_tasks
+        set status = ${retrying ? "retrying" : "failed"}, phase = ${retrying ? "retrying" : "failed"},
+          attempts = ${Number(commandRows[0].attempts ?? 1)}, error_code = ${retrying ? "bridge_retry" : "bridge_failed"},
+          error_detail = ${error || "Bridge command failed."}, updated_at = now(),
+          completed_at = case when ${retrying} then null else now() end
+        where command_id = ${commandId}
+      `;
+      await updateMenuPublishBatch(cleanText(payload.batchId, 80));
+    }
+  }
+  if (String(rows[0].commandType) === "capture_menu_snapshot" && status !== "succeeded") {
+    const retrying = String(rows[0].status) === "pending";
+    await sql`
+      update menu_change_sync_tasks
+      set status = ${retrying ? "retrying" : "failed"}, phase = ${retrying ? "retrying" : "failed"},
+        attempts = ${Number(commandRows[0].attempts ?? 1)}, error_code = ${retrying ? "bridge_retry" : "bridge_failed"},
+        error_detail = ${error || "Bridge command failed."}, updated_at = now(),
+        completed_at = case when ${retrying} then null else now() end
+      where command_id = ${commandId}
+    `;
   }
   await publishBridgeCommandUpdated(authorization.storeId, {
     id: commandId,

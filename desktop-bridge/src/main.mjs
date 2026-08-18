@@ -157,6 +157,22 @@ async function executeInventoryCommand(command) {
   throw new Error("Inventory command retry limit reached.");
 }
 
+async function executeMenuCommand(command) {
+  const platform = String(command.platform);
+  const adapter = adapters.get(platform);
+  if (!adapter) throw new Error(`No enabled adapter for ${platform}`);
+  const payload = command.payload && typeof command.payload === "object" ? command.payload : {};
+  if (command.type === "capture_menu_snapshot") {
+    await reportProgress(command, { phase: "capturing", attempt: 1, maxAttempts: 3 });
+    return adapter.captureMenuSnapshot(payload);
+  }
+  if (command.type === "publish_menu_changes") {
+    await reportProgress(command, { phase: "locating", attempt: 1, maxAttempts: 3 });
+    return adapter.publishMenuChanges(payload, async (progress) => reportProgress(command, progress));
+  }
+  throw new Error(`unsupported_menu_command:${command.type}`);
+}
+
 process.once("SIGINT", async () => {
   await shutdown();
   process.exit(0);
@@ -201,7 +217,9 @@ for (;;) {
   try {
     command = await api.nextCommand();
     if (command) {
-      const result = await executeInventoryCommand(command);
+      const result = ["publish_menu_changes", "capture_menu_snapshot"].includes(command.type)
+        ? await executeMenuCommand(command)
+        : await executeInventoryCommand(command);
       await api.acknowledge(command.id, "succeeded", result);
       continue;
     }

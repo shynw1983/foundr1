@@ -8,6 +8,9 @@ const maamaaMenuPath = "/Users/wushengyin/Desktop/maamaa/src/data/malatang-menu.
 const nanachaLocaleDir = "/Users/wushengyin/Desktop/nanacha New HP/public/locales";
 const maamaaLocaleDir = "/Users/wushengyin/Desktop/maamaa/public/locales";
 const nanachaImageDir = new URL("../public/assets/menu/nanacha/", import.meta.url);
+const maamaaSupplementalOptions = JSON.parse(
+  await readFile(new URL("../data/menus/maamaa-supplemental-options.json", import.meta.url), "utf8")
+);
 const brandArgumentIndex = process.argv.indexOf("--brand");
 const selectedBrand = brandArgumentIndex >= 0 ? String(process.argv[brandArgumentIndex + 1] ?? "").trim().toLowerCase() : "";
 const pruneMissing = process.argv.includes("--prune");
@@ -709,7 +712,7 @@ async function importMaamaa() {
     { key: "heat", name: "辛さ", type: "single", choices: menu.heatLevels, affectsProcedure: true, ruleJson: { source: "maamaa", defaultChoice: "normal", minSelections: 1, maxSelections: 1, allowRepeat: false, perOptionMax: 1, optionValueType: "id" } },
     { key: "numb", name: "痺れ", type: "single", choices: menu.numbLevels, affectsProcedure: true, ruleJson: { source: "maamaa", defaultChoice: "tiny", minSelections: 1, maxSelections: 1, allowRepeat: false, perOptionMax: 1, optionValueType: "id" } },
     { key: "special-flavor", name: "味変・追加調味", type: "multiple", choices: menu.specialFlavors, affectsProcedure: true, ruleJson: { source: "maamaa", limit: 6, minSelections: 0, maxSelections: 6, allowRepeat: false, perOptionMax: 1, optionValueType: "id" } },
-    { key: "noodle-replacement", name: "麺の種類を変更する", type: "quantity", choices: menu.noodleReplacementOptions, affectsProcedure: true, ruleJson: { source: "maamaa", limit: menu.noodleReplacementRule.limit, minSelections: 0, maxSelections: menu.noodleReplacementRule.limit, allowRepeat: true, perOptionMax: menu.noodleReplacementRule.perOptionMax, optionValueType: "id" } }
+    { key: "noodle-replacement", name: "麺の種類を変更する", type: "quantity", choices: [...menu.noodleReplacementOptions, ...(maamaaSupplementalOptions["noodle-replacement"] ?? [])], affectsProcedure: true, ruleJson: { source: "maamaa", limit: menu.noodleReplacementRule.limit, minSelections: 0, maxSelections: menu.noodleReplacementRule.limit, allowRepeat: true, perOptionMax: menu.noodleReplacementRule.perOptionMax, optionValueType: "id" } }
   ];
 
   let groupCount = 0;

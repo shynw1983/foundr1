@@ -27,10 +27,11 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not set. Run `npx vercel env pull .env.local --yes` first.");
 }
 
-const [snapshot, mapping, menu] = await Promise.all([
+const [snapshot, mapping, menu, supplementalOptions] = await Promise.all([
   readFile(snapshotPath, "utf8").then(JSON.parse),
   readFile(mappingPath, "utf8").then(JSON.parse),
-  import(`${pathToFileURL(maamaaMenuPath).href}?sync=${Date.now()}`)
+  import(`${pathToFileURL(maamaaMenuPath).href}?sync=${Date.now()}`),
+  readFile(new URL("../data/menus/maamaa-supplemental-options.json", import.meta.url), "utf8").then(JSON.parse)
 ]);
 
 const snapshotGroupKeys = [
@@ -45,7 +46,7 @@ const expectedGroups = new Map([
   ["heat", { name: "辛さ", items: menu.heatLevels }],
   ["numb", { name: "痺れ", items: menu.numbLevels }],
   ["special-flavor", { name: "味変・追加調味", items: menu.specialFlavors }],
-  ["noodle-replacement", { name: "麺の種類を変更する", items: menu.noodleReplacementOptions }],
+  ["noodle-replacement", { name: "麺の種類を変更する", items: [...menu.noodleReplacementOptions, ...(supplementalOptions["noodle-replacement"] ?? [])] }],
   ...menu.menuSections.map((section) => [section.id, { name: section.title, items: section.items }])
 ]);
 const supplementalGroupKeys = new Set([

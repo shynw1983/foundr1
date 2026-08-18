@@ -1,0 +1,14 @@
+{
+  "noodle-replacement": [
+    {
+      "id": "replace-hot-pot-wide-noodle",
+      "name": "火鍋板春雨に変更",
+      "displayNames": {
+        "zh": "更换为火锅宽粉",
+        "ko": "훠궈 넓적당면으로 변경",
+        "en": "Change to Hot Pot Potato Wide Noodles"
+      },
+      "price": 170
+    }
+  ]
+}

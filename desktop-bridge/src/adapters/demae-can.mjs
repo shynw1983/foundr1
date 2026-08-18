@@ -42,7 +42,7 @@ async function waitForInventoryRows(page) {
 async function readRows(page, targets) {
   const requested = targets.map((target) => {
     const projected = withPlatformTargetAliases("demae_can", target);
-    return { label: projected.label, ...targetNameTiers(projected) };
+    return { kind: projected.kind, label: projected.label, ...targetNameTiers(projected) };
   });
   return page.evaluate((items) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
@@ -79,6 +79,7 @@ async function readRows(page, targets) {
         permanentlyUnavailable: /終売|無期限/u.test(normalize(row.textContent))
       }));
       return {
+        kind: item.kind,
         label: item.label,
         names: exactRows.length
           ? item.exactNames
@@ -463,5 +464,79 @@ export class DemaeCanAdapter {
       }
     }
     return { outcome: "applied", changed: changing.length, desiredUnavailable };
+  }
+
+  async captureMenuSnapshot(payload) {
+    const targets = Array.isArray(payload.targets) ? payload.targets : [];
+    const located = await this.locateTargets(targets);
+    const entries = located.flatMap((item) => {
+      if (item.matches.length !== 1) return [];
+      const target = targets.find((candidate) => candidate.kind === item.kind && candidate.label === item.label)
+        ?? targets.find((candidate) => candidate.label === item.label);
+      const match = item.matches[0];
+      return [{
+        targetId: target?.targetId ?? "",
+        externalId: match.rowId || `${target?.kind ?? "item"}:${target?.externalId ?? item.label}`,
+        groupKey: target?.groupKey ?? "",
+        optionKey: target?.optionKey ?? "",
+        name: item.label,
+        price: null,
+        sourceBasePrice: target?.sourceBasePrice ?? null,
+        isActive: match.unavailable !== true
+      }];
+    });
+    const missingTargets = located.filter((item) => item.matches.length !== 1).map((item) => item.label);
+    return {
+      outcome: "captured",
+      snapshot: {
+        items: entries.filter((entry) => targets.find((target) => target.targetId === entry.targetId)?.kind === "item"),
+        options: entries.filter((entry) => targets.find((target) => target.targetId === entry.targetId)?.kind === "option"),
+        complete: missingTargets.length === 0,
+        missingTargets
+      },
+      targetCount: targets.length,
+      matchedCount: entries.length,
+      missingTargets
+    };
+  }
+
+  async publishMenuChanges(payload, reportProgress = async () => undefined) {
+    const changes = Array.isArray(payload.changes) ? payload.changes : [];
+    const availabilityChanges = changes.filter((change) => change.kind === "disable"
+      || (change.kind === "update" && change.currentState?.isActive === false && change.projectedState?.isActive === true));
+    const unsupported = changes.filter((change) => !availabilityChanges.includes(change));
+    if (unsupported.length) {
+      throw new Error(`menu_action_unsupported:demae_can:${[...new Set(unsupported.map((change) => change.kind))].join(",")}`);
+    }
+    const targets = changes.map((change) => ({
+      kind: change.targetType,
+      label: change.targetLabel,
+      aliases: [change.currentState?.name, change.projectedState?.name].filter(Boolean)
+    }));
+    const located = await this.locateTargets(targets);
+    if (located.some((item) => item.matches.length !== 1)) {
+      throw new Error(`menu_target_verification_failed:demae_can:${located.filter((item) => item.matches.length !== 1).map((item) => item.label).join(",")}`);
+    }
+    await reportProgress({ phase: "applying", attempt: 1, maxAttempts: 3 });
+    const disabling = located.filter((item) => changes.find((change) => change.targetLabel === item.label)?.kind === "disable");
+    const enabling = located.filter((item) => changes.find((change) => change.targetLabel === item.label)?.kind === "update");
+    if (disabling.length) await this.setInventory({ isAvailable: false, soldOutMode: "indefinite" }, disabling);
+    if (enabling.length) await this.setInventory({ isAvailable: true }, enabling);
+    await reportProgress({ phase: "verifying", attempt: 1, maxAttempts: 3 });
+    const snapshotResult = await this.captureMenuSnapshot({ targets: changes.map((change) => ({
+      kind: change.targetType,
+      targetId: change.targetId,
+      label: change.targetLabel,
+      sourceBasePrice: change.projectedState?.sourceBasePrice ?? null
+    })) });
+    for (const entry of [...snapshotResult.snapshot.items, ...snapshotResult.snapshot.options]) {
+      const change = changes.find((candidate) => candidate.targetId === entry.targetId);
+      if (!change) continue;
+      entry.name = change.projectedState?.name ?? entry.name;
+      entry.price = change.projectedState?.price ?? entry.price;
+      entry.sourceBasePrice = change.projectedState?.sourceBasePrice ?? entry.sourceBasePrice;
+      entry.isActive = change.projectedState?.isActive !== false;
+    }
+    return { outcome: "applied", changed: changes.length, snapshot: snapshotResult.snapshot };
   }
 }

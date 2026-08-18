@@ -2,10 +2,11 @@ import { after } from "next/server";
 import { requireOsSession } from "../../../lib/api-auth";
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
+import { deliveryPlatformRules, type DeliveryMenuPlatformKey } from "../../../lib/delivery-menu-publishing";
 import { publishPublicMenuUpdatedEvent } from "../../../lib/order-realtime";
 import { roleHasPermission } from "../../../lib/role-permissions";
 
-const defaultExternalPlatforms = [
+const defaultExternalPlatforms: Array<{ key: DeliveryMenuPlatformKey; name: string }> = [
   { key: "uber_eats", name: "Uber Eats" },
   { key: "rocket_now", name: "Rocket Now" },
   { key: "demae_can", name: "出前館" }
@@ -283,7 +284,7 @@ async function readMenuAdminData() {
 
   await ensureDefaultExternalPlatforms(brands.map((brand) => String(brand.id)));
 
-  const [externalPlatforms, syncTasks, availabilityLinks] = await Promise.all([
+  const [externalPlatforms, syncTasks, availabilityLinks, platformTargetSettings, publishBatches] = await Promise.all([
     sql`
       select
         id::text,
@@ -292,6 +293,8 @@ async function readMenuAdminData() {
         platform_key as "platformKey",
         name,
         management_url as "managementUrl",
+        rule_version as "ruleVersion",
+        coalesce(rule_config, '{}'::jsonb) as "ruleConfig",
         is_active as "isActive",
         updated_at as "updatedAt"
       from menu_external_platforms
@@ -310,6 +313,17 @@ async function readMenuAdminData() {
         menu_change_sync_tasks.change_kind as "changeKind",
         menu_change_sync_tasks.change_summary as "changeSummary",
         menu_change_sync_tasks.status,
+        menu_change_sync_tasks.phase,
+        menu_change_sync_tasks.attempts,
+        menu_change_sync_tasks.max_attempts as "maxAttempts",
+        menu_change_sync_tasks.error_code as "errorCode",
+        menu_change_sync_tasks.error_detail as "errorDetail",
+        menu_change_sync_tasks.is_retryable as "isRetryable",
+        coalesce(menu_change_sync_tasks.command_id::text, '') as "commandId",
+        coalesce(menu_change_sync_tasks.publish_batch_id::text, '') as "publishBatchId",
+        menu_change_sync_tasks.current_value as "currentValue",
+        menu_change_sync_tasks.projected_value as "projectedValue",
+        menu_change_sync_tasks.verified_at as "verifiedAt",
         coalesce(created_employee.name, '') as "createdByName",
         coalesce(completed_employee.name, '') as "completedByName",
         menu_change_sync_tasks.completion_note as "completionNote",
@@ -320,10 +334,10 @@ async function readMenuAdminData() {
       join menu_external_platforms on menu_external_platforms.id = menu_change_sync_tasks.external_platform_id
       left join employees created_employee on created_employee.id = menu_change_sync_tasks.created_by
       left join employees completed_employee on completed_employee.id = menu_change_sync_tasks.completed_by
-      where menu_change_sync_tasks.status = 'pending'
+      where menu_change_sync_tasks.status in ('pending', 'queued', 'processing', 'retrying', 'failed')
          or menu_change_sync_tasks.created_at > now() - interval '30 days'
       order by
-        case when menu_change_sync_tasks.status = 'pending' then 0 else 1 end,
+        case when menu_change_sync_tasks.status in ('pending', 'queued', 'processing', 'retrying', 'failed') then 0 else 1 end,
         menu_change_sync_tasks.created_at desc
       limit 200
     `,
@@ -338,10 +352,36 @@ async function readMenuAdminData() {
         is_bidirectional as "isBidirectional"
       from menu_availability_links
       order by created_at, id
+    `,
+    sql`
+      select settings.id::text, settings.brand_id::text as "brandId",
+        coalesce(settings.store_id::text, '') as "storeId",
+        settings.external_platform_id::text as "externalPlatformId",
+        settings.target_type as "targetType", settings.target_id::text as "targetId",
+        settings.is_enabled as "isEnabled", settings.name_override as "nameOverride",
+        settings.description_override as "descriptionOverride",
+        settings.price_override::float as "priceOverride", settings.emoji_mode as "emojiMode",
+        coalesce(settings.placement_config, '{}'::jsonb) as "placementConfig",
+        settings.updated_at as "updatedAt"
+      from menu_platform_target_settings settings
+      order by settings.updated_at desc
+    `,
+    sql`
+      select batches.id::text, batches.brand_id::text as "brandId",
+        coalesce(batches.store_id::text, '') as "storeId", batches.status,
+        batches.requested_platforms as "requestedPlatforms", batches.rule_versions as "ruleVersions",
+        batches.created_at as "createdAt", batches.confirmed_at as "confirmedAt",
+        batches.completed_at as "completedAt", batches.updated_at as "updatedAt",
+        coalesce(created_employee.name, '') as "createdByName"
+      from menu_publish_batches batches
+      left join employees created_employee on created_employee.id = batches.created_by
+      where batches.created_at > now() - interval '30 days'
+      order by batches.created_at desc
+      limit 100
     `
   ]);
 
-  return { brands, stores, sources, categories, items, groups, options, storeSettings, itemOptionGroups, externalPlatforms, syncTasks, availabilityLinks };
+  return { brands, stores, sources, categories, items, groups, options, storeSettings, itemOptionGroups, externalPlatforms, syncTasks, availabilityLinks, platformTargetSettings, publishBatches };
 }
 
 export async function GET() {
@@ -372,10 +412,11 @@ export async function POST(request: Request) {
     else if (kind === "storeSetting") result = await upsertStoreSetting(body, session.id);
     else if (kind === "sortOrder") result = await updateSortOrder(body, session.id);
     else if (kind === "externalPlatform") result = await upsertExternalPlatform(body);
+    else if (kind === "platformTargetSetting") result = await upsertPlatformTargetSetting(body, session.id);
     else if (kind === "completeSyncTask") result = await completeSyncTask(body, session.id);
     else if (kind === "availabilityLink") result = await upsertAvailabilityLink(body, session.id);
     else return Response.json({ error: "保存対象が不正です。" }, { status: 400 });
-    if (!["externalPlatform", "completeSyncTask", "availabilityLink"].includes(kind)) publishAllPublicMenuUpdatesAfterResponse();
+    if (!["externalPlatform", "platformTargetSetting", "completeSyncTask", "availabilityLink"].includes(kind)) publishAllPublicMenuUpdatesAfterResponse();
     return Response.json(result);
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "保存できませんでした。" }, { status: 400 });
@@ -417,15 +458,19 @@ function publishAllPublicMenuUpdatesAfterResponse() {
 async function ensureDefaultExternalPlatforms(brandIds: string[]) {
   for (const brandId of brandIds) {
     for (const platform of defaultExternalPlatforms) {
+      const rule = deliveryPlatformRules[platform.key];
       await sql`
-        insert into menu_external_platforms (brand_id, platform_key, name, is_active, updated_at)
-        values (${brandId}, ${platform.key}, ${platform.name}, true, now())
+        insert into menu_external_platforms (brand_id, platform_key, name, rule_version, rule_config, is_active, updated_at)
+        values (${brandId}, ${platform.key}, ${platform.name}, ${rule.ruleVersion}, ${JSON.stringify(rule)}::jsonb, true, now())
         on conflict (
           brand_id,
           (coalesce(store_id, '00000000-0000-0000-0000-000000000000'::uuid)),
           platform_key
         )
-        do nothing
+        do update set
+          rule_version = case when menu_external_platforms.rule_version = '' then excluded.rule_version else menu_external_platforms.rule_version end,
+          rule_config = case when menu_external_platforms.rule_config = '{}'::jsonb then excluded.rule_config else menu_external_platforms.rule_config end,
+          updated_at = now()
       `;
     }
   }
@@ -510,6 +555,8 @@ async function upsertExternalPlatform(body: Record<string, unknown>) {
           platform_key = ${platformKey},
           name = ${name},
           management_url = ${String(body.managementUrl ?? "").trim()},
+          rule_version = ${String(body.ruleVersion ?? deliveryPlatformRules[platformKey as DeliveryMenuPlatformKey]?.ruleVersion ?? "").trim()},
+          rule_config = ${JSON.stringify(parseJsonObject(body.ruleConfig))}::jsonb,
           is_active = ${body.isActive !== false},
           updated_at = now()
         where id = ${id}
@@ -522,6 +569,8 @@ async function upsertExternalPlatform(body: Record<string, unknown>) {
           platform_key,
           name,
           management_url,
+          rule_version,
+          rule_config,
           is_active,
           updated_at
         )
@@ -531,6 +580,8 @@ async function upsertExternalPlatform(body: Record<string, unknown>) {
           ${platformKey},
           ${name},
           ${String(body.managementUrl ?? "").trim()},
+          ${String(body.ruleVersion ?? deliveryPlatformRules[platformKey as DeliveryMenuPlatformKey]?.ruleVersion ?? "").trim()},
+          ${JSON.stringify(parseJsonObject(body.ruleConfig))}::jsonb,
           ${body.isActive !== false},
           now()
         )
@@ -542,11 +593,55 @@ async function upsertExternalPlatform(body: Record<string, unknown>) {
         do update set
           name = excluded.name,
           management_url = excluded.management_url,
+          rule_version = excluded.rule_version,
+          rule_config = excluded.rule_config,
           is_active = excluded.is_active,
           updated_at = now()
         returning id::text
       `;
 
+  return { ok: true, id: rows[0]?.id };
+}
+
+async function upsertPlatformTargetSetting(body: Record<string, unknown>, employeeId: string) {
+  const brandId = cleanOptionalId(body.brandId);
+  const externalPlatformId = cleanOptionalId(body.externalPlatformId);
+  const targetType = String(body.targetType ?? "").trim();
+  const targetId = cleanOptionalId(body.targetId);
+  const emojiMode = String(body.emojiMode ?? "follow").trim();
+  if (!brandId || !externalPlatformId || !targetId || !["item", "option", "category", "option_group"].includes(targetType)) {
+    throw new Error("プラットフォームとメニュー対象を選択してください。");
+  }
+  if (!["follow", "show", "hide"].includes(emojiMode)) throw new Error("Emoji 設定が不正です。");
+  const platformRows = await sql`
+    select id::text from menu_external_platforms
+    where id = ${externalPlatformId} and brand_id = ${brandId}
+    limit 1
+  `;
+  if (!platformRows.length) throw new Error("外部プラットフォームが見つかりません。");
+  const rows = await sql`
+    insert into menu_platform_target_settings (
+      brand_id, store_id, external_platform_id, target_type, target_id,
+      is_enabled, name_override, description_override, price_override,
+      emoji_mode, placement_config, updated_by, updated_at
+    ) values (
+      ${brandId}, ${cleanOptionalId(body.storeId)}, ${externalPlatformId}, ${targetType}, ${targetId},
+      ${body.isEnabled !== false}, ${String(body.nameOverride ?? "").trim()},
+      ${String(body.descriptionOverride ?? "").trim()}, ${parseOptionalNumber(body.priceOverride)},
+      ${emojiMode}, ${JSON.stringify(parseJsonObject(body.placementConfig))}::jsonb, ${employeeId}, now()
+    )
+    on conflict (external_platform_id, target_type, target_id) do update set
+      store_id = excluded.store_id,
+      is_enabled = excluded.is_enabled,
+      name_override = excluded.name_override,
+      description_override = excluded.description_override,
+      price_override = excluded.price_override,
+      emoji_mode = excluded.emoji_mode,
+      placement_config = excluded.placement_config,
+      updated_by = excluded.updated_by,
+      updated_at = now()
+    returning id::text
+  `;
   return { ok: true, id: rows[0]?.id };
 }
 

@@ -67,6 +67,20 @@ test("links every consistently keyed noodle surface without a one-off alias", ()
   }
 });
 
+test("groups normal, replacement, and cold hot-pot wide noodles", () => {
+  const rows = [
+    row({ id: "normal", groupKey: "noodles", optionKey: "hot-pot-wide-noodle", externalId: "hot-pot-wide-noodle", name: "火鍋板春雨", displayNames: { zh: "火锅宽粉" } }),
+    row({ id: "replacement", groupKey: "noodle-replacement", optionKey: "replace-hot-pot-wide-noodle", externalId: "replace-hot-pot-wide-noodle", name: "火鍋板春雨に変更", displayNames: { zh: "更换为火锅宽粉" } }),
+    row({ id: "cold", groupKey: "cold-noodles", optionKey: "cold-hot-pot-wide-noodles", externalId: "cold-hot-pot-wide-noodles", name: "冷やし火鍋板春雨100g", displayNames: { zh: "火锅宽粉" } })
+  ];
+
+  for (const label of ["火鍋板春雨", "火锅宽粉"]) {
+    const result = resolveUberInventoryTargets(label, rows);
+    assert.equal(result.inventoryKey, "hot-pot-wide-noodle");
+    assert.deepEqual(result.targets.map((target) => target.menuOptionId), ["normal", "replacement", "cold"]);
+  }
+});
+
 test("does not apply noodle prefix linking to unrelated option groups", () => {
   const result = resolveUberInventoryTargets("冷製ソース", [
     row({ id: "normal", groupKey: "sauces", optionKey: "sauce", externalId: "sauce", name: "ソース" }),

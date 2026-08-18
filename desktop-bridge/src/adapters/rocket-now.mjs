@@ -300,4 +300,90 @@ export class RocketNowAdapter {
     }
     return { outcome: "applied", changed: uniqueChanging.length, desiredHidden };
   }
+
+  async captureMenuSnapshot(payload) {
+    const targets = Array.isArray(payload.targets) ? payload.targets : [];
+    const located = [];
+    for (const kind of ["item", "option"]) {
+      const kindTargets = targets.filter((target) => target.kind === kind);
+      if (kindTargets.length) located.push(...await this.locateTargets(kindTargets));
+    }
+    const entries = located.flatMap((item) => {
+      if (item.matches.length !== 1) return [];
+      const target = targets.find((candidate) => candidate.kind === item.kind && candidate.label === item.label)
+        ?? targets.find((candidate) => candidate.label === item.label);
+      const match = item.matches[0];
+      return [{
+        targetId: target?.targetId ?? "",
+        externalId: match.checkboxId || `${target?.kind ?? "item"}:${target?.externalId ?? item.label}`,
+        groupKey: target?.groupKey ?? "",
+        optionKey: target?.optionKey ?? "",
+        name: item.label,
+        price: null,
+        sourceBasePrice: target?.sourceBasePrice ?? null,
+        isActive: match.hidden !== true
+      }];
+    });
+    const missingTargets = located.filter((item) => item.matches.length !== 1).map((item) => item.label);
+    return {
+      outcome: "captured",
+      snapshot: {
+        items: entries.filter((entry) => targets.find((target) => target.targetId === entry.targetId)?.kind === "item"),
+        options: entries.filter((entry) => targets.find((target) => target.targetId === entry.targetId)?.kind === "option"),
+        complete: missingTargets.length === 0,
+        missingTargets
+      },
+      targetCount: targets.length,
+      matchedCount: entries.length,
+      missingTargets
+    };
+  }
+
+  async publishMenuChanges(payload, reportProgress = async () => undefined) {
+    const changes = Array.isArray(payload.changes) ? payload.changes : [];
+    const availabilityChanges = changes.filter((change) => change.kind === "disable"
+      || (change.kind === "update" && change.currentState?.isActive === false && change.projectedState?.isActive === true));
+    const unsupported = changes.filter((change) => !availabilityChanges.includes(change));
+    if (unsupported.length) {
+      throw new Error(`menu_action_unsupported:rocket_now:${[...new Set(unsupported.map((change) => change.kind))].join(",")}`);
+    }
+    const targets = changes.map((change) => ({
+      kind: change.targetType,
+      label: change.targetLabel,
+      aliases: [change.currentState?.name, change.projectedState?.name].filter(Boolean)
+    }));
+    const located = [];
+    for (const kind of ["item", "option"]) {
+      const kindTargets = targets.filter((target) => target.kind === kind);
+      if (kindTargets.length) located.push(...await this.locateTargets(kindTargets));
+    }
+    if (located.some((item) => item.matches.length !== 1)) {
+      throw new Error(`menu_target_verification_failed:rocket_now:${located.filter((item) => item.matches.length !== 1).map((item) => item.label).join(",")}`);
+    }
+    await reportProgress({ phase: "applying", attempt: 1, maxAttempts: 3 });
+    for (const desiredAvailable of [false, true]) {
+      for (const kind of ["item", "option"]) {
+        const kindLocated = located.filter((item) => item.kind === kind && changes.find((change) => (
+          change.targetType === item.kind && change.targetLabel === item.label
+        ))?.kind !== (desiredAvailable ? "disable" : "update"));
+        if (kindLocated.length) await this.setInventory({ isAvailable: desiredAvailable }, kindLocated);
+      }
+    }
+    await reportProgress({ phase: "verifying", attempt: 1, maxAttempts: 3 });
+    const snapshotResult = await this.captureMenuSnapshot({ targets: changes.map((change) => ({
+      kind: change.targetType,
+      targetId: change.targetId,
+      label: change.targetLabel,
+      sourceBasePrice: change.projectedState?.sourceBasePrice ?? null
+    })) });
+    for (const entry of [...snapshotResult.snapshot.items, ...snapshotResult.snapshot.options]) {
+      const change = changes.find((candidate) => candidate.targetId === entry.targetId);
+      if (!change) continue;
+      entry.name = change.projectedState?.name ?? entry.name;
+      entry.price = change.projectedState?.price ?? entry.price;
+      entry.sourceBasePrice = change.projectedState?.sourceBasePrice ?? entry.sourceBasePrice;
+      entry.isActive = change.projectedState?.isActive !== false;
+    }
+    return { outcome: "applied", changed: changes.length, snapshot: snapshotResult.snapshot };
+  }
 }
