@@ -65,3 +65,11 @@ test("keeps Rocket variants after they are published", () => {
     ["トッポッキ50g", "トッポッキに変更"]
   );
 });
+
+test("excludes shredded tofu skin from platforms where it is not published", () => {
+  const target = item("豆腐皮の細切り");
+
+  assert.equal(projectInventoryTargetsForPlatform("rocket_now", [target]).length, 0);
+  assert.equal(projectInventoryTargetsForPlatform("demae_can", [target]).length, 0);
+  assert.equal(projectInventoryTargetsForPlatform("uber_eats", [target]).length, 1);
+});

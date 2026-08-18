@@ -13,11 +13,13 @@ const EXCLUDED_LABELS: Record<InventoryPlatform, Set<string>> = {
   ]),
   demae_can: new Set([
     "シビレ⚡️⚡️",
-    "🥇山盛りうずら×🔟"
+    "🥇山盛りうずら×🔟",
+    "豆腐皮の細切り"
   ]),
   rocket_now: new Set([
     "🥇山盛りうずら×🔟",
-    "大海老1匹"
+    "大海老1匹",
+    "豆腐皮の細切り"
   ])
 };
 
