@@ -381,18 +381,30 @@ export default function StoreMenuPage() {
   const isOptionCategory = selectedCategory === optionCategoryKey;
   const showOptionCategory = settings.availability.targets.options && settings.availability.optionDisplayMode === "separate_category";
   const showMixedOptions = settings.availability.targets.options && settings.availability.optionDisplayMode === "mixed";
+  const showSeparateOptionsForStatusFilter = showOptionCategory
+    && selectedCategory === null
+    && statusFilter !== "all";
+  const showOptionsInItemView = showMixedOptions || showSeparateOptionsForStatusFilter;
   const categoryStatusTargets = selectedCategory === null
     ? categoryItems
     : categoryItems.filter((item) => itemCategory(item) === selectedCategory);
+  const includeOptionsInStatusCounts = isOptionCategory
+    || showMixedOptions
+    || (showOptionCategory && selectedCategory === null);
   const statusFilterTargets = isOptionCategory
     ? optionItems
-    : showMixedOptions ? [...categoryStatusTargets, ...optionItems] : categoryStatusTargets;
+    : includeOptionsInStatusCounts
+      ? [...categoryStatusTargets, ...optionItems]
+      : categoryStatusTargets;
   const statusFilterCounts = {
-    all: statusFilterTargets.length,
+    all: isOptionCategory || showMixedOptions ? statusFilterTargets.length : categoryStatusTargets.length,
     available: statusFilterTargets.filter((target) => target.stockStatus === "available").length,
     low_stock: statusFilterTargets.filter((target) => target.stockStatus === "low_stock").length,
     unavailable: statusFilterTargets.filter((target) => target.stockStatus === "unavailable").length
   };
+  const visibleTargetCount = isOptionCategory
+    ? visibleOptions.length
+    : visibleItems.length + (showOptionsInItemView ? visibleOptions.length : 0);
 
   useEffect(() => {
     if (selectedCategory === optionCategoryKey && !showOptionCategory) {
@@ -762,7 +774,7 @@ export default function StoreMenuPage() {
           <section className="panel store-menu-items-panel">
             <div className="store-menu-list-head">
               <h2>{isOptionCategory ? "オプション・トッピング" : selectedCategory ?? "すべて"}</h2>
-              <span className="status-pill">{isOptionCategory ? visibleOptions.length : visibleItems.length}件</span>
+              <span className="status-pill">{visibleTargetCount}件</span>
             </div>
             {isOptionCategory && showOptionCategory ? (
               <section className="store-menu-option-section store-menu-option-section-flat">
@@ -785,7 +797,7 @@ export default function StoreMenuPage() {
               </section>
             ) : (
               <>
-                {showMixedOptions && visibleOptions.length ? (
+                {showOptionsInItemView && visibleOptions.length ? (
                   <section className="store-menu-option-section">
                     <div className="store-menu-list-head">
                       <h3>オプション・トッピング</h3>
@@ -873,7 +885,9 @@ export default function StoreMenuPage() {
                       />
                     </article>
                   ))}
-                  {!visibleItems.length ? <p className="empty-state">{loading ? "読み込み中..." : "商品がありません。"}</p> : null}
+                  {!visibleItems.length && !(showOptionsInItemView && visibleOptions.length) ? (
+                    <p className="empty-state">{loading ? "読み込み中..." : "商品がありません。"}</p>
+                  ) : null}
                 </div>
               </>
             )}
