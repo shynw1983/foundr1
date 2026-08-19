@@ -1,5 +1,6 @@
 import { after } from "next/server";
-import { requireOsSession } from "../../../lib/api-auth";
+import { cookies } from "next/headers";
+import { osStoreContextCookieName, requireOsSession } from "../../../lib/api-auth";
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 import { deliveryPlatformRules, type DeliveryMenuPlatformKey } from "../../../lib/delivery-menu-publishing";
@@ -144,7 +145,7 @@ async function makeUniqueOptionKey(input: {
   return `${baseKey}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-async function readMenuAdminData() {
+async function readMenuAdminData(selectedStoreId = "") {
   const [brands, stores, sources, categories, items, groups, options, storeSettings, itemOptionGroups] = await Promise.all([
     sql`
       select id::text, name
@@ -399,7 +400,8 @@ async function readMenuAdminData() {
     `
   ]);
 
-  return { brands, stores, sources, categories, items, groups, options, storeSettings, itemOptionGroups, externalPlatforms, syncTasks, availabilityLinks, platformTargetSettings, publishBatches, platformImportCandidates };
+  const resolvedStoreId = stores.some((store) => String(store.id) === selectedStoreId) ? selectedStoreId : "";
+  return { selectedStoreId: resolvedStoreId, brands, stores, sources, categories, items, groups, options, storeSettings, itemOptionGroups, externalPlatforms, syncTasks, availabilityLinks, platformTargetSettings, publishBatches, platformImportCandidates };
 }
 
 export async function GET() {
@@ -407,8 +409,11 @@ export async function GET() {
   if (!session || !(await canEditMenus(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
-
-  return Response.json(await readMenuAdminData());
+  const cookieStore = await cookies();
+  const selectedStoreId = String(cookieStore.get(osStoreContextCookieName)?.value ?? "").trim();
+  return Response.json(await readMenuAdminData(selectedStoreId), {
+    headers: { "Cache-Control": "no-store, max-age=0" }
+  });
 }
 
 export async function POST(request: Request) {

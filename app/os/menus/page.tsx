@@ -233,6 +233,7 @@ type MenuAvailabilityLink = {
 };
 
 type MenuAdminData = {
+  selectedStoreId: string;
   brands: OptionItem[];
   stores: StoreOption[];
   sources: MenuSource[];
@@ -684,6 +685,7 @@ function isUberImportDraft(item: MenuItem) {
 
 export default function MenuAdminPage() {
   const [data, setData] = useState<MenuAdminData>({
+    selectedStoreId: "",
     brands: [],
     stores: [],
     sources: [],
@@ -914,14 +916,17 @@ export default function MenuAdminPage() {
     }
 
     const nextData = await response.json() as MenuAdminData;
-    const nextBrandId = activeBrandId || nextData.brands[0]?.id || "";
+    const contextStore = nextData.stores.find((store) => store.id === nextData.selectedStoreId);
+    const nextBrandId = activeBrandId || contextStore?.brandIds[0] || nextData.brands[0]?.id || "";
     const brandItems = nextData.items.filter((item) => item.brandId === nextBrandId && !item.storeId);
     const nextItem = brandItems.find((item) => item.id === nextSelectedItemId) ?? brandItems[0];
 
     setData(nextData);
     setActiveBrandId(nextBrandId);
     const eligibleStores = nextData.stores.filter((store) => store.brandIds.includes(nextBrandId));
-    setPublishStoreId((current) => eligibleStores.some((store) => store.id === current) ? current : eligibleStores[0]?.id ?? "");
+    setPublishStoreId((current) => eligibleStores.some((store) => store.id === current)
+      ? current
+      : eligibleStores.find((store) => store.id === nextData.selectedStoreId)?.id ?? eligibleStores[0]?.id ?? "");
     setSelectedPublishPlatforms((current) => current.length ? current : nextData.externalPlatforms
       .filter((platform) => platform.brandId === nextBrandId && !platform.storeId && platform.isActive)
       .map((platform) => platform.platformKey));
@@ -1094,7 +1099,7 @@ export default function MenuAdminPage() {
     setOptionDraft(emptyOption);
     setActiveOptionGroupId("");
     const eligibleStores = data.stores.filter((store) => store.brandIds.includes(brandId));
-    setPublishStoreId(eligibleStores[0]?.id ?? "");
+    setPublishStoreId(eligibleStores.find((store) => store.id === data.selectedStoreId)?.id ?? eligibleStores[0]?.id ?? "");
     setSelectedPublishPlatforms(data.externalPlatforms
       .filter((platform) => platform.brandId === brandId && !platform.storeId && platform.isActive)
       .map((platform) => platform.platformKey));
@@ -1932,13 +1937,22 @@ export default function MenuAdminPage() {
                 </button>
               </div>
               <div className="menu-publish-controls">
-                <label>
-                  <span>対象店舗</span>
-                  <select value={publishStoreId} onChange={(event) => setPublishStoreId(event.target.value)}>
-                    <option value="">店舗を選択</option>
-                    {publishStores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
-                  </select>
-                </label>
+                <div className="menu-publish-scope-fields">
+                  <label>
+                    <span>対象ブランド</span>
+                    <select value={activeBrandId} onChange={(event) => selectBrand(event.target.value)}>
+                      <option value="">ブランドを選択</option>
+                      {data.brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>対象店舗</span>
+                    <select value={publishStoreId} onChange={(event) => setPublishStoreId(event.target.value)}>
+                      <option value="">店舗を選択</option>
+                      {publishStores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
+                    </select>
+                  </label>
+                </div>
                 <fieldset>
                   <legend>配信先</legend>
                   {brandExternalPlatforms.filter((platform) => platform.isActive).map((platform) => (
