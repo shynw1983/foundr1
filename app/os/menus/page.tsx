@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   FileText,
+  Info,
   Languages,
   Lightbulb,
   Link2,
@@ -40,6 +41,11 @@ type OptionItem = {
 
 type StoreOption = OptionItem & {
   brandIds: string[];
+};
+
+type MenuActionNotice = {
+  tone: "success" | "error" | "info";
+  text: string;
 };
 
 type MenuSource = {
@@ -280,7 +286,7 @@ type MenuPublishPreviewPlatform = {
   platformKey: "uber_eats" | "rocket_now" | "demae_can";
   platformName: string;
   ruleVersion: string;
-  baselineStatus: "ready" | "missing";
+  baselineStatus: "ready" | "confirmed" | "missing";
   baselineCapturedAt: string | null;
   changes: MenuPublishPreviewChange[];
   reconciliationIssues: MenuPlatformReconciliationIssue[];
@@ -563,6 +569,7 @@ function getMenuTaskStatus(task: MenuSyncTask) {
 function getBaselineQuality(platform?: MenuPublishPreviewPlatform) {
   if (!platform?.baselineCapturedAt) return "基準データなし";
   if (platform.baselineStatus === "ready") return "全件一致";
+  if (platform.baselineStatus === "confirmed") return "対応確認済み";
   return platform.reconciliationIssues?.length
     ? `${platform.reconciliationIssues.length}件の対応確認を開く`
     : "取込結果の確認が必要";
@@ -754,6 +761,7 @@ export default function MenuAdminPage() {
   const [selectedPublishPlatforms, setSelectedPublishPlatforms] = useState<string[]>([]);
   const [publishAction, setPublishAction] = useState<"publishing" | "capturing" | "">("");
   const [reconciliationAction, setReconciliationAction] = useState("");
+  const [actionNotice, setActionNotice] = useState<MenuActionNotice | null>(null);
   const [availabilityLinkDraft, setAvailabilityLinkDraft] = useState({
     sourceKey: "",
     dependentKey: "",
@@ -895,19 +903,38 @@ export default function MenuAdminPage() {
     details.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function focusMenuSettingPanel() {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const panel = document.getElementById("menu-os-setting-panel");
+        if (!panel) return;
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+        panel.focus({ preventScroll: true });
+      });
+    });
+  }
+
   function openReconciliationTarget(issue: MenuPlatformReconciliationIssue) {
     if (issue.targetType === "item") {
       const item = data.items.find((entry) => entry.id === issue.targetId);
-      if (item) selectItem(item);
+      if (!item) {
+        setActionNotice({ tone: "error", text: `${issue.targetLabel} の商品設定が見つかりません。メニューを再読み込みしてください。` });
+        return;
+      }
+      selectItem(item);
     } else {
       const option = data.options.find((entry) => entry.id === issue.targetId);
       const group = option ? data.groups.find((entry) => entry.id === option.optionGroupId) : undefined;
-      if (option && group) {
-        openChoiceSettings(group);
-        editOption(option);
+      if (!option || !group) {
+        setActionNotice({ tone: "error", text: `${issue.targetLabel} の選択肢設定が見つかりません。メニューを再読み込みしてください。` });
+        return;
       }
+      openChoiceSettings(group);
+      editOption(option);
     }
     setMessage(`${issue.targetLabel} の OS 設定を開きました。`);
+    setActionNotice({ tone: "info", text: `${issue.targetLabel} の OS 設定へ移動します。` });
+    focusMenuSettingPanel();
   }
 
   async function recaptureReconciliationPlatform(platformKey: MenuPublishPreviewPlatform["platformKey"]) {
@@ -923,10 +950,14 @@ export default function MenuAdminPage() {
 
   async function disableReconciliationTarget(platform: MenuPublishPreviewPlatform, issue: MenuPlatformReconciliationIssue) {
     const externalPlatform = brandExternalPlatforms.find((entry) => entry.platformKey === platform.platformKey);
-    if (!externalPlatform) return;
+    if (!externalPlatform) {
+      setActionNotice({ tone: "error", text: `${platform.platformName} の設定が見つかりません。ページを再読み込みしてください。` });
+      return;
+    }
     const actionKey = `${issue.id}:disable`;
     setReconciliationAction(actionKey);
     setMessage("");
+    let settingSaved = false;
     try {
       const current = data.platformTargetSettings.find((setting) => (
         setting.externalPlatformId === externalPlatform.id && setting.targetType === issue.targetType && setting.targetId === issue.targetId
@@ -946,16 +977,69 @@ export default function MenuAdminPage() {
           descriptionOverride: current?.descriptionOverride ?? "",
           priceOverride: current?.priceOverride ?? null,
           emojiMode: current?.emojiMode ?? "follow",
-          placementConfig: current?.placementConfig ?? {}
+          placementConfig: { ...(current?.placementConfig ?? {}), confirmedPlatformCreate: false }
         })
       });
       const result = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(result.error || "販売対象から除外できませんでした。");
+      settingSaved = true;
+      setActionNotice({ tone: "success", text: `${issue.targetLabel}を${platform.platformName}の販売対象から外しました。` });
       await recaptureReconciliationPlatform(platform.platformKey);
       setMessage(`${issue.targetLabel}を${platform.platformName}の販売対象から外し、再取込を開始しました。`);
       await loadMenus(selectedItemId);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "対応を保存できませんでした。");
+      const cause = error instanceof Error ? error.message : "対応を保存できませんでした。";
+      const errorMessage = settingSaved
+        ? `${issue.targetLabel}の販売除外は保存しましたが、再取込を開始できませんでした：${cause}`
+        : cause;
+      setMessage(errorMessage);
+      setActionNotice({ tone: "error", text: errorMessage });
+    } finally {
+      setReconciliationAction("");
+    }
+  }
+
+  async function confirmReconciliationCreate(platform: MenuPublishPreviewPlatform, issue: MenuPlatformReconciliationIssue) {
+    const externalPlatform = brandExternalPlatforms.find((entry) => entry.platformKey === platform.platformKey);
+    if (!externalPlatform) {
+      setActionNotice({ tone: "error", text: `${platform.platformName} の設定が見つかりません。ページを再読み込みしてください。` });
+      return;
+    }
+    const actionKey = `${issue.id}:create`;
+    setReconciliationAction(actionKey);
+    setMessage("");
+    try {
+      const current = data.platformTargetSettings.find((setting) => (
+        setting.externalPlatformId === externalPlatform.id && setting.targetType === issue.targetType && setting.targetId === issue.targetId
+      ));
+      const response = await fetch("/api/menus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "platformTargetSetting",
+          brandId: activeBrandId,
+          storeId: "",
+          externalPlatformId: externalPlatform.id,
+          targetType: issue.targetType,
+          targetId: issue.targetId,
+          isEnabled: true,
+          nameOverride: current?.nameOverride ?? "",
+          descriptionOverride: current?.descriptionOverride ?? "",
+          priceOverride: current?.priceOverride ?? null,
+          emojiMode: current?.emojiMode ?? "follow",
+          placementConfig: { ...(current?.placementConfig ?? {}), confirmedPlatformCreate: true }
+        })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error || `${platform.platformName}への新規追加を確認できませんでした。`);
+      const successMessage = `${issue.targetLabel}を${platform.platformName}に新規追加する対象として確認しました。`;
+      setMessage(successMessage);
+      setActionNotice({ tone: "success", text: successMessage });
+      await loadMenus(selectedItemId);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : `${platform.platformName}への新規追加を確認できませんでした。`;
+      setMessage(errorMessage);
+      setActionNotice({ tone: "error", text: errorMessage });
     } finally {
       setReconciliationAction("");
     }
@@ -967,10 +1051,14 @@ export default function MenuAdminPage() {
     candidate: MenuPlatformReconciliationIssue["candidates"][number]
   ) {
     const externalPlatform = brandExternalPlatforms.find((entry) => entry.platformKey === platform.platformKey);
-    if (!externalPlatform) return;
+    if (!externalPlatform) {
+      setActionNotice({ tone: "error", text: `${platform.platformName} の設定が見つかりません。ページを再読み込みしてください。` });
+      return;
+    }
     const actionKey = `${issue.id}:${candidate.externalId}`;
     setReconciliationAction(actionKey);
     setMessage("");
+    let mappingSaved = false;
     try {
       const response = await fetch("/api/menus", {
         method: "POST",
@@ -986,11 +1074,18 @@ export default function MenuAdminPage() {
       });
       const result = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(result.error || "候補を固定できませんでした。");
+      mappingSaved = true;
+      setActionNotice({ tone: "success", text: `${candidate.name}を対応先に固定しました。現在メニューを再取込します。` });
       await recaptureReconciliationPlatform(platform.platformKey);
       setMessage(`${candidate.name}を対応先に固定し、再取込を開始しました。`);
       await loadMenus(selectedItemId);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "候補を固定できませんでした。");
+      const cause = error instanceof Error ? error.message : "候補を固定できませんでした。";
+      const errorMessage = mappingSaved
+        ? `${candidate.name}の固定は保存しましたが、再取込を開始できませんでした：${cause}`
+        : cause;
+      setMessage(errorMessage);
+      setActionNotice({ tone: "error", text: errorMessage });
     } finally {
       setReconciliationAction("");
     }
@@ -1080,6 +1175,12 @@ export default function MenuAdminPage() {
     void loadMenus("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!actionNotice) return;
+    const timer = window.setTimeout(() => setActionNotice(null), 7000);
+    return () => window.clearTimeout(timer);
+  }, [actionNotice]);
 
   useEffect(() => {
     const hasRunningMenuTask = data.syncTasks.some((task) => (
@@ -1924,6 +2025,13 @@ export default function MenuAdminPage() {
       </aside>
 
       <section className="workspace menu-admin-page">
+        {actionNotice ? (
+          <div className={`menu-action-toast is-${actionNotice.tone}`} role={actionNotice.tone === "error" ? "alert" : "status"} aria-live="polite">
+            {actionNotice.tone === "success" ? <CheckCircle2 size={18} aria-hidden="true" /> : actionNotice.tone === "error" ? <AlertTriangle size={18} aria-hidden="true" /> : <Info size={18} aria-hidden="true" />}
+            <span>{actionNotice.text}</span>
+            <button type="button" aria-label="通知を閉じる" onClick={() => setActionNotice(null)}>×</button>
+          </div>
+        ) : null}
         <div className="workspace-heading">
           <div>
             <p className="eyebrow">Menu Master</p>
@@ -2175,7 +2283,7 @@ export default function MenuAdminPage() {
                       const isRunning = Boolean(task && runningMenuTaskStatuses.has(task.status));
                       const isFailed = task?.status === "failed";
                       const isComplete = Boolean(task && ["succeeded", "completed"].includes(task.status));
-                      const needsReview = isComplete && row.preview?.baselineStatus !== "ready";
+                      const needsReview = isComplete && row.preview?.baselineStatus === "missing";
                       return (
                         <div className={`menu-capture-progress-row${isRunning ? " is-running" : isFailed ? " is-failed" : needsReview ? " is-warning" : isComplete ? " is-complete" : ""}`} key={row.platformKey}>
                           <span className="menu-capture-progress-icon" aria-hidden="true">
@@ -2218,8 +2326,8 @@ export default function MenuAdminPage() {
                             <strong>{platform.platformName}</strong>
                             <small>{platform.ruleVersion}</small>
                           </div>
-                          <span className={platform.baselineStatus === "ready" ? "is-ready" : "is-blocked"}>
-                            {platform.baselineStatus === "ready" ? "基準取込済み" : platform.baselineCapturedAt ? "取込済み・要確認" : "基準未取込"}
+                          <span className={platform.baselineStatus === "missing" ? "is-blocked" : "is-ready"}>
+                            {platform.baselineStatus === "ready" ? "基準取込済み" : platform.baselineStatus === "confirmed" ? "対応確認済み" : platform.baselineCapturedAt ? "取込済み・要確認" : "基準未取込"}
                           </span>
                         </div>
                         <p className="menu-publish-rule-summary">{getPlatformRuleSummary(platform.platformKey)}</p>
@@ -2264,7 +2372,7 @@ export default function MenuAdminPage() {
                                   </div>
                                   {issue.issueKind === "multiple" ? (
                                     <div className="menu-reconciliation-candidates">
-                                      <p>Uber に複数候補があります。正しい1件を固定してください。</p>
+                                      <p>{platform.platformName} に複数候補があります。正しい1件を固定してください。</p>
                                       {issue.candidates.map((candidate) => (
                                         <div className="menu-reconciliation-candidate" key={candidate.externalId}>
                                           <div>
@@ -2283,12 +2391,19 @@ export default function MenuAdminPage() {
                                       ))}
                                     </div>
                                   ) : (
-                                    <p>Uber の最新メニューに対応先がありません。Uber に追加するか、この配信先では販売しないかを決めてください。</p>
+                                    <p>{platform.platformName} の最新メニューに対応先がありません。新規追加するか、この配信先では販売しないかを選択してください。</p>
                                   )}
                                   <div className="menu-reconciliation-actions">
-                                    <button className="secondary-button compact-button" type="button" onClick={() => openReconciliationTarget(issue)}>
-                                      OS の設定を開く
-                                    </button>
+                                    {issue.issueKind === "missing" ? (
+                                      <button
+                                        className="primary-button compact-button"
+                                        type="button"
+                                        disabled={Boolean(reconciliationAction)}
+                                        onClick={() => void confirmReconciliationCreate(platform, issue)}
+                                      >
+                                        {reconciliationAction === `${issue.id}:create` ? "確認中" : `${platform.platformName}に新規追加`}
+                                      </button>
+                                    ) : null}
                                     {issue.issueKind === "missing" ? (
                                       <button
                                         className="secondary-button compact-button"
@@ -2299,6 +2414,9 @@ export default function MenuAdminPage() {
                                         {reconciliationAction === `${issue.id}:disable` ? "保存中" : `${platform.platformName}では販売しない`}
                                       </button>
                                     ) : null}
+                                    <button className="secondary-button compact-button" type="button" onClick={() => openReconciliationTarget(issue)}>
+                                      OS 設定を編集
+                                    </button>
                                   </div>
                                 </article>
                               ))}
@@ -2630,7 +2748,7 @@ export default function MenuAdminPage() {
             </div>
           </aside>
 
-          <section className="menu-detail-panel">
+          <section className="menu-detail-panel" id="menu-os-setting-panel" tabIndex={-1}>
             {isChoiceSettingsView ? (
               <section className="menu-edit-card">
                 <div className="section-heading">

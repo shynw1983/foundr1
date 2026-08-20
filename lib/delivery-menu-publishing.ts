@@ -118,7 +118,7 @@ export type MenuPublishPreviewPlatform = {
   platformKey: DeliveryMenuPlatformKey;
   platformName: string;
   ruleVersion: string;
-  baselineStatus: "ready" | "missing";
+  baselineStatus: "ready" | "confirmed" | "missing";
   baselineCapturedAt: string | null;
   changes: MenuPublishPreviewChange[];
   reconciliationIssues: MenuPlatformReconciliationIssue[];
@@ -320,7 +320,7 @@ function compareTarget(input: {
       summary: `${platform.platformName} に対応する${targetType === "item" ? "商品" : "選択肢"}がありません。`,
       projectedValue: `${projectedName} / ${yen(projectedPrice)}`,
       projectedState,
-      confidence: platform.baselineStatus === "ready" ? "confirmed" : "provisional"
+      confidence: platform.baselineStatus === "missing" ? "provisional" : "confirmed"
     });
     return;
   }
@@ -417,44 +417,43 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
       warnings: [],
       blockers: []
     };
+    let unresolvedBaselineTargets = baseline?.missingTargets?.length ?? 0;
     if (baseline?.missingTargets?.length) {
-      const missingLabels = new Set(baseline.missingTargets);
-      for (const target of input.items) {
-        if (!missingLabels.has(target.name)) continue;
-        const candidates = baseline.items.filter((entry) => entry.targetId === target.id);
+      const unhandledMissingLabels = [...baseline.missingTargets];
+      const addIssue = (targetType: "item" | "option", target: MenuProjectionItem | MenuProjectionOption) => {
+        const missingIndex = unhandledMissingLabels.findIndex((label) => label === target.name);
+        if (missingIndex < 0) return;
+        unhandledMissingLabels.splice(missingIndex, 1);
+        const setting = target.platformSettings?.[platformKey];
+        const candidates = (targetType === "item" ? baseline.items : baseline.options).filter((entry) => entry.targetId === target.id);
+        if (setting?.isEnabled === false) return;
+        if (candidates.length === 0 && setting?.placementConfig?.confirmedPlatformCreate === true) return;
         platform.reconciliationIssues.push({
-          id: `${platformKey}:item:${target.id}`,
-          targetType: "item",
+          id: `${platformKey}:${targetType}:${target.id}`,
+          targetType,
           targetId: target.id,
           targetLabel: target.name,
-          locationLabel: `分類: ${target.category || "未分類"}`,
+          locationLabel: targetType === "item"
+            ? `分類: ${(target as MenuProjectionItem).category || "未分類"}`
+            : `選択グループ: ${(target as MenuProjectionOption).groupLabel || (target as MenuProjectionOption).groupKey || "未設定"}`,
           issueKind: candidates.length > 1 ? "multiple" : "missing",
           candidates: candidates.map((entry) => ({ externalId: entry.externalId ?? "", name: entry.name, price: entry.price }))
         });
-      }
-      for (const target of input.options) {
-        if (!missingLabels.has(target.name)) continue;
-        const candidates = baseline.options.filter((entry) => entry.targetId === target.id);
-        platform.reconciliationIssues.push({
-          id: `${platformKey}:option:${target.id}`,
-          targetType: "option",
-          targetId: target.id,
-          targetLabel: target.name,
-          locationLabel: `選択グループ: ${target.groupLabel || target.groupKey || "未設定"}`,
-          issueKind: candidates.length > 1 ? "multiple" : "missing",
-          candidates: candidates.map((entry) => ({ externalId: entry.externalId ?? "", name: entry.name, price: entry.price }))
-        });
-      }
+      };
+      for (const target of input.items) addIssue("item", target);
+      for (const target of input.options) addIssue("option", target);
+      unresolvedBaselineTargets = unhandledMissingLabels.length + platform.reconciliationIssues.length;
+      if (unresolvedBaselineTargets === 0) platform.baselineStatus = "confirmed";
     }
     const missingTranslations = missingRequiredTranslations(activeEntries, rule.requiredLanguages);
     if (missingTranslations > 0) platform.blockers.push(`商品・選択肢に必須翻訳の未入力が ${missingTranslations} 欄あります。`);
     if (!baseline) platform.blockers.push("現在のプラットフォームメニュー基準が未取込のため、正確な差分を確定できません。");
-    else if (baseline.complete === false) {
+    else if (baseline.complete === false && unresolvedBaselineTargets > 0) {
       const missingCount = platform.reconciliationIssues.filter((issue) => issue.issueKind === "missing").length;
       const multipleCount = platform.reconciliationIssues.filter((issue) => issue.issueKind === "multiple").length;
       platform.blockers.push(platform.reconciliationIssues.length
         ? `取込結果に未検出 ${missingCount}件・候補重複 ${multipleCount}件があります。下の「対応確認」を開いて処理してください。`
-        : `基準取込で一致しない対象が ${baseline.missingTargets?.length ?? 0}件あります。再取込して確認してください。`);
+        : `基準取込で一致しない対象が ${unresolvedBaselineTargets}件あります。再取込して確認してください。`);
     }
 
     for (const item of input.items) {

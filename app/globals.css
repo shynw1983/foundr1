@@ -9098,6 +9098,58 @@ body :where(
   background: var(--amber-soft);
 }
 
+.menu-action-toast {
+  position: fixed;
+  z-index: 1200;
+  inset-block-start: 18px;
+  inset-inline-end: 18px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: start;
+  width: min(420px, calc(100vw - 36px));
+  padding: 12px 13px;
+  border: 1px solid rgba(33, 116, 91, 0.3);
+  border-radius: 9px;
+  color: var(--green);
+  background: var(--surface);
+  box-shadow: 0 12px 30px rgba(22, 35, 31, 0.16);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.menu-action-toast.is-error {
+  border-color: rgba(181, 53, 53, 0.32);
+  color: var(--red);
+}
+
+.menu-action-toast.is-info {
+  border-color: rgba(40, 105, 168, 0.28);
+  color: var(--blue);
+}
+
+.menu-action-toast > button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -4px -4px 0 0;
+  padding: 0;
+  border: 0;
+  color: currentColor;
+  background: transparent;
+  font: inherit;
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.menu-action-toast > button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
 .info-panel {
   display: grid;
   gap: 6px;

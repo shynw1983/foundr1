@@ -148,6 +148,47 @@ test("blocks publication when a captured baseline has unmatched targets", () => 
   assert.equal(rocket?.blockers.some((blocker) => blocker.includes("1件")), true);
 });
 
+test("treats a confirmed platform creation as a resolved baseline target", () => {
+  const preview = buildDeliveryMenuPublishPreview({
+    items: [{
+      id: "1",
+      externalId: "corn",
+      name: "トウモロコシ麺",
+      displayNames: {},
+      basePrice: 170,
+      isActive: true,
+      platformSettings: {
+        rocket_now: { isEnabled: true, placementConfig: { confirmedPlatformCreate: true } }
+      }
+    }],
+    options: [],
+    platformBaselines: {
+      rocket_now: {
+        capturedAt: "2026-08-21",
+        items: [],
+        options: [],
+        complete: false,
+        missingTargets: ["トウモロコシ麺"]
+      },
+      demae_can: {
+        capturedAt: "2026-08-21",
+        items: [],
+        options: [],
+        complete: false,
+        missingTargets: ["トウモロコシ麺"]
+      }
+    }
+  });
+  const rocket = preview.platforms.find((platform) => platform.platformKey === "rocket_now");
+  const demae = preview.platforms.find((platform) => platform.platformKey === "demae_can");
+  assert.equal(rocket?.baselineStatus, "confirmed");
+  assert.equal(rocket?.reconciliationIssues.length, 0);
+  assert.equal(rocket?.blockers.some((blocker) => blocker.includes("基準取込")), false);
+  assert.equal(rocket?.changes.some((change) => change.kind === "create" && change.confidence === "confirmed"), true);
+  assert.equal(demae?.baselineStatus, "missing");
+  assert.equal(demae?.reconciliationIssues.length, 1);
+});
+
 test("describes unmatched targets with their OS group and actionable candidates", () => {
   const preview = buildDeliveryMenuPublishPreview({
     items: [],
