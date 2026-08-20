@@ -45,6 +45,17 @@ export function targetNameTiers(target) {
   return { exactNames, fallbackNames, primaryNames, aliasNames };
 }
 
+export function tieredTargetCandidates(targetRows, nameParts) {
+  const matchesTier = (key) => targetRows.filter((target) => (
+    target[key].some((name) => nameParts.includes(name))
+  ));
+  const exactCandidates = matchesTier("normalizedExactNames");
+  if (exactCandidates.length) return { candidates: exactCandidates, matchBasis: "exact_name" };
+  const fallbackCandidates = matchesTier("normalizedFallbackNames");
+  if (fallbackCandidates.length) return { candidates: fallbackCandidates, matchBasis: "fallback_name" };
+  return { candidates: matchesTier("normalizedAliasNames"), matchBasis: "alias" };
+}
+
 export async function pageSummary(page) {
   return page.evaluate(() => ({
     url: location.href,

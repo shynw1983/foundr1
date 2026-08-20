@@ -1,7 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 import { CdpPage } from "../cdp-page.mjs";
-import { loginState, normalizeText, platformUiChanged, targetNameTiers } from "./common.mjs";
+import { loginState, normalizeText, platformUiChanged, targetNameTiers, tieredTargetCandidates } from "./common.mjs";
 
 const UBER_ORIGIN = "https://merchants.ubereats.com/";
 const STRICT_EXACT_UBER_LABELS = new Set([
@@ -320,15 +320,20 @@ export class UberEatsAdapter {
          sourceBasePrice: target.sourceBasePrice ?? null,
          label: target.label,
           knownExternalIds: Array.isArray(target.knownExternalIds) ? target.knownExternalIds : [],
-         names: [...tiers.exactNames, ...tiers.fallbackNames, ...tiers.aliasNames]
+         exactNames: tiers.exactNames,
+         fallbackNames: tiers.fallbackNames,
+         aliasNames: tiers.aliasNames
         };
       });
       scan = await page.evaluate(`(() => {
         ${NORMALIZE_SOURCE}
+        const selectTieredCandidates = ${tieredTargetCandidates.toString()};
         const targets = ${JSON.stringify(requested)};
         const targetRows = targets.map((target) => ({
           ...target,
-          normalizedNames: [...new Set(target.names.map(normalize).filter(Boolean))]
+          normalizedExactNames: [...new Set(target.exactNames.map(normalize).filter(Boolean))],
+          normalizedFallbackNames: [...new Set(target.fallbackNames.map(normalize).filter(Boolean))],
+          normalizedAliasNames: [...new Set(target.aliasNames.map(normalize).filter(Boolean))]
         }));
         const anchors = [...document.querySelectorAll('a[href*="/items/"]')]
           .filter((anchor) => anchor.getClientRects().length);
@@ -343,12 +348,13 @@ export class UberEatsAdapter {
             }
          }
          const rawName = String(anchor.textContent ?? "").trim();
-          const externalId = new URL(anchor.href).pathname.replace(/\\/$/u, "");
-         const nameParts = normalize(rawName).split(/[|｜]/u).map((part) => part.trim()).filter(Boolean);
+         const externalId = new URL(anchor.href).pathname.replace(/\\/$/u, "");
+          const nameParts = normalize(rawName).split(/[|｜]/u).map((part) => part.trim()).filter(Boolean);
           const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.includes(externalId));
-          const candidates = mappedCandidates.length
-            ? mappedCandidates
-            : targetRows.filter((target) => target.normalizedNames.some((name) => nameParts.includes(name)));
+          const tieredMatch = mappedCandidates.length
+            ? { candidates: mappedCandidates, matchBasis: "external_id" }
+            : selectTieredCandidates(targetRows, nameParts);
+          const candidates = tieredMatch.candidates;
           const target = candidates.length === 1 ? candidates[0] : null;
           const lines = (record?.innerText ?? "").split("\\n").map((line) => line.trim()).filter(Boolean);
           const price = Number(String(lines[1] ?? "").replace(/[^0-9]/g, "")) || null;
@@ -364,7 +370,7 @@ export class UberEatsAdapter {
             observedKind: target?.kind ?? "item",
            metadata: {
              href: anchor.href,
-              matchBasis: mappedCandidates.length ? "external_id" : "name",
+              matchBasis: tieredMatch.matchBasis,
               kindConfidence: target ? "mapped" : "page",
              ambiguousTargetIds: candidates.length > 1 ? candidates.map((candidate) => candidate.targetId) : []
             }

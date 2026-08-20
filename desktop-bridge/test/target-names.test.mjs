@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeText, targetNameTiers } from "../src/adapters/common.mjs";
+import { normalizeText, targetNameTiers, tieredTargetCandidates } from "../src/adapters/common.mjs";
 import { withPlatformTargetAliases } from "../src/adapters/platform-target-aliases.mjs";
 import { rocketInventoryUrl, uniqueLocatedRows } from "../src/adapters/rocket-now.mjs";
 import {
@@ -61,6 +61,26 @@ test("keeps an exact weighted noodle name ahead of a legacy weightless title", (
 
   assert.deepEqual(tiers.exactNames, ["トウモロコシ麺50g"]);
   assert.deepEqual(tiers.fallbackNames, ["トウモロコシ麺"]);
+});
+
+test("prefers a Japanese exact name over duplicated multilingual aliases", () => {
+  const rows = [
+    {
+      targetId: "regular-corn",
+      normalizedExactNames: ["トウモロコシ麺50g"],
+      normalizedFallbackNames: ["トウモロコシ麺"],
+      normalizedAliasNames: ["玉米面", "옥수수면", "Corn Noodles"]
+    },
+    {
+      targetId: "cold-corn",
+      normalizedExactNames: ["冷やしトウモロコシ麺100g"],
+      normalizedFallbackNames: ["冷やしトウモロコシ麺"],
+      normalizedAliasNames: ["玉米面", "옥수수면", "Corn Noodles"]
+    }
+  ];
+  const result = tieredTargetCandidates(rows, ["トウモロコシ麺50g", "玉米面", "옥수수면", "Corn Noodles"]);
+  assert.equal(result.matchBasis, "exact_name");
+  assert.deepEqual(result.candidates.map((candidate) => candidate.targetId), ["regular-corn"]);
 });
 
 test("generates safe platform variants without merging noodle categories", () => {
