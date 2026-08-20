@@ -511,57 +511,10 @@ async function recordMenuChangeSyncTasks(input: {
   changeSummary: string;
   employeeId: string;
 }) {
-  const platforms = await sql`
-    select id::text
-    from menu_external_platforms
-    where brand_id = ${input.brandId}
-      and is_active = true
-      and platform_key in ('uber_eats', 'rocket_now', 'demae_can')
-      and (${input.storeId || null}::uuid is null or store_id = ${input.storeId || null})
-      and (${input.storeId || null}::uuid is not null or store_id is null)
-  `;
-
-  for (const platform of platforms) {
-    await sql`
-      insert into menu_change_sync_tasks (
-        brand_id,
-        store_id,
-        external_platform_id,
-        target_type,
-        target_id,
-        target_label,
-        change_kind,
-        change_summary,
-        created_by,
-        updated_at
-      )
-      values (
-        ${input.brandId},
-        ${input.storeId || null},
-        ${platform.id},
-        ${input.targetType},
-        ${input.targetId || null},
-        ${input.targetLabel},
-        ${input.changeKind},
-        ${input.changeSummary},
-        ${input.employeeId},
-        now()
-      )
-      on conflict (
-        external_platform_id,
-        target_type,
-        (coalesce(target_id, '00000000-0000-0000-0000-000000000000'::uuid)),
-        change_kind
-      )
-      where status = 'pending'
-      do update set
-        target_label = excluded.target_label,
-        change_summary = excluded.change_summary,
-        created_by = excluded.created_by,
-        created_at = now(),
-        updated_at = now()
-    `;
-  }
+  // Bridge capture + baseline diff is now the source of truth. Keep this
+  // compatibility hook while callers migrate, but do not create manual tasks
+  // that can outlive the platform snapshot and pollute the current diff.
+  void input;
 }
 
 async function upsertExternalPlatform(body: Record<string, unknown>) {

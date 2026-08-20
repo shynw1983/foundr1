@@ -229,13 +229,6 @@ type BuildPreviewInput = {
   uberBaselineItems?: UberMenuBaselineItem[];
   uberBaselineOptions?: UberMenuBaselineOption[];
   uberBaselineCapturedAt?: string | null;
-  pendingTasksByPlatform: Partial<Record<DeliveryMenuPlatformKey, Array<{
-    id: string;
-    targetType: string;
-    targetLabel: string;
-    changeKind: string;
-    changeSummary: string;
-  }>>>;
 };
 
 function normalizedBaseline(input: BuildPreviewInput): Partial<Record<DeliveryMenuPlatformKey, MenuPlatformBaseline>> {
@@ -267,32 +260,6 @@ function normalizedBaseline(input: BuildPreviewInput): Partial<Record<DeliveryMe
       }))
     }
   };
-}
-
-function addPendingTaskChanges(
-  platform: MenuPublishPreviewPlatform,
-  tasks: Array<{ id: string; targetType: string; targetLabel: string; changeKind: string; changeSummary: string }>
-) {
-  const existing = new Set(platform.changes.map((change) => `${change.targetType}:${change.targetLabel}:${change.kind}`));
-  for (const task of tasks) {
-    const kind = (["create", "rename", "reprice", "update", "move", "disable", "delete"].includes(task.changeKind)
-      ? task.changeKind
-      : "update") as MenuPublishChangeKind;
-    const targetType = (["item", "option", "category", "option_group"].includes(task.targetType)
-      ? task.targetType
-      : "other") as MenuPublishPreviewChange["targetType"];
-    const key = `${targetType}:${task.targetLabel}:${kind}`;
-    if (existing.has(key)) continue;
-    platform.changes.push({
-      id: `task:${task.id}`,
-      targetType,
-      targetLabel: task.targetLabel,
-      kind,
-      summary: task.changeSummary,
-      confidence: platform.baselineStatus === "ready" ? "confirmed" : "provisional"
-    });
-    existing.add(key);
-  }
 }
 
 function findItemBaseline(item: MenuProjectionItem, entries: MenuPlatformBaselineEntry[]) {
@@ -493,7 +460,6 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
     if (platformKey === "demae_can") {
       platform.warnings.push("商品種別に応じて「選択面・変更面・選択冷面」を変換し、調味の直後に配置します。");
     }
-    addPendingTaskChanges(platform, input.pendingTasksByPlatform[platformKey] ?? []);
     platform.changes.sort((left, right) => left.kind.localeCompare(right.kind) || left.targetLabel.localeCompare(right.targetLabel, "ja"));
     return platform;
   });

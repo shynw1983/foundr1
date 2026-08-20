@@ -39,8 +39,7 @@ test("reports confirmed Uber name differences without mutating platform data", (
     options: [],
     uberBaselineItems: [{ websiteId: "corn", name: "旧名称", uberPrice: 216 }],
     uberBaselineOptions: [],
-    uberBaselineCapturedAt: "2026-08-11",
-    pendingTasksByPlatform: {}
+    uberBaselineCapturedAt: "2026-08-11"
   });
   const uber = preview.platforms.find((platform) => platform.platformKey === "uber_eats");
   assert.equal(preview.mode, "read_only");
@@ -73,8 +72,7 @@ test("ignores invisible whitespace differences in multilingual platform names", 
         }],
         options: []
       }
-    },
-    pendingTasksByPlatform: {}
+    }
   });
   const uber = preview.platforms.find((platform) => platform.platformKey === "uber_eats");
   assert.equal(uber?.changes.some((change) => change.kind === "rename"), false);
@@ -104,8 +102,7 @@ test("still reports meaningful multilingual name differences", () => {
         }],
         options: []
       }
-    },
-    pendingTasksByPlatform: {}
+    }
   });
   const uber = preview.platforms.find((platform) => platform.platformKey === "uber_eats");
   assert.equal(uber?.changes.some((change) => change.kind === "rename"), true);
@@ -124,8 +121,7 @@ test("compares all platform baselines and protects destructive changes", () => {
         ],
         options: []
       }
-    },
-    pendingTasksByPlatform: {}
+    }
   });
   const rocket = preview.platforms.find((platform) => platform.platformKey === "rocket_now");
   assert.equal(rocket?.baselineStatus, "ready");
@@ -145,8 +141,7 @@ test("blocks publication when a captured baseline has unmatched targets", () => 
         complete: false,
         missingTargets: ["トウモロコシ麺"]
       }
-    },
-    pendingTasksByPlatform: {}
+    }
   });
   const rocket = preview.platforms.find((platform) => platform.platformKey === "rocket_now");
   assert.equal(rocket?.baselineStatus, "missing");

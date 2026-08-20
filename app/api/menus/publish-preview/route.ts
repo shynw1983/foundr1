@@ -25,7 +25,7 @@ function cleanBrandId(request: Request) {
 }
 
 async function loadPreview(brandId: string) {
-  const [brands, items, groups, options, tasks, platforms, targetSettings, snapshots, mappings] = await Promise.all([
+  const [brands, items, groups, options, platforms, targetSettings, snapshots, mappings] = await Promise.all([
     sql`select id::text, name from brands where id = ${brandId} limit 1`,
     sql`
       select
@@ -58,21 +58,6 @@ async function loadPreview(brandId: string) {
       join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
       where menu_option_groups.brand_id = ${brandId}
       order by menu_option_groups.sort_order, menu_options.sort_order, menu_options.name
-    `,
-    sql`
-      select
-        menu_change_sync_tasks.id::text,
-        menu_external_platforms.platform_key as "platformKey",
-        menu_change_sync_tasks.target_type as "targetType",
-        menu_change_sync_tasks.target_label as "targetLabel",
-        menu_change_sync_tasks.change_kind as "changeKind",
-        menu_change_sync_tasks.change_summary as "changeSummary"
-      from menu_change_sync_tasks
-      join menu_external_platforms on menu_external_platforms.id = menu_change_sync_tasks.external_platform_id
-      where menu_change_sync_tasks.brand_id = ${brandId}
-        and menu_change_sync_tasks.store_id is null
-        and menu_change_sync_tasks.status = 'pending'
-      order by menu_change_sync_tasks.created_at desc
     `,
     sql`
       select id::text, platform_key as "platformKey", rule_version as "ruleVersion",
@@ -131,25 +116,6 @@ async function loadPreview(brandId: string) {
     };
     platformSettingsByTarget.set(key, current);
   }
-  const pendingTasksByPlatform: Partial<Record<DeliveryMenuPlatformKey, Array<{
-    id: string;
-    targetType: string;
-    targetLabel: string;
-    changeKind: string;
-    changeSummary: string;
-  }>>> = {};
-  for (const task of tasks) {
-    const platformKey = String(task.platformKey) as DeliveryMenuPlatformKey;
-    if (!(["uber_eats", "rocket_now", "demae_can"] as string[]).includes(platformKey)) continue;
-    (pendingTasksByPlatform[platformKey] ??= []).push({
-      id: String(task.id),
-      targetType: String(task.targetType),
-      targetLabel: String(task.targetLabel),
-      changeKind: String(task.changeKind),
-      changeSummary: String(task.changeSummary)
-    });
-  }
-
   const uberBaselineOptions = uberMapping.groups.flatMap((group) => group.options.map((option) => ({
     groupKey: group.groupKey,
     optionKey: option.optionKey,
@@ -249,8 +215,7 @@ async function loadPreview(brandId: string) {
       websitePrice: "websitePrice" in item && typeof item.websitePrice === "number" ? item.websitePrice : null
     })),
     uberBaselineOptions,
-    uberBaselineCapturedAt: uberCatalog.source.capturedAt,
-    pendingTasksByPlatform
+    uberBaselineCapturedAt: uberCatalog.source.capturedAt
   });
 
   return {
