@@ -1,5 +1,6 @@
 import type { EmployeeSession } from "./auth";
 import { sql } from "./db";
+import { chunkMenuTranslationEntries } from "./menu-translation-batching";
 import { roleHasPermission } from "./role-permissions";
 
 export const menuTranslationLanguages = ["en", "zh", "zh-Hant", "ko", "vi", "ne"] as const;
@@ -225,10 +226,97 @@ function extractJsonArray(text: string) {
   return match?.[0] ?? "[]";
 }
 
-function chunkEntries<T>(entries: T[], size: number) {
-  const chunks: T[][] = [];
-  for (let index = 0; index < entries.length; index += size) chunks.push(entries.slice(index, index + size));
-  return chunks;
+function extractTranslationResults(content: string) {
+  const parsed = JSON.parse(extractJsonArray(content)) as unknown;
+  if (!Array.isArray(parsed)) throw new Error("translation_output_not_array");
+  return parsed as OpenAiTranslationResult[];
+}
+
+async function requestTranslationChunk(input: {
+  apiKey: string;
+  model: string;
+  entries: TranslationRequestEntry[];
+  retryDepth?: number;
+}): Promise<OpenAiTranslationResult[]> {
+  const retryDepth = input.retryDepth ?? 0;
+  const outputTokenLimit = input.entries.length === 1 ? 12000 : 8000;
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: input.model,
+      input: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text: [
+                "You translate restaurant menu data from Japanese into customer-facing menu text.",
+                "Return only a complete JSON array. Do not include markdown.",
+                "Each output item must be {\"key\":\"...\",\"text\":\"...\"}.",
+                "Return exactly one output item for every input key.",
+                "Use natural, concise wording for menus, option names, and descriptions.",
+                "Keep product identity stable. Translate ingredients and option meanings clearly.",
+                "Treat zh as Simplified Chinese and zh-Hant as Traditional Chinese. Never copy Simplified Chinese into Traditional Chinese.",
+                "For Korean, Vietnamese, and Nepali, use the target language script naturally."
+              ].join("\n")
+            }
+          ]
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: JSON.stringify({
+                sourceLanguage: "Japanese",
+                targetLanguageLabels,
+                entries: input.entries
+              })
+            }
+          ]
+        }
+      ],
+      max_output_tokens: outputTokenLimit
+    })
+  });
+  const body = await response.json().catch(() => ({})) as {
+    error?: { message?: string };
+    status?: string;
+    incomplete_details?: { reason?: string };
+    output_text?: string;
+    output?: Array<{ content?: Array<{ text?: string; type?: string }> }>;
+  };
+  if (!response.ok) throw new Error(body.error?.message || "OpenAI 翻訳に失敗しました。");
+  const content = body.output_text
+    ?? body.output?.flatMap((item) => item.content ?? []).map((contentItem) => contentItem.text ?? "").join("\n").trim()
+    ?? "";
+
+  try {
+    if (body.status === "incomplete") throw new Error(body.incomplete_details?.reason || "translation_output_incomplete");
+    const results = extractTranslationResults(content);
+    const returnedKeys = new Set(results.map((result) => String(result.key ?? "")).filter(Boolean));
+    const missingEntries = input.entries.filter((entry) => !returnedKeys.has(entry.key));
+    if (!missingEntries.length) return results;
+    if (retryDepth >= 2) throw new Error("translation_output_missing_entries");
+    return [...results, ...await requestTranslationChunk({ ...input, entries: missingEntries, retryDepth: retryDepth + 1 })];
+  } catch (error) {
+    if (input.entries.length > 1) {
+      const middle = Math.ceil(input.entries.length / 2);
+      const left = await requestTranslationChunk({ ...input, entries: input.entries.slice(0, middle), retryDepth: retryDepth + 1 });
+      const right = await requestTranslationChunk({ ...input, entries: input.entries.slice(middle), retryDepth: retryDepth + 1 });
+      return [...left, ...right];
+    }
+    if (retryDepth < 2) return requestTranslationChunk({ ...input, retryDepth: retryDepth + 1 });
+    const reason = error instanceof Error ? error.message : "";
+    throw new Error(reason.includes("OpenAI")
+      ? reason
+      : "AI 翻訳の出力が途中で切れました。対象を小分けにしても完了できなかったため、しばらくしてから再試行してください。");
+  }
 }
 
 export async function generateMenuTranslationPreview(entries: MenuTranslationDraftEntry[]) {
@@ -239,7 +327,7 @@ export async function generateMenuTranslationPreview(entries: MenuTranslationDra
   const model = process.env.OPENAI_MENU_TRANSLATION_MODEL || "gpt-5.4-mini";
   const suggestedByKey = new Map<string, string>();
 
-  for (const chunk of chunkEntries(entries, 40)) {
+  for (const chunk of chunkMenuTranslationEntries(entries)) {
     const requestEntries: TranslationRequestEntry[] = chunk.map((entry) => ({
       key: entry.key,
       language: entry.language,
@@ -247,60 +335,7 @@ export async function generateMenuTranslationPreview(entries: MenuTranslationDra
       targetLabel: entry.targetLabel,
       targetType: entry.targetType
     }));
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model,
-        input: [
-          {
-            role: "system",
-            content: [
-              {
-                type: "input_text",
-                text: [
-                  "You translate restaurant menu data from Japanese into customer-facing menu text.",
-                  "Return only a JSON array. Do not include markdown.",
-                  "Each output item must be {\"key\":\"...\",\"text\":\"...\"}.",
-                  "Use natural, concise wording for menus, option names, and descriptions.",
-                  "Keep product identity stable. Translate ingredients and option meanings clearly.",
-                  "Treat zh as Simplified Chinese and zh-Hant as Traditional Chinese. Never copy Simplified Chinese into Traditional Chinese.",
-                  "For Korean, Vietnamese, and Nepali, use the target language script naturally."
-                ].join("\n")
-              }
-            ]
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: JSON.stringify({
-                  sourceLanguage: "Japanese",
-                  targetLanguageLabels,
-                  entries: requestEntries
-                })
-              }
-            ]
-          }
-        ],
-        max_output_tokens: 6000
-      })
-    });
-    const body = await response.json().catch(() => ({})) as {
-      error?: { message?: string };
-      output_text?: string;
-      output?: Array<{ content?: Array<{ text?: string; type?: string }> }>;
-    };
-    if (!response.ok) throw new Error(body.error?.message || "OpenAI 翻訳に失敗しました。");
-
-    const content = body.output_text
-      ?? body.output?.flatMap((item) => item.content ?? []).map((contentItem) => contentItem.text ?? "").join("\n").trim()
-      ?? "";
-    const parsed = JSON.parse(extractJsonArray(content)) as OpenAiTranslationResult[];
+    const parsed = await requestTranslationChunk({ apiKey, model, entries: requestEntries });
     for (const result of parsed) {
       const key = String(result.key ?? "");
       const text = String(result.text ?? "").trim();
@@ -329,7 +364,7 @@ function normalizeAppliedEntries(value: unknown): MenuTranslationDraftEntry[] {
       language,
       sourceText: String(source.sourceText ?? ""),
       currentText: String(source.currentText ?? ""),
-      suggestedText: String(source.suggestedText ?? "").trim().slice(0, 600),
+      suggestedText: String(source.suggestedText ?? "").trim().slice(0, field === "descriptionDisplayNames" ? 20000 : 600),
       targetLabel: String(source.targetLabel ?? "")
     };
   }).filter((entry) => (

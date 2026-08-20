@@ -7,6 +7,7 @@ import { rocketInventoryUrl, uniqueLocatedRows } from "../src/adapters/rocket-no
 import {
   parseUberSoldOutDuration,
   preferCurrentUberMatches,
+  projectUberMenuSnapshot,
   uberTargetNameTiers,
   uberItemDetailMatches
 } from "../src/adapters/uber-eats.mjs";
@@ -218,4 +219,67 @@ test("waits for the expected Uber item identity before trusting its sold-out sta
     url: "https://merchants.ubereats.com/manager/menumaker/store/items/wide-noodle",
     itemName: "【おすすめ❗️】もちもち板春雨50g｜宽粉｜Wide Sweet Potato Noodles"
   }), true);
+});
+
+test("captures the current Uber menu graph and keeps availability separate from publication", () => {
+  const currentProductId = "current-product";
+  const currentOptionId = "current-option";
+  const snapshot = projectUberMenuSnapshot({
+    data: {
+      menuMapping: [{ menuType: "MENU_TYPE_FULFILLMENT_DELIVERY", menuUUID: "delivery-menu" }],
+      menus: {
+        "delivery-menu": {
+          subsectionsMap: {
+            category: { uuid: "category", displayItems: [{ uuid: currentProductId }] }
+          },
+          entities: {
+            customizationsMap: {
+              group: { uuid: "group", options: [{ uuid: currentOptionId }] }
+            },
+            itemsMap: {
+              [currentProductId]: {
+                itemInfo: { title: { defaultValue: "商品｜Product" } },
+                paymentInfo: { priceInfo: { defaultValue: { price: { low: 41500, high: 0 } } } },
+                suspensionInfo: { defaultValue: { suspendUntilMilliseconds: "2026-08-22T00:00:00.000Z" } }
+              },
+              [currentOptionId]: {
+                itemInfo: { title: { defaultValue: "選択肢｜Option" } },
+                paymentInfo: { priceInfo: { defaultValue: { price: { low: 15000, high: 0 } } } }
+              },
+              orphan: {
+                itemInfo: { title: { defaultValue: "旧商品" } },
+                paymentInfo: { priceInfo: { defaultValue: { price: { low: 0, high: 0 } } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, [
+    {
+      targetId: "os-product",
+      label: "商品",
+      knownExternalIds: [currentProductId],
+      exactNames: ["商品"],
+      fallbackNames: [],
+      aliasNames: []
+    },
+    {
+      targetId: "os-option",
+      label: "選択肢",
+      knownExternalIds: [currentOptionId],
+      exactNames: ["選択肢"],
+      fallbackNames: [],
+      aliasNames: []
+    }
+  ], Date.parse("2026-08-21T00:00:00.000Z"));
+
+  assert.equal(snapshot.complete, true);
+  assert.equal(snapshot.items.length, 1);
+  assert.equal(snapshot.options.length, 1);
+  assert.equal(snapshot.items[0].price, 415);
+  assert.equal(snapshot.items[0].isActive, true);
+  assert.equal(snapshot.items[0].metadata.isAvailable, false);
+  assert.equal(snapshot.options[0].metadata.isAvailable, true);
+  assert.equal([...snapshot.items, ...snapshot.options].some((entry) => entry.externalId === "orphan"), false);
 });

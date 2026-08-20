@@ -47,6 +47,86 @@ export function parseUberSoldOutDuration(value) {
     .trim();
 }
 
+function uberMoney(value) {
+  const low = Number(value?.low ?? 0);
+  const high = Number(value?.high ?? 0);
+  return (high * 4294967296 + low) / 100;
+}
+
+function uberAvailability(item, now) {
+  const suspendUntil = String(item?.suspensionInfo?.defaultValue?.suspendUntilMilliseconds ?? "");
+  const unavailable = Boolean(suspendUntil && Number.isFinite(Date.parse(suspendUntil)) && Date.parse(suspendUntil) > now);
+  return { isAvailable: !unavailable, suspendUntil: unavailable ? suspendUntil : null };
+}
+
+export function projectUberMenuSnapshot(raw, requestedTargets, now = Date.now()) {
+  const deliveryMapping = raw?.data?.menuMapping?.find((entry) => entry?.menuType === "MENU_TYPE_FULFILLMENT_DELIVERY");
+  const menuId = String(deliveryMapping?.menuUUID ?? "");
+  const menu = raw?.data?.menus?.[menuId];
+  if (!menu) throw new Error("uber_eats_menu_payload_invalid");
+  const targetRows = requestedTargets.map((target) => ({
+    ...target,
+    normalizedExactNames: [...new Set(target.exactNames.map(normalizeText).filter(Boolean))],
+    normalizedFallbackNames: [...new Set(target.fallbackNames.map(normalizeText).filter(Boolean))],
+    normalizedAliasNames: [...new Set(target.aliasNames.map(normalizeText).filter(Boolean))]
+  }));
+  const unmappedTargetRows = targetRows.filter((target) => !target.knownExternalIds.length);
+  const itemsMap = menu.entities?.itemsMap ?? {};
+  const productParents = new Map();
+  for (const subsection of Object.values(menu.subsectionsMap ?? {})) {
+    for (const entry of subsection?.displayItems ?? []) productParents.set(String(entry.uuid), String(subsection.uuid));
+  }
+  const optionParents = new Map();
+  for (const group of Object.values(menu.entities?.customizationsMap ?? {})) {
+    for (const entry of group?.options ?? []) optionParents.set(String(entry.uuid), String(group.uuid));
+  }
+  const rows = [
+    ...[...productParents].map(([externalId, externalParentId]) => ({ externalId, externalParentId, observedKind: "item" })),
+    ...[...optionParents].map(([externalId, externalParentId]) => ({ externalId, externalParentId, observedKind: "option" }))
+  ];
+  const entries = rows.map((row) => {
+    const item = itemsMap[row.externalId];
+    if (!item) throw new Error(`uber_eats_menu_item_missing:${row.externalId}`);
+    const rawName = String(item.itemInfo?.title?.defaultValue ?? "").trim();
+    const nameParts = normalizeText(rawName).split(/[|｜]/u).map((part) => part.trim()).filter(Boolean);
+    const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.some((known) => known === row.externalId || known.endsWith(`/${row.externalId}`)));
+    const tieredMatch = mappedCandidates.length
+      ? { candidates: mappedCandidates, matchBasis: "external_id" }
+      : tieredTargetCandidates(unmappedTargetRows, nameParts);
+    const target = tieredMatch.candidates.length === 1 ? tieredMatch.candidates[0] : null;
+    const currentAvailability = uberAvailability(item, now);
+    return {
+      targetId: target?.targetId ?? "",
+      externalId: row.externalId,
+      externalParentId: row.externalParentId,
+      groupKey: target?.groupKey ?? "",
+      optionKey: target?.optionKey ?? "",
+      name: rawName,
+      price: uberMoney(item.paymentInfo?.priceInfo?.defaultValue?.price),
+      sourceBasePrice: target?.sourceBasePrice ?? null,
+      isActive: true,
+      observedKind: row.observedKind,
+      metadata: {
+        matchBasis: tieredMatch.matchBasis,
+        kindConfidence: target ? "mapped" : "menu_graph",
+        isAvailable: currentAvailability.isAvailable,
+        suspendUntil: currentAvailability.suspendUntil,
+        ambiguousTargetIds: tieredMatch.candidates.length > 1 ? tieredMatch.candidates.map((candidate) => candidate.targetId) : []
+      }
+    };
+  });
+  const matchedCounts = Object.fromEntries(targetRows.map((target) => [target.targetId, entries.filter((entry) => entry.targetId === target.targetId).length]));
+  const missingTargets = targetRows.filter((target) => matchedCounts[target.targetId] !== 1).map((target) => target.label);
+  return {
+    items: entries.filter((entry) => entry.observedKind === "item"),
+    options: entries.filter((entry) => entry.observedKind === "option"),
+    complete: missingTargets.length === 0,
+    missingTargets,
+    scanMode: "uber_menu_graph",
+    menuId
+  };
+}
+
 function itemPath(value) {
   try {
     return new URL(String(value ?? "")).pathname.replace(/\/$/u, "");
@@ -306,97 +386,45 @@ export class UberEatsAdapter {
 
   async captureMenuSnapshot(payload) {
     const targets = Array.isArray(payload.targets) ? payload.targets : [];
+    const requested = targets.map((target) => {
+      const tiers = uberTargetNameTiers(target);
+      return {
+        targetId: target.targetId,
+        kind: target.kind,
+        groupKey: target.groupKey ?? "",
+        optionKey: target.optionKey ?? "",
+        sourceBasePrice: target.sourceBasePrice ?? null,
+        label: target.label,
+        knownExternalIds: Array.isArray(target.knownExternalIds) ? target.knownExternalIds : [],
+        exactNames: tiers.exactNames,
+        fallbackNames: tiers.fallbackNames,
+        aliasNames: tiers.aliasNames
+      };
+    });
     const page = await this.connect();
-    let scan;
+    let rawMenu;
     try {
       await this.openItemsPage(page);
-      const requested = targets.map((target) => {
-        const tiers = uberTargetNameTiers(target);
-        return {
-          targetId: target.targetId,
-          kind: target.kind,
-          groupKey: target.groupKey ?? "",
-          optionKey: target.optionKey ?? "",
-         sourceBasePrice: target.sourceBasePrice ?? null,
-         label: target.label,
-          knownExternalIds: Array.isArray(target.knownExternalIds) ? target.knownExternalIds : [],
-         exactNames: tiers.exactNames,
-         fallbackNames: tiers.fallbackNames,
-         aliasNames: tiers.aliasNames
-        };
-      });
-      scan = await page.evaluate(`(() => {
-        ${NORMALIZE_SOURCE}
-        const selectTieredCandidates = ${tieredTargetCandidates.toString()};
-        const targets = ${JSON.stringify(requested)};
-        const targetRows = targets.map((target) => ({
-          ...target,
-          normalizedExactNames: [...new Set(target.exactNames.map(normalize).filter(Boolean))],
-          normalizedFallbackNames: [...new Set(target.fallbackNames.map(normalize).filter(Boolean))],
-          normalizedAliasNames: [...new Set(target.aliasNames.map(normalize).filter(Boolean))]
-        }));
-        const unmappedTargetRows = targetRows.filter((target) => !target.knownExternalIds.length);
-        const anchors = [...document.querySelectorAll('a[href*="/items/"]')]
-          .filter((anchor) => anchor.getClientRects().length);
-        const unique = [...new Map(anchors.map((anchor) => [anchor.href, anchor])).values()];
-        const entries = unique.map((anchor) => {
-          let record = anchor.closest('tr, [role="row"], .cw.bd.il.r6.cu');
-          if (!record) {
-            let current = anchor.parentElement;
-            for (let depth = 0; current && depth < 6; depth += 1, current = current.parentElement) {
-              const text = current.innerText ?? current.textContent ?? "";
-              if (text.length < 1600 && text.split("\\n").filter(Boolean).length >= 2) { record = current; break; }
-            }
-         }
-         const rawName = String(anchor.textContent ?? "").trim();
-         const externalId = new URL(anchor.href).pathname.replace(/\\/$/u, "");
-          const nameParts = normalize(rawName).split(/[|｜]/u).map((part) => part.trim()).filter(Boolean);
-          const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.includes(externalId));
-          const tieredMatch = mappedCandidates.length
-            ? { candidates: mappedCandidates, matchBasis: "external_id" }
-            : selectTieredCandidates(unmappedTargetRows, nameParts);
-          const candidates = tieredMatch.candidates;
-          const target = candidates.length === 1 ? candidates[0] : null;
-          const lines = (record?.innerText ?? "").split("\\n").map((line) => line.trim()).filter(Boolean);
-          const price = Number(String(lines[1] ?? "").replace(/[^0-9]/g, "")) || null;
-          return {
-            targetId: target?.targetId ?? "",
-            externalId,
-            groupKey: target?.groupKey ?? "",
-            optionKey: target?.optionKey ?? "",
-            name: rawName,
-            price,
-            sourceBasePrice: target?.sourceBasePrice ?? null,
-            isActive: !/売り切れ|販売停止|非表示/u.test(record?.innerText ?? ""),
-            observedKind: target?.kind ?? "item",
-           metadata: {
-             href: anchor.href,
-              matchBasis: tieredMatch.matchBasis,
-              kindConfidence: target ? "mapped" : "page",
-             ambiguousTargetIds: candidates.length > 1 ? candidates.map((candidate) => candidate.targetId) : []
-            }
-          };
-        });
-        const matchedCounts = Object.fromEntries(targetRows.map((target) => [target.targetId, entries.filter((entry) => entry.targetId === target.targetId).length]));
-        return {
-          entries,
-          missingTargets: targetRows.filter((target) => matchedCounts[target.targetId] !== 1).map((target) => target.label)
-        };
-      })()`);
+      const storeUuid = String(this.platformConfig.storeUuid ?? "").trim();
+      rawMenu = await page.evaluate(`fetch(${JSON.stringify("https://merchants.ubereats.com/manager/menumaker/api/getMenuData?localeCode=ja-JP")}, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json", "x-csrf-token": "x" },
+        body: JSON.stringify({ storeUUID: ${JSON.stringify(storeUuid)}, shouldLoadItems: true })
+      }).then(async (response) => {
+        const text = await response.text();
+        if (!response.ok) throw new Error("uber_eats_menu_api_" + response.status + ":" + text.slice(0, 200));
+        return JSON.parse(text);
+      })`);
     } finally {
       page.close();
     }
-    const entries = scan.entries;
-    const missingTargets = scan.missingTargets;
+    const snapshot = projectUberMenuSnapshot(rawMenu, requested);
+    const entries = [...snapshot.items, ...snapshot.options];
+    const missingTargets = snapshot.missingTargets;
     return {
       outcome: "captured",
-      snapshot: {
-        items: entries.filter((entry) => entry.observedKind === "item"),
-        options: entries.filter((entry) => entry.observedKind === "option"),
-        complete: missingTargets.length === 0,
-        missingTargets,
-        scanMode: "full_platform"
-      },
+      snapshot,
       targetCount: targets.length,
       matchedCount: entries.filter((entry) => entry.targetId).length,
       missingTargets
