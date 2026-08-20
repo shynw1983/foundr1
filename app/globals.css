@@ -9587,6 +9587,129 @@ body :where(
   gap: 8px;
 }
 
+.menu-capture-progress {
+  display: grid;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.menu-capture-progress.is-running {
+  border-color: color-mix(in srgb, var(--green) 32%, var(--line));
+}
+
+.menu-capture-progress-head,
+.menu-capture-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.menu-capture-progress-head {
+  justify-content: space-between;
+}
+
+.menu-capture-progress-head > div,
+.menu-capture-progress-row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.menu-capture-progress-head strong,
+.menu-capture-progress-row strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.menu-capture-progress-head span,
+.menu-capture-progress-row small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.menu-capture-progress-head > b {
+  color: var(--green);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.menu-capture-progress-track {
+  overflow: hidden;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.menu-capture-progress-track > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width 240ms ease;
+}
+
+.menu-capture-progress.has-failure .menu-capture-progress-track > span {
+  background: var(--red);
+}
+
+.menu-capture-progress-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.menu-capture-progress-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 0.8fr) minmax(0, 1.2fr);
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+}
+
+.menu-capture-progress-row > div:last-child {
+  justify-items: end;
+  text-align: right;
+}
+
+.menu-capture-progress-row > div:last-child > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.menu-capture-progress-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: var(--muted);
+  background: var(--soft);
+}
+
+.menu-capture-progress-row.is-running .menu-capture-progress-icon,
+.menu-capture-progress-row.is-complete .menu-capture-progress-icon {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.menu-capture-progress-row.is-warning .menu-capture-progress-icon {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.menu-capture-progress-row.is-failed .menu-capture-progress-icon {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
 .menu-publish-platform-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -10115,6 +10238,10 @@ body :where(
   .menu-publish-control-actions,
   .menu-publish-control-actions button {
     width: 100%;
+  }
+
+  .menu-capture-progress-list {
+    grid-template-columns: 1fr;
   }
 
   .menu-sync-task-row {

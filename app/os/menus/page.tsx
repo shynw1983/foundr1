@@ -530,6 +530,7 @@ function getPublishChangeLabel(kind: MenuPublishPreviewChange["kind"]) {
 function getMenuTaskStatus(task: MenuSyncTask) {
   if (task.status === "queued") return "待機中";
   if (task.status === "processing") {
+    if (task.phase === "capturing") return "メニュー読取中";
     if (task.phase === "verifying") return "回読確認中";
     if (task.phase === "applying") return "反映中";
     if (task.phase === "locating") return "対象確認中";
@@ -546,6 +547,19 @@ function getMenuTaskStatus(task: MenuSyncTask) {
   if (task.status === "completed") return "手動反映済み";
   return "未反映";
 }
+
+function getBaselineQuality(platform?: MenuPublishPreviewPlatform) {
+  if (!platform?.baselineCapturedAt) return "基準データなし";
+  if (platform.baselineStatus === "ready") return "全件一致";
+  const mismatch = platform.blockers
+    .map((blocker) => blocker.match(/基準取込で一致しない対象が (\d+)件/u))
+    .find(Boolean);
+  return mismatch?.[1] ? `${mismatch[1]}件の対応確認が必要` : "取込結果の確認が必要";
+}
+
+const menuCaptureTaskLabels = new Set(["プラットフォーム基準取込", "毎日プラットフォーム全量回読"]);
+const runningMenuTaskStatuses = new Set(["queued", "processing", "retrying"]);
+const terminalMenuTaskStatuses = new Set(["failed", "succeeded", "completed"]);
 
 function getPlatformRuleSummary(platformKey: MenuPublishPreviewPlatform["platformKey"]) {
   if (platformKey === "uber_eats") return "日本語＋中・韓・英 / Emoji可 / OS価格×1.25";
@@ -756,6 +770,10 @@ export default function MenuAdminPage() {
   }
 
   async function startMenuPublish(confirmDestructive = false) {
+    if (captureRunActive) {
+      setMessage("現在メニューの取込完了後に差分を配信してください。");
+      return;
+    }
     if (!activeBrandId || !publishStoreId || !selectedPublishPlatforms.length) {
       setMessage("店舗と配信先を選択してください。");
       return;
@@ -1019,6 +1037,28 @@ export default function MenuAdminPage() {
       && (!task.storeId || !publishStoreId || task.storeId === publishStoreId)
       && supportedDeliveryPlatformKeys.has(data.externalPlatforms.find((platform) => platform.id === task.externalPlatformId)?.platformKey ?? "")
   )), [activeBrandId, data.externalPlatforms, data.syncTasks, publishStoreId]);
+  const capturePlatformRows = useMemo(() => selectedPublishPlatforms.map((platformKey) => {
+    const platform = brandExternalPlatforms.find((entry) => entry.platformKey === platformKey);
+    const tasks = platform ? brandSyncTasks.filter((task) => (
+      task.externalPlatformId === platform.id && menuCaptureTaskLabels.has(task.targetLabel)
+    )) : [];
+    const task = tasks.reduce<MenuSyncTask | undefined>((latest, candidate) => (
+      !latest || new Date(candidate.createdAt).getTime() > new Date(latest.createdAt).getTime() ? candidate : latest
+    ), undefined);
+    return {
+      platformKey,
+      platformName: platform?.name ?? platformKey,
+      task,
+      preview: publishPreview?.platforms.find((entry) => entry.platformKey === platformKey)
+    };
+  }), [brandExternalPlatforms, brandSyncTasks, publishPreview, selectedPublishPlatforms]);
+  const captureRunActive = publishAction === "capturing" || capturePlatformRows.some((row) => (
+    row.task && runningMenuTaskStatuses.has(row.task.status)
+  ));
+  const captureFinishedCount = capturePlatformRows.filter((row) => row.task && terminalMenuTaskStatuses.has(row.task.status)).length;
+  const captureDisplayedFinishedCount = publishAction === "capturing" ? 0 : captureFinishedCount;
+  const captureFailedCount = capturePlatformRows.filter((row) => row.task?.status === "failed").length;
+  const captureSucceededCount = capturePlatformRows.filter((row) => row.task && ["succeeded", "completed"].includes(row.task.status)).length;
   const pendingSyncTasks = brandSyncTasks.filter((task) => ["pending", "queued", "processing", "retrying", "failed"].includes(task.status));
   const completedSyncTasks = brandSyncTasks.filter((task) => ["completed", "succeeded"].includes(task.status)).slice(0, 8);
   const brandPublishBatches = data.publishBatches.filter((batch) => (
@@ -1929,7 +1969,7 @@ export default function MenuAdminPage() {
                 <button
                   className="secondary-button compact-button"
                   type="button"
-                  disabled={!activeBrandId || publishPreviewStatus === "loading"}
+                  disabled={!activeBrandId || publishPreviewStatus === "loading" || captureRunActive}
                   onClick={() => void loadPublishPreview(activeBrandId)}
                 >
                   <RefreshCw className={publishPreviewStatus === "loading" ? "is-spinning" : ""} size={15} />
@@ -1972,23 +2012,69 @@ export default function MenuAdminPage() {
                   <button
                     className="secondary-button compact-button"
                     type="button"
-                    disabled={Boolean(publishAction) || !publishStoreId || !selectedPublishPlatforms.length}
+                    disabled={Boolean(publishAction) || captureRunActive || !publishStoreId || !selectedPublishPlatforms.length}
                     onClick={() => void capturePlatformBaseline()}
                   >
-                    <RefreshCw className={publishAction === "capturing" ? "is-spinning" : ""} size={15} />
-                    {publishAction === "capturing" ? "取込中" : "現在メニューを取込"}
+                    <RefreshCw className={captureRunActive ? "is-spinning" : ""} size={15} />
+                    {publishAction === "capturing"
+                      ? "取込開始中"
+                      : captureRunActive
+                        ? `取込中 ${captureDisplayedFinishedCount}/${capturePlatformRows.length}`
+                        : "現在メニューを取込"}
                   </button>
                   <button
                     className="primary-button compact-button"
                     type="button"
-                    disabled={Boolean(publishAction) || !publishStoreId || !selectedPublishPlatforms.length}
+                    disabled={Boolean(publishAction) || captureRunActive || !publishStoreId || !selectedPublishPlatforms.length}
                     onClick={() => void startMenuPublish()}
                   >
                     <Upload size={15} />
-                    {publishAction === "publishing" ? "配信開始中" : "差分を配信"}
+                    {publishAction === "publishing" ? "配信開始中" : captureRunActive ? "取込完了待ち" : "差分を配信"}
                   </button>
                 </div>
               </div>
+              {capturePlatformRows.length ? (
+                <section className={`menu-capture-progress${captureRunActive ? " is-running" : ""}${captureFailedCount ? " has-failure" : ""}`} aria-live="polite">
+                  <div className="menu-capture-progress-head">
+                    <div>
+                      <strong>{captureRunActive ? "現在メニューを取込中" : "最新の取込結果"}</strong>
+                      <span>{captureRunActive ? "Mac Bridge が各プラットフォームを順番に読み取っています。" : "取込完了と全件一致は別々に確認します。"}</span>
+                    </div>
+                    <b>{captureRunActive
+                      ? `${captureDisplayedFinishedCount}/${capturePlatformRows.length}`
+                      : captureFailedCount
+                        ? `${captureSucceededCount}/${capturePlatformRows.length} 成功`
+                        : `${captureSucceededCount}/${capturePlatformRows.length}`}</b>
+                  </div>
+                  <div className="menu-capture-progress-track" aria-hidden="true">
+                    <span style={{ width: `${capturePlatformRows.length ? Math.round(captureDisplayedFinishedCount / capturePlatformRows.length * 100) : 0}%` }} />
+                  </div>
+                  <div className="menu-capture-progress-list">
+                    {capturePlatformRows.map((row) => {
+                      const task = row.task;
+                      const isRunning = Boolean(task && runningMenuTaskStatuses.has(task.status));
+                      const isFailed = task?.status === "failed";
+                      const isComplete = Boolean(task && ["succeeded", "completed"].includes(task.status));
+                      const needsReview = isComplete && row.preview?.baselineStatus !== "ready";
+                      return (
+                        <div className={`menu-capture-progress-row${isRunning ? " is-running" : isFailed ? " is-failed" : needsReview ? " is-warning" : isComplete ? " is-complete" : ""}`} key={row.platformKey}>
+                          <span className="menu-capture-progress-icon" aria-hidden="true">
+                            {isRunning ? <RefreshCw className="is-spinning" size={15} /> : isFailed || needsReview ? <AlertTriangle size={15} /> : isComplete ? <CheckCircle2 size={15} /> : <span />}
+                          </span>
+                          <div>
+                            <strong>{row.platformName}</strong>
+                            <small>{task?.status === "succeeded" ? "取込完了" : task ? getMenuTaskStatus(task) : "まだ取込していません"}</small>
+                          </div>
+                          <div>
+                            <span>{isComplete ? getBaselineQuality(row.preview) : isFailed ? task?.errorDetail || "再試行してください" : isRunning ? "Bridge 処理中" : "未実行"}</span>
+                            {task ? <small>{formatDateTime(task.completedAt || task.createdAt)}</small> : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
               {publishPreviewStatus === "error" ? (
                 <p className="menu-publish-preview-error">差分を読み込めませんでした。再比較してください。</p>
               ) : null}
