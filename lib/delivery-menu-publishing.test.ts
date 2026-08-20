@@ -221,3 +221,47 @@ test("describes unmatched targets with their OS group and actionable candidates"
   assert.deepEqual(uber?.reconciliationIssues[0]?.candidates.map((candidate) => candidate.externalId), ["uber-a", "uber-b"]);
   assert.equal(uber?.blockers.some((blocker) => blocker.includes("候補重複 1件")), true);
 });
+
+test("assigns a shared missing label to the option when the same-named item was captured", () => {
+  const preview = buildDeliveryMenuPublishPreview({
+    items: [{
+      id: "soup-item",
+      externalId: "soup-item",
+      name: "旨味マーラータンスープ",
+      category: "旨味ベースの特別仕立てスープ",
+      displayNames: {},
+      basePrice: 330,
+      isActive: true
+    }],
+    options: [{
+      id: "soup-option",
+      groupKey: "soup-selection",
+      groupLabel: "スープを選ぶ",
+      optionKey: "umami-soup",
+      name: "旨味マーラータンスープ",
+      displayNames: {},
+      priceDelta: 0,
+      isActive: true
+    }],
+    platformBaselines: {
+      rocket_now: {
+        capturedAt: "2026-08-21",
+        items: [{
+          targetId: "soup-item",
+          externalId: "rocket-soup",
+          name: "【自由にカスタム】旨味マーラータンスープ",
+          price: null,
+          isActive: true
+        }],
+        options: [],
+        complete: false,
+        missingTargets: ["旨味マーラータンスープ"]
+      }
+    }
+  });
+  const rocket = preview.platforms.find((platform) => platform.platformKey === "rocket_now");
+  assert.equal(rocket?.reconciliationIssues.length, 1);
+  assert.equal(rocket?.reconciliationIssues[0]?.targetType, "option");
+  assert.equal(rocket?.reconciliationIssues[0]?.targetId, "soup-option");
+  assert.equal(rocket?.reconciliationIssues[0]?.locationLabel, "選択グループ: スープを選ぶ");
+});

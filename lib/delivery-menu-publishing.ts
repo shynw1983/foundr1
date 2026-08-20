@@ -421,12 +421,16 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
     if (baseline?.missingTargets?.length) {
       const unhandledMissingLabels = [...baseline.missingTargets];
       const addIssue = (targetType: "item" | "option", target: MenuProjectionItem | MenuProjectionOption) => {
+        const setting = target.platformSettings?.[platformKey];
+        if (setting?.isEnabled === false) return;
+        const candidates = (targetType === "item" ? baseline.items : baseline.options).filter((entry) => entry.targetId === target.id);
+        // The Bridge currently reports missing targets by label. When an item and
+        // an option share that label, a uniquely captured item must not consume
+        // the option's missing marker (or vice versa).
+        if (candidates.length === 1) return;
         const missingIndex = unhandledMissingLabels.findIndex((label) => label === target.name);
         if (missingIndex < 0) return;
         unhandledMissingLabels.splice(missingIndex, 1);
-        const setting = target.platformSettings?.[platformKey];
-        const candidates = (targetType === "item" ? baseline.items : baseline.options).filter((entry) => entry.targetId === target.id);
-        if (setting?.isEnabled === false) return;
         if (candidates.length === 0 && setting?.placementConfig?.confirmedPlatformCreate === true) return;
         platform.reconciliationIssues.push({
           id: `${platformKey}:${targetType}:${target.id}`,
