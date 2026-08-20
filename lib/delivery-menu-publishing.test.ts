@@ -49,6 +49,68 @@ test("reports confirmed Uber name differences without mutating platform data", (
   assert.equal(uber?.changes.some((change) => change.kind === "reprice"), false);
 });
 
+test("ignores invisible whitespace differences in multilingual platform names", () => {
+  const preview = buildDeliveryMenuPublishPreview({
+    items: [{
+      id: "hellfire",
+      externalId: "hellfire",
+      name: "地獄の業火",
+      displayNames: { zh: "地狱业火", ko: "지옥의 업화", en: "Infernal Hellfire" },
+      basePrice: 800,
+      isActive: true
+    }],
+    options: [],
+    platformBaselines: {
+      uber_eats: {
+        capturedAt: "2026-08-20",
+        items: [{
+          targetId: "hellfire",
+          externalId: "hellfire",
+          name: "地獄の業火｜ 地狱业火 ｜지옥의 업화  ｜Infernal  Hellfire ",
+          price: 1000,
+          sourceBasePrice: 800,
+          isActive: true
+        }],
+        options: []
+      }
+    },
+    pendingTasksByPlatform: {}
+  });
+  const uber = preview.platforms.find((platform) => platform.platformKey === "uber_eats");
+  assert.equal(uber?.changes.some((change) => change.kind === "rename"), false);
+});
+
+test("still reports meaningful multilingual name differences", () => {
+  const preview = buildDeliveryMenuPublishPreview({
+    items: [{
+      id: "hellfire",
+      externalId: "hellfire",
+      name: "地獄の業火",
+      displayNames: { zh: "地狱业火", ko: "지옥의 업화", en: "Infernal Hellfire" },
+      basePrice: 800,
+      isActive: true
+    }],
+    options: [],
+    platformBaselines: {
+      uber_eats: {
+        capturedAt: "2026-08-20",
+        items: [{
+          targetId: "hellfire",
+          externalId: "hellfire",
+          name: "地獄の業火｜地狱业火｜지옥의 불꽃｜Infernal Hellfire",
+          price: 1000,
+          sourceBasePrice: 800,
+          isActive: true
+        }],
+        options: []
+      }
+    },
+    pendingTasksByPlatform: {}
+  });
+  const uber = preview.platforms.find((platform) => platform.platformKey === "uber_eats");
+  assert.equal(uber?.changes.some((change) => change.kind === "rename"), true);
+});
+
 test("compares all platform baselines and protects destructive changes", () => {
   const preview = buildDeliveryMenuPublishPreview({
     items: [{ id: "1", externalId: "corn", name: "トウモロコシ麺", displayNames: { zh: "玉米面", ko: "옥수수면", en: "Corn noodles" }, basePrice: 170, isActive: true }],

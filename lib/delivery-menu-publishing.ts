@@ -205,6 +205,13 @@ function yen(value: number | null | undefined) {
   return `¥${Math.round(value).toLocaleString("ja-JP")}`;
 }
 
+function comparableDeliveryName(value: string) {
+  return String(value ?? "")
+    .split(/[|｜]/u)
+    .map((part) => part.trim().replace(/\s+/gu, " "))
+    .join("｜");
+}
+
 function missingRequiredTranslations(
   entries: Array<{ isActive: boolean; displayNames?: Record<string, string> }>,
   requiredLanguages: readonly string[]
@@ -362,7 +369,7 @@ function compareTarget(input: {
       confidence: "confirmed"
     });
   }
-  if (projectedName !== baseline.name) {
+  if (comparableDeliveryName(projectedName) !== comparableDeliveryName(baseline.name)) {
     platform.changes.push({
       id: `${platformKey}:${targetType}:${target.id}:rename`,
       targetType,
