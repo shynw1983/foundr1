@@ -115,6 +115,7 @@ async function readAllRows(page, targets) {
   return page.evaluate((items) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const targetRows = items.map((item) => ({ ...item, normalizedNames: [...new Set(item.names.map(normalize).filter(Boolean))] }));
+    const unmappedTargetRows = targetRows.filter((target) => !target.knownExternalIds.length);
     const titles = [...document.querySelectorAll("[class*=Styles_name__]")].filter((title) => title.getClientRects().length);
     const grouped = new Map();
     for (const title of titles) {
@@ -133,7 +134,7 @@ async function readAllRows(page, targets) {
       const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.some((knownId) => knownId === externalId || rowIds.includes(knownId)));
       const candidates = mappedCandidates.length
         ? mappedCandidates
-        : targetRows.filter((target) => target.normalizedNames.some((name) => parts.includes(name)));
+        : unmappedTargetRows.filter((target) => target.normalizedNames.some((name) => parts.includes(name)));
      const target = candidates.length === 1 ? candidates[0] : null;
       const text = group.rows.map((row) => normalize(row.textContent)).join(" ");
       return {

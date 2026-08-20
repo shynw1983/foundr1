@@ -255,6 +255,7 @@ type MenuPublishPreviewChange = {
   targetType: "item" | "option" | "category" | "option_group" | "other";
   targetId?: string;
   targetLabel: string;
+  locationLabel?: string;
   kind: "create" | "rename" | "reprice" | "update" | "move" | "disable" | "delete";
   summary: string;
   currentValue?: string;
@@ -265,6 +266,16 @@ type MenuPublishPreviewChange = {
   requiresExplicitConfirmation?: boolean;
 };
 
+type MenuPlatformReconciliationIssue = {
+  id: string;
+  targetType: "item" | "option";
+  targetId: string;
+  targetLabel: string;
+  locationLabel: string;
+  issueKind: "missing" | "multiple";
+  candidates: Array<{ externalId: string; name: string; price: number | null }>;
+};
+
 type MenuPublishPreviewPlatform = {
   platformKey: "uber_eats" | "rocket_now" | "demae_can";
   platformName: string;
@@ -272,6 +283,7 @@ type MenuPublishPreviewPlatform = {
   baselineStatus: "ready" | "missing";
   baselineCapturedAt: string | null;
   changes: MenuPublishPreviewChange[];
+  reconciliationIssues: MenuPlatformReconciliationIssue[];
   warnings: string[];
   blockers: string[];
 };
@@ -551,10 +563,9 @@ function getMenuTaskStatus(task: MenuSyncTask) {
 function getBaselineQuality(platform?: MenuPublishPreviewPlatform) {
   if (!platform?.baselineCapturedAt) return "基準データなし";
   if (platform.baselineStatus === "ready") return "全件一致";
-  const mismatch = platform.blockers
-    .map((blocker) => blocker.match(/基準取込で一致しない対象が (\d+)件/u))
-    .find(Boolean);
-  return mismatch?.[1] ? `${mismatch[1]}件の対応確認が必要` : "取込結果の確認が必要";
+  return platform.reconciliationIssues?.length
+    ? `${platform.reconciliationIssues.length}件の対応確認を開く`
+    : "取込結果の確認が必要";
 }
 
 const menuCaptureTaskLabels = new Set(["プラットフォーム基準取込", "毎日プラットフォーム全量回読"]);
@@ -742,6 +753,7 @@ export default function MenuAdminPage() {
   const [publishStoreId, setPublishStoreId] = useState("");
   const [selectedPublishPlatforms, setSelectedPublishPlatforms] = useState<string[]>([]);
   const [publishAction, setPublishAction] = useState<"publishing" | "capturing" | "">("");
+  const [reconciliationAction, setReconciliationAction] = useState("");
   const [availabilityLinkDraft, setAvailabilityLinkDraft] = useState({
     sourceKey: "",
     dependentKey: "",
@@ -874,6 +886,114 @@ export default function MenuAdminPage() {
     const result = await response.json().catch(() => ({})) as { error?: string };
     setMessage(response.ok ? `${platform.platformName} の現在値を OS の個別設定に取り込みました。` : result.error || "プラットフォームの現在値を取り込めませんでした。");
     if (response.ok) await loadMenus(selectedItemId);
+  }
+
+  function openPlatformReconciliation(platformKey: MenuPublishPreviewPlatform["platformKey"]) {
+    const details = document.getElementById(`menu-reconciliation-${platformKey}`) as HTMLDetailsElement | null;
+    if (!details) return;
+    details.open = true;
+    details.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function openReconciliationTarget(issue: MenuPlatformReconciliationIssue) {
+    if (issue.targetType === "item") {
+      const item = data.items.find((entry) => entry.id === issue.targetId);
+      if (item) selectItem(item);
+    } else {
+      const option = data.options.find((entry) => entry.id === issue.targetId);
+      const group = option ? data.groups.find((entry) => entry.id === option.optionGroupId) : undefined;
+      if (option && group) {
+        openChoiceSettings(group);
+        editOption(option);
+      }
+    }
+    setMessage(`${issue.targetLabel} の OS 設定を開きました。`);
+  }
+
+  async function recaptureReconciliationPlatform(platformKey: MenuPublishPreviewPlatform["platformKey"]) {
+    if (!publishStoreId) throw new Error("対象店舗を選択してください。");
+    const response = await fetch("/api/menus/publish-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "capture", brandId: activeBrandId, storeId: publishStoreId, platformKeys: [platformKey] })
+    });
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) throw new Error(result.error || "再取込を開始できませんでした。");
+  }
+
+  async function disableReconciliationTarget(platform: MenuPublishPreviewPlatform, issue: MenuPlatformReconciliationIssue) {
+    const externalPlatform = brandExternalPlatforms.find((entry) => entry.platformKey === platform.platformKey);
+    if (!externalPlatform) return;
+    const actionKey = `${issue.id}:disable`;
+    setReconciliationAction(actionKey);
+    setMessage("");
+    try {
+      const current = data.platformTargetSettings.find((setting) => (
+        setting.externalPlatformId === externalPlatform.id && setting.targetType === issue.targetType && setting.targetId === issue.targetId
+      ));
+      const response = await fetch("/api/menus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "platformTargetSetting",
+          brandId: activeBrandId,
+          storeId: "",
+          externalPlatformId: externalPlatform.id,
+          targetType: issue.targetType,
+          targetId: issue.targetId,
+          isEnabled: false,
+          nameOverride: current?.nameOverride ?? "",
+          descriptionOverride: current?.descriptionOverride ?? "",
+          priceOverride: current?.priceOverride ?? null,
+          emojiMode: current?.emojiMode ?? "follow",
+          placementConfig: current?.placementConfig ?? {}
+        })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error || "販売対象から除外できませんでした。");
+      await recaptureReconciliationPlatform(platform.platformKey);
+      setMessage(`${issue.targetLabel}を${platform.platformName}の販売対象から外し、再取込を開始しました。`);
+      await loadMenus(selectedItemId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "対応を保存できませんでした。");
+    } finally {
+      setReconciliationAction("");
+    }
+  }
+
+  async function adoptReconciliationCandidate(
+    platform: MenuPublishPreviewPlatform,
+    issue: MenuPlatformReconciliationIssue,
+    candidate: MenuPlatformReconciliationIssue["candidates"][number]
+  ) {
+    const externalPlatform = brandExternalPlatforms.find((entry) => entry.platformKey === platform.platformKey);
+    if (!externalPlatform) return;
+    const actionKey = `${issue.id}:${candidate.externalId}`;
+    setReconciliationAction(actionKey);
+    setMessage("");
+    try {
+      const response = await fetch("/api/menus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "platformObjectMapping",
+          brandId: activeBrandId,
+          externalPlatformId: externalPlatform.id,
+          targetType: issue.targetType,
+          targetId: issue.targetId,
+          externalId: candidate.externalId
+        })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error || "候補を固定できませんでした。");
+      await recaptureReconciliationPlatform(platform.platformKey);
+      setMessage(`${candidate.name}を対応先に固定し、再取込を開始しました。`);
+      await loadMenus(selectedItemId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "候補を固定できませんでした。");
+    } finally {
+      setReconciliationAction("");
+    }
   }
 
   async function resolvePlatformCandidate(candidate: MenuPlatformImportCandidate, action: "ignore" | "restore" | "create_draft") {
@@ -2066,7 +2186,13 @@ export default function MenuAdminPage() {
                             <small>{task?.status === "succeeded" ? "取込完了" : task ? getMenuTaskStatus(task) : "まだ取込していません"}</small>
                           </div>
                           <div>
-                            <span>{isComplete ? getBaselineQuality(row.preview) : isFailed ? task?.errorDetail || "再試行してください" : isRunning ? "Bridge 処理中" : "未実行"}</span>
+                            {needsReview && row.preview ? (
+                              <button className="menu-capture-review-link" type="button" onClick={() => openPlatformReconciliation(row.platformKey as MenuPublishPreviewPlatform["platformKey"])}>
+                                {getBaselineQuality(row.preview)}
+                              </button>
+                            ) : (
+                              <span>{isComplete ? getBaselineQuality(row.preview) : isFailed ? task?.errorDetail || "再試行してください" : isRunning ? "Bridge 処理中" : "未実行"}</span>
+                            )}
                             {task ? <small>{formatDateTime(task.completedAt || task.createdAt)}</small> : null}
                           </div>
                         </div>
@@ -2093,7 +2219,7 @@ export default function MenuAdminPage() {
                             <small>{platform.ruleVersion}</small>
                           </div>
                           <span className={platform.baselineStatus === "ready" ? "is-ready" : "is-blocked"}>
-                            {platform.baselineStatus === "ready" ? "基準取込済み" : "基準未取込"}
+                            {platform.baselineStatus === "ready" ? "基準取込済み" : platform.baselineCapturedAt ? "取込済み・要確認" : "基準未取込"}
                           </span>
                         </div>
                         <p className="menu-publish-rule-summary">{getPlatformRuleSummary(platform.platformKey)}</p>
@@ -2103,7 +2229,12 @@ export default function MenuAdminPage() {
                           ))}
                           {!platform.changes.length ? <span className="is-empty">確定差分なし</span> : null}
                         </div>
-                        {platform.blockers.map((blocker) => (
+                        {platform.blockers.map((blocker) => platform.reconciliationIssues?.length && blocker.includes("取込結果") ? (
+                          <button className="menu-publish-notice is-blocker is-actionable" type="button" key={blocker} onClick={() => openPlatformReconciliation(platform.platformKey)}>
+                            <AlertTriangle size={14} />
+                            <span>{blocker}</span>
+                          </button>
+                        ) : (
                           <p className="menu-publish-notice is-blocker" key={blocker}>
                             <AlertTriangle size={14} />
                             <span>{blocker}</span>
@@ -2115,6 +2246,65 @@ export default function MenuAdminPage() {
                             <span>{warning}</span>
                           </p>
                         ))}
+                        {platform.reconciliationIssues?.length ? (
+                          <details className="menu-reconciliation-details" id={`menu-reconciliation-${platform.platformKey}`}>
+                            <summary>
+                              <span>対応確認 {platform.reconciliationIssues.length}件</span>
+                              <small>所属先を見て、その場で処理</small>
+                            </summary>
+                            <div className="menu-reconciliation-list">
+                              {platform.reconciliationIssues.map((issue) => (
+                                <article className={`menu-reconciliation-row is-${issue.issueKind}`} key={issue.id}>
+                                  <div className="menu-reconciliation-heading">
+                                    <span>{issue.issueKind === "multiple" ? "候補重複" : "未検出"}</span>
+                                    <div>
+                                      <strong>{issue.targetLabel}</strong>
+                                      <small>{issue.targetType === "item" ? "商品" : "選択肢"} / {issue.locationLabel}</small>
+                                    </div>
+                                  </div>
+                                  {issue.issueKind === "multiple" ? (
+                                    <div className="menu-reconciliation-candidates">
+                                      <p>Uber に複数候補があります。正しい1件を固定してください。</p>
+                                      {issue.candidates.map((candidate) => (
+                                        <div className="menu-reconciliation-candidate" key={candidate.externalId}>
+                                          <div>
+                                            <strong>{candidate.name}</strong>
+                                            <small>{candidate.price === null ? "価格未取得" : `¥${candidate.price.toLocaleString("ja-JP")}`}</small>
+                                          </div>
+                                          <button
+                                            className="secondary-button compact-button"
+                                            type="button"
+                                            disabled={Boolean(reconciliationAction)}
+                                            onClick={() => void adoptReconciliationCandidate(platform, issue, candidate)}
+                                          >
+                                            {reconciliationAction === `${issue.id}:${candidate.externalId}` ? "固定中" : "この候補に固定"}
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p>Uber の最新メニューに対応先がありません。Uber に追加するか、この配信先では販売しないかを決めてください。</p>
+                                  )}
+                                  <div className="menu-reconciliation-actions">
+                                    <button className="secondary-button compact-button" type="button" onClick={() => openReconciliationTarget(issue)}>
+                                      OS の設定を開く
+                                    </button>
+                                    {issue.issueKind === "missing" ? (
+                                      <button
+                                        className="secondary-button compact-button"
+                                        type="button"
+                                        disabled={Boolean(reconciliationAction)}
+                                        onClick={() => void disableReconciliationTarget(platform, issue)}
+                                      >
+                                        {reconciliationAction === `${issue.id}:disable` ? "保存中" : `${platform.platformName}では販売しない`}
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </article>
+                              ))}
+                            </div>
+                          </details>
+                        ) : null}
                         {platform.changes.length ? (
                           <details className="menu-publish-change-details">
                             <summary>差分 {platform.changes.length}件を見る</summary>
@@ -2124,6 +2314,7 @@ export default function MenuAdminPage() {
                                   <span className={`menu-publish-change-kind is-${change.kind}`}>{getPublishChangeLabel(change.kind)}</span>
                                   <div>
                                     <strong>{change.targetLabel}</strong>
+                                    {change.locationLabel ? <span className="menu-publish-change-location">{change.targetType === "item" ? "商品" : change.targetType === "option" ? "選択肢" : "対象"} / {change.locationLabel}</span> : null}
                                     <p>{change.summary}</p>
                                     {change.currentValue || change.projectedValue ? (
                                       <small>

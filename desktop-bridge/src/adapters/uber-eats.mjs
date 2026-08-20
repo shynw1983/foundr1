@@ -335,6 +335,7 @@ export class UberEatsAdapter {
           normalizedFallbackNames: [...new Set(target.fallbackNames.map(normalize).filter(Boolean))],
           normalizedAliasNames: [...new Set(target.aliasNames.map(normalize).filter(Boolean))]
         }));
+        const unmappedTargetRows = targetRows.filter((target) => !target.knownExternalIds.length);
         const anchors = [...document.querySelectorAll('a[href*="/items/"]')]
           .filter((anchor) => anchor.getClientRects().length);
         const unique = [...new Map(anchors.map((anchor) => [anchor.href, anchor])).values()];
@@ -353,7 +354,7 @@ export class UberEatsAdapter {
           const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.includes(externalId));
           const tieredMatch = mappedCandidates.length
             ? { candidates: mappedCandidates, matchBasis: "external_id" }
-            : selectTieredCandidates(targetRows, nameParts);
+            : selectTieredCandidates(unmappedTargetRows, nameParts);
           const candidates = tieredMatch.candidates;
           const target = candidates.length === 1 ? candidates[0] : null;
           const lines = (record?.innerText ?? "").split("\\n").map((line) => line.trim()).filter(Boolean);

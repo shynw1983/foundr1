@@ -32,6 +32,7 @@ async function loadPreview(brandId: string) {
         id::text,
         coalesce(external_id, '') as "externalId",
         name,
+        category,
         coalesce(display_names, '{}'::jsonb) as "displayNames",
         base_price::float as "basePrice",
         is_active as "isActive"
@@ -41,7 +42,7 @@ async function loadPreview(brandId: string) {
       order by sort_order, name
     `,
     sql`
-      select id::text, group_key as "groupKey"
+      select id::text, group_key as "groupKey", name as "groupName"
       from menu_option_groups
       where brand_id = ${brandId}
     `,
@@ -191,6 +192,7 @@ async function loadPreview(brandId: string) {
       id: String(item.id),
       externalId: String(item.externalId),
       name: String(item.name),
+      category: String(item.category ?? ""),
       displayNames: item.displayNames as Record<string, string>,
       basePrice: item.basePrice === null ? null : Number(item.basePrice),
       isActive: item.isActive === true,
@@ -201,6 +203,7 @@ async function loadPreview(brandId: string) {
       groupKey: groupKeyById.get(String(option.optionGroupId)) ?? "",
       optionKey: String(option.optionKey),
       name: String(option.name),
+      groupLabel: String(groups.find((group) => String(group.id) === String(option.optionGroupId))?.groupName ?? ""),
       displayNames: option.displayNames as Record<string, string>,
       priceDelta: option.priceDelta === null ? null : Number(option.priceDelta),
       isActive: option.isActive === true,

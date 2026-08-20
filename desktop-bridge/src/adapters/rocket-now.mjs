@@ -167,6 +167,7 @@ async function readAllRows(page, targets, targetKind) {
   return page.evaluate(({ targets: items, defaultKind }) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const targetRows = items.map((item) => ({ ...item, normalizedNames: [...new Set(item.names.map(normalize).filter(Boolean))] }));
+    const unmappedTargetRows = targetRows.filter((target) => !target.knownExternalIds.length);
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")]
       .filter((title) => title.getClientRects().length);
     const rowFor = (element) => {
@@ -195,7 +196,7 @@ async function readAllRows(page, targets, targetKind) {
       const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.some((knownId) => knownId === externalId || checkboxIds.includes(knownId)));
       const candidates = mappedCandidates.length
         ? mappedCandidates
-        : targetRows.filter((target) => target.normalizedNames.some((name) => parts.includes(name)));
+        : unmappedTargetRows.filter((target) => target.normalizedNames.some((name) => parts.includes(name)));
      const target = candidates.length === 1 ? candidates[0] : null;
       return {
         targetId: target?.targetId ?? "",

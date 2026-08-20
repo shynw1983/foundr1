@@ -147,3 +147,36 @@ test("blocks publication when a captured baseline has unmatched targets", () => 
   assert.equal(rocket?.baselineStatus, "missing");
   assert.equal(rocket?.blockers.some((blocker) => blocker.includes("1件")), true);
 });
+
+test("describes unmatched targets with their OS group and actionable candidates", () => {
+  const preview = buildDeliveryMenuPublishPreview({
+    items: [],
+    options: [{
+      id: "replacement",
+      groupKey: "noodle-replacement",
+      groupLabel: "麺の種類を変更する",
+      optionKey: "replace-corn",
+      name: "トウモロコシ麺に変更",
+      displayNames: {},
+      priceDelta: 170,
+      isActive: true
+    }],
+    platformBaselines: {
+      uber_eats: {
+        capturedAt: "2026-08-21",
+        items: [],
+        options: [
+          { targetId: "replacement", externalId: "uber-a", name: "トウモロコシ麺に変更 A", price: 213 },
+          { targetId: "replacement", externalId: "uber-b", name: "トウモロコシ麺に変更 B", price: 213 }
+        ],
+        complete: false,
+        missingTargets: ["トウモロコシ麺に変更"]
+      }
+    }
+  });
+  const uber = preview.platforms.find((platform) => platform.platformKey === "uber_eats");
+  assert.equal(uber?.reconciliationIssues[0]?.issueKind, "multiple");
+  assert.equal(uber?.reconciliationIssues[0]?.locationLabel, "選択グループ: 麺の種類を変更する");
+  assert.deepEqual(uber?.reconciliationIssues[0]?.candidates.map((candidate) => candidate.externalId), ["uber-a", "uber-b"]);
+  assert.equal(uber?.blockers.some((blocker) => blocker.includes("候補重複 1件")), true);
+});

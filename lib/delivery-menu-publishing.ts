@@ -13,6 +13,7 @@ export type MenuProjectionItem = {
   id: string;
   externalId: string;
   name: string;
+  category?: string;
   displayNames?: Record<string, string>;
   basePrice: number | null;
   isActive: boolean;
@@ -24,6 +25,7 @@ export type MenuProjectionOption = {
   groupKey: string;
   optionKey: string;
   name: string;
+  groupLabel?: string;
   displayNames?: Record<string, string>;
   priceDelta: number | null;
   isActive: boolean;
@@ -87,6 +89,7 @@ export type MenuPublishPreviewChange = {
   targetType: "item" | "option" | "category" | "option_group" | "other";
   targetId?: string;
   targetLabel: string;
+  locationLabel?: string;
   kind: MenuPublishChangeKind;
   summary: string;
   currentValue?: string;
@@ -97,6 +100,20 @@ export type MenuPublishPreviewChange = {
   requiresExplicitConfirmation?: boolean;
 };
 
+export type MenuPlatformReconciliationIssue = {
+  id: string;
+  targetType: "item" | "option";
+  targetId: string;
+  targetLabel: string;
+  locationLabel: string;
+  issueKind: "missing" | "multiple";
+  candidates: Array<{
+    externalId: string;
+    name: string;
+    price: number | null;
+  }>;
+};
+
 export type MenuPublishPreviewPlatform = {
   platformKey: DeliveryMenuPlatformKey;
   platformName: string;
@@ -104,6 +121,7 @@ export type MenuPublishPreviewPlatform = {
   baselineStatus: "ready" | "missing";
   baselineCapturedAt: string | null;
   changes: MenuPublishPreviewChange[];
+  reconciliationIssues: MenuPlatformReconciliationIssue[];
   warnings: string[];
   blockers: string[];
 };
@@ -284,6 +302,9 @@ function compareTarget(input: {
 }) {
   const { platform, platformKey, rule, targetType, target, baseline, basePrice, setting } = input;
   const enabled = target.isActive && setting?.isEnabled !== false;
+  const locationLabel = targetType === "item"
+    ? `分類: ${(target as MenuProjectionItem).category || "未分類"}`
+    : `選択グループ: ${(target as MenuProjectionOption).groupLabel || (target as MenuProjectionOption).groupKey || "未設定"}`;
   const projectedName = projectDeliveryName(platformKey, target.name, target.displayNames, setting, rule);
   const projectedPrice = projectDeliveryPrice(platformKey, basePrice, setting, rule);
   const projectedState = { name: projectedName, price: projectedPrice, sourceBasePrice: basePrice, isActive: enabled };
@@ -294,6 +315,7 @@ function compareTarget(input: {
       targetType,
       targetId: target.id,
       targetLabel: target.name,
+      locationLabel,
       kind: "create",
       summary: `${platform.platformName} に対応する${targetType === "item" ? "商品" : "選択肢"}がありません。`,
       projectedValue: `${projectedName} / ${yen(projectedPrice)}`,
@@ -309,6 +331,7 @@ function compareTarget(input: {
       targetType,
       targetId: target.id,
       targetLabel: target.name,
+      locationLabel,
       kind: "disable",
       summary: `${platform.platformName} では販売停止にします。`,
       currentValue: baseline.name,
@@ -327,6 +350,7 @@ function compareTarget(input: {
       targetType,
       targetId: target.id,
       targetLabel: target.name,
+      locationLabel,
       kind: "update",
       summary: `${platform.platformName} で販売を再開します。`,
       currentValue: "販売停止",
@@ -342,6 +366,7 @@ function compareTarget(input: {
       targetType,
       targetId: target.id,
       targetLabel: target.name,
+      locationLabel,
       kind: "rename",
       summary: `${platform.platformName} の名称を更新します。`,
       currentValue: baseline.name,
@@ -360,6 +385,7 @@ function compareTarget(input: {
       targetType,
       targetId: target.id,
       targetLabel: target.name,
+      locationLabel,
       kind: "reprice",
       summary: setting?.priceOverride !== undefined && setting.priceOverride !== null
         ? "プラットフォーム個別価格を反映します。"
@@ -387,13 +413,49 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
       baselineStatus: baseline && baseline.complete !== false ? "ready" : "missing",
       baselineCapturedAt: baseline?.capturedAt ?? null,
       changes: [],
+      reconciliationIssues: [],
       warnings: [],
       blockers: []
     };
+    if (baseline?.missingTargets?.length) {
+      const missingLabels = new Set(baseline.missingTargets);
+      for (const target of input.items) {
+        if (!missingLabels.has(target.name)) continue;
+        const candidates = baseline.items.filter((entry) => entry.targetId === target.id);
+        platform.reconciliationIssues.push({
+          id: `${platformKey}:item:${target.id}`,
+          targetType: "item",
+          targetId: target.id,
+          targetLabel: target.name,
+          locationLabel: `分類: ${target.category || "未分類"}`,
+          issueKind: candidates.length > 1 ? "multiple" : "missing",
+          candidates: candidates.map((entry) => ({ externalId: entry.externalId ?? "", name: entry.name, price: entry.price }))
+        });
+      }
+      for (const target of input.options) {
+        if (!missingLabels.has(target.name)) continue;
+        const candidates = baseline.options.filter((entry) => entry.targetId === target.id);
+        platform.reconciliationIssues.push({
+          id: `${platformKey}:option:${target.id}`,
+          targetType: "option",
+          targetId: target.id,
+          targetLabel: target.name,
+          locationLabel: `選択グループ: ${target.groupLabel || target.groupKey || "未設定"}`,
+          issueKind: candidates.length > 1 ? "multiple" : "missing",
+          candidates: candidates.map((entry) => ({ externalId: entry.externalId ?? "", name: entry.name, price: entry.price }))
+        });
+      }
+    }
     const missingTranslations = missingRequiredTranslations(activeEntries, rule.requiredLanguages);
     if (missingTranslations > 0) platform.blockers.push(`商品・選択肢に必須翻訳の未入力が ${missingTranslations} 欄あります。`);
     if (!baseline) platform.blockers.push("現在のプラットフォームメニュー基準が未取込のため、正確な差分を確定できません。");
-    else if (baseline.complete === false) platform.blockers.push(`基準取込で一致しない対象が ${baseline.missingTargets?.length ?? 0}件あるため、誤操作防止のため配信を停止しています。`);
+    else if (baseline.complete === false) {
+      const missingCount = platform.reconciliationIssues.filter((issue) => issue.issueKind === "missing").length;
+      const multipleCount = platform.reconciliationIssues.filter((issue) => issue.issueKind === "multiple").length;
+      platform.blockers.push(platform.reconciliationIssues.length
+        ? `取込結果に未検出 ${missingCount}件・候補重複 ${multipleCount}件があります。下の「対応確認」を開いて処理してください。`
+        : `基準取込で一致しない対象が ${baseline.missingTargets?.length ?? 0}件あります。再取込して確認してください。`);
+    }
 
     for (const item of input.items) {
       compareTarget({
@@ -427,6 +489,7 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
             id: `${platformKey}:orphan:item:${entry.externalId ?? entry.name}`,
             targetType: "item",
             targetLabel: entry.name,
+            locationLabel: "Uber 側の商品一覧",
             kind: "delete",
             summary: "OS に対応商品がないプラットフォーム既存商品です。自動削除しません。",
             currentValue: entry.name,
@@ -441,6 +504,7 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
             id: `${platformKey}:orphan:option:${entry.externalId ?? `${entry.groupKey}:${entry.optionKey}`}`,
             targetType: "option",
             targetLabel: entry.name,
+            locationLabel: entry.groupKey ? `Uber 側グループ: ${entry.groupKey}` : "Uber 側の選択肢一覧",
             kind: "delete",
             summary: "OS に対応選択肢がないプラットフォーム既存データです。自動削除しません。",
             currentValue: entry.name,
