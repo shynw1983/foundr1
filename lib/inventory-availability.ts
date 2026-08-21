@@ -101,6 +101,7 @@ export async function applyInventoryAvailability(input: {
   isAvailable: boolean;
   stockStatus?: InventoryStockStatus;
   persistOverall?: boolean;
+  resetPlatformOverrides?: boolean;
   platforms?: InventoryPlatform[];
   platformStates?: Partial<Record<InventoryPlatform, boolean>>;
   platformOverride?: {
@@ -132,6 +133,21 @@ export async function applyInventoryAvailability(input: {
   const persistJson = JSON.stringify(persistRows.map(({ brandId, targetKind, targetId, linked }) => ({
     brandId, targetKind, targetId, linked
   })));
+
+  if (input.resetPlatformOverrides && targetRows.length) {
+    const resetJson = JSON.stringify(targetRows.map(({ targetKind, targetId }) => ({ targetKind, targetId })));
+    await sql`
+      with targets as (
+        select * from jsonb_to_recordset(${resetJson}::jsonb) as value("targetKind" text, "targetId" uuid)
+      )
+      delete from menu_platform_availability_settings settings
+      using targets
+      where settings.store_id::text = ${storeId}
+        and settings.target_kind = targets."targetKind"
+        and settings.target_id = targets."targetId"
+        and settings.platform in ('uber_eats', 'rocket_now', 'demae_can')
+    `;
+  }
 
   if (persistRows.length) {
     if (!isAvailable && stockStatus === "unavailable") {

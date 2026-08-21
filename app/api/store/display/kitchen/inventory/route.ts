@@ -314,6 +314,7 @@ export async function POST(request: Request) {
     isAvailable,
     stockStatus,
     persistOverall: body.persistOverall !== false,
+    resetPlatformOverrides: body.resetPlatformOverrides === true,
     platforms,
     platformStates,
     platformOverride: overridePlatform && overrideAvailability

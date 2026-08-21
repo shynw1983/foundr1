@@ -420,6 +420,7 @@ export default function StoreMenuPage() {
     isAvailable: boolean;
     stockStatus?: StockStatus;
     persistOverall?: boolean;
+    resetPlatformOverrides?: boolean;
     platforms?: Exclude<PlatformKey, "foundr1">[];
     platformStates?: Partial<Record<Exclude<PlatformKey, "foundr1">, boolean>>;
     overridePlatform?: PlatformKey;
@@ -466,9 +467,10 @@ export default function StoreMenuPage() {
     try {
       if (patch.stockStatus) {
         const isAvailable = patch.stockStatus !== "unavailable";
-        const platformStates = Object.fromEntries(salesPlatforms
+        const deliveryPlatforms = salesPlatforms
           .filter((platform): platform is { key: Exclude<PlatformKey, "foundr1">; label: string } => platform.key !== "foundr1")
-          .map((platform) => [platform.key, effectiveAvailability(patch.stockStatus as StockStatus, item.platformAvailability[platform.key] ?? "follow")])) as Partial<Record<Exclude<PlatformKey, "foundr1">, boolean>>;
+          .map((platform) => platform.key);
+        const platformStates = Object.fromEntries(deliveryPlatforms.map((platform) => [platform, isAvailable])) as Partial<Record<Exclude<PlatformKey, "foundr1">, boolean>>;
         const result = await applyDeliveryAvailability({
           brandId: item.brandId,
           ingredientLabel: item.name,
@@ -476,8 +478,9 @@ export default function StoreMenuPage() {
           targetKind: "item",
           isAvailable,
           stockStatus: patch.stockStatus,
-          platforms: patch.stockStatus === "low_stock" ? [] : Object.keys(platformStates) as Exclude<PlatformKey, "foundr1">[],
-          platformStates
+          platforms: patch.stockStatus === "low_stock" ? [] : deliveryPlatforms,
+          platformStates,
+          resetPlatformOverrides: patch.stockStatus !== "low_stock"
         });
         setItems((current) => current.map((entry) => {
           const state = result.targetStates.get(entry.id);
@@ -530,9 +533,10 @@ export default function StoreMenuPage() {
     try {
       if (patch.stockStatus) {
         const isAvailable = patch.stockStatus !== "unavailable";
-        const platformStates = Object.fromEntries(salesPlatforms
+        const deliveryPlatforms = salesPlatforms
           .filter((platform): platform is { key: Exclude<PlatformKey, "foundr1">; label: string } => platform.key !== "foundr1")
-          .map((platform) => [platform.key, effectiveAvailability(patch.stockStatus as StockStatus, option.platformAvailability[platform.key] ?? "follow")])) as Partial<Record<Exclude<PlatformKey, "foundr1">, boolean>>;
+          .map((platform) => platform.key);
+        const platformStates = Object.fromEntries(deliveryPlatforms.map((platform) => [platform, isAvailable])) as Partial<Record<Exclude<PlatformKey, "foundr1">, boolean>>;
         const result = await applyDeliveryAvailability({
           brandId: option.brandId,
           ingredientLabel: option.name,
@@ -540,8 +544,9 @@ export default function StoreMenuPage() {
           targetKind: "option",
           isAvailable,
           stockStatus: patch.stockStatus,
-          platforms: patch.stockStatus === "low_stock" ? [] : Object.keys(platformStates) as Exclude<PlatformKey, "foundr1">[],
-          platformStates
+          platforms: patch.stockStatus === "low_stock" ? [] : deliveryPlatforms,
+          platformStates,
+          resetPlatformOverrides: patch.stockStatus !== "low_stock"
         });
         setOptions((current) => current.map((entry) => {
           const state = result.targetStates.get(entry.id);
