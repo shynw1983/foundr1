@@ -2427,7 +2427,21 @@ export default function MenuAdminPage() {
                           <details className="menu-publish-change-details">
                             <summary>差分 {platform.changes.length}件を見る</summary>
                             <div className="menu-publish-change-list">
-                              {platform.changes.map((change) => (
+                              {platform.changes.map((change) => {
+                                const confirmedCreateIssue: MenuPlatformReconciliationIssue | null = (
+                                  change.kind === "create"
+                                  && change.targetId
+                                  && (change.targetType === "item" || change.targetType === "option")
+                                ) ? {
+                                  id: `${platform.platformKey}:${change.targetType}:${change.targetId}`,
+                                  targetType: change.targetType,
+                                  targetId: change.targetId,
+                                  targetLabel: change.targetLabel,
+                                  locationLabel: change.locationLabel ?? (change.targetType === "item" ? "分類: 未分類" : "選択グループ: 未設定"),
+                                  issueKind: "missing",
+                                  candidates: []
+                                } : null;
+                                return (
                                 <div className="menu-publish-change-row" key={change.id}>
                                   <span className={`menu-publish-change-kind is-${change.kind}`}>{getPublishChangeLabel(change.kind)}</span>
                                   <div>
@@ -2441,7 +2455,22 @@ export default function MenuAdminPage() {
                                         {change.projectedValue ? `予定: ${change.projectedValue}` : ""}
                                       </small>
                                     ) : null}
-                                    {change.targetId && ["rename", "reprice", "update", "disable"].includes(change.kind) ? (
+                                    {confirmedCreateIssue ? (
+                                      <div className="menu-publish-change-actions">
+                                        <span>追加を配信対象として確認済み</span>
+                                        <button
+                                          className="secondary-button compact-button"
+                                          type="button"
+                                          disabled={Boolean(reconciliationAction)}
+                                          onClick={() => void disableReconciliationTarget(platform, confirmedCreateIssue)}
+                                        >
+                                          {reconciliationAction === `${confirmedCreateIssue.id}:disable` ? "保存中" : `${platform.platformName}では販売しない`}
+                                        </button>
+                                        <button className="secondary-button compact-button" type="button" onClick={() => openReconciliationTarget(confirmedCreateIssue)}>
+                                          OS 設定を編集
+                                        </button>
+                                      </div>
+                                    ) : change.targetId && ["rename", "reprice", "update", "disable"].includes(change.kind) ? (
                                       <button
                                         className="menu-publish-adopt-button"
                                         type="button"
@@ -2453,7 +2482,8 @@ export default function MenuAdminPage() {
                                   </div>
                                   {change.confidence === "provisional" ? <em>要確認</em> : null}
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </details>
                         ) : null}

@@ -10101,6 +10101,21 @@ body :where(
   text-decoration: underline;
 }
 
+.menu-publish-change-row > .menu-publish-change-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  margin-top: 3px;
+}
+
+.menu-publish-change-actions > span {
+  width: 100%;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 600;
+}
+
 .menu-platform-candidate-panel {
   border: 1px solid color-mix(in srgb, var(--amber) 30%, var(--line));
   border-radius: 8px;

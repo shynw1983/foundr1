@@ -299,14 +299,19 @@ function compareTarget(input: {
   baseline?: MenuPlatformBaselineEntry;
   basePrice: number | null;
   setting?: MenuPlatformTargetSetting;
+  sharedHighTierPrice?: number | null;
 }) {
-  const { platform, platformKey, rule, targetType, target, baseline, basePrice, setting } = input;
+  const { platform, platformKey, rule, targetType, target, baseline, basePrice, setting, sharedHighTierPrice } = input;
   const enabled = target.isActive && setting?.isEnabled !== false;
   const locationLabel = targetType === "item"
     ? `分類: ${(target as MenuProjectionItem).category || "未分類"}`
     : `選択グループ: ${(target as MenuProjectionOption).groupLabel || (target as MenuProjectionOption).groupKey || "未設定"}`;
   const projectedName = projectDeliveryName(platformKey, target.name, target.displayNames, setting, rule);
-  const projectedPrice = projectDeliveryPrice(platformKey, basePrice, setting, rule);
+  const hasPlatformPriceOverride = setting?.priceOverride !== undefined && setting.priceOverride !== null;
+  const inheritedHighTierPrice = sharedHighTierPrice !== null && sharedHighTierPrice !== undefined
+    ? Number(sharedHighTierPrice)
+    : null;
+  const projectedPrice = inheritedHighTierPrice ?? projectDeliveryPrice(platformKey, basePrice, setting, rule);
   const projectedState = { name: projectedName, price: projectedPrice, sourceBasePrice: basePrice, isActive: enabled };
   if (!baseline) {
     if (!enabled) return;
@@ -320,7 +325,9 @@ function compareTarget(input: {
       summary: `${platform.platformName} に対応する${targetType === "item" ? "商品" : "選択肢"}がありません。`,
       projectedValue: `${projectedName} / ${yen(projectedPrice)}`,
       projectedState,
-      confidence: platform.baselineStatus === "missing" ? "provisional" : "confirmed"
+      confidence: setting?.placementConfig?.confirmedPlatformCreate === true
+        ? "confirmed"
+        : platform.baselineStatus === "missing" ? "provisional" : "confirmed"
     });
     return;
   }
@@ -379,7 +386,7 @@ function compareTarget(input: {
   const sourceBaseChanged = baseline.sourceBasePrice === undefined
     || baseline.sourceBasePrice === null
     || Number(baseline.sourceBasePrice) !== Number(basePrice);
-  if (sourceBaseChanged && projectedPrice !== null && Number(projectedPrice) !== Number(baseline.price)) {
+  if ((sourceBaseChanged || inheritedHighTierPrice !== null || hasPlatformPriceOverride) && projectedPrice !== null && Number(projectedPrice) !== Number(baseline.price)) {
     platform.changes.push({
       id: `${platformKey}:${targetType}:${target.id}:reprice`,
       targetType,
@@ -387,14 +394,16 @@ function compareTarget(input: {
       targetLabel: target.name,
       locationLabel,
       kind: "reprice",
-      summary: setting?.priceOverride !== undefined && setting.priceOverride !== null
-        ? "プラットフォーム個別価格を反映します。"
+      summary: inheritedHighTierPrice !== null
+        ? "Uber Eats の確定済み配達価格を共通価格として反映します。"
+        : hasPlatformPriceOverride
+          ? "プラットフォーム個別価格を反映します。"
         : `基礎価格から ${rule.priceMultiplier} 倍で算出した価格です。`,
       currentValue: yen(baseline.price),
       projectedValue: yen(projectedPrice),
       currentState,
       projectedState,
-      confidence: setting?.priceOverride !== undefined && setting.priceOverride !== null ? "confirmed" : "provisional"
+      confidence: hasPlatformPriceOverride || inheritedHighTierPrice !== null ? "confirmed" : "provisional"
     });
   }
 }
@@ -459,7 +468,8 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
         target: item,
         baseline: findItemBaseline(item, baseline?.items ?? []),
         basePrice: item.basePrice,
-        setting: item.platformSettings?.[platformKey]
+        setting: item.platformSettings?.[platformKey],
+        sharedHighTierPrice: platformKey === "rocket_now" ? item.platformSettings?.uber_eats?.priceOverride : null
       });
     }
     for (const option of input.options) {
@@ -471,7 +481,8 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
         target: option,
         baseline: findOptionBaseline(option, baseline?.options ?? []),
         basePrice: option.priceDelta,
-        setting: option.platformSettings?.[platformKey]
+        setting: option.platformSettings?.[platformKey],
+        sharedHighTierPrice: platformKey === "rocket_now" ? option.platformSettings?.uber_eats?.priceOverride : null
       });
     }
 
