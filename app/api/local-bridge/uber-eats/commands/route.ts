@@ -414,8 +414,8 @@ export async function GET(request: Request) {
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
       and (
-        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
-        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
+        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
+        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
       )
       and status in ('pending', 'processing')
       and created_at < now() - interval '2 hours'
@@ -441,8 +441,8 @@ export async function GET(request: Request) {
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
       and (
-        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
-        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
+        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
+        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
       )
       and status = 'processing'
       and claim_expires_at < now()
@@ -529,8 +529,8 @@ export async function GET(request: Request) {
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
       and (
-        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
-        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
+        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
+        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
       )
       and status = 'processing'
       and (
@@ -567,8 +567,8 @@ export async function GET(request: Request) {
           or (platform = 'demae_can' and ${authorization.supportsDemae})
         )
         and (
-          (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
-          or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'publish_menu_changes', 'capture_menu_snapshot'))
+          (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
+          or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
         )
         and status = 'pending'
         and available_at <= now()
