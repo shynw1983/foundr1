@@ -447,18 +447,8 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
       for (const target of input.items) addIssue("item", target);
       for (const target of input.options) addIssue("option", target);
       unresolvedBaselineTargets = unhandledMissingLabels.length + platform.reconciliationIssues.length;
-      if (unresolvedBaselineTargets === 0) platform.baselineStatus = "confirmed";
     }
-    const missingTranslations = missingRequiredTranslations(activeEntries, rule.requiredLanguages);
-    if (missingTranslations > 0) platform.blockers.push(`商品・選択肢に必須翻訳の未入力が ${missingTranslations} 欄あります。`);
-    if (!baseline) platform.blockers.push("現在のプラットフォームメニュー基準が未取込のため、正確な差分を確定できません。");
-    else if (baseline.complete === false && unresolvedBaselineTargets > 0) {
-      const missingCount = platform.reconciliationIssues.filter((issue) => issue.issueKind === "missing").length;
-      const multipleCount = platform.reconciliationIssues.filter((issue) => issue.issueKind === "multiple").length;
-      platform.blockers.push(platform.reconciliationIssues.length
-        ? `取込結果に未検出 ${missingCount}件・候補重複 ${multipleCount}件があります。下の「対応確認」を開いて処理してください。`
-        : `基準取込で一致しない対象が ${unresolvedBaselineTargets}件あります。再取込して確認してください。`);
-    }
+    if (baseline && baseline.complete === false && unresolvedBaselineTargets === 0) platform.baselineStatus = "confirmed";
 
     for (const item of input.items) {
       compareTarget({
@@ -483,6 +473,57 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
         basePrice: option.priceDelta,
         setting: option.platformSettings?.[platformKey]
       });
+    }
+
+    // A target without a captured platform counterpart needs an explicit choice.
+    // Keep it out of the passive diff list until the operator confirms creation
+    // or disables it for this platform. This also catches targets omitted from a
+    // Bridge missingTargets list, which previously appeared as non-actionable
+    // provisional create rows.
+    if (baseline) {
+      const targetsByKey = new Map<string, MenuProjectionItem | MenuProjectionOption>();
+      for (const item of input.items) targetsByKey.set(`item:${item.id}`, item);
+      for (const option of input.options) targetsByKey.set(`option:${option.id}`, option);
+
+      for (const change of platform.changes) {
+        if (change.kind !== "create" || !change.targetId || (change.targetType !== "item" && change.targetType !== "option")) continue;
+        const target = targetsByKey.get(`${change.targetType}:${change.targetId}`);
+        if (!target) continue;
+        const setting = target.platformSettings?.[platformKey];
+        if (setting?.placementConfig?.confirmedPlatformCreate === true) continue;
+        const issueId = `${platformKey}:${change.targetType}:${change.targetId}`;
+        if (platform.reconciliationIssues.some((issue) => issue.id === issueId)) continue;
+        platform.reconciliationIssues.push({
+          id: issueId,
+          targetType: change.targetType,
+          targetId: change.targetId,
+          targetLabel: change.targetLabel,
+          locationLabel: change.locationLabel ?? (change.targetType === "item" ? "分類: 未分類" : "選択グループ: 未設定"),
+          issueKind: "missing",
+          candidates: []
+        });
+      }
+
+      const unresolvedIssueIds = new Set(platform.reconciliationIssues.map((issue) => issue.id));
+      platform.changes = platform.changes.filter((change) => (
+        change.kind !== "create"
+        || !change.targetId
+        || (change.targetType !== "item" && change.targetType !== "option")
+        || !unresolvedIssueIds.has(`${platformKey}:${change.targetType}:${change.targetId}`)
+      ));
+      unresolvedBaselineTargets = Math.max(unresolvedBaselineTargets, platform.reconciliationIssues.length);
+      if (platform.reconciliationIssues.length > 0) platform.baselineStatus = "missing";
+    }
+
+    const missingTranslations = missingRequiredTranslations(activeEntries, rule.requiredLanguages);
+    if (missingTranslations > 0) platform.blockers.push(`商品・選択肢に必須翻訳の未入力が ${missingTranslations} 欄あります。`);
+    if (!baseline) platform.blockers.push("現在のプラットフォームメニュー基準が未取込のため、正確な差分を確定できません。");
+    else if (unresolvedBaselineTargets > 0) {
+      const missingCount = platform.reconciliationIssues.filter((issue) => issue.issueKind === "missing").length;
+      const multipleCount = platform.reconciliationIssues.filter((issue) => issue.issueKind === "multiple").length;
+      platform.blockers.push(platform.reconciliationIssues.length
+        ? `対応未確認の未検出 ${missingCount}件・候補重複 ${multipleCount}件があります。下の「対応確認」を開いて処理してください。`
+        : `基準取込で一致しない対象が ${unresolvedBaselineTargets}件あります。再取込して確認してください。`);
     }
 
     if (baseline) {

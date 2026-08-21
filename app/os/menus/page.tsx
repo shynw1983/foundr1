@@ -2391,7 +2391,7 @@ export default function MenuAdminPage() {
                                       ))}
                                     </div>
                                   ) : (
-                                    <p>{platform.platformName} の最新メニューに対応先がありません。新規追加するか、この配信先では販売しないかを選択してください。</p>
+                                    <p>{platform.platformName} の最新メニューに対応先がありません。次回の配信で追加するか、この配信先では販売しないかを選択してください。</p>
                                   )}
                                   <div className="menu-reconciliation-actions">
                                     {issue.issueKind === "missing" ? (
@@ -2401,7 +2401,7 @@ export default function MenuAdminPage() {
                                         disabled={Boolean(reconciliationAction)}
                                         onClick={() => void confirmReconciliationCreate(platform, issue)}
                                       >
-                                        {reconciliationAction === `${issue.id}:create` ? "確認中" : `${platform.platformName}に新規追加`}
+                                        {reconciliationAction === `${issue.id}:create` ? "確認中" : "追加を配信対象にする"}
                                       </button>
                                     ) : null}
                                     {issue.issueKind === "missing" ? (

@@ -146,6 +146,39 @@ test("blocks publication when a captured baseline has unmatched targets", () => 
   const rocket = preview.platforms.find((platform) => platform.platformKey === "rocket_now");
   assert.equal(rocket?.baselineStatus, "missing");
   assert.equal(rocket?.blockers.some((blocker) => blocker.includes("1件")), true);
+  assert.equal(rocket?.reconciliationIssues.length, 1);
+  assert.equal(rocket?.changes.some((change) => change.kind === "create"), false);
+});
+
+test("turns an unconfirmed create diff into an actionable reconciliation issue", () => {
+  const preview = buildDeliveryMenuPublishPreview({
+    items: [],
+    options: [{
+      id: "new-fish-tofu",
+      groupKey: "standard",
+      groupLabel: "ベーシックトッピング",
+      optionKey: "new-fish-tofu",
+      name: "【NEW】魚豆腐",
+      displayNames: {},
+      priceDelta: 170,
+      isActive: true
+    }],
+    platformBaselines: {
+      rocket_now: {
+        capturedAt: "2026-08-22",
+        items: [],
+        options: [],
+        complete: true,
+        missingTargets: []
+      }
+    }
+  });
+  const rocket = preview.platforms.find((platform) => platform.platformKey === "rocket_now");
+  assert.equal(rocket?.baselineStatus, "missing");
+  assert.equal(rocket?.reconciliationIssues.length, 1);
+  assert.equal(rocket?.reconciliationIssues[0]?.targetLabel, "【NEW】魚豆腐");
+  assert.equal(rocket?.reconciliationIssues[0]?.locationLabel, "選択グループ: ベーシックトッピング");
+  assert.equal(rocket?.changes.some((change) => change.kind === "create"), false);
 });
 
 test("treats a confirmed platform creation as a resolved baseline target", () => {
