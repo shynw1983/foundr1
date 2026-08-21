@@ -130,7 +130,10 @@ export function resolveUberInventoryTargets(
       row,
       aliases,
       normalizedAliases: aliases.map(normalize).filter((value) => value.length >= 2),
-      canonicalKey: canonicalInventoryKey(row.externalId || row.optionKey, row.groupKey)
+      // optionKey is the OS-owned stable inventory identity. Platform imports
+      // may replace externalId (for example with an Uber UUID), so using the
+      // external ID first would orphan existing stock-out blocks.
+      canonicalKey: canonicalInventoryKey(row.optionKey || row.externalId, row.groupKey)
     };
   });
   const exactRows = preparedRows.filter(({ normalizedAliases }) =>

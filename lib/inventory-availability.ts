@@ -197,8 +197,14 @@ export async function applyInventoryAvailability(input: {
           and blocks.target_kind = targets."targetKind"
           and blocks.target_id::text = targets."targetId"
           and (
-            blocks.inventory_key = ${resolution.inventoryKey}
-            or (targets.linked = false and blocks.inventory_key like 'manual-existing:%')
+            -- An explicit restore of the directly selected item/option clears
+            -- every historical blocker for that target. Inventory identities
+            -- can change after a platform catalog import, and retaining an old
+            -- key would immediately turn the restored target unavailable again.
+            targets.linked = false
+            -- Dependent products can be blocked by several ingredients. Only
+            -- remove the blocker belonging to the ingredient being restored.
+            or blocks.inventory_key = ${resolution.inventoryKey}
           )
       `;
     }

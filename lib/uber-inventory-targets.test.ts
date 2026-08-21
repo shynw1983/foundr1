@@ -101,6 +101,22 @@ test("matches a customer-facing topping label directly", () => {
   assert.equal(result.targets[0]?.menuOptionId, "vinegar");
 });
 
+test("keeps the stable OS inventory key when a platform import replaces externalId", () => {
+  const result = resolveUberInventoryTargets("チンゲン菜", [
+    row({
+      id: "bok-choy",
+      groupKey: "standard",
+      optionKey: "bok-choy",
+      externalId: "4e6518bf-b945-4056-abff-797bec21156d",
+      name: "チンゲン菜",
+      displayNames: { zh: "上海青", en: "Bok Choy" }
+    })
+  ]);
+
+  assert.equal(result.inventoryKey, "bok-choy");
+  assert.deepEqual(result.targets.map((target) => target.menuOptionId), ["bok-choy"]);
+});
+
 test("uses an exact Chinese option name before similar yam names", () => {
   const result = resolveUberInventoryTargets("山药粉", [
     row({ id: "yam", groupKey: "noodles", optionKey: "yam-noodle", externalId: "yam-noodle", name: "山芋麺", displayNames: { zh: "山药粉" } }),
