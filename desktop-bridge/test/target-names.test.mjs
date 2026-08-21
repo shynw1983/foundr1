@@ -7,6 +7,7 @@ import { rocketInventoryUrl, uniqueLocatedRows } from "../src/adapters/rocket-no
 import {
   parseUberSoldOutDuration,
   preferCurrentUberMatches,
+  projectUberInventoryAudit,
   projectUberMenuSnapshot,
   uberTargetNameTiers,
   uberItemDetailMatches
@@ -282,4 +283,41 @@ test("captures the current Uber menu graph and keeps availability separate from 
   assert.equal(snapshot.items[0].metadata.isAvailable, false);
   assert.equal(snapshot.options[0].metadata.isAvailable, true);
   assert.equal([...snapshot.items, ...snapshot.options].some((entry) => entry.externalId === "orphan"), false);
+});
+
+test("converts an Uber menu snapshot into a read-only inventory audit", () => {
+  const audit = projectUberInventoryAudit({
+    items: [{
+      targetId: "os-product",
+      observedKind: "item",
+      metadata: { isAvailable: false }
+    }],
+    options: [{
+      targetId: "os-option",
+      observedKind: "option",
+      metadata: { isAvailable: true }
+    }, {
+      targetId: "",
+      observedKind: "option",
+      metadata: { isAvailable: false }
+    }]
+  }, 3);
+
+  assert.deepEqual(audit, {
+    outcome: "audited",
+    targetCount: 3,
+    items: [{
+      kind: "item",
+      targetId: "os-product",
+      isAvailable: false,
+      found: true,
+      status: "sold_out"
+    }, {
+      kind: "option",
+      targetId: "os-option",
+      isAvailable: true,
+      found: true,
+      status: "available"
+    }]
+  });
 });

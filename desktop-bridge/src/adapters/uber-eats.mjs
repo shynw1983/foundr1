@@ -127,6 +127,30 @@ export function projectUberMenuSnapshot(raw, requestedTargets, now = Date.now())
   };
 }
 
+export function projectUberInventoryAudit(snapshot, targetCount) {
+  const entries = [
+    ...(Array.isArray(snapshot?.items) ? snapshot.items : []),
+    ...(Array.isArray(snapshot?.options) ? snapshot.options : [])
+  ];
+  const items = entries
+    .filter((entry) => entry?.targetId && ["item", "option"].includes(entry.observedKind))
+    .map((entry) => {
+      const isAvailable = entry.metadata?.isAvailable !== false;
+      return {
+        kind: entry.observedKind,
+        targetId: entry.targetId,
+        isAvailable,
+        found: true,
+        status: isAvailable ? "available" : "sold_out"
+      };
+    });
+  return {
+    outcome: "audited",
+    targetCount: Number(targetCount ?? items.length),
+    items
+  };
+}
+
 function itemPath(value) {
   try {
     return new URL(String(value ?? "")).pathname.replace(/\/$/u, "");
@@ -429,6 +453,12 @@ export class UberEatsAdapter {
       matchedCount: entries.filter((entry) => entry.targetId).length,
       missingTargets
     };
+  }
+
+  async auditInventory(payload) {
+    const targets = Array.isArray(payload.targets) ? payload.targets : [];
+    const captured = await this.captureMenuSnapshot({ targets });
+    return projectUberInventoryAudit(captured.snapshot, targets.length);
   }
 
   async publishMenuChanges(payload, reportProgress = async () => undefined) {

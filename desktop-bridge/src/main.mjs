@@ -173,6 +173,17 @@ async function executeMenuCommand(command) {
   throw new Error(`unsupported_menu_command:${command.type}`);
 }
 
+async function executeAuditCommand(command) {
+  const platform = String(command.platform);
+  const adapter = adapters.get(platform);
+  if (!adapter || typeof adapter.auditInventory !== "function") {
+    throw new Error(`unsupported_inventory_audit:${platform}`);
+  }
+  const payload = command.payload && typeof command.payload === "object" ? command.payload : {};
+  await reportProgress(command, { phase: "auditing", attempt: 1, maxAttempts: 1 });
+  return adapter.auditInventory(payload);
+}
+
 process.once("SIGINT", async () => {
   await shutdown();
   process.exit(0);
@@ -217,9 +228,11 @@ for (;;) {
   try {
     command = await api.nextCommand();
     if (command) {
-      const result = ["publish_menu_changes", "capture_menu_snapshot"].includes(command.type)
-        ? await executeMenuCommand(command)
-        : await executeInventoryCommand(command);
+      const result = command.type === "audit_inventory"
+        ? await executeAuditCommand(command)
+        : ["publish_menu_changes", "capture_menu_snapshot"].includes(command.type)
+          ? await executeMenuCommand(command)
+          : await executeInventoryCommand(command);
       await api.acknowledge(command.id, "succeeded", result);
       continue;
     }
