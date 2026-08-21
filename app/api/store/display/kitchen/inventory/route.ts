@@ -258,7 +258,7 @@ export async function POST(request: Request) {
       where store_id::text = ${storeId}
         and platform = 'uber_eats'
         and command_type = 'audit_inventory'
-        and status = 'pending'
+        and status in ('pending', 'processing')
       order by created_at desc
       limit 1
     `;

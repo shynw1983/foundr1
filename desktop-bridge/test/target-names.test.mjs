@@ -258,6 +258,7 @@ test("captures the current Uber menu graph and keeps availability separate from 
     }
   }, [
     {
+      kind: "item",
       targetId: "os-product",
       label: "商品",
       knownExternalIds: [currentProductId],
@@ -266,6 +267,7 @@ test("captures the current Uber menu graph and keeps availability separate from 
       aliasNames: []
     },
     {
+      kind: "option",
       targetId: "os-option",
       label: "選択肢",
       knownExternalIds: [currentOptionId],
@@ -283,6 +285,50 @@ test("captures the current Uber menu graph and keeps availability separate from 
   assert.equal(snapshot.items[0].metadata.isAvailable, false);
   assert.equal(snapshot.options[0].metadata.isAvailable, true);
   assert.equal([...snapshot.items, ...snapshot.options].some((entry) => entry.externalId === "orphan"), false);
+});
+
+test("matches same-named Uber products and options within their own kinds", () => {
+  const snapshot = projectUberMenuSnapshot({
+    data: {
+      menuMapping: [{ menuType: "MENU_TYPE_FULFILLMENT_DELIVERY", menuUUID: "delivery-menu" }],
+      menus: {
+        "delivery-menu": {
+          subsectionsMap: {
+            category: { uuid: "category", displayItems: [{ uuid: "product" }] }
+          },
+          entities: {
+            customizationsMap: {
+              group: { uuid: "group", options: [{ uuid: "option" }] }
+            },
+            itemsMap: {
+              product: { itemInfo: { title: { defaultValue: "旨味マーラータンスープ" } } },
+              option: { itemInfo: { title: { defaultValue: "旨味マーラータンスープ" } } }
+            }
+          }
+        }
+      }
+    }
+  }, [{
+    kind: "item",
+    targetId: "os-product",
+    label: "旨味マーラータンスープ",
+    knownExternalIds: [],
+    exactNames: ["旨味マーラータンスープ"],
+    fallbackNames: [],
+    aliasNames: []
+  }, {
+    kind: "option",
+    targetId: "os-option",
+    label: "旨味マーラータンスープ",
+    knownExternalIds: [],
+    exactNames: ["旨味マーラータンスープ"],
+    fallbackNames: [],
+    aliasNames: []
+  }]);
+
+  assert.equal(snapshot.complete, true);
+  assert.equal(snapshot.items[0].targetId, "os-product");
+  assert.equal(snapshot.options[0].targetId, "os-option");
 });
 
 test("converts an Uber menu snapshot into a read-only inventory audit", () => {

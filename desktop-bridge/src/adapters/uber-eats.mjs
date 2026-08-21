@@ -89,10 +89,12 @@ export function projectUberMenuSnapshot(raw, requestedTargets, now = Date.now())
     if (!item) throw new Error(`uber_eats_menu_item_missing:${row.externalId}`);
     const rawName = String(item.itemInfo?.title?.defaultValue ?? "").trim();
     const nameParts = normalizeText(rawName).split(/[|｜]/u).map((part) => part.trim()).filter(Boolean);
-    const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.some((known) => known === row.externalId || known.endsWith(`/${row.externalId}`)));
+    const kindTargets = targetRows.filter((target) => !target.kind || target.kind === row.observedKind);
+    const kindUnmappedTargets = unmappedTargetRows.filter((target) => !target.kind || target.kind === row.observedKind);
+    const mappedCandidates = kindTargets.filter((target) => target.knownExternalIds.some((known) => known === row.externalId || known.endsWith(`/${row.externalId}`)));
     const tieredMatch = mappedCandidates.length
       ? { candidates: mappedCandidates, matchBasis: "external_id" }
-      : tieredTargetCandidates(unmappedTargetRows, nameParts);
+      : tieredTargetCandidates(kindUnmappedTargets, nameParts);
     const target = tieredMatch.candidates.length === 1 ? tieredMatch.candidates[0] : null;
     const currentAvailability = uberAvailability(item, now);
     return {
