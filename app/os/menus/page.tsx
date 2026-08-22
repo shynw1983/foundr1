@@ -46,6 +46,8 @@ type StoreOption = OptionItem & {
 type MenuActionNotice = {
   tone: "success" | "error" | "info";
   text: string;
+  actionLabel?: string;
+  onAction?: () => void;
 };
 
 type MenuSource = {
@@ -761,6 +763,7 @@ export default function MenuAdminPage() {
   const [selectedPublishPlatforms, setSelectedPublishPlatforms] = useState<string[]>([]);
   const [publishAction, setPublishAction] = useState<"publishing" | "capturing" | "">("");
   const [reconciliationAction, setReconciliationAction] = useState("");
+  const [platformDifferenceAction, setPlatformDifferenceAction] = useState("");
   const [actionNotice, setActionNotice] = useState<MenuActionNotice | null>(null);
   const [availabilityLinkDraft, setAvailabilityLinkDraft] = useState({
     sourceKey: "",
@@ -877,23 +880,92 @@ export default function MenuAdminPage() {
     if (!change.targetId) return;
     const externalPlatform = brandExternalPlatforms.find((entry) => entry.platformKey === platform.platformKey);
     if (!externalPlatform) return;
-    const response = await fetch("/api/menus", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kind: "adoptPlatformState",
-        brandId: activeBrandId,
-        externalPlatformId: externalPlatform.id,
-        targetType: change.targetType,
-        targetId: change.targetId,
-        adoptName: change.kind === "rename",
-        adoptPrice: change.kind === "reprice",
-        adoptAvailability: change.kind === "update" || change.kind === "disable"
-      })
-    });
-    const result = await response.json().catch(() => ({})) as { error?: string };
-    setMessage(response.ok ? `${platform.platformName} の現在値を OS の個別設定に取り込みました。` : result.error || "プラットフォームの現在値を取り込めませんでした。");
-    if (response.ok) await loadMenus(selectedItemId);
+    const previousSetting = data.platformTargetSettings.find((setting) => (
+      setting.externalPlatformId === externalPlatform.id
+      && setting.targetType === change.targetType
+      && setting.targetId === change.targetId
+    ));
+    const actionKey = `${platform.platformKey}:${change.id}:adopt`;
+    setPlatformDifferenceAction(actionKey);
+    try {
+      const response = await fetch("/api/menus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "adoptPlatformState",
+          brandId: activeBrandId,
+          externalPlatformId: externalPlatform.id,
+          targetType: change.targetType,
+          targetId: change.targetId,
+          adoptName: change.kind === "rename",
+          adoptPrice: change.kind === "reprice",
+          adoptAvailability: change.kind === "update" || change.kind === "disable"
+        })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error || "プラットフォームの現在値を取り込めませんでした。");
+      const fieldLabel = change.kind === "rename" ? "名称" : change.kind === "reprice" ? "価格" : "販売状態";
+      const successMessage = `${platform.platformName} の現在${fieldLabel}を OS の個別設定として維持しました。プラットフォームは更新していません。`;
+      setMessage(successMessage);
+      setActionNotice({
+        tone: "success",
+        text: successMessage,
+        actionLabel: "元に戻す",
+        onAction: () => void restorePlatformDifference(platform, change, previousSetting)
+      });
+      await loadMenus(selectedItemId);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "プラットフォームの現在値を取り込めませんでした。";
+      setMessage(errorMessage);
+      setActionNotice({ tone: "error", text: errorMessage });
+    } finally {
+      setPlatformDifferenceAction("");
+    }
+  }
+
+  async function restorePlatformDifference(
+    platform: MenuPublishPreviewPlatform,
+    change: MenuPublishPreviewChange,
+    previousSetting?: MenuPlatformTargetSetting
+  ) {
+    if (!change.targetId) return;
+    const externalPlatform = brandExternalPlatforms.find((entry) => entry.platformKey === platform.platformKey);
+    if (!externalPlatform) return;
+    setActionNotice(null);
+    const actionKey = `${platform.platformKey}:${change.id}:restore`;
+    setPlatformDifferenceAction(actionKey);
+    try {
+      const response = await fetch("/api/menus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "platformTargetSetting",
+          brandId: activeBrandId,
+          storeId: previousSetting?.storeId ?? "",
+          externalPlatformId: externalPlatform.id,
+          targetType: change.targetType,
+          targetId: change.targetId,
+          isEnabled: previousSetting?.isEnabled ?? true,
+          nameOverride: previousSetting?.nameOverride ?? "",
+          descriptionOverride: previousSetting?.descriptionOverride ?? "",
+          priceOverride: previousSetting?.priceOverride ?? null,
+          emojiMode: previousSetting?.emojiMode ?? "follow",
+          placementConfig: previousSetting?.placementConfig ?? {}
+        })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error || "維持したプラットフォーム値を元に戻せませんでした。");
+      const successMessage = `${platform.platformName} の現在値の維持を取り消し、クリック前の OS 設定に戻しました。`;
+      setMessage(successMessage);
+      setActionNotice({ tone: "success", text: successMessage });
+      await loadMenus(selectedItemId);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "維持したプラットフォーム値を元に戻せませんでした。";
+      setMessage(errorMessage);
+      setActionNotice({ tone: "error", text: errorMessage });
+    } finally {
+      setPlatformDifferenceAction("");
+    }
   }
 
   function openPlatformReconciliation(platformKey: MenuPublishPreviewPlatform["platformKey"]) {
@@ -1178,7 +1250,7 @@ export default function MenuAdminPage() {
 
   useEffect(() => {
     if (!actionNotice) return;
-    const timer = window.setTimeout(() => setActionNotice(null), 7000);
+    const timer = window.setTimeout(() => setActionNotice(null), actionNotice.onAction ? 15000 : 7000);
     return () => window.clearTimeout(timer);
   }, [actionNotice]);
 
@@ -2029,7 +2101,10 @@ export default function MenuAdminPage() {
           <div className={`menu-action-toast is-${actionNotice.tone}`} role={actionNotice.tone === "error" ? "alert" : "status"} aria-live="polite">
             {actionNotice.tone === "success" ? <CheckCircle2 size={18} aria-hidden="true" /> : actionNotice.tone === "error" ? <AlertTriangle size={18} aria-hidden="true" /> : <Info size={18} aria-hidden="true" />}
             <span>{actionNotice.text}</span>
-            <button type="button" aria-label="通知を閉じる" onClick={() => setActionNotice(null)}>×</button>
+            {actionNotice.onAction && actionNotice.actionLabel ? (
+              <button className="menu-action-toast-action" type="button" onClick={actionNotice.onAction}>{actionNotice.actionLabel}</button>
+            ) : null}
+            <button className="menu-action-toast-close" type="button" aria-label="通知を閉じる" onClick={() => setActionNotice(null)}>×</button>
           </div>
         ) : null}
         <div className="workspace-heading">
@@ -2471,13 +2546,23 @@ export default function MenuAdminPage() {
                                         </button>
                                       </div>
                                     ) : change.targetId && ["rename", "reprice", "update", "disable"].includes(change.kind) ? (
-                                      <button
-                                        className="menu-publish-adopt-button"
-                                        type="button"
-                                        onClick={() => void adoptPlatformDifference(platform, change)}
-                                      >
-                                        プラットフォーム現在値を採用
-                                      </button>
+                                      <div className="menu-publish-adopt-action">
+                                        <button
+                                          className="menu-publish-adopt-button"
+                                          type="button"
+                                          disabled={Boolean(platformDifferenceAction)}
+                                          onClick={() => void adoptPlatformDifference(platform, change)}
+                                        >
+                                          {platformDifferenceAction === `${platform.platformKey}:${change.id}:adopt`
+                                            ? "保存中"
+                                            : change.kind === "rename"
+                                              ? `${platform.platformName} の現在名称を維持`
+                                              : change.kind === "reprice"
+                                                ? `${platform.platformName} の現在価格を維持`
+                                                : `${platform.platformName} の現在販売状態を維持`}
+                                        </button>
+                                        <small>OS の{platform.platformName}個別設定に保存し、次回配信でもこの値を維持します。今すぐプラットフォームは更新しません。</small>
+                                      </div>
                                     ) : null}
                                   </div>
                                   {change.confidence === "provisional" ? <em>要確認</em> : null}

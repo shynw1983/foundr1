@@ -9104,7 +9104,7 @@ body :where(
   inset-block-start: 18px;
   inset-inline-end: 18px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   gap: 9px;
   align-items: start;
   width: min(420px, calc(100vw - 36px));
@@ -9129,7 +9129,8 @@ body :where(
   color: var(--blue);
 }
 
-.menu-action-toast > button {
+.menu-action-toast-close {
+  grid-column: -2 / -1;
   display: grid;
   place-items: center;
   width: 24px;
@@ -9145,7 +9146,25 @@ body :where(
   cursor: pointer;
 }
 
-.menu-action-toast > button:focus-visible {
+.menu-action-toast-action {
+  align-self: center;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  color: currentColor;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.menu-action-toast-action:hover {
+  background: var(--green-soft);
+}
+
+.menu-action-toast button:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 1px;
 }
@@ -10099,6 +10118,22 @@ body :where(
 
 .menu-publish-adopt-button:hover {
   text-decoration: underline;
+}
+
+.menu-publish-adopt-button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.menu-publish-adopt-action {
+  display: grid;
+  justify-items: start;
+  gap: 1px;
+}
+
+.menu-publish-adopt-action > small {
+  max-width: 58ch;
+  font-size: 10px;
 }
 
 .menu-publish-change-row > .menu-publish-change-actions {
