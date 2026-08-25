@@ -102,6 +102,7 @@ export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const params = new URL(request.url).searchParams;
+  const includeAvailable = params.get("scope") === "all";
   const storeId = await authorizeStore(session, text(params.get("storeId"), 80));
   const commandId = text(params.get("commandId"), 80);
   if (!storeId) return Response.json({ error: "状態を確認できません。" }, { status: 400 });
@@ -131,7 +132,7 @@ export async function GET(request: Request) {
     `;
     const optionGroups = new Map<string, Record<string, unknown>>();
     for (const row of optionRows as Array<UberInventoryOptionRow & { statusNote: string }>) {
-      if (row.isAvailable) continue;
+      if (!includeAvailable && row.isAvailable) continue;
       const brandRows = (optionRows as Array<UberInventoryOptionRow & { statusNote: string }>)
         .filter((candidate) => candidate.brandId === row.brandId);
       const label = inventoryDisplayLabel(row.name, row.statusNote, row.displayNames);
@@ -143,7 +144,9 @@ export async function GET(request: Request) {
         /noodle/i.test(target.groupKey) && !/replacement/i.test(target.groupKey)
       )) ?? resolved.targets[0];
       const preferredRow = brandRows.find((candidate) => candidate.id === preferredTarget?.targetId);
-      const displayLabel = /^厨房画面:/u.test(row.statusNote)
+      const displayLabel = includeAvailable
+        ? row.name
+        : /^厨房画面:/u.test(row.statusNote)
         ? label
         : preferredRow
           ? inventoryDisplayLabel(preferredRow.name, preferredRow.statusNote, preferredRow.displayNames)
@@ -153,6 +156,8 @@ export async function GET(request: Request) {
         ingredientLabel: displayLabel,
         targetKind: "option",
         brandId: row.brandId,
+        isAvailable: resolved.targets.every((target) => target.isAvailable),
+        searchLabels: Array.from(new Set(resolved.targets.flatMap((target) => target.aliases))),
         targets: resolved.targets.map((target) => ({
           kind: target.kind,
           targetId: target.targetId,
@@ -184,12 +189,16 @@ export async function GET(request: Request) {
       order by menu_catalog_items.sort_order
     `;
     const itemGroups = (itemRows as Array<UberInventoryItemRow & { statusNote: string }>)
-      .filter((row) => !row.isAvailable)
+      .filter((row) => includeAvailable || !row.isAvailable)
       .map((row) => ({
         inventoryKey: `item:${row.externalId || row.id}`,
-        ingredientLabel: inventoryDisplayLabel(row.name, row.statusNote, row.displayNames),
+        ingredientLabel: includeAvailable
+          ? row.name
+          : inventoryDisplayLabel(row.name, row.statusNote, row.displayNames),
         targetKind: "item" as const,
         brandId: row.brandId,
+        isAvailable: row.isAvailable,
+        searchLabels: inventoryAliases(row.name, row.displayNames),
         targets: [{
           kind: "item" as const,
           targetId: row.id,
@@ -201,7 +210,11 @@ export async function GET(request: Request) {
       }));
 
     return Response.json({
-      items: [...optionGroups.values(), ...itemGroups]
+      scope: includeAvailable ? "all" : "unavailable",
+      storeId,
+      items: includeAvailable
+        ? [...itemGroups, ...optionGroups.values()]
+        : [...optionGroups.values(), ...itemGroups]
     }, { headers: { "Cache-Control": "no-store" } });
   }
   const rows = await sql`

@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">Foundr1 Store</string>
     <string name="default_app_url">https://www.foundr1.jp/store/pos</string>
+    <string name="inventory_widget_description">商品・食材の欠品登録と販売再開</string>
 </resources>
