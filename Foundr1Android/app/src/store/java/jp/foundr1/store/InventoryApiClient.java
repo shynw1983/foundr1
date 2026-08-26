@@ -36,7 +36,7 @@ final class InventoryApiClient {
         body.put("action", "apply");
         body.put("storeId", item.storeId);
         body.put("brandId", item.brandId);
-        body.put("ingredientLabel", item.label);
+        body.put("ingredientLabel", item.actionLabel);
         body.put("feedbackLabel", item.label);
         body.put("targetKind", item.kind);
         body.put("isAvailable", available);
@@ -105,6 +105,9 @@ final class InventoryApiClient {
             item.put("brandId", row.optString("brandId"));
             item.put("storeId", storeId);
             item.put("isAvailable", row.optBoolean("isAvailable", true));
+            item.put("displayNames", row.optJSONObject("displayNames") == null
+                ? new JSONObject()
+                : row.optJSONObject("displayNames"));
             JSONArray labels = new JSONArray();
             labels.put(name);
             labels.put(row.optString("brandName"));

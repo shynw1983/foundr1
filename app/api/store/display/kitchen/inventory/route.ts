@@ -157,6 +157,7 @@ export async function GET(request: Request) {
         targetKind: "option",
         brandId: row.brandId,
         isAvailable: resolved.targets.every((target) => target.isAvailable),
+        displayNames: preferredRow?.displayNames ?? row.displayNames ?? {},
         searchLabels: Array.from(new Set(resolved.targets.flatMap((target) => target.aliases))),
         targets: resolved.targets.map((target) => ({
           kind: target.kind,
@@ -198,6 +199,7 @@ export async function GET(request: Request) {
         targetKind: "item" as const,
         brandId: row.brandId,
         isAvailable: row.isAvailable,
+        displayNames: row.displayNames ?? {},
         searchLabels: inventoryAliases(row.name, row.displayNames),
         targets: [{
           kind: "item" as const,

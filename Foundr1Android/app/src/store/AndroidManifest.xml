@@ -8,6 +8,15 @@
             android:launchMode="singleTop"
             android:theme="@style/QuickInventoryTheme" />
 
+        <activity
+            android:name=".InventoryWidgetConfigActivity"
+            android:exported="true"
+            android:theme="@style/QuickInventoryTheme">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".InventoryWidgetProvider"
             android:exported="false">
