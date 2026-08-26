@@ -103,8 +103,17 @@ final class InventoryApiClient {
             item.put("ingredientLabel", name);
             item.put("targetKind", kind);
             item.put("brandId", row.optString("brandId"));
+            item.put("brandName", row.optString("brandName"));
             item.put("storeId", storeId);
             item.put("isAvailable", row.optBoolean("isAvailable", true));
+            String category = "item".equals(kind) ? row.optString("category", "未分類") : "";
+            String groupName = "option".equals(kind) ? row.optString("groupName", "その他") : category;
+            item.put("category", category);
+            item.put("groupName", groupName);
+            item.put("groupDisplayNames", row.optJSONObject("groupDisplayNames") == null
+                ? new JSONObject()
+                : row.optJSONObject("groupDisplayNames"));
+            item.put("impactCount", 1);
             item.put("displayNames", row.optJSONObject("displayNames") == null
                 ? new JSONObject()
                 : row.optJSONObject("displayNames"));

@@ -16,6 +16,19 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type InventoryOptionRow = UberInventoryOptionRow & {
+  statusNote: string;
+  brandName: string;
+  groupName: string;
+  groupDisplayNames: Record<string, unknown> | null;
+};
+
+type InventoryItemRow = UberInventoryItemRow & {
+  statusNote: string;
+  brandName: string;
+  category: string;
+};
+
 function text(value: unknown, maxLength = 500) {
   return String(value ?? "").trim().slice(0, maxLength);
 }
@@ -111,7 +124,10 @@ export async function GET(request: Request) {
       select
         menu_options.id::text,
         menu_option_groups.brand_id::text as "brandId",
+        brands.name as "brandName",
         menu_option_groups.group_key as "groupKey",
+        menu_option_groups.name as "groupName",
+        menu_option_groups.display_names as "groupDisplayNames",
         menu_options.option_key as "optionKey",
         coalesce(menu_options.external_id, '') as "externalId",
         menu_options.name,
@@ -120,6 +136,7 @@ export async function GET(request: Request) {
         coalesce(menu_option_store_settings.status_note, '') as "statusNote"
       from menu_options
       join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
+      join brands on brands.id = menu_option_groups.brand_id
       join store_brands
         on store_brands.brand_id = menu_option_groups.brand_id
         and store_brands.store_id::text = ${storeId}
@@ -131,9 +148,9 @@ export async function GET(request: Request) {
       order by menu_option_groups.sort_order, menu_options.sort_order
     `;
     const optionGroups = new Map<string, Record<string, unknown>>();
-    for (const row of optionRows as Array<UberInventoryOptionRow & { statusNote: string }>) {
+    for (const row of optionRows as InventoryOptionRow[]) {
       if (!includeAvailable && row.isAvailable) continue;
-      const brandRows = (optionRows as Array<UberInventoryOptionRow & { statusNote: string }>)
+      const brandRows = (optionRows as InventoryOptionRow[])
         .filter((candidate) => candidate.brandId === row.brandId);
       const label = inventoryDisplayLabel(row.name, row.statusNote, row.displayNames);
       const resolved = resolveUberInventoryTargets(label, brandRows);
@@ -144,6 +161,10 @@ export async function GET(request: Request) {
         /noodle/i.test(target.groupKey) && !/replacement/i.test(target.groupKey)
       )) ?? resolved.targets[0];
       const preferredRow = brandRows.find((candidate) => candidate.id === preferredTarget?.targetId);
+      const linkedRows = resolved.targets.flatMap((target) => {
+        const linkedRow = brandRows.find((candidate) => candidate.id === target.targetId);
+        return linkedRow ? [linkedRow] : [];
+      });
       const displayLabel = includeAvailable
         ? row.name
         : /^厨房画面:/u.test(row.statusNote)
@@ -156,6 +177,12 @@ export async function GET(request: Request) {
         ingredientLabel: displayLabel,
         targetKind: "option",
         brandId: row.brandId,
+        brandName: row.brandName,
+        category: "",
+        groupName: preferredRow?.groupName ?? row.groupName,
+        groupDisplayNames: preferredRow?.groupDisplayNames ?? row.groupDisplayNames ?? {},
+        groupNames: Array.from(new Set(linkedRows.map((candidate) => candidate.groupName).filter(Boolean))),
+        impactCount: resolved.targets.length,
         isAvailable: resolved.targets.every((target) => target.isAvailable),
         displayNames: preferredRow?.displayNames ?? row.displayNames ?? {},
         searchLabels: Array.from(new Set(resolved.targets.flatMap((target) => target.aliases))),
@@ -173,12 +200,15 @@ export async function GET(request: Request) {
       select
         menu_catalog_items.id::text,
         menu_catalog_items.brand_id::text as "brandId",
+        brands.name as "brandName",
+        coalesce(menu_catalog_items.category, '未分類') as category,
         coalesce(menu_catalog_items.external_id, '') as "externalId",
         menu_catalog_items.name,
         menu_catalog_items.display_names as "displayNames",
         coalesce(menu_store_settings.is_available, true) as "isAvailable",
         coalesce(menu_store_settings.status_note, '') as "statusNote"
       from menu_catalog_items
+      join brands on brands.id = menu_catalog_items.brand_id
       join store_brands
         on store_brands.brand_id = menu_catalog_items.brand_id
         and store_brands.store_id::text = ${storeId}
@@ -189,7 +219,7 @@ export async function GET(request: Request) {
         and (menu_catalog_items.store_id is null or menu_catalog_items.store_id::text = ${storeId})
       order by menu_catalog_items.sort_order
     `;
-    const itemGroups = (itemRows as Array<UberInventoryItemRow & { statusNote: string }>)
+    const itemGroups = (itemRows as InventoryItemRow[])
       .filter((row) => includeAvailable || !row.isAvailable)
       .map((row) => ({
         inventoryKey: `item:${row.externalId || row.id}`,
@@ -198,6 +228,12 @@ export async function GET(request: Request) {
           : inventoryDisplayLabel(row.name, row.statusNote, row.displayNames),
         targetKind: "item" as const,
         brandId: row.brandId,
+        brandName: row.brandName,
+        category: row.category,
+        groupName: row.category,
+        groupDisplayNames: {},
+        groupNames: [row.category],
+        impactCount: 1,
         isAvailable: row.isAvailable,
         displayNames: row.displayNames ?? {},
         searchLabels: inventoryAliases(row.name, row.displayNames),
