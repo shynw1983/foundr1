@@ -42,6 +42,10 @@ import java.util.Set;
 public class QuickInventoryActivity extends Activity {
     public static final String EXTRA_MODE = "inventory_mode";
     public static final String EXTRA_LANGUAGE = "inventory_language";
+    public static final String EXTRA_STORE_ID = "inventory_store_id";
+    public static final String EXTRA_STORE_NAME = "inventory_store_name";
+    public static final String EXTRA_BRAND_ID = "inventory_brand_id";
+    public static final String EXTRA_BRAND_NAME = "inventory_brand_name";
     public static final String MODE_SHORTAGE = "shortage";
     public static final String MODE_RESTORE = "restore";
     private static final String UI_PREFERENCES = "quick_inventory_ui";
@@ -133,6 +137,10 @@ public class QuickInventoryActivity extends Activity {
     private final Set<String> collapsedGroupKeys = new HashSet<>();
     private String mode = MODE_SHORTAGE;
     private String language = InventoryWidgetProvider.LANGUAGE_JA;
+    private String selectedStoreId = "";
+    private String selectedStoreName = "";
+    private String selectedBrandId = "";
+    private String selectedBrandName = "";
     private String kindFilter = "all";
     private String groupFilter = "";
     private EditText searchInput;
@@ -152,12 +160,13 @@ public class QuickInventoryActivity extends Activity {
         language = InventoryWidgetProvider.LANGUAGE_ZH.equals(getIntent().getStringExtra(EXTRA_LANGUAGE))
             ? InventoryWidgetProvider.LANGUAGE_ZH
             : InventoryWidgetProvider.LANGUAGE_JA;
+        readScope(getIntent());
         Set<String> savedCollapsed = getSharedPreferences(UI_PREFERENCES, MODE_PRIVATE)
             .getStringSet(collapsedPreferenceKey(), new HashSet<>());
         if (savedCollapsed != null) collapsedGroupKeys.addAll(savedCollapsed);
         setContentView(buildContent());
 
-        JSONObject cached = InventoryApiClient.readCache(this);
+        JSONObject cached = InventoryApiClient.readCache(this, selectedStoreId);
         if (cached != null) showInventory(cached, false);
         loadInventory();
         searchInput.postDelayed(() -> {
@@ -174,7 +183,10 @@ public class QuickInventoryActivity extends Activity {
         String nextLanguage = InventoryWidgetProvider.LANGUAGE_ZH.equals(intent.getStringExtra(EXTRA_LANGUAGE))
             ? InventoryWidgetProvider.LANGUAGE_ZH
             : InventoryWidgetProvider.LANGUAGE_JA;
-        if (!nextMode.equals(mode) || !nextLanguage.equals(language)) {
+        String nextStoreId = safe(intent.getStringExtra(EXTRA_STORE_ID));
+        String nextBrandId = safe(intent.getStringExtra(EXTRA_BRAND_ID));
+        if (!nextMode.equals(mode) || !nextLanguage.equals(language)
+            || !nextStoreId.equals(selectedStoreId) || !nextBrandId.equals(selectedBrandId)) {
             setIntent(intent);
             recreate();
             return;
@@ -220,6 +232,18 @@ public class QuickInventoryActivity extends Activity {
         });
         header.addView(close, new LinearLayout.LayoutParams(dp(52), dp(48)));
         panel.addView(header);
+
+        TextView scope = new TextView(this);
+        scope.setText(scopeLabel());
+        scope.setTextColor(Color.rgb(19, 78, 58));
+        scope.setTextSize(14);
+        scope.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        scope.setGravity(Gravity.CENTER_VERTICAL);
+        scope.setPadding(dp(12), 0, dp(12), 0);
+        scope.setBackground(rounded(Color.rgb(236, 244, 240), 10));
+        LinearLayout.LayoutParams scopeParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42));
+        scopeParams.setMargins(0, 0, 0, dp(8));
+        panel.addView(scope, scopeParams);
 
         searchInput = new EditText(this);
         searchInput.setSingleLine(true);
@@ -321,8 +345,8 @@ public class QuickInventoryActivity extends Activity {
         resultStatus.setText(t("最新状態を読み込み中…", "正在读取最新状态…"));
         new Thread(() -> {
             try {
-                JSONObject body = InventoryApiClient.loadAll();
-                InventoryApiClient.saveCache(this, body);
+                JSONObject body = InventoryApiClient.loadAll(selectedStoreId);
+                InventoryApiClient.saveCache(this, selectedStoreId, body);
                 runOnUiThread(() -> showInventory(body, true));
             } catch (Exception error) {
                 runOnUiThread(() -> {
@@ -401,9 +425,10 @@ public class QuickInventoryActivity extends Activity {
         for (InventoryItem item : allItems) {
             boolean relevantState = MODE_RESTORE.equals(mode) ? !item.available : item.available;
             boolean relevantKind = "all".equals(kindFilter) || kindFilter.equals(item.kind);
+            boolean relevantBrand = selectedBrandId.isEmpty() || selectedBrandId.equals(item.brandId);
             boolean relevantGroup = groupFilter.isEmpty() || groupFilter.equals(item.groupKey);
             boolean matches = query.isEmpty() || item.searchText.contains(query);
-            if (!relevantState || !relevantKind || !relevantGroup || !matches) continue;
+            if (!relevantState || !relevantKind || !relevantBrand || !relevantGroup || !matches) continue;
             relevantItems.add(item);
             grouped.computeIfAbsent(item.groupKey, ignored -> new ArrayList<>()).add(item);
         }
@@ -436,8 +461,8 @@ public class QuickInventoryActivity extends Activity {
         }
         String action = MODE_RESTORE.equals(mode) ? t("販売を再開", "恢复销售") : t("欠品に変更", "设为缺货");
         String message = isChinese()
-            ? "已选择 " + selected.size() + " 项，来自 " + groups.size() + " 个分组。\n预计影响 " + impact + " 个关联商品或选项，并同步到已连接的销售渠道。"
-            : selected.size() + "件・" + groups.size() + "グループを選択中です。\n関連する商品・選択肢 " + impact + "件へ反映し、連携済み販売チャネルにも同期します。";
+            ? scopeLabel() + "\n已选择 " + selected.size() + " 项，来自 " + groups.size() + " 个分组。\n预计影响 " + impact + " 个关联商品或选项，并同步到已连接的销售渠道。"
+            : scopeLabel() + "\n" + selected.size() + "件・" + groups.size() + "グループを選択中です。\n関連する商品・選択肢 " + impact + "件へ反映し、連携済み販売チャネルにも同期します。";
         new AlertDialog.Builder(this)
             .setTitle(isChinese() ? "确定" + action + "吗？" : action + "しますか？")
             .setMessage(message)
@@ -587,6 +612,23 @@ public class QuickInventoryActivity extends Activity {
         if (!isChinese() || displayNames == null) return fallback == null ? "" : fallback.trim();
         String localized = displayNames.optString("zh", fallback == null ? "" : fallback).trim();
         return localized.isEmpty() ? (fallback == null ? "" : fallback.trim()) : localized;
+    }
+
+    private void readScope(Intent intent) {
+        selectedStoreId = safe(intent.getStringExtra(EXTRA_STORE_ID));
+        selectedStoreName = safe(intent.getStringExtra(EXTRA_STORE_NAME));
+        selectedBrandId = safe(intent.getStringExtra(EXTRA_BRAND_ID));
+        selectedBrandName = safe(intent.getStringExtra(EXTRA_BRAND_NAME));
+    }
+
+    private String scopeLabel() {
+        String store = selectedStoreName.isEmpty() ? t("店舗未設定", "未设置门店") : selectedStoreName;
+        String brand = selectedBrandName.isEmpty() ? t("全ブランド", "全部品牌") : selectedBrandName;
+        return store + "  ·  " + brand;
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private boolean isChinese() {

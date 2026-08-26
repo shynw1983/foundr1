@@ -12,6 +12,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 final class InventoryApiClient {
@@ -22,13 +23,23 @@ final class InventoryApiClient {
 
     private InventoryApiClient() {}
 
-    static JSONObject loadAll() throws Exception {
-        JSONObject inventory = request("GET", INVENTORY_URL + "?scope=all", null);
+    static JSONObject loadAll(String storeId) throws Exception {
+        String storeQuery = storeId == null || storeId.trim().isEmpty()
+            ? ""
+            : "&storeId=" + URLEncoder.encode(storeId.trim(), "UTF-8");
+        JSONObject inventory = request("GET", INVENTORY_URL + "?scope=all" + storeQuery, null);
         if ("all".equals(inventory.optString("scope"))) return inventory;
         // During a staged rollout the installed APK can be newer than the web API.
         // The existing menu-settings endpoint already exposes the complete catalog,
         // so never mistake the legacy sold-out-only response for the all-item list.
-        return normalizeMenuSettings(request("GET", BASE_URL + "/api/store/menu-settings", null));
+        return normalizeMenuSettings(loadConfiguration(storeId));
+    }
+
+    static JSONObject loadConfiguration(String storeId) throws Exception {
+        String query = storeId == null || storeId.trim().isEmpty()
+            ? ""
+            : "?storeId=" + URLEncoder.encode(storeId.trim(), "UTF-8");
+        return request("GET", BASE_URL + "/api/store/menu-settings" + query, null);
     }
 
     static JSONObject apply(QuickInventoryActivity.InventoryItem item, boolean available) throws Exception {
@@ -45,16 +56,16 @@ final class InventoryApiClient {
         return request("POST", INVENTORY_URL, body.toString());
     }
 
-    static void saveCache(Context context, JSONObject body) {
+    static void saveCache(Context context, String storeId, JSONObject body) {
         context.getSharedPreferences(CACHE_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putString(CACHE_KEY, body.toString())
+            .putString(cacheKey(storeId), body.toString())
             .apply();
     }
 
-    static JSONObject readCache(Context context) {
+    static JSONObject readCache(Context context, String storeId) {
         String value = context.getSharedPreferences(CACHE_NAME, Context.MODE_PRIVATE)
-            .getString(CACHE_KEY, "");
+            .getString(cacheKey(storeId), "");
         if (value == null || value.isEmpty()) return null;
         try {
             return new JSONObject(value);
@@ -63,14 +74,23 @@ final class InventoryApiClient {
         }
     }
 
-    static int unavailableCount(JSONObject body) {
+    static int unavailableCount(JSONObject body, String brandId) {
         JSONArray items = body == null ? null : body.optJSONArray("items");
         if (items == null) return 0;
         int count = 0;
         for (int index = 0; index < items.length(); index += 1) {
-            if (!items.optJSONObject(index).optBoolean("isAvailable", true)) count += 1;
+            JSONObject item = items.optJSONObject(index);
+            if (item == null) continue;
+            boolean matchesBrand = brandId == null || brandId.trim().isEmpty()
+                || brandId.equals(item.optString("brandId"));
+            if (matchesBrand && !item.optBoolean("isAvailable", true)) count += 1;
         }
         return count;
+    }
+
+    private static String cacheKey(String storeId) {
+        String value = storeId == null ? "" : storeId.trim();
+        return CACHE_KEY + "_" + (value.isEmpty() ? "default" : value);
     }
 
     private static JSONObject normalizeMenuSettings(JSONObject source) throws Exception {
