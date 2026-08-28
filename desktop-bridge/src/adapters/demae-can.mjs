@@ -539,9 +539,77 @@ export class DemaeCanAdapter {
     await this.ensureAuthenticated(page);
     const scan = await this.readInventoryRowsWithAuthRecovery(page, targets);
     if (scan.some((item) => item.matches.length === 0)) await this.refreshInventoryPage(page);
-    const result = await readAllRows(page, targets);
-    const entries = result.entries;
-    const missingTargets = result.missingTargets;
+    const inventoryResult = await readAllRows(page, targets);
+    const catalog = await page.evaluate(async () => {
+      const getData = async (path) => {
+        const response = await fetch(path, { credentials: "include" });
+        if (!response.ok) throw new Error(`demae_can_catalog_api_${response.status}`);
+        const body = await response.json();
+        if (body?.code !== "MSA0000") throw new Error(`demae_can_catalog_api_${body?.code ?? "unknown"}`);
+        return body.data;
+      };
+      const chains = await getData("/merchant-admin/api/v1/product/search/chain-menu-pattern");
+      const chain = chains?.[0];
+      const chainId = Number(chain?.chain?.chainId ?? 0);
+      const menuPatternCode = String(chain?.menuPatternList?.[0]?.menuPatternCode ?? "");
+      if (!chainId || !menuPatternCode) throw new Error("demae_can_catalog_identity_missing");
+      const [categories, patternItems, groups] = await Promise.all([
+        getData(`/merchant-admin/api/v1/product/search/category?chainId=${chainId}&menuPatternCode=${encodeURIComponent(menuPatternCode)}`),
+        getData(`/merchant-admin/api/v1/product/chain/${chainId}/menu-pattern/${encodeURIComponent(menuPatternCode)}/item-list`),
+        getData(`/merchant-admin/api/v1/product/suggest/chain/${chainId}/menu-pattern/${encodeURIComponent(menuPatternCode)}/linked-option-group-list`)
+      ]);
+      const optionGroups = [];
+      for (const group of groups ?? []) {
+        const optionRows = await getData(`/merchant-admin/api/v1/product/chain/${chainId}/option-group/${encodeURIComponent(group.optionGroupCode)}/option-item-list`);
+        optionGroups.push({ ...group, options: optionRows ?? [] });
+      }
+      return { chainId, menuPatternCode, categories, patternItems, optionGroups };
+    });
+    const inventoryByExternalId = new Map(inventoryResult.entries.map((entry) => [entry.externalId, entry]));
+    const patternItems = new Map((catalog.patternItems?.categoryList ?? [])
+      .flatMap((category) => category.itemList ?? [])
+      .map((item) => [String(item.itemCode), item]));
+    const entries = [];
+    for (const category of catalog.categories?.categoryList ?? []) {
+      for (const item of category.itemList ?? []) {
+        const externalId = `itemList_${catalog.chainId}${item.itemCode}false`;
+        const inventory = inventoryByExternalId.get(externalId);
+        const patternItem = patternItems.get(String(item.itemCode));
+        entries.push({
+          targetId: inventory?.targetId ?? "",
+          externalId,
+          groupKey: inventory?.groupKey ?? "",
+          optionKey: inventory?.optionKey ?? "",
+          name: String(item.itemName ?? ""),
+          price: item.sizeInfoList?.[0]?.price === null || item.sizeInfoList?.[0]?.price === undefined ? null : Number(item.sizeInfoList[0].price),
+          sourceBasePrice: inventory?.sourceBasePrice ?? null,
+          isActive: inventory ? inventory.isActive : !patternItem?.stockoutType,
+          observedKind: "item",
+          metadata: { ...(inventory?.metadata ?? {}), itemCode: String(item.itemCode), categoryCode: String(category.categoryCode ?? ""), matchBasis: inventory ? "external_id" : "catalog_api" }
+        });
+      }
+    }
+    for (const group of catalog.optionGroups) {
+      for (const option of group.options) {
+        const externalId = `itemList_${catalog.chainId}${option.optionCode}true`;
+        const inventory = inventoryByExternalId.get(externalId);
+        entries.push({
+          targetId: inventory?.targetId ?? "",
+          externalId,
+          groupKey: inventory?.groupKey ?? "",
+          optionKey: inventory?.optionKey ?? "",
+          name: String(option.optionName ?? ""),
+          price: option.price === null || option.price === undefined ? null : Number(option.price),
+          sourceBasePrice: inventory?.sourceBasePrice ?? null,
+          isActive: inventory?.isActive !== false,
+          observedKind: "option",
+          metadata: { ...(inventory?.metadata ?? {}), optionCode: String(option.optionCode), optionGroupCode: String(group.optionGroupCode), optionGroupName: String(group.optionGroupName ?? ""), matchBasis: inventory ? "external_id" : "catalog_api" }
+        });
+      }
+    }
+    const matchedCounts = new Map();
+    for (const entry of entries) if (entry.targetId) matchedCounts.set(entry.targetId, (matchedCounts.get(entry.targetId) ?? 0) + 1);
+    const missingTargets = targets.filter((target) => matchedCounts.get(target.targetId) !== 1).map((target) => target.label);
     return {
       outcome: "captured",
       snapshot: {

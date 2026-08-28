@@ -225,6 +225,94 @@ async function readAllRows(page, targets, targetKind) {
   }, { targets: requested, defaultKind: targetKind });
 }
 
+async function readCatalog(page, storeId) {
+  return page.evaluate(async (merchantStoreId) => {
+    const read = async (path) => {
+      const response = await fetch(path, { credentials: "include" });
+      if (!response.ok) throw new Error(`rocket_now_catalog_api_${response.status}`);
+      const body = await response.json();
+      if (body?.code !== "SUCCESS") throw new Error(`rocket_now_catalog_api_${body?.code ?? "unknown"}`);
+      return body.data;
+    };
+    const [dishData, optionData] = await Promise.all([
+      read(`/api/v1/merchant/web/stores/${merchantStoreId}/all-menu-dishes`),
+      read(`/api/v1/merchant/web/stores/${merchantStoreId}/all-options?fetchDish=true`)
+    ]);
+    const dishes = [];
+    const seenDishIds = new Set();
+    for (const menu of dishData?.menus ?? []) {
+      for (const dish of menu.dishes ?? []) {
+        const dishId = String(dish.dishId ?? "");
+        if (!dishId || seenDishIds.has(dishId)) continue;
+        seenDishIds.add(dishId);
+        dishes.push({ ...dish, menuId: dish.menuId ?? menu.menuId });
+      }
+    }
+    const options = [];
+    for (const group of optionData ?? []) {
+      for (const option of group.optionItems ?? []) {
+        options.push({
+          ...option,
+          optionId: group.optionId,
+          optionName: group.optionName
+        });
+      }
+    }
+    return { dishes, options };
+  }, storeId);
+}
+
+function mergeCatalogEntries(inventoryEntries, catalog, targetKind) {
+  const catalogByPhysicalId = new Map();
+  if (targetKind === "item") {
+    for (const dish of catalog.dishes ?? []) {
+      catalogByPhysicalId.set(String(dish.dishId), {
+        parentId: String(dish.menuId ?? ""),
+        name: String(dish.dishName ?? ""),
+        price: dish.salePrice === null || dish.salePrice === undefined ? null : Number(dish.salePrice),
+        isActive: dish.displayStatus === "ON_SALE",
+        displayStatus: String(dish.displayStatus ?? "")
+      });
+    }
+  } else {
+    for (const option of catalog.options ?? []) {
+      catalogByPhysicalId.set(String(option.optionItemId), {
+        parentId: String(option.optionId ?? ""),
+        name: String(option.optionItemName ?? ""),
+        price: option.salePrice === null || option.salePrice === undefined ? null : Number(option.salePrice),
+        isActive: option.displayStatus === "ON_SALE",
+        displayStatus: String(option.displayStatus ?? "")
+      });
+    }
+  }
+  return inventoryEntries.map((entry) => {
+    const rowIds = Array.isArray(entry.metadata?.checkboxIds)
+      ? entry.metadata.checkboxIds
+      : String(entry.externalId ?? "").split(",");
+    const physicalIds = rowIds.map((rowId) => String(rowId).match(/^sub_checkbox_\d+_(\d+)$/u)?.[1] ?? "").filter(Boolean);
+    const matches = physicalIds.map((id) => catalogByPhysicalId.get(id)).filter(Boolean);
+    if (!matches.length) return entry;
+    const names = [...new Set(matches.map((match) => match.name).filter(Boolean))];
+    const prices = [...new Set(matches.map((match) => match.price).filter((price) => price !== null))];
+    const parentIds = [...new Set(matches.map((match) => match.parentId).filter(Boolean))];
+    return {
+      ...entry,
+      externalParentId: parentIds.join(","),
+      name: names[0] ?? entry.name,
+      price: prices.length === 1 ? prices[0] : null,
+      isActive: entry.isActive !== false && matches.every((match) => match.isActive),
+      metadata: {
+        ...(entry.metadata ?? {}),
+        physicalIds,
+        catalogDisplayStatuses: [...new Set(matches.map((match) => match.displayStatus))],
+        catalogNameConflict: names.length > 1,
+        catalogPriceConflict: prices.length > 1,
+        matchBasis: entry.targetId ? entry.metadata?.matchBasis : "catalog_api"
+      }
+    };
+  });
+}
+
 async function waitForRows(page, items, hidden, targetKind) {
   const verify = async () => page.waitForFunction(({ requested, expectedHidden }) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
@@ -381,12 +469,14 @@ export class RocketNowAdapter {
     const targets = Array.isArray(payload.targets) ? payload.targets : [];
     const entries = [];
     const missingTargets = [];
+    let catalog = null;
     for (const kind of ["item", "option"]) {
       const kindTargets = targets.filter((target) => target.kind === kind);
       const page = await this.session.goto(this.inventoryUrl(kind));
       await selectInventoryTab(page, kind);
+      catalog ??= await readCatalog(page, this.config.storeId);
       const scan = await readAllRows(page, kindTargets, kind);
-      entries.push(...scan.entries);
+      entries.push(...mergeCatalogEntries(scan.entries, catalog, kind));
       missingTargets.push(...scan.missingTargets);
     }
     return {

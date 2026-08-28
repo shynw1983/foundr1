@@ -153,12 +153,18 @@ const [existingMappings, existingTargetSettings] = await Promise.all([
 const mappingByExternal = new Map(existingMappings.map((row) => [`${row.targetType}:${row.externalId}`, row.targetId]));
 const placementByTarget = new Map(existingTargetSettings.map((row) => [`${row.targetType}:${row.targetId}`, row.placementConfig ?? {}]));
 
-const takeExisting = (candidates, used, description) => {
-  const unique = [...new Map(candidates.filter(Boolean).map((row) => [row.id, row])).values()].filter((row) => !used.has(row.id));
-  if (unique.length > 1) throw new Error(`Ambiguous OS match for ${description}: ${unique.map((row) => row.id).join(",")}`);
-  const chosen = unique[0] ?? null;
-  if (chosen) used.add(chosen.id);
-  return chosen;
+const takeExisting = (candidateTiers, used, description) => {
+  for (const tier of candidateTiers) {
+    const unique = [...new Map((Array.isArray(tier) ? tier : [tier]).filter(Boolean).map((row) => [row.id, row])).values()]
+      .filter((row) => !used.has(row.id));
+    if (unique.length > 1) throw new Error(`Ambiguous OS match for ${description}: ${unique.map((row) => row.id).join(",")}`);
+    const chosen = unique[0] ?? null;
+    if (chosen) {
+      used.add(chosen.id);
+      return chosen;
+    }
+  }
+  return null;
 };
 const usedCategoryIds = new Set();
 const desiredCategories = categories.map((category) => {
@@ -166,7 +172,7 @@ const desiredCategories = categories.map((category) => {
   const existing = takeExisting([
     existingCategories.find((row) => row.id === mappedId),
     existingCategories.find((row) => row.externalId === category.uberId),
-    ...existingCategories.filter((row) => normalize(row.name) === normalize(category.name))
+    existingCategories.filter((row) => normalize(row.name) === normalize(category.name))
   ], usedCategoryIds, `category ${category.name}`);
   return { ...category, id: existing?.id ?? randomUUID() };
 });
@@ -180,7 +186,7 @@ const desiredGroups = groups.map((group) => {
     existingGroups.find((row) => row.id === mappedId),
     existingGroups.find((row) => row.externalId === group.uberId),
     existingGroups.find((row) => row.groupKey === group.preferredKey),
-    ...existingGroups.filter((row) => normalize(row.name) === normalize(group.title))
+    existingGroups.filter((row) => normalize(row.name) === normalize(group.title))
   ], usedGroupIds, `group ${group.title}`);
   return { ...group, id: existing?.id ?? randomUUID(), groupKey: existing?.groupKey ?? group.preferredKey, existing };
 });
@@ -194,13 +200,13 @@ const desiredItems = productIds.map((uberId, index) => {
   const category = categoryForProduct.get(uberId);
   const mappedId = mappingByExternal.get(`item:${uberId}`);
   const sourceMatch = existingItems.find((row) => String(row.variableSchema?.sourceProductId ?? "") === uberId);
-  const candidates = [
+  const candidateTiers = [
     existingItems.find((row) => row.id === mappedId),
     sourceMatch,
-    ...existingItems.filter((row) => normalize(`${row.promotionPrefix}${row.name}`) === normalize(title.ja)),
-    ...existingItems.filter((row) => normalize(row.name) === normalize(japanese.name) && (!category || normalize(row.category) === normalize(category.name)))
+    existingItems.filter((row) => normalize(`${row.promotionPrefix}${row.name}`) === normalize(title.ja)),
+    existingItems.filter((row) => normalize(row.name) === normalize(japanese.name) && (!category || normalize(row.category) === normalize(category.name)))
   ];
-  const existing = takeExisting(candidates, usedItemIds, `item ${title.ja}`);
+  const existing = takeExisting(candidateTiers, usedItemIds, `item ${title.ja}`);
   const uberPrice = priceFor(item);
   const status = availability(item);
   const customizationIds = item.customizationUUIDs?.defaultValue ?? [];
@@ -226,7 +232,7 @@ for (const group of desiredGroups) {
     const existing = takeExisting([
       existingOptions.find((row) => row.id === mappedId),
       existingOptions.find((row) => row.externalId === uberId),
-      ...existingInGroup.filter((row) => normalize(row.name) === normalize(title.ja))
+      existingInGroup.filter((row) => normalize(row.name) === normalize(title.ja))
     ], usedOptionIds, `option ${group.title}/${title.ja}`);
     const uberPrice = priceFor(item);
     desiredOptions.push({

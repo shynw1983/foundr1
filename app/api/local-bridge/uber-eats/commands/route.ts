@@ -739,18 +739,29 @@ export async function POST(request: Request) {
     const payload = commandRows[0].payload && typeof commandRows[0].payload === "object"
       ? commandRows[0].payload as Record<string, unknown>
       : {};
-    await applyMenuSnapshotResult({
-      storeId: authorization.storeId,
-      platform: String(rows[0].platform ?? commandRows[0].platform ?? ""),
-      payload,
-      result
-    });
-    await sql`
-      update menu_change_sync_tasks
-      set status = 'succeeded', phase = 'verified', verified_at = now(), completed_at = now(),
-        completion_note = 'Bridge で基準取込済み', error_code = '', error_detail = '', updated_at = now()
-      where command_id = ${commandId}
-    `;
+    try {
+      await applyMenuSnapshotResult({
+        storeId: authorization.storeId,
+        platform: String(rows[0].platform ?? commandRows[0].platform ?? ""),
+        payload,
+        result
+      });
+      await sql`
+        update menu_change_sync_tasks
+        set status = 'succeeded', phase = 'verified', verified_at = now(), completed_at = now(),
+          completion_note = 'Bridge で基準取込済み', error_code = '', error_detail = '', updated_at = now()
+        where command_id = ${commandId}
+      `;
+    } catch (snapshotError) {
+      const detail = snapshotError instanceof Error ? snapshotError.message : String(snapshotError);
+      await sql`
+        update menu_change_sync_tasks
+        set status = 'failed', phase = 'failed', completed_at = now(),
+          completion_note = 'Bridge の読取は完了しましたが、基準データの保存に失敗しました',
+          error_code = 'snapshot_persistence_failed', error_detail = ${detail}, updated_at = now()
+        where command_id = ${commandId}
+      `;
+    }
   }
   if (String(rows[0].commandType) === "publish_menu_changes") {
     const payload = commandRows[0].payload && typeof commandRows[0].payload === "object"
