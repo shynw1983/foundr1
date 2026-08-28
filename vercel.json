@@ -18,7 +18,7 @@
     },
     {
       "path": "/api/cron/competitor-menu-watch",
-      "schedule": "0 7 * * *"
+      "schedule": "0 * * * *"
     }
   ]
 }

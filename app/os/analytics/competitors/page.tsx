@@ -442,7 +442,7 @@ export default function CompetitorMenuMonitorPage() {
     <AnalyticsShell
       eyebrow="Market intelligence"
       title="競合メニュー監視"
-      sourceLabel="毎日 16:00（日本時間）に全店を自動確認"
+      sourceLabel="毎時 00分（日本時間）に全店を自動確認"
       workspaceClassName="competitor-monitor-workspace"
     >
       <ActionNotice notice={notice} onClose={clearNotice} />
@@ -450,7 +450,7 @@ export default function CompetitorMenuMonitorPage() {
       <section className="competitor-monitor-strip" aria-label="監視状況">
         <div><span>監視中</span><strong>{data.summary.activeSources}</strong><small>メニュー</small></div>
         <div><span>30日間の新商品</span><strong>{data.summary.newProducts30d}</strong><small>件</small></div>
-        <div><span>最終確認</span><strong className="is-date">{formatDate(data.summary.lastCompletedAt)}</strong><small>次回 16:00</small></div>
+        <div><span>最終確認</span><strong className="is-date">{formatDate(data.summary.lastCompletedAt)}</strong><small>次回 毎時00分</small></div>
         <div className="competitor-monitor-pulse" aria-hidden="true"><Radar size={24} /><span /></div>
       </section>
 

@@ -48,7 +48,7 @@ type AnalyticsState = {
 const analyticsCards = [
   {
     title: "競合メニュー監視",
-    description: "競合店の公開メニューを毎日確認し、新商品と変更履歴を記録します。",
+    description: "競合店の公開メニューを毎時確認し、新商品と変更履歴を記録します。",
     href: "/os/analytics/competitors",
     icon: Radar,
     status: "利用可能"
