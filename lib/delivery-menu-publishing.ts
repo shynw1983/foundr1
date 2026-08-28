@@ -383,10 +383,10 @@ function compareTarget(input: {
       confidence: "confirmed"
     });
   }
-  const sourceBaseChanged = baseline.sourceBasePrice === undefined
-    || baseline.sourceBasePrice === null
-    || Number(baseline.sourceBasePrice) !== Number(basePrice);
-  if ((sourceBaseChanged || inheritedHighTierPrice !== null || hasPlatformPriceOverride) && projectedPrice !== null && Number(projectedPrice) !== Number(baseline.price)) {
+  // Always compare the platform price with the current OS projection. A price
+  // edited directly in a platform keeps the same OS sourceBasePrice, so gating
+  // this comparison on a source-price change would incorrectly hide that edit.
+  if (projectedPrice !== null && Number(projectedPrice) !== Number(baseline.price)) {
     platform.changes.push({
       id: `${platformKey}:${targetType}:${target.id}:reprice`,
       targetType,
@@ -548,6 +548,12 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
             kind: "delete",
             summary: "OS に対応商品がないプラットフォーム既存商品です。自動削除しません。",
             currentValue: entry.name,
+            currentState: {
+              name: entry.name,
+              price: entry.price,
+              isActive: entry.isActive !== false,
+              externalId: entry.externalId ?? ""
+            },
             confidence: "confirmed",
             requiresExplicitConfirmation: true
           });
@@ -563,6 +569,12 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
             kind: "delete",
             summary: "OS に対応選択肢がないプラットフォーム既存データです。自動削除しません。",
             currentValue: entry.name,
+            currentState: {
+              name: entry.name,
+              price: entry.price,
+              isActive: entry.isActive !== false,
+              externalId: entry.externalId ?? ""
+            },
             confidence: "confirmed",
             requiresExplicitConfirmation: true
           });

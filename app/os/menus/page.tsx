@@ -570,11 +570,12 @@ function getMenuTaskStatus(task: MenuSyncTask) {
 
 function getBaselineQuality(platform?: MenuPublishPreviewPlatform) {
   if (!platform?.baselineCapturedAt) return "基準データなし";
-  if (platform.baselineStatus === "ready") return "全件一致";
-  if (platform.baselineStatus === "confirmed") return "対応確認済み";
-  return platform.reconciliationIssues?.length
+  if (platform.baselineStatus === "missing") return platform.reconciliationIssues?.length
     ? `${platform.reconciliationIssues.length}件の対応確認を開く`
     : "取込結果の確認が必要";
+  if (platform.changes.length) return `${platform.changes.length}件の差分を確認`;
+  if (platform.baselineStatus === "confirmed") return "対応確認済み・差分なし";
+  return "全件一致";
 }
 
 const menuCaptureTaskLabels = new Set(["プラットフォーム基準取込", "毎日プラットフォーム全量回読"]);
@@ -973,6 +974,23 @@ export default function MenuAdminPage() {
     if (!details) return;
     details.open = true;
     details.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function openPlatformDifferences(platformKey: MenuPublishPreviewPlatform["platformKey"]) {
+    const details = document.getElementById(`menu-differences-${platformKey}`) as HTMLDetailsElement | null;
+    if (!details) return;
+    details.open = true;
+    details.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function chooseOsValueForDifference(platform: MenuPublishPreviewPlatform, change: MenuPublishPreviewChange) {
+    const fieldLabel = change.kind === "rename" ? "名称" : change.kind === "reprice" ? "価格" : "販売状態";
+    const notice = `OS の${fieldLabel}を採用します。上の「差分を配信」を押すと ${platform.platformName} が OS 値に更新されます。`;
+    setMessage(notice);
+    setActionNotice({ tone: "info", text: notice });
+    const publishButton = document.getElementById("menu-publish-submit");
+    publishButton?.scrollIntoView({ behavior: "smooth", block: "center" });
+    publishButton?.focus({ preventScroll: true });
   }
 
   function focusMenuSettingPanel() {
@@ -2326,6 +2344,7 @@ export default function MenuAdminPage() {
                         : "現在メニューを取込"}
                   </button>
                   <button
+                    id="menu-publish-submit"
                     className="primary-button compact-button"
                     type="button"
                     disabled={Boolean(publishAction) || captureRunActive || !publishStoreId || !selectedPublishPlatforms.length}
@@ -2358,7 +2377,9 @@ export default function MenuAdminPage() {
                       const isRunning = Boolean(task && runningMenuTaskStatuses.has(task.status));
                       const isFailed = task?.status === "failed";
                       const isComplete = Boolean(task && ["succeeded", "completed"].includes(task.status));
-                      const needsReview = isComplete && row.preview?.baselineStatus === "missing";
+                      const needsReview = Boolean(isComplete && row.preview && (
+                        row.preview.baselineStatus === "missing" || row.preview.changes.length > 0
+                      ));
                       return (
                         <div className={`menu-capture-progress-row${isRunning ? " is-running" : isFailed ? " is-failed" : needsReview ? " is-warning" : isComplete ? " is-complete" : ""}`} key={row.platformKey}>
                           <span className="menu-capture-progress-icon" aria-hidden="true">
@@ -2370,7 +2391,13 @@ export default function MenuAdminPage() {
                           </div>
                           <div>
                             {needsReview && row.preview ? (
-                              <button className="menu-capture-review-link" type="button" onClick={() => openPlatformReconciliation(row.platformKey as MenuPublishPreviewPlatform["platformKey"])}>
+                              <button
+                                className="menu-capture-review-link"
+                                type="button"
+                                onClick={() => row.preview?.baselineStatus === "missing"
+                                  ? openPlatformReconciliation(row.platformKey as MenuPublishPreviewPlatform["platformKey"])
+                                  : openPlatformDifferences(row.platformKey as MenuPublishPreviewPlatform["platformKey"])}
+                              >
                                 {getBaselineQuality(row.preview)}
                               </button>
                             ) : (
@@ -2401,8 +2428,12 @@ export default function MenuAdminPage() {
                             <strong>{platform.platformName}</strong>
                             <small>{platform.ruleVersion}</small>
                           </div>
-                          <span className={platform.baselineStatus === "missing" ? "is-blocked" : "is-ready"}>
-                            {platform.baselineStatus === "ready" ? "基準取込済み" : platform.baselineStatus === "confirmed" ? "対応確認済み" : platform.baselineCapturedAt ? "取込済み・要確認" : "基準未取込"}
+                          <span className={platform.baselineStatus === "missing" || platform.changes.length ? "is-blocked" : "is-ready"}>
+                            {platform.baselineStatus === "missing"
+                              ? platform.baselineCapturedAt ? "取込済み・要確認" : "基準未取込"
+                              : platform.changes.length
+                                ? `取込済み・差分 ${platform.changes.length}件`
+                                : platform.baselineStatus === "confirmed" ? "対応確認済み・一致" : "全件一致"}
                           </span>
                         </div>
                         <p className="menu-publish-rule-summary">{getPlatformRuleSummary(platform.platformKey)}</p>
@@ -2499,10 +2530,19 @@ export default function MenuAdminPage() {
                           </details>
                         ) : null}
                         {platform.changes.length ? (
-                          <details className="menu-publish-change-details">
+                          <details className="menu-publish-change-details" id={`menu-differences-${platform.platformKey}`}>
                             <summary>差分 {platform.changes.length}件を見る</summary>
+                            <p className="menu-publish-change-guidance">
+                              Bridge は、OS と{platform.platformName}のどちらで最後に変更したかを自動判定しません。現在値と OS 予定値を比較し、正しい側を選んでください。
+                            </p>
                             <div className="menu-publish-change-list">
                               {platform.changes.map((change) => {
+                                const externalId = String(change.currentState?.externalId ?? "");
+                                const platformCandidate = externalId ? brandPlatformCandidates.find((candidate) => (
+                                  candidate.platformKey === platform.platformKey
+                                  && candidate.externalId === externalId
+                                  && candidate.targetType === change.targetType
+                                )) : undefined;
                                 const confirmedCreateIssue: MenuPlatformReconciliationIssue | null = (
                                   change.kind === "create"
                                   && change.targetId
@@ -2518,17 +2558,18 @@ export default function MenuAdminPage() {
                                 } : null;
                                 return (
                                 <div className="menu-publish-change-row" key={change.id}>
-                                  <span className={`menu-publish-change-kind is-${change.kind}`}>{getPublishChangeLabel(change.kind)}</span>
+                                  <span className={`menu-publish-change-kind is-${change.kind}`}>
+                                    {change.kind === "delete" && !change.targetId ? "OS未登録" : getPublishChangeLabel(change.kind)}
+                                  </span>
                                   <div>
                                     <strong>{change.targetLabel}</strong>
                                     {change.locationLabel ? <span className="menu-publish-change-location">{change.targetType === "item" ? "商品" : change.targetType === "option" ? "選択肢" : "対象"} / {change.locationLabel}</span> : null}
                                     <p>{change.summary}</p>
                                     {change.currentValue || change.projectedValue ? (
-                                      <small>
-                                        {change.currentValue ? `現在: ${change.currentValue}` : ""}
-                                        {change.currentValue && change.projectedValue ? " → " : ""}
-                                        {change.projectedValue ? `予定: ${change.projectedValue}` : ""}
-                                      </small>
+                                      <div className="menu-publish-value-comparison">
+                                        {change.currentValue ? <small><b>{platform.platformName} 現在値</b>{change.currentValue}</small> : null}
+                                        {change.projectedValue ? <small><b>OS からの予定値</b>{change.projectedValue}</small> : null}
+                                      </div>
                                     ) : null}
                                     {confirmedCreateIssue ? (
                                       <div className="menu-publish-change-actions">
@@ -2545,23 +2586,40 @@ export default function MenuAdminPage() {
                                           OS 設定を編集
                                         </button>
                                       </div>
+                                    ) : platformCandidate ? (
+                                      <div className="menu-publish-candidate-actions">
+                                        <small>{platform.platformName}で追加された可能性があります。削除候補にはせず、扱いを選択してください。</small>
+                                        <div>
+                                          {platformCandidate.targetType === "item" && (platformCandidate.observedPayload.metadata as Record<string, unknown> | undefined)?.kindConfidence !== "unknown" ? (
+                                            <button className="primary-button compact-button" type="button" onClick={() => void resolvePlatformCandidate(platformCandidate, "create_draft")}>OS に未公開下書きとして取り込む</button>
+                                          ) : null}
+                                          <button className="secondary-button compact-button" type="button" onClick={() => void resolvePlatformCandidate(platformCandidate, "ignore")}>{platform.platformName}専用で保持</button>
+                                        </div>
+                                      </div>
                                     ) : change.targetId && ["rename", "reprice", "update", "disable"].includes(change.kind) ? (
                                       <div className="menu-publish-adopt-action">
-                                        <button
-                                          className="menu-publish-adopt-button"
-                                          type="button"
-                                          disabled={Boolean(platformDifferenceAction)}
-                                          onClick={() => void adoptPlatformDifference(platform, change)}
-                                        >
-                                          {platformDifferenceAction === `${platform.platformKey}:${change.id}:adopt`
-                                            ? "保存中"
-                                            : change.kind === "rename"
-                                              ? `${platform.platformName} の現在名称を維持`
-                                              : change.kind === "reprice"
-                                                ? `${platform.platformName} の現在価格を維持`
-                                                : `${platform.platformName} の現在販売状態を維持`}
-                                        </button>
-                                        <small>OS の{platform.platformName}個別設定に保存し、次回配信でもこの値を維持します。今すぐプラットフォームは更新しません。</small>
+                                        <small>選択してください：</small>
+                                        <div className="menu-publish-difference-decisions">
+                                          <button
+                                            className="secondary-button compact-button"
+                                            type="button"
+                                            disabled={Boolean(platformDifferenceAction)}
+                                            onClick={() => void adoptPlatformDifference(platform, change)}
+                                          >
+                                            {platformDifferenceAction === `${platform.platformKey}:${change.id}:adopt`
+                                              ? "保存中"
+                                              : `${platform.platformName}現在値を OS に採用`}
+                                          </button>
+                                          <button
+                                            className="primary-button compact-button"
+                                            type="button"
+                                            disabled={Boolean(platformDifferenceAction)}
+                                            onClick={() => chooseOsValueForDifference(platform, change)}
+                                          >
+                                            OS 値で{platform.platformName}を更新
+                                          </button>
+                                        </div>
+                                        <small>左は OS の個別設定へ保存し、右はこの差分を配信対象として残します。どちらも選択前にプラットフォームを自動更新しません。</small>
                                       </div>
                                     ) : null}
                                   </div>

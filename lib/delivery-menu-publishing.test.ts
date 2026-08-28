@@ -118,7 +118,7 @@ test("keeps an adopted platform name exact instead of appending translations aga
   ), "プラットフォームで直接編集した名称｜Custom name");
 });
 
-test("reports confirmed Uber name differences without mutating platform data", () => {
+test("reports Uber name and direct price differences without mutating platform data", () => {
   const preview = buildDeliveryMenuPublishPreview({
     items: [{ id: "1", externalId: "corn", name: "トウモロコシ麺", displayNames: { zh: "玉米面", ko: "옥수수면", en: "Corn noodles" }, basePrice: 170, isActive: true }],
     options: [],
@@ -130,7 +130,7 @@ test("reports confirmed Uber name differences without mutating platform data", (
   assert.equal(preview.mode, "read_only");
   assert.equal(uber?.baselineStatus, "ready");
   assert.equal(uber?.changes.some((change) => change.kind === "rename" && change.confidence === "confirmed"), true);
-  assert.equal(uber?.changes.some((change) => change.kind === "reprice"), false);
+  assert.equal(uber?.changes.some((change) => change.kind === "reprice"), true);
 });
 
 test("ignores invisible whitespace differences in multilingual platform names", () => {
@@ -211,7 +211,8 @@ test("compares all platform baselines and protects destructive changes", () => {
   const rocket = preview.platforms.find((platform) => platform.platformKey === "rocket_now");
   assert.equal(rocket?.baselineStatus, "ready");
   assert.equal(rocket?.changes.some((change) => change.kind === "rename" && change.targetId === "1"), true);
-  assert.equal(rocket?.changes.some((change) => change.kind === "delete" && change.requiresExplicitConfirmation), true);
+  const orphan = rocket?.changes.find((change) => change.kind === "delete" && change.requiresExplicitConfirmation);
+  assert.equal(orphan?.currentState?.externalId, "orphan");
 });
 
 test("blocks publication when a captured baseline has unmatched targets", () => {
