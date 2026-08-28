@@ -40,7 +40,7 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     category: "モジュール",
     defaultRoles: ["owner", "manager"],
     lockedRoles: ["owner"],
-    navPaths: ["/os/analytics", "/os/analytics/sales", "/os/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"]
+    navPaths: ["/os/analytics", "/os/analytics/sales", "/os/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit", "/os/analytics/competitors"]
   },
   {
     key: "module.timecard",

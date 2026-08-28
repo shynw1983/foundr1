@@ -4238,6 +4238,119 @@ create index if not exists idx_local_bridge_commands_pending
   on local_bridge_commands(store_id, platform, status, available_at, created_at);
 create index if not exists idx_sales_import_rows_batch
   on sales_import_rows(batch_id, row_index);
+
+create table if not exists competitor_menu_sources (
+  id uuid primary key default gen_random_uuid(),
+  competitor_name text not null,
+  source_name text not null default '',
+  source_url text not null unique,
+  source_type text not null default 'website',
+  is_active boolean not null default true,
+  created_by uuid references employees(id) on delete set null,
+  last_scanned_at timestamptz,
+  last_success_at timestamptz,
+  last_rating numeric(4, 2),
+  last_review_count_label text not null default '',
+  last_promotions jsonb,
+  last_error text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (source_type in ('website', 'uber_eats', 'delivery_platform', 'json'))
+);
+
+alter table competitor_menu_sources add column if not exists last_rating numeric(4, 2);
+alter table competitor_menu_sources add column if not exists last_review_count_label text not null default '';
+alter table competitor_menu_sources add column if not exists last_promotions jsonb;
+
+create table if not exists competitor_menu_scan_runs (
+  id uuid primary key default gen_random_uuid(),
+  source_id uuid not null references competitor_menu_sources(id) on delete cascade,
+  trigger_type text not null default 'scheduled',
+  status text not null default 'running',
+  item_count integer not null default 0,
+  new_item_count integer not null default 0,
+  change_count integer not null default 0,
+  error_detail text not null default '',
+  started_at timestamptz not null default now(),
+  completed_at timestamptz,
+  check (trigger_type in ('scheduled', 'manual', 'system')),
+  check (status in ('running', 'succeeded', 'failed'))
+);
+
+create table if not exists competitor_menu_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  source_id uuid not null references competitor_menu_sources(id) on delete cascade,
+  scan_run_id uuid references competitor_menu_scan_runs(id) on delete set null,
+  content_hash text not null,
+  item_count integer not null default 0,
+  payload jsonb not null default '[]'::jsonb,
+  captured_at timestamptz not null default now(),
+  unique (source_id, content_hash)
+);
+
+create table if not exists competitor_menu_items (
+  id uuid primary key default gen_random_uuid(),
+  source_id uuid not null references competitor_menu_sources(id) on delete cascade,
+  external_key text not null,
+  name text not null,
+  normalized_name text not null,
+  category text not null default '',
+  description text not null default '',
+  price numeric(12, 2),
+  currency text not null default 'JPY',
+  item_url text not null default '',
+  image_url text not null default '',
+  is_available boolean not null default true,
+  raw_payload jsonb not null default '{}'::jsonb,
+  is_present boolean not null default true,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  missing_at timestamptz,
+  updated_at timestamptz not null default now(),
+  unique (source_id, external_key)
+);
+
+create table if not exists competitor_menu_changes (
+  id uuid primary key default gen_random_uuid(),
+  source_id uuid not null references competitor_menu_sources(id) on delete cascade,
+  item_id uuid references competitor_menu_items(id) on delete set null,
+  change_type text not null,
+  title text not null,
+  summary text not null default '',
+  previous_value jsonb not null default '{}'::jsonb,
+  current_value jsonb not null default '{}'::jsonb,
+  detected_at timestamptz not null default now(),
+  notified_at timestamptz,
+  check (change_type in ('new_product', 'price_changed', 'renamed', 'category_changed', 'description_changed', 'image_changed', 'availability_changed', 'details_changed', 'item_promotion_changed', 'store_rating_changed', 'store_review_count_changed', 'store_promotion_changed', 'returned', 'removed'))
+);
+
+alter table competitor_menu_items add column if not exists description text not null default '';
+alter table competitor_menu_items add column if not exists is_available boolean not null default true;
+update competitor_menu_items
+set
+  description = trim(regexp_replace(
+    coalesce(nullif(raw_payload ->> 'itemDescription', ''), nullif(raw_payload ->> 'description', ''), description),
+    '[[:space:]]+', ' ', 'g'
+  )),
+  is_available = case
+    when coalesce((raw_payload ->> 'isSoldOut')::boolean, false) then false
+    when raw_payload ? 'isAvailable' then coalesce((raw_payload ->> 'isAvailable')::boolean, true)
+    else is_available
+  end;
+alter table competitor_menu_changes drop constraint if exists competitor_menu_changes_change_type_check;
+alter table competitor_menu_changes add constraint competitor_menu_changes_change_type_check
+  check (change_type in ('new_product', 'price_changed', 'renamed', 'category_changed', 'description_changed', 'image_changed', 'availability_changed', 'details_changed', 'item_promotion_changed', 'store_rating_changed', 'store_review_count_changed', 'store_promotion_changed', 'returned', 'removed'));
+
+create index if not exists idx_competitor_menu_sources_active
+  on competitor_menu_sources(is_active, updated_at desc);
+create index if not exists idx_competitor_menu_scan_runs_source
+  on competitor_menu_scan_runs(source_id, started_at desc);
+create index if not exists idx_competitor_menu_snapshots_source
+  on competitor_menu_snapshots(source_id, captured_at desc);
+create index if not exists idx_competitor_menu_items_source_present
+  on competitor_menu_items(source_id, is_present, last_seen_at desc);
+create index if not exists idx_competitor_menu_changes_detected
+  on competitor_menu_changes(detected_at desc, source_id);
 create index if not exists idx_procedure_books_menu_catalog_item on procedure_books(menu_catalog_item_id);
 create index if not exists idx_procedure_book_stores_store on procedure_book_stores(store_id);
 create index if not exists idx_procedure_steps_book_order on procedure_steps(procedure_book_id, sort_order);

@@ -6,6 +6,7 @@ import {
   ClipboardList,
   LineChart,
   LogOut,
+  Radar,
   WalletCards
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -22,6 +23,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "原価・経費分析", href: "/os/analytics/cost", icon: Boxes },
   { label: "経費設定", href: "/os/analytics/expenses", icon: Boxes },
   { label: "月次損益", href: "/os/analytics/profit", icon: LineChart },
+  { label: "競合メニュー監視", href: "/os/analytics/competitors", icon: Radar },
   { label: "ログアウト", href: "/os/logout", icon: LogOut }
 ];
 

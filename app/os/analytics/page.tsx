@@ -4,6 +4,7 @@ import {
   Boxes,
   ChartColumn,
   LineChart,
+  Radar,
   WalletCards
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -45,6 +46,13 @@ type AnalyticsState = {
 };
 
 const analyticsCards = [
+  {
+    title: "競合メニュー監視",
+    description: "競合店の公開メニューを毎日確認し、新商品と変更履歴を記録します。",
+    href: "/os/analytics/competitors",
+    icon: Radar,
+    status: "利用可能"
+  },
   {
     title: "売上分析",
     description: "売上、入金見込み、チャネル、忙しさ、天気、取込状況を確認します。",
