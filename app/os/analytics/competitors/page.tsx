@@ -1,10 +1,11 @@
 "use client";
 
-import { Download, ExternalLink, Eye, EyeOff, Plus, Radar, RefreshCw, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, PackageSearch, Plus, Radar, RefreshCw, Search, Trash2 } from "lucide-react";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { ActionNotice, useActionNotice } from "../../components/ActionNotice";
 import { AnalyticsShell } from "../components/AnalyticsShell";
+import styles from "./page.module.css";
 
 type Source = {
   id: string;
@@ -55,8 +56,42 @@ type ScanRun = {
   startedAt: string;
 };
 
+type ProductOptionGroup = {
+  id: string;
+  title: string;
+  min: number;
+  max: number;
+  options: Array<{
+    id: string;
+    title: string;
+    price: number;
+    isSoldOut: boolean;
+    childGroups: ProductOptionGroup[];
+  }>;
+};
+
+type CompetitorItem = {
+  id: string;
+  sourceId: string;
+  competitorName: string;
+  name: string;
+  category: string;
+  description: string;
+  price: number | null;
+  currency: string;
+  itemUrl: string;
+  imageUrl: string;
+  isAvailable: boolean;
+  lastSeenAt: string;
+  promotion: { active: boolean; currentPrice: string; originalPrice: string };
+  optionGroups: ProductOptionGroup[];
+  groupCount: number;
+  optionCount: number;
+};
+
 type MonitorData = {
   sources: Source[];
+  items: CompetitorItem[];
   changes: Change[];
   recentRuns: ScanRun[];
   summary: { activeSources: number; newProducts30d: number; lastCompletedAt: string | null };
@@ -64,6 +99,7 @@ type MonitorData = {
 
 const emptyData: MonitorData = {
   sources: [],
+  items: [],
   changes: [],
   recentRuns: [],
   summary: { activeSources: 0, newProducts30d: 0, lastCompletedAt: null }
@@ -115,12 +151,46 @@ function priceLabel(value: Change["currentValue"], changeType: string) {
   return `${value.currency} ${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value.price)}`;
 }
 
+function productPriceLabel(price: number | null, currency: string) {
+  if (price === null) return "—";
+  if ((currency || "JPY") === "JPY") return `¥${new Intl.NumberFormat("ja-JP").format(price)}`;
+  return `${currency} ${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(price)}`;
+}
+
+function OptionGroups({ groups, depth = 0 }: { groups: ProductOptionGroup[]; depth?: number }) {
+  return (
+    <div className={styles.optionGroups} data-depth={depth}>
+      {groups.map((group) => (
+        <section className={styles.optionGroup} key={`${depth}-${group.id}`}>
+          <header>
+            <strong>{group.title}</strong>
+            <span>{group.min > 0 ? `必須 ${group.min}${group.max > group.min ? `〜${group.max}` : ""}点` : group.max > 0 ? `最大 ${group.max}点` : "任意"}</span>
+          </header>
+          <div className={styles.optionList}>
+            {group.options.map((option) => (
+              <div className={`${styles.optionItem}${option.isSoldOut ? ` ${styles.optionSoldOut}` : ""}`} key={option.id}>
+                <div><span>{option.title}</span>{option.price > 0 ? <small>+{productPriceLabel(option.price, "JPY")}</small> : <small>無料</small>}{option.isSoldOut ? <em>売り切れ</em> : null}</div>
+                {option.childGroups.length ? <OptionGroups groups={option.childGroups} depth={depth + 1} /> : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export default function CompetitorMenuMonitorPage() {
   const [data, setData] = useState<MonitorData>(emptyData);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [scanningId, setScanningId] = useState("");
   const [selectedSourceId, setSelectedSourceId] = useState("all");
+  const [activeView, setActiveView] = useState<"products" | "timeline">("products");
+  const [productQuery, setProductQuery] = useState("");
+  const [productStatus, setProductStatus] = useState("all");
+  const [productCategory, setProductCategory] = useState("all");
+  const [expandedItemId, setExpandedItemId] = useState("");
   const { notice, showNotice, clearNotice } = useActionNotice();
 
   async function loadData() {
@@ -137,6 +207,21 @@ export default function CompetitorMenuMonitorPage() {
   const visibleChanges = useMemo(() => selectedSourceId === "all"
     ? data.changes
     : data.changes.filter((change) => change.sourceId === selectedSourceId), [data.changes, selectedSourceId]);
+  const sourceItems = useMemo(() => selectedSourceId === "all"
+    ? data.items
+    : data.items.filter((item) => item.sourceId === selectedSourceId), [data.items, selectedSourceId]);
+  const categories = useMemo(() => [...new Set(sourceItems.map((item) => item.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja")), [sourceItems]);
+  const visibleItems = useMemo(() => {
+    const query = productQuery.trim().toLocaleLowerCase("ja-JP");
+    return sourceItems.filter((item) => {
+      if (productCategory !== "all" && item.category !== productCategory) return false;
+      if (productStatus === "promotion" && !item.promotion.active) return false;
+      if (productStatus === "available" && !item.isAvailable) return false;
+      if (productStatus === "soldout" && item.isAvailable) return false;
+      if (productStatus === "options" && item.optionCount === 0) return false;
+      return !query || `${item.name} ${item.category} ${item.description}`.toLocaleLowerCase("ja-JP").includes(query);
+    });
+  }, [productCategory, productQuery, productStatus, sourceItems]);
   const reportHref = selectedSourceId === "all"
     ? "/api/competitor-menus/report"
     : `/api/competitor-menus/report?sourceId=${encodeURIComponent(selectedSourceId)}`;
@@ -261,18 +346,82 @@ export default function CompetitorMenuMonitorPage() {
             )}
           </section>
 
-          <section className="panel competitor-monitor-panel">
+          <section className={`panel competitor-monitor-panel ${styles.intelligencePanel}`}>
             <div className="panel-heading competitor-monitor-heading">
-              <div><p className="eyebrow">Detected changes</p><h3>変更タイムライン</h3></div>
+              <div><p className="eyebrow">Menu intelligence</p><h3>{activeView === "products" ? "現在の商品一覧" : "変更タイムライン"}</h3></div>
               <div className="competitor-monitor-heading-actions">
-                <select value={selectedSourceId} onChange={(event) => setSelectedSourceId(event.target.value)} aria-label="監視先で絞り込み">
+                <div className={styles.viewTabs} role="tablist" aria-label="表示内容">
+                  <button className={activeView === "products" ? styles.activeTab : ""} type="button" role="tab" aria-selected={activeView === "products"} onClick={() => setActiveView("products")}>商品一覧</button>
+                  <button className={activeView === "timeline" ? styles.activeTab : ""} type="button" role="tab" aria-selected={activeView === "timeline"} onClick={() => setActiveView("timeline")}>変更履歴</button>
+                </div>
+                <select value={selectedSourceId} onChange={(event) => { setSelectedSourceId(event.target.value); setProductCategory("all"); setExpandedItemId(""); }} aria-label="監視先で絞り込み">
                   <option value="all">すべての競合店</option>
                   {data.sources.map((source) => <option value={source.id} key={source.id}>{source.competitorName}</option>)}
                 </select>
-                <a className="secondary-button" href={reportHref}><Download size={15} />30日分CSV</a>
+                {activeView === "timeline" ? <a className="secondary-button" href={reportHref}><Download size={15} />30日分CSV</a> : null}
               </div>
             </div>
-            {!visibleChanges.length ? (
+            {activeView === "products" ? (
+              <>
+                <div className={styles.productTools}>
+                  <label className={styles.searchBox}><Search size={15} /><input value={productQuery} onChange={(event) => setProductQuery(event.target.value)} placeholder="商品名・説明を検索" aria-label="商品を検索" /></label>
+                  <select value={productStatus} onChange={(event) => setProductStatus(event.target.value)} aria-label="商品状態で絞り込み">
+                    <option value="all">すべての状態</option>
+                    <option value="promotion">割引中</option>
+                    <option value="available">販売中</option>
+                    <option value="soldout">売り切れ</option>
+                    <option value="options">選択内容あり</option>
+                  </select>
+                  <select value={productCategory} onChange={(event) => setProductCategory(event.target.value)} aria-label="分類で絞り込み">
+                    <option value="all">すべての分類</option>
+                    {categories.map((category) => <option value={category} key={category}>{category}</option>)}
+                  </select>
+                  <span>{visibleItems.length}商品</span>
+                </div>
+                {!visibleItems.length ? (
+                  <div className="competitor-monitor-empty is-compact"><PackageSearch size={24} /><strong>条件に合う商品はありません</strong><span>店、状態、分類、検索語を変更してください。</span></div>
+                ) : (
+                  <div className={styles.productTableWrap}>
+                    <table className={styles.productTable}>
+                      <thead><tr><th>商品</th><th>分類</th><th>通常価格</th><th>割引</th><th>販売状態</th><th>商品選択内容</th></tr></thead>
+                      <tbody>
+                        {visibleItems.map((item) => {
+                          const expanded = expandedItemId === item.id;
+                          return (
+                            <Fragment key={item.id}>
+                              <tr className={expanded ? styles.expandedRow : ""}>
+                                <td>
+                                  <button className={styles.productNameButton} type="button" aria-expanded={expanded} onClick={() => setExpandedItemId(expanded ? "" : item.id)}>
+                                    {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                                    <span><strong>{item.name}</strong><small>{item.competitorName}</small></span>
+                                  </button>
+                                </td>
+                                <td><span className={styles.categoryLabel}>{item.category || "未分類"}</span></td>
+                                <td><strong className={styles.basePrice}>{productPriceLabel(item.price, item.currency)}</strong></td>
+                                <td>{item.promotion.active ? <span className={styles.promotionPrice}><strong>{item.promotion.currentPrice || "実施中"}</strong><small>割引中</small></span> : <span className={styles.mutedCell}>なし</span>}</td>
+                                <td><span className={item.isAvailable ? styles.available : styles.soldOut}>{item.isAvailable ? "販売中" : "売り切れ"}</span></td>
+                                <td><button className={styles.optionCountButton} type="button" onClick={() => setExpandedItemId(expanded ? "" : item.id)} disabled={!item.optionCount}>{item.optionCount ? `${item.groupCount}組・${item.optionCount}項目` : "なし"}</button></td>
+                              </tr>
+                              {expanded ? (
+                                <tr className={styles.detailRow}><td colSpan={6}>
+                                  <div className={styles.productDetail}>
+                                    <div className={styles.productDetailHead}>
+                                      <div><strong>商品説明</strong><p>{item.description || "商品説明はありません。"}</p></div>
+                                      {item.itemUrl ? <a href={item.itemUrl} target="_blank" rel="noreferrer">元メニューで見る<ExternalLink size={12} /></a> : null}
+                                    </div>
+                                    {item.optionGroups.length ? <OptionGroups groups={item.optionGroups} /> : <p className={styles.noOptions}>この商品に選択内容はありません。</p>}
+                                  </div>
+                                </td></tr>
+                              ) : null}
+                            </Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            ) : !visibleChanges.length ? (
               <div className="competitor-monitor-empty is-compact"><strong>まだ変更はありません</strong><span>初回読取で基準を作成した後、新商品・価格・割引・商品選択内容などの変更をここに記録します。</span></div>
             ) : (
               <div className="competitor-change-timeline">

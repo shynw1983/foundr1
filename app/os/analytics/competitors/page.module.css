@@ -1,0 +1,406 @@
+.intelligencePanel {
+  overflow: hidden;
+}
+
+.viewTabs {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid #dce4df;
+  border-radius: 9px;
+  background: #f4f7f5;
+}
+
+.viewTabs button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 6px;
+  color: #66736c;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.viewTabs button.activeTab {
+  color: #173d2f;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(25 54 43 / 10%);
+}
+
+.viewTabs button:focus-visible,
+.productNameButton:focus-visible,
+.optionCountButton:focus-visible {
+  outline: 2px solid #247c5e;
+  outline-offset: 2px;
+}
+
+.productTools {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(130px, 170px) minmax(150px, 210px) auto;
+  gap: 9px;
+  align-items: center;
+  padding: 12px 18px;
+  border-top: 1px solid #e4eae6;
+  border-bottom: 1px solid #e4eae6;
+  background: #fafcfb;
+}
+
+.productTools select,
+.searchBox {
+  min-height: 38px;
+  border: 1px solid #d7e0da;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.productTools select {
+  width: 100%;
+  margin: 0;
+  padding: 0 28px 0 10px;
+  color: #374840;
+  font-size: 12px;
+}
+
+.productTools > span {
+  color: #65736c;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.searchBox {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 0 11px;
+  color: #718078;
+}
+
+.searchBox input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: #263b32;
+  background: transparent;
+  font-size: 13px;
+}
+
+.productTableWrap {
+  overflow-x: auto;
+}
+
+.productTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.productTable th {
+  padding: 9px 12px;
+  border-bottom: 1px solid #dfe6e2;
+  color: #75827b;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.productTable th:first-child { width: 34%; padding-left: 18px; }
+.productTable th:nth-child(2) { width: 15%; }
+.productTable th:nth-child(3) { width: 11%; }
+.productTable th:nth-child(4) { width: 12%; }
+.productTable th:nth-child(5) { width: 11%; }
+.productTable th:nth-child(6) { width: 17%; }
+
+.productTable td {
+  padding: 11px 12px;
+  border-bottom: 1px solid #edf1ee;
+  color: #33453c;
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.productTable td:first-child { padding-left: 18px; }
+.productTable tr:not(.detailRow):hover td { background: #fbfdfc; }
+.productTable tr.expandedRow td { border-bottom-color: transparent; background: #f7faf8; }
+
+.productNameButton {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.productNameButton > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #4d6b5e;
+}
+
+.productNameButton > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.productNameButton strong {
+  overflow: hidden;
+  color: #21382e;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.productNameButton small {
+  color: #7a8780;
+  font-size: 10px;
+}
+
+.categoryLabel {
+  display: block;
+  overflow: hidden;
+  color: #52635a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.basePrice {
+  color: #203a2f;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.promotionPrice {
+  display: grid;
+  gap: 2px;
+}
+
+.promotionPrice strong {
+  color: #176a4d;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.promotionPrice small {
+  color: #348165;
+  font-size: 10px;
+}
+
+.available,
+.soldOut {
+  display: inline-flex;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.available { color: #176a4d; background: #e9f5ef; }
+.soldOut { color: #9a403b; background: #faeceb; }
+.mutedCell { color: #8a958f; }
+
+.optionCountButton {
+  padding: 0;
+  border: 0;
+  color: #315f83;
+  background: transparent;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.optionCountButton:disabled {
+  color: #8a958f;
+  cursor: default;
+}
+
+.detailRow td {
+  padding: 0 18px 16px !important;
+  border-bottom: 1px solid #dfe7e2;
+  background: #f7faf8;
+}
+
+.productDetail {
+  padding: 15px;
+  border: 1px solid #dce6e0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.productDetailHead {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e8edea;
+}
+
+.productDetailHead strong {
+  color: #30453a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.productDetailHead p,
+.noOptions {
+  margin: 4px 0 0;
+  color: #68766e;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.productDetailHead a {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  flex: 0 0 auto;
+  color: #315f83;
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.optionGroups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.optionGroups[data-depth="1"],
+.optionGroups[data-depth="2"],
+.optionGroups[data-depth="3"],
+.optionGroups[data-depth="4"] {
+  grid-template-columns: 1fr;
+  margin-top: 7px;
+  padding-left: 10px;
+  border-left: 2px solid #dce8e1;
+}
+
+.optionGroup {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e2e9e5;
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.optionGroup > header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+
+.optionGroup > header strong {
+  color: #244337;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.optionGroup > header span {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #526b60;
+  background: #eaf1ed;
+  font-size: 9px;
+}
+
+.optionList {
+  display: grid;
+  gap: 5px;
+}
+
+.optionItem > div:first-child {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.optionItem span {
+  overflow: hidden;
+  color: #45584e;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionItem small {
+  flex: 0 0 auto;
+  color: #687a71;
+  font-size: 10px;
+}
+
+.optionItem em {
+  flex: 0 0 auto;
+  color: #a0443e;
+  font-size: 9px;
+  font-style: normal;
+}
+
+.optionSoldOut span {
+  color: #929b96;
+  text-decoration: line-through;
+}
+
+@media (max-width: 900px) {
+  .productTools { grid-template-columns: minmax(180px, 1fr) 130px 150px; }
+  .productTools > span { display: none; }
+  .optionGroups { grid-template-columns: 1fr; }
+  .productTable { min-width: 820px; }
+}
+
+@media (max-width: 720px) {
+  .viewTabs { width: 100%; }
+  .viewTabs button { flex: 1; }
+  .productTools { grid-template-columns: 1fr 1fr; padding: 11px 15px; }
+  .searchBox { grid-column: 1 / -1; }
+  .productTools select { min-width: 0; }
+  .productTableWrap { overflow: visible; padding: 4px 15px 14px; }
+  .productTable,
+  .productTable tbody { display: block; min-width: 0; }
+  .productTable thead { display: none; }
+  .productTable tr:not(.detailRow) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    margin-top: 10px;
+    padding: 13px;
+    border: 1px solid #e0e7e3;
+    border-radius: 10px;
+    background: #fff;
+  }
+  .productTable tr:not(.detailRow) td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .productTable tr:not(.detailRow) td:first-child { grid-column: 1 / -1; }
+  .productTable tr:not(.detailRow) td:nth-child(2) { grid-column: 1 / -1; }
+  .productTable tr:not(.detailRow) td:nth-child(3),
+  .productTable tr:not(.detailRow) td:nth-child(4) { grid-row: 3; }
+  .productTable tr:not(.detailRow) td:nth-child(5),
+  .productTable tr:not(.detailRow) td:nth-child(6) { grid-row: 4; }
+  .productTable tr.detailRow { display: block; }
+  .detailRow td { display: block; padding: 0 0 6px !important; border: 0; background: transparent; }
+  .productNameButton strong { white-space: normal; }
+  .productDetailHead { flex-direction: column; }
+}
