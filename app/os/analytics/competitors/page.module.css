@@ -11,6 +11,10 @@
 }
 
 .viewTabs button {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
   min-height: 30px;
   padding: 0 11px;
   border: 0;
@@ -361,11 +365,154 @@
   text-decoration: line-through;
 }
 
+.comparisonWorkspace {
+  display: grid;
+  gap: 16px;
+  padding: 16px 18px 20px;
+  border-top: 1px solid #e4eae6;
+  background: #f8faf9;
+}
+
+.comparisonSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid #dfe7e2;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.comparisonSummary > div {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 7px;
+  min-width: 0;
+  padding: 13px 14px;
+  border-right: 1px solid #e6ece8;
+}
+
+.comparisonSummary > div:last-child { border-right: 0; }
+.comparisonSummary svg { grid-row: 1 / 3; color: #2e7159; }
+.comparisonSummary span { color: #6a7971; font-size: 10px; }
+.comparisonSummary strong { color: #203d31; font-size: 16px; font-weight: 650; }
+.comparisonSummary small { grid-column: 1 / -1; color: #7a8780; font-size: 10px; }
+
+.productComparison,
+.assortmentGap {
+  overflow: hidden;
+  border: 1px solid #dfe7e2;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.comparisonLead {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5ebe7;
+}
+
+.comparisonLead p { margin: 0 0 3px; }
+.comparisonLead h4 { margin: 0; color: #213c31; font-size: 14px; font-weight: 650; }
+.comparisonLead > span { color: #65766d; font-size: 10px; }
+
+.ownProductPicker {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e8edea;
+  scrollbar-width: thin;
+}
+
+.ownProductPicker button {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto;
+  gap: 4px 12px;
+  flex: 0 0 220px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid #dce5e0;
+  border-radius: 8px;
+  color: #506158;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ownProductPicker button:hover { border-color: #9bbcaf; background: #fbfdfc; }
+.ownProductPicker button.selectedOwnProduct { border-color: #2f755b; box-shadow: inset 0 0 0 1px #2f755b; background: #f2f8f5; }
+.ownProductPicker span { overflow: hidden; color: #2a4237; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.ownProductPicker strong { color: #214b3a; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.ownProductPicker small { grid-column: 1 / -1; color: #7a8780; font-size: 9px; }
+
+.priceComparison { padding: 15px 16px 16px; }
+.priceScaleHeader { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 13px; }
+.priceScaleHeader strong { color: #294238; font-size: 12px; font-weight: 600; }
+.priceScaleHeader span { color: #7b8881; font-size: 9px; }
+.priceRows { display: grid; gap: 8px; }
+.priceRow { display: grid; grid-template-columns: minmax(150px, 210px) minmax(180px, 1fr) 125px; gap: 15px; align-items: center; min-height: 49px; padding: 7px 10px; border: 1px solid #e7ece9; border-radius: 8px; }
+.priceRow > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.priceRow > div:first-child strong { overflow: hidden; color: #344b40; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.priceRow > div:first-child small { overflow: hidden; color: #7b8881; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.priceRow > span { color: #65766d; font-size: 9px; text-align: right; }
+.ownPriceRow { border-color: #a7c7b9; background: #f4f9f6; }
+
+.priceTrack {
+  position: relative;
+  height: 2px;
+  margin: 18px 18px 8px;
+  background: #ccd8d2;
+}
+
+.priceTrack::before,
+.priceTrack::after { position: absolute; top: -3px; width: 1px; height: 8px; content: ""; background: #aebdb5; }
+.priceTrack::before { left: 0; }
+.priceTrack::after { right: 0; }
+.priceMarker { position: absolute; top: -5px; width: 10px; height: 10px; transform: translateX(-50%); border: 2px solid #fff; border-radius: 50%; background: #496d5d; box-shadow: 0 0 0 1px #496d5d; }
+.ownPriceRow .priceMarker { background: #17704f; box-shadow: 0 0 0 1px #17704f; }
+.priceMarker b { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); color: #2e463b; font-size: 10px; font-weight: 650; white-space: nowrap; }
+.noComparable { margin: 12px 0 0; padding: 9px 11px; border-radius: 7px; color: #66776e; background: #f4f7f5; font-size: 10px; }
+
+.selectedOptionComparison {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.selectedOptionComparison > div { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 9px 10px; border: 1px solid #e3e9e5; border-radius: 7px; }
+.selectedOptionComparison span { overflow: hidden; color: #596a61; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.selectedOptionComparison strong { color: #1d4c39; font-size: 14px; font-weight: 650; }
+.selectedOptionComparison small { grid-column: 1 / -1; color: #7c8882; font-size: 9px; }
+
+.gapColumns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gapColumns > article { min-width: 0; padding: 14px 16px 16px; }
+.gapColumns > article + article { border-left: 1px solid #e4eae6; }
+.gapColumns > article > header { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.gapColumns > article > header strong { color: #263f34; font-size: 12px; font-weight: 650; }
+.gapColumns > article > header span { color: #74827b; font-size: 9px; }
+.differenceSection + .differenceSection { margin-top: 14px; padding-top: 14px; border-top: 1px solid #e7ece9; }
+.differenceSection > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+.differenceSection > header strong { color: #56675e; font-size: 10px; font-weight: 600; }
+.differenceSection > header span { color: #7b8881; font-size: 9px; }
+.differenceSection > p { margin: 0; color: #87928c; font-size: 10px; }
+.differenceList { display: grid; gap: 5px; max-height: 260px; overflow-y: auto; padding-right: 3px; }
+.differenceList > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 7px 8px; border-radius: 6px; background: #f6f8f7; }
+.differenceList span { overflow: hidden; color: #3b5046; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.differenceList small { color: #74827b; font-size: 8px; white-space: nowrap; }
+
 @media (max-width: 900px) {
   .productTools { grid-template-columns: minmax(180px, 1fr) 130px 150px; }
   .productTools > span { display: none; }
   .optionGroups { grid-template-columns: 1fr; }
   .productTable { min-width: 820px; }
+  .comparisonSummary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .comparisonSummary > div:nth-child(2) { border-right: 0; }
+  .comparisonSummary > div:nth-child(-n + 2) { border-bottom: 1px solid #e6ece8; }
+  .priceRow { grid-template-columns: minmax(125px, 175px) minmax(160px, 1fr) 105px; }
 }
 
 @media (max-width: 720px) {
@@ -403,4 +550,16 @@
   .detailRow td { display: block; padding: 0 0 6px !important; border: 0; background: transparent; }
   .productNameButton strong { white-space: normal; }
   .productDetailHead { flex-direction: column; }
+  .comparisonWorkspace { padding: 12px 14px 16px; }
+  .comparisonSummary { grid-template-columns: 1fr 1fr; }
+  .comparisonSummary > div { padding: 11px; }
+  .comparisonLead { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .ownProductPicker { padding: 10px 12px; }
+  .ownProductPicker button { flex-basis: 190px; }
+  .priceComparison { padding: 13px 12px; }
+  .priceRow { grid-template-columns: 1fr; gap: 5px; }
+  .priceRow > span { text-align: left; }
+  .priceTrack { margin-right: 24px; margin-left: 24px; }
+  .gapColumns { grid-template-columns: 1fr; }
+  .gapColumns > article + article { border-top: 1px solid #e4eae6; border-left: 0; }
 }

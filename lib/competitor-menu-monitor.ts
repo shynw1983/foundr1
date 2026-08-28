@@ -5,6 +5,7 @@ import { lookup } from "node:dns/promises";
 import { sql } from "./db";
 import { sendLarkTextMessage } from "./lark";
 import { createOsNotification } from "./web-push";
+import { canonicalCompetitorProductIdentity } from "./competitor-menu-identity";
 
 export type CompetitorSourceType = "website" | "uber_eats" | "delivery_platform" | "json";
 
@@ -771,10 +772,30 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
     const baseline = Number(snapshotCountRows[0]?.count ?? 0) === 0;
     const typedPreviousRows = previousRows as PreviousItem[];
     const previousByKey = new Map(typedPreviousRows.map((item) => [item.externalKey, item]));
+    const previousByIdentity = new Map<string, PreviousItem>();
+    for (const previous of typedPreviousRows) {
+      const identity = canonicalCompetitorProductIdentity(previous.externalKey);
+      const existing = previousByIdentity.get(identity);
+      if (!existing || (!existing.isPresent && previous.isPresent)) previousByIdentity.set(identity, previous);
+    }
     if (source.sourceType === "uber_eats") {
-      items = await hydrateUberOptions(items, source.sourceUrl, previousByKey);
+      const previousLookup = new Map(previousByKey);
+      for (const [identity, previous] of previousByIdentity) {
+        previousLookup.set(identity, previous);
+        previousLookup.set(`id:${identity}`, previous);
+      }
+      items = await hydrateUberOptions(items, source.sourceUrl, previousLookup);
+    }
+    // Some imported baselines used the bare Uber UUID while the live API uses
+    // `id:<UUID>`. Preserve the existing key so one product cannot become a
+    // false new-product + removed-product pair when the prefix changes.
+    for (const item of items) {
+      if (previousByKey.has(item.externalKey)) continue;
+      const previous = previousByIdentity.get(canonicalCompetitorProductIdentity(item.externalKey));
+      if (previous) item.externalKey = previous.externalKey;
     }
     const currentByKey = new Map(items.map((item) => [item.externalKey, item]));
+    const currentIdentities = new Set(items.map((item) => canonicalCompetitorProductIdentity(item.externalKey)));
     const changes: Change[] = [];
 
     if (!baseline) {
@@ -803,7 +824,7 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
         });
       }
       for (const item of items) {
-        const previous = previousByKey.get(item.externalKey);
+        const previous = previousByKey.get(item.externalKey) ?? previousByIdentity.get(canonicalCompetitorProductIdentity(item.externalKey));
         if (!previous) {
           changes.push({ type: "new_product", externalKey: item.externalKey, title: item.name, summary: `${formatPrice(item.price, item.currency)}で新しく掲載されました。`, previousValue: {}, currentValue: publicItemValue(item) });
           continue;
@@ -843,7 +864,8 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
       const safeCompleteSnapshot = typedPreviousRows.length === 0 || items.length >= Math.max(1, Math.floor(typedPreviousRows.length * 0.7));
       if (safeCompleteSnapshot) {
         for (const previous of typedPreviousRows) {
-          if (previous.isPresent && !currentByKey.has(previous.externalKey)) {
+          if (previous.isPresent && !currentByKey.has(previous.externalKey)
+            && !currentIdentities.has(canonicalCompetitorProductIdentity(previous.externalKey))) {
             changes.push({ type: "removed", externalKey: previous.externalKey, title: previous.name, summary: "メニューから掲載がなくなりました。", previousValue: publicItemValue(previous), currentValue: {} });
           }
         }

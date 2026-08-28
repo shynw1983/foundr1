@@ -102,7 +102,7 @@ export async function GET() {
   const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const [sources, changes, recentRuns, summaryRows, itemRows] = await Promise.all([
+  const [sources, changes, recentRuns, summaryRows, itemRows, ownItemRows, ownGroupRows] = await Promise.all([
     sql`
       select sources.id::text, sources.competitor_name as "competitorName", sources.source_name as "sourceName",
         sources.source_url as "sourceUrl", sources.source_type as "sourceType", sources.is_active as "isActive",
@@ -158,6 +158,50 @@ export async function GET() {
       join competitor_menu_sources sources on sources.id = items.source_id
       where items.is_present = true
       order by sources.competitor_name, items.category, items.name
+    `,
+    sql`
+      select items.id::text, concat(items.promotion_prefix, items.name) as name,
+        items.category, items.description, items.image_url as "imageUrl", items.item_kind as "itemKind",
+        coalesce(settings.price_override, items.base_price)::float as price,
+        coalesce((mappings.last_observed_state #>> '{metadata,isAvailable}')::boolean, settings.is_enabled) as "isAvailable",
+        sources.last_synced_at as "lastSyncedAt"
+      from menu_catalog_items items
+      join brands on brands.id = items.brand_id
+      join menu_external_platforms platforms on platforms.brand_id = items.brand_id
+        and platforms.store_id is null and platforms.platform_key = 'uber_eats' and platforms.is_active = true
+      join menu_platform_target_settings settings on settings.external_platform_id = platforms.id
+        and settings.target_type = 'item' and settings.target_id = items.id
+      left join menu_platform_object_mappings mappings on mappings.external_platform_id = platforms.id
+        and mappings.target_type = 'item' and mappings.target_id = items.id
+      left join menu_sources sources on sources.id = items.menu_source_id
+      where brands.name = ${"まぁ麻"} and brands.status = 'active' and items.is_active = true
+        and settings.is_enabled = true
+      order by items.sort_order, items.name
+    `,
+    sql`
+      select links.menu_catalog_item_id::text as "itemId", groups.id::text as "groupId",
+        groups.name as "groupName", groups.selection_type as "selectionType", groups.rule_json as "ruleJson",
+        options.id::text as "optionId", options.name as "optionName",
+        coalesce(option_settings.price_override, options.price_delta)::float as "optionPrice",
+        coalesce((option_mappings.last_observed_state #>> '{metadata,isAvailable}')::boolean, option_settings.is_enabled) as "isAvailable",
+        links.sort_order as "groupSort", options.sort_order as "optionSort"
+      from menu_catalog_item_option_groups links
+      join menu_catalog_items items on items.id = links.menu_catalog_item_id and items.is_active = true
+      join brands on brands.id = items.brand_id
+      join menu_option_groups groups on groups.id = links.option_group_id and groups.is_active = true
+      join menu_options options on options.option_group_id = groups.id and options.is_active = true
+      join menu_external_platforms platforms on platforms.brand_id = items.brand_id
+        and platforms.store_id is null and platforms.platform_key = 'uber_eats' and platforms.is_active = true
+      join menu_platform_target_settings item_settings on item_settings.external_platform_id = platforms.id
+        and item_settings.target_type = 'item' and item_settings.target_id = items.id and item_settings.is_enabled = true
+      join menu_platform_target_settings group_settings on group_settings.external_platform_id = platforms.id
+        and group_settings.target_type = 'option_group' and group_settings.target_id = groups.id and group_settings.is_enabled = true
+      join menu_platform_target_settings option_settings on option_settings.external_platform_id = platforms.id
+        and option_settings.target_type = 'option' and option_settings.target_id = options.id
+      left join menu_platform_object_mappings option_mappings on option_mappings.external_platform_id = platforms.id
+        and option_mappings.target_type = 'option' and option_mappings.target_id = options.id
+      where brands.name = ${"まぁ麻"} and brands.status = 'active' and links.is_active = true
+      order by links.sort_order, groups.sort_order, options.sort_order, options.name
     `
   ]);
   const items = itemRows.map((row) => {
@@ -181,7 +225,60 @@ export async function GET() {
       ...optionTotals(optionGroups)
     };
   });
-  return Response.json({ sources, items, changes, recentRuns, summary: summaryRows[0] ?? { activeSources: 0, newProducts30d: 0, lastCompletedAt: null } });
+  const ownGroupsByItem = new Map<string, Map<string, PublicOptionGroup>>();
+  for (const row of ownGroupRows) {
+    const itemId = String(row.itemId);
+    if (!ownGroupsByItem.has(itemId)) ownGroupsByItem.set(itemId, new Map());
+    const groups = ownGroupsByItem.get(itemId)!;
+    const groupId = String(row.groupId);
+    if (!groups.has(groupId)) {
+      const rules = row.ruleJson && typeof row.ruleJson === "object" ? row.ruleJson as Record<string, unknown> : {};
+      groups.set(groupId, {
+        id: groupId,
+        title: String(row.groupName),
+        min: Number(rules.minSelections ?? (row.selectionType === "single" ? 1 : 0)) || 0,
+        max: Number(rules.maxSelections ?? rules.limit ?? 0) || 0,
+        options: []
+      });
+    }
+    groups.get(groupId)!.options.push({
+      id: String(row.optionId),
+      title: String(row.optionName),
+      price: Number(row.optionPrice ?? 0),
+      isSoldOut: row.isAvailable !== true,
+      childGroups: []
+    });
+  }
+  const ownItems = ownItemRows.map((row) => {
+    const optionGroups = [...(ownGroupsByItem.get(String(row.id))?.values() ?? [])];
+    return {
+      id: String(row.id),
+      name: String(row.name),
+      category: String(row.category),
+      description: String(row.description),
+      imageUrl: String(row.imageUrl),
+      itemKind: String(row.itemKind),
+      price: row.price === null ? null : Number(row.price),
+      currency: "JPY",
+      isAvailable: row.isAvailable === true,
+      lastSyncedAt: row.lastSyncedAt,
+      optionGroups,
+      ...optionTotals(optionGroups)
+    };
+  });
+  return Response.json({
+    sources,
+    items,
+    ownStore: {
+      name: "まぁ麻",
+      platform: "Uber Eats",
+      lastSyncedAt: ownItemRows.find((row) => row.lastSyncedAt)?.lastSyncedAt ?? null,
+      items: ownItems
+    },
+    changes,
+    recentRuns,
+    summary: summaryRows[0] ?? { activeSources: 0, newProducts30d: 0, lastCompletedAt: null }
+  });
 }
 
 export async function POST(request: Request) {

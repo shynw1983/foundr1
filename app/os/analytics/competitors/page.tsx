@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, PackageSearch, Plus, Radar, RefreshCw, Search, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Layers3, PackageSearch, Plus, Radar, RefreshCw, Search, ShieldCheck, Store, Trash2 } from "lucide-react";
 import type { FormEvent } from "react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { ActionNotice, useActionNotice } from "../../components/ActionNotice";
@@ -89,9 +89,22 @@ type CompetitorItem = {
   optionCount: number;
 };
 
+type OwnItem = Omit<CompetitorItem, "sourceId" | "competitorName" | "itemUrl" | "lastSeenAt" | "promotion"> & {
+  itemKind: string;
+  lastSyncedAt: string | null;
+};
+
+type OwnStore = {
+  name: string;
+  platform: string;
+  lastSyncedAt: string | null;
+  items: OwnItem[];
+};
+
 type MonitorData = {
   sources: Source[];
   items: CompetitorItem[];
+  ownStore: OwnStore;
   changes: Change[];
   recentRuns: ScanRun[];
   summary: { activeSources: number; newProducts30d: number; lastCompletedAt: string | null };
@@ -100,6 +113,7 @@ type MonitorData = {
 const emptyData: MonitorData = {
   sources: [],
   items: [],
+  ownStore: { name: "まぁ麻", platform: "Uber Eats", lastSyncedAt: null, items: [] },
   changes: [],
   recentRuns: [],
   summary: { activeSources: 0, newProducts30d: 0, lastCompletedAt: null }
@@ -157,6 +171,83 @@ function productPriceLabel(price: number | null, currency: string) {
   return `${currency} ${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(price)}`;
 }
 
+function comparisonText(value: string) {
+  return value
+    .split(/[|｜]/)[0]
+    .normalize("NFKC")
+    .replace(/【[^】]*】|\[[^\]]*\]/g, "")
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, "")
+    .replace(/[()（）][^()（）]*[)）]/g, "")
+    .replace(/\s+/g, "")
+    .toLocaleLowerCase("ja-JP");
+}
+
+function productKey(name: string) {
+  const value = comparisonText(name);
+  if (/注文方法|information|お知らせ|臨時休業/.test(value)) return "information";
+  if (/カマンベール|チーズ/.test(value)) return "camembert";
+  if (/牛肉麺|牛肉マーラー麺/.test(value)) return "beef-noodle";
+  if (/トマト/.test(value)) return "tomato-broth";
+  if (/麻辣香鍋|マーラーシャングオ|汁なし/.test(value)) return "dry-mala";
+  if (/薬膳|牛骨|白湯/.test(value)) return "bone-broth";
+  if (/海鮮|シーフード/.test(value)) return "seafood-set";
+  if (/ラム|羊肉/.test(value)) return "lamb-set";
+  if (/鶏肉|チキン/.test(value)) return "chicken-set";
+  if (/野菜|ヘルシー/.test(value)) return "vegetable-set";
+  if (/豚肉|お肉たっぷり|肉盛り/.test(value)) return "meat-set";
+  if (/スペシャル|プレミアム|豪華/.test(value)) return "premium-set";
+  if (/麻辣湯|マーラータン|スープ/.test(value)) return "mala-broth";
+  if (/コーラ|cola/.test(value)) return "drink-cola";
+  if (/烏龍|ウーロン|ジャスミン|茶/.test(value)) return `drink-tea-${value.replace(/[^ぁ-んァ-ヶ一-龠]/g, "")}`;
+  if (/ご飯|ライス|米飯/.test(value)) return "rice";
+  return `name:${value.replace(/[^a-z0-9ぁ-んァ-ヶ一-龠]/g, "")}`;
+}
+
+function assortmentProductKey(name: string) {
+  const value = comparisonText(name);
+  const size = /大盛|大份|ビッグ|large/.test(value) ? ":large" : /小盛|小份|ミニ|small/.test(value) ? ":small" : ":regular";
+  return `${productKey(name)}${size}`;
+}
+
+type FlatOption = { key: string; title: string; group: string; price: number; isSoldOut: boolean };
+
+function optionKey(group: string, title: string) {
+  const groupName = comparisonText(group);
+  const value = comparisonText(title);
+  const level = value.match(/([0-9]+(?:\.[0-9]+)?)/)?.[1] ?? (/なし|抜き|ゼロ/.test(value) ? "0" : "");
+  if (/辛さ|辛度/.test(groupName)) return `heat:${level || value}`;
+  if (/痺|しびれ|麻度/.test(groupName)) return `numb:${level || value}`;
+  if (/薬膳/.test(groupName)) return `herb:${/なし|抜き/.test(value) ? "off" : "on"}`;
+  const aliases: Array<[RegExp, string]> = [
+    [/牛肉/, "牛肉"], [/豚肉|ポーク/, "豚肉"], [/ラム|羊肉/, "ラム肉"], [/鶏肉|チキン/, "鶏肉"],
+    [/ほうれん草|菠菜/, "ほうれん草"], [/小松菜/, "小松菜"], [/白菜/, "白菜"], [/えのき|エノキ/, "えのき"],
+    [/れんこん|レンコン|蓮根/, "れんこん"], [/うずら|ウズラ/, "うずら卵"], [/きくらげ|木耳/, "きくらげ"],
+    [/ソーセージ|ウインナー/, "ソーセージ"], [/春雨/, "春雨"], [/中華麺|ラーメン/, "中華麺"], [/刀削麺/, "刀削麺"]
+  ];
+  const alias = aliases.find(([pattern]) => pattern.test(value));
+  const quantity = value.match(/([0-9]+(?:\.[0-9]+)?)(g|kg|個|本|枚|玉)/)?.slice(1).join("") ?? "";
+  if (alias) return `option:${alias[1]}:${quantity || "standard"}`;
+  return `option:${value.replace(/[0-9]+(?:\.[0-9]+)?(?:g|kg|個|本|枚|玉|円)?/g, "").replace(/[^a-zぁ-んァ-ヶ一-龠]/g, "")}`;
+}
+
+function flattenOptions(groups: ProductOptionGroup[]): FlatOption[] {
+  const result: FlatOption[] = [];
+  function visit(entries: ProductOptionGroup[]) {
+    for (const group of entries) {
+      for (const option of group.options) {
+        result.push({ key: optionKey(group.title, option.title), title: option.title, group: group.title, price: option.price, isSoldOut: option.isSoldOut });
+        visit(option.childGroups);
+      }
+    }
+  }
+  visit(groups);
+  return result;
+}
+
+function uniqueByKey<T extends { key: string }>(values: T[]) {
+  return [...new Map(values.filter((value) => value.key && value.key !== "option:").map((value) => [value.key, value])).values()];
+}
+
 function OptionGroups({ groups, depth = 0 }: { groups: ProductOptionGroup[]; depth?: number }) {
   return (
     <div className={styles.optionGroups} data-depth={depth}>
@@ -180,17 +271,29 @@ function OptionGroups({ groups, depth = 0 }: { groups: ProductOptionGroup[]; dep
   );
 }
 
+function DifferenceList({ title, items, emptyText }: { title: string; items: Array<{ key: string; name: string; note: string }>; emptyText: string }) {
+  return (
+    <section className={styles.differenceSection}>
+      <header><strong>{title}</strong><span>{items.length}件</span></header>
+      {items.length ? <div className={styles.differenceList}>{items.map((item) => (
+        <div key={item.key}><span>{item.name}</span><small>{item.note}</small></div>
+      ))}</div> : <p>{emptyText}</p>}
+    </section>
+  );
+}
+
 export default function CompetitorMenuMonitorPage() {
   const [data, setData] = useState<MonitorData>(emptyData);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [scanningId, setScanningId] = useState("");
   const [selectedSourceId, setSelectedSourceId] = useState("all");
-  const [activeView, setActiveView] = useState<"products" | "timeline">("products");
+  const [activeView, setActiveView] = useState<"products" | "compare" | "timeline">("products");
   const [productQuery, setProductQuery] = useState("");
   const [productStatus, setProductStatus] = useState("all");
   const [productCategory, setProductCategory] = useState("all");
   const [expandedItemId, setExpandedItemId] = useState("");
+  const [selectedOwnItemId, setSelectedOwnItemId] = useState("");
   const { notice, showNotice, clearNotice } = useActionNotice();
 
   async function loadData() {
@@ -222,6 +325,43 @@ export default function CompetitorMenuMonitorPage() {
       return !query || `${item.name} ${item.category} ${item.description}`.toLocaleLowerCase("ja-JP").includes(query);
     });
   }, [productCategory, productQuery, productStatus, sourceItems]);
+  const ownSellableItems = useMemo(() => data.ownStore.items.filter((item) => productKey(item.name) !== "information"), [data.ownStore.items]);
+  const selectedOwnItem = ownSellableItems.find((item) => item.id === selectedOwnItemId) ?? ownSellableItems[0] ?? null;
+  const comparableItems = useMemo(() => selectedOwnItem
+    ? sourceItems.filter((item) => productKey(item.name) === productKey(selectedOwnItem.name))
+    : [], [selectedOwnItem, sourceItems]);
+  const catalogDifferences = useMemo(() => {
+    const ownProducts = [...new Map(ownSellableItems.map((item) => [assortmentProductKey(item.name), item])).entries()];
+    const competitorProducts = [...new Map(sourceItems.filter((item) => productKey(item.name) !== "information").map((item) => [assortmentProductKey(item.name), item])).entries()];
+    const ownKeys = new Set(ownProducts.map(([key]) => key));
+    const competitorKeys = new Set(competitorProducts.map(([key]) => key));
+    const ownOptions = uniqueByKey(ownSellableItems.flatMap((item) => flattenOptions(item.optionGroups)));
+    const competitorOptions = uniqueByKey(sourceItems.flatMap((item) => flattenOptions(item.optionGroups)));
+    const ownOptionKeys = new Set(ownOptions.map((option) => option.key));
+    const competitorOptionKeys = new Set(competitorOptions.map((option) => option.key));
+    return {
+      competitorOnlyProducts: competitorProducts.filter(([key]) => !ownKeys.has(key)).map(([, item]) => item),
+      ownOnlyProducts: ownProducts.filter(([key]) => !competitorKeys.has(key)).map(([, item]) => item),
+      competitorOnlyOptions: competitorOptions.filter((option) => !ownOptionKeys.has(option.key)),
+      ownOnlyOptions: ownOptions.filter((option) => !competitorOptionKeys.has(option.key)),
+      sharedProducts: ownProducts.filter(([key]) => competitorKeys.has(key)).length,
+      sharedOptions: ownOptions.filter((option) => competitorOptionKeys.has(option.key)).length,
+      ownOptionCount: ownOptions.length,
+      competitorOptionCount: competitorOptions.length
+    };
+  }, [ownSellableItems, sourceItems]);
+  const priceRange = useMemo(() => {
+    const prices = [selectedOwnItem?.price, ...comparableItems.map((item) => item.price)].filter((price): price is number => typeof price === "number");
+    if (!prices.length) return { min: 0, max: 1 };
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const padding = Math.max(100, (max - min) * .15);
+    return { min: Math.max(0, min - padding), max: max + padding };
+  }, [comparableItems, selectedOwnItem]);
+  function pricePosition(price: number | null) {
+    if (price === null) return 0;
+    return Math.max(0, Math.min(100, ((price - priceRange.min) / (priceRange.max - priceRange.min)) * 100));
+  }
   const reportHref = selectedSourceId === "all"
     ? "/api/competitor-menus/report"
     : `/api/competitor-menus/report?sourceId=${encodeURIComponent(selectedSourceId)}`;
@@ -348,10 +488,11 @@ export default function CompetitorMenuMonitorPage() {
 
           <section className={`panel competitor-monitor-panel ${styles.intelligencePanel}`}>
             <div className="panel-heading competitor-monitor-heading">
-              <div><p className="eyebrow">Menu intelligence</p><h3>{activeView === "products" ? "現在の商品一覧" : "変更タイムライン"}</h3></div>
+              <div><p className="eyebrow">Menu intelligence</p><h3>{activeView === "products" ? "現在の商品一覧" : activeView === "compare" ? "Uber Eats 同平台比較" : "変更タイムライン"}</h3></div>
               <div className="competitor-monitor-heading-actions">
                 <div className={styles.viewTabs} role="tablist" aria-label="表示内容">
                   <button className={activeView === "products" ? styles.activeTab : ""} type="button" role="tab" aria-selected={activeView === "products"} onClick={() => setActiveView("products")}>商品一覧</button>
+                  <button className={activeView === "compare" ? styles.activeTab : ""} type="button" role="tab" aria-selected={activeView === "compare"} onClick={() => setActiveView("compare")}><ArrowLeftRight size={13} />同平台比較</button>
                   <button className={activeView === "timeline" ? styles.activeTab : ""} type="button" role="tab" aria-selected={activeView === "timeline"} onClick={() => setActiveView("timeline")}>変更履歴</button>
                 </div>
                 <select value={selectedSourceId} onChange={(event) => { setSelectedSourceId(event.target.value); setProductCategory("all"); setExpandedItemId(""); }} aria-label="監視先で絞り込み">
@@ -421,6 +562,76 @@ export default function CompetitorMenuMonitorPage() {
                   </div>
                 )}
               </>
+            ) : activeView === "compare" ? (
+              <div className={styles.comparisonWorkspace}>
+                <div className={styles.comparisonSummary}>
+                  <div><Store size={17} /><span>自店 Uber Eats</span><strong>{ownSellableItems.length}商品</strong><small>{catalogDifferences.ownOptionCount}種類の選択肢</small></div>
+                  <div><Radar size={17} /><span>比較対象</span><strong>{selectedSourceId === "all" ? data.sources.length : 1}店舗</strong><small>{sourceItems.length}商品・{catalogDifferences.competitorOptionCount}種類の選択肢</small></div>
+                  <div><Layers3 size={17} /><span>共通の品揃え</span><strong>{catalogDifferences.sharedProducts}商品</strong><small>{catalogDifferences.sharedOptions}種類の選択肢</small></div>
+                  <div><ShieldCheck size={17} /><span>比較方針</span><strong>粗利を維持</strong><small>値下げ提案なし・価値差を確認</small></div>
+                </div>
+
+                <section className={styles.productComparison}>
+                  <div className={styles.comparisonLead}>
+                    <div><p className="eyebrow">Product lens</p><h4>商品をクリックして価格と選択肢を比較</h4></div>
+                    <span>通常価格と割引は別表示</span>
+                  </div>
+                  {!ownSellableItems.length ? (
+                    <div className="competitor-monitor-empty is-compact"><PackageSearch size={24} /><strong>自店の Uber Eats 商品がありません</strong><span>メニュー同期後に比較できます。</span></div>
+                  ) : (
+                    <>
+                      <div className={styles.ownProductPicker} role="list" aria-label="自店の商品">
+                        {ownSellableItems.map((item) => <button className={selectedOwnItem?.id === item.id ? styles.selectedOwnProduct : ""} type="button" role="listitem" key={item.id} onClick={() => setSelectedOwnItemId(item.id)}><span>{item.name}</span><strong>{productPriceLabel(item.price, "JPY")}</strong><small>{item.groupCount}組・{item.optionCount}項目</small></button>)}
+                      </div>
+                      {selectedOwnItem ? (
+                        <div className={styles.priceComparison}>
+                          <div className={styles.priceScaleHeader}><strong>{selectedOwnItem.name}</strong><span>{productPriceLabel(priceRange.min, "JPY")} — {productPriceLabel(priceRange.max, "JPY")}</span></div>
+                          <div className={styles.priceRows}>
+                            <div className={`${styles.priceRow} ${styles.ownPriceRow}`}>
+                              <div><strong>まぁ麻</strong><small>自店・通常価格</small></div>
+                              <div className={styles.priceTrack}><span className={styles.priceMarker} style={{ left: `${pricePosition(selectedOwnItem.price)}%` }}><b>{productPriceLabel(selectedOwnItem.price, "JPY")}</b></span></div>
+                              <span>{selectedOwnItem.groupCount}組・{selectedOwnItem.optionCount}項目</span>
+                            </div>
+                            {comparableItems.map((item) => (
+                              <div className={styles.priceRow} key={item.id}>
+                                <div><strong>{item.competitorName}</strong><small>{item.name}</small></div>
+                                <div className={styles.priceTrack}><span className={styles.priceMarker} style={{ left: `${pricePosition(item.price)}%` }}><b>{productPriceLabel(item.price, item.currency)}</b></span></div>
+                                <span>{item.promotion.active ? `割引 ${item.promotion.currentPrice || "実施中"}` : `${item.groupCount}組・${item.optionCount}項目`}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {!comparableItems.length ? <p className={styles.noComparable}>この商品と同種と判定できる競合商品はありません。下の「我有人无」に表示します。</p> : null}
+                          <div className={styles.selectedOptionComparison}>
+                            <div><span>自店の選択肢</span><strong>{selectedOwnItem.optionCount}</strong><small>{selectedOwnItem.groupCount}組</small></div>
+                            {comparableItems.map((item) => {
+                              const ownOptions = uniqueByKey(flattenOptions(selectedOwnItem.optionGroups));
+                              const competitorKeys = new Set(uniqueByKey(flattenOptions(item.optionGroups)).map((option) => option.key));
+                              const commonCount = ownOptions.filter((option) => competitorKeys.has(option.key)).length;
+                              return <div key={item.id}><span>{item.competitorName}</span><strong>{item.optionCount}</strong><small>自店と共通 {commonCount}種類</small></div>;
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </section>
+
+                <section className={styles.assortmentGap}>
+                  <div className={styles.comparisonLead}><div><p className="eyebrow">Assortment gap</p><h4>人有我无 / 我有人无</h4></div><span>商品と商品内の選択肢を含む</span></div>
+                  <div className={styles.gapColumns}>
+                    <article>
+                      <header><strong>競合にあって自店にない</strong><span>品揃え候補として確認</span></header>
+                      <DifferenceList title="主商品" emptyText="競合だけの主商品はありません。" items={catalogDifferences.competitorOnlyProducts.map((item) => ({ key: item.id, name: item.name, note: `${item.competitorName}・${productPriceLabel(item.price, item.currency)}` }))} />
+                      <DifferenceList title="商品内の選択肢" emptyText="競合だけの選択肢はありません。" items={catalogDifferences.competitorOnlyOptions.map((item) => ({ key: item.key, name: item.title, note: `${item.group}・${item.price > 0 ? `+${productPriceLabel(item.price, "JPY")}` : "無料"}` }))} />
+                    </article>
+                    <article>
+                      <header><strong>自店にあって競合にない</strong><span>高付加価値として訴求</span></header>
+                      <DifferenceList title="主商品" emptyText="自店だけの主商品はありません。" items={catalogDifferences.ownOnlyProducts.map((item) => ({ key: item.id, name: item.name, note: `まぁ麻・${productPriceLabel(item.price, "JPY")}` }))} />
+                      <DifferenceList title="商品内の選択肢" emptyText="自店だけの選択肢はありません。" items={catalogDifferences.ownOnlyOptions.map((item) => ({ key: item.key, name: item.title, note: `${item.group}・${item.price > 0 ? `+${productPriceLabel(item.price, "JPY")}` : "無料"}` }))} />
+                    </article>
+                  </div>
+                </section>
+              </div>
             ) : !visibleChanges.length ? (
               <div className="competitor-monitor-empty is-compact"><strong>まだ変更はありません</strong><span>初回読取で基準を作成した後、新商品・価格・割引・商品選択内容などの変更をここに記録します。</span></div>
             ) : (
