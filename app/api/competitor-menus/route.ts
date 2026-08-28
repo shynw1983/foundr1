@@ -50,11 +50,13 @@ function normalizeOptionGroups(value: unknown, depth = 0): PublicOptionGroup[] {
     if (!entry || typeof entry !== "object") return [];
     const group = entry as Record<string, unknown>;
     const options = Array.isArray(group.options) ? group.options : [];
+    const uniqueMin = Number(group.minPermittedUnique ?? 0) || 0;
+    const uniqueMax = Number(group.maxPermittedUnique ?? 0) || 0;
     return [{
       id: plainText(group.uuid ?? group.id) || `group-${depth}-${groupIndex}`,
       title: plainText(group.title ?? group.name) || "選択内容",
-      min: Number(group.minPermittedUnique ?? group.minPermitted ?? 0) || 0,
-      max: Number(group.maxPermittedUnique ?? group.maxPermitted ?? 0) || 0,
+      min: uniqueMin > 0 ? uniqueMin : Number(group.minPermitted ?? 0) || 0,
+      max: uniqueMax > 0 ? uniqueMax : Number(group.maxPermitted ?? 0) || 0,
       options: options.flatMap((optionEntry, optionIndex) => {
         if (!optionEntry || typeof optionEntry !== "object") return [];
         const option = optionEntry as Record<string, unknown>;
