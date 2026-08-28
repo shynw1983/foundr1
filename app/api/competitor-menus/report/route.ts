@@ -15,6 +15,7 @@ const changeTypeLabels: Record<string, string> = {
   image_changed: "商品画像変更",
   availability_changed: "販売状態変更",
   details_changed: "商品詳細変更",
+  options_changed: "商品選択内容変更",
   store_rating_changed: "店舗評価変更",
   store_review_count_changed: "評価件数変更",
   store_promotion_changed: "店舗キャンペーン変更",
@@ -48,6 +49,12 @@ function detailsLabel(record: unknown) {
   const details = value(record, "details");
   if (!details || typeof details !== "object" || !Object.keys(details as Record<string, unknown>).length) return "";
   return JSON.stringify(details);
+}
+
+function optionsLabel(record: unknown) {
+  const options = value(record, "options");
+  if (!options || typeof options !== "object" || !Object.keys(options as Record<string, unknown>).length) return "";
+  return JSON.stringify(options);
 }
 
 function promotionsLabel(record: unknown) {
@@ -87,6 +94,7 @@ export async function GET(request: Request) {
     "変更前価格", "変更後価格", "通貨", "変更前分類", "変更後分類",
     "変更前販売状態", "変更後販売状態", "変更前商品説明", "変更後商品説明",
     "変更前画像", "変更後画像", "変更前その他情報", "変更後その他情報",
+    "変更前商品選択内容", "変更後商品選択内容",
     "変更前店舗評価", "変更後店舗評価", "変更前評価件数", "変更後評価件数",
     "変更前割引・キャンペーン", "変更後割引・キャンペーン",
     "商品URL", "メニューURL"
@@ -115,6 +123,8 @@ export async function GET(request: Request) {
       value(current, "imageUrl"),
       detailsLabel(previous),
       detailsLabel(current),
+      optionsLabel(previous),
+      optionsLabel(current),
       value(previous, "rating"),
       value(current, "rating"),
       value(previous, "reviewCount"),

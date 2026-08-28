@@ -4321,7 +4321,7 @@ create table if not exists competitor_menu_changes (
   current_value jsonb not null default '{}'::jsonb,
   detected_at timestamptz not null default now(),
   notified_at timestamptz,
-  check (change_type in ('new_product', 'price_changed', 'renamed', 'category_changed', 'description_changed', 'image_changed', 'availability_changed', 'details_changed', 'item_promotion_changed', 'store_rating_changed', 'store_review_count_changed', 'store_promotion_changed', 'returned', 'removed'))
+  check (change_type in ('new_product', 'price_changed', 'renamed', 'category_changed', 'description_changed', 'image_changed', 'availability_changed', 'details_changed', 'options_changed', 'item_promotion_changed', 'store_rating_changed', 'store_review_count_changed', 'store_promotion_changed', 'returned', 'removed'))
 );
 
 alter table competitor_menu_items add column if not exists description text not null default '';
@@ -4339,7 +4339,7 @@ set
   end;
 alter table competitor_menu_changes drop constraint if exists competitor_menu_changes_change_type_check;
 alter table competitor_menu_changes add constraint competitor_menu_changes_change_type_check
-  check (change_type in ('new_product', 'price_changed', 'renamed', 'category_changed', 'description_changed', 'image_changed', 'availability_changed', 'details_changed', 'item_promotion_changed', 'store_rating_changed', 'store_review_count_changed', 'store_promotion_changed', 'returned', 'removed'));
+  check (change_type in ('new_product', 'price_changed', 'renamed', 'category_changed', 'description_changed', 'image_changed', 'availability_changed', 'details_changed', 'options_changed', 'item_promotion_changed', 'store_rating_changed', 'store_review_count_changed', 'store_promotion_changed', 'returned', 'removed'));
 
 create index if not exists idx_competitor_menu_sources_active
   on competitor_menu_sources(is_active, updated_at desc);

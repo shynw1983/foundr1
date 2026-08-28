@@ -31,7 +31,14 @@ type Change = {
   changeType: string;
   title: string;
   summary: string;
-  currentValue: { price?: number | null; currency?: string; itemUrl?: string; imageUrl?: string; isAvailable?: boolean };
+  currentValue: {
+    price?: number | null;
+    currency?: string;
+    itemUrl?: string;
+    imageUrl?: string;
+    isAvailable?: boolean;
+    promotionDetails?: { currentPrice?: string; originalPrice?: string };
+  };
   detectedAt: string;
 };
 
@@ -78,6 +85,7 @@ const changeTypeLabels: Record<string, string> = {
   image_changed: "商品画像変更",
   availability_changed: "販売状態変更",
   details_changed: "商品詳細変更",
+  options_changed: "商品選択内容変更",
   store_rating_changed: "店舗評価変更",
   store_review_count_changed: "評価件数変更",
   store_promotion_changed: "店舗キャンペーン変更",
@@ -97,7 +105,11 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function priceLabel(value: Change["currentValue"]) {
+function priceLabel(value: Change["currentValue"], changeType: string) {
+  if (changeType === "item_promotion_changed" && value?.promotionDetails?.currentPrice) {
+    const original = value.promotionDetails.originalPrice;
+    return original ? `${value.promotionDetails.currentPrice}（通常 ${original}）` : value.promotionDetails.currentPrice;
+  }
   if (typeof value?.price !== "number") return "";
   if ((value.currency || "JPY") === "JPY") return `¥${new Intl.NumberFormat("ja-JP").format(value.price)}`;
   return `${value.currency} ${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value.price)}`;
@@ -261,7 +273,7 @@ export default function CompetitorMenuMonitorPage() {
               </div>
             </div>
             {!visibleChanges.length ? (
-              <div className="competitor-monitor-empty is-compact"><strong>まだ変更はありません</strong><span>初回読取で基準を作成した後、新商品や価格変更をここに記録します。</span></div>
+              <div className="competitor-monitor-empty is-compact"><strong>まだ変更はありません</strong><span>初回読取で基準を作成した後、新商品・価格・割引・商品選択内容などの変更をここに記録します。</span></div>
             ) : (
               <div className="competitor-change-timeline">
                 {visibleChanges.map((change) => (
@@ -271,7 +283,7 @@ export default function CompetitorMenuMonitorPage() {
                     <div>
                       <p><span>{changeTypeLabels[change.changeType] || change.changeType}</span><small>{change.competitorName}</small></p>
                       <strong>{change.title}</strong>
-                      <em>{priceLabel(change.currentValue)}</em>
+                      <em>{priceLabel(change.currentValue, change.changeType)}</em>
                       <div>{change.summary}{change.currentValue?.itemUrl ? <a href={change.currentValue.itemUrl} target="_blank" rel="noreferrer">商品を見る<ExternalLink size={11} /></a> : null}</div>
                     </div>
                   </article>

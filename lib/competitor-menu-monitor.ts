@@ -31,6 +31,7 @@ type MenuItem = {
   imageUrl: string;
   isAvailable: boolean;
   details: Record<string, unknown>;
+  options: Record<string, unknown>;
   promotionDetails: Record<string, unknown>;
   rawPayload: Record<string, unknown>;
 };
@@ -52,7 +53,7 @@ type PreviousItem = {
 };
 
 type Change = {
-  type: "new_product" | "price_changed" | "renamed" | "category_changed" | "description_changed" | "image_changed" | "availability_changed" | "details_changed" | "item_promotion_changed" | "store_rating_changed" | "store_review_count_changed" | "store_promotion_changed" | "returned" | "removed";
+  type: "new_product" | "price_changed" | "renamed" | "category_changed" | "description_changed" | "image_changed" | "availability_changed" | "details_changed" | "options_changed" | "item_promotion_changed" | "store_rating_changed" | "store_review_count_changed" | "store_promotion_changed" | "returned" | "removed";
   externalKey: string;
   title: string;
   summary: string;
@@ -99,17 +100,28 @@ function numericPrice(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
   if (typeof value !== "string") return null;
   const normalized = value.replace(/[^0-9.,-]/g, "").replace(/,/g, "");
+  if (!/[0-9]/.test(normalized)) return null;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function comparableDetails(record: Record<string, unknown>) {
   const keys = [
-    "customizationsList", "modifierGroups", "modifier_groups", "modifiers", "options",
-    "optionGroups", "option_groups", "variations", "variants", "sizes", "tags",
-    "dietaryInfo", "dietaryLabels", "allergens", "hasCustomizations", "numAlcoholicItems"
+    "tags", "dietaryInfo", "dietaryLabels", "allergens", "hasCustomizations", "numAlcoholicItems"
   ];
   return Object.fromEntries(keys.filter((key) => record[key] !== undefined).map((key) => [key, record[key]]));
+}
+
+function comparableOptions(record: Record<string, unknown>) {
+  const keys = [
+    "customizationsList", "modifierGroups", "modifier_groups", "modifiers", "options",
+    "optionGroups", "option_groups", "variations", "variants", "sizes"
+  ];
+  return Object.fromEntries(keys.filter((key) => record[key] !== undefined).map((key) => [key, record[key]]));
+}
+
+function optionDetailsLoaded(record: Record<string, unknown>) {
+  return record._optionDetailsLoaded === true;
 }
 
 function nestedText(value: unknown) {
@@ -206,6 +218,7 @@ function itemFromRecord(record: Record<string, unknown>, sourceUrl: string): Men
     imageUrl,
     isAvailable,
     details: comparableDetails(record),
+    options: comparableOptions(record),
     promotionDetails: comparablePromotionDetails(record),
     rawPayload: record
   };
@@ -273,10 +286,14 @@ function collectUberStoreItems(root: unknown, sourceUrl: string) {
         const displayPrice = raw.priceTagline && typeof raw.priceTagline === "object"
           ? (raw.priceTagline as Record<string, unknown>).text
           : null;
+        const promotionDetails = comparablePromotionDetails(raw);
+        const originalPrice = numericPrice(promotionDetails.originalPrice);
         const item = itemFromRecord({
           ...raw,
           categoryName: category,
-          price: numericPrice(displayPrice) ?? (numericPrice(raw.price) === null ? null : Number(raw.price) / 100),
+          // A campaign price is not a product price change. Track the struck-through
+          // original price as the product price and keep the campaign price in promo details.
+          price: originalPrice ?? numericPrice(displayPrice) ?? (numericPrice(raw.price) === null ? null : Number(raw.price) / 100),
           priceCurrency: currency,
           url: sourceUrl
         }, sourceUrl);
@@ -484,6 +501,84 @@ async function fetchUberMenu(sourceUrl: string) {
   }
 }
 
+async function fetchUberItemDetails(storeUuid: string, item: MenuItem) {
+  const raw = item.rawPayload;
+  const menuItemUuid = firstText(raw.uuid, raw.id, item.externalKey.replace(/^id:/, ""));
+  const sectionUuid = firstText(raw.sectionUuid);
+  const subsectionUuid = firstText(raw.subsectionUuid);
+  if (!menuItemUuid || !sectionUuid || !subsectionUuid) throw new Error("商品オプションの読取IDが不足しています。");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+  try {
+    const response = await fetch("https://www.ubereats.com/_p/api/getMenuItemV1?localeCode=ja-JP", {
+      method: "POST",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "x-csrf-token": "x",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1"
+      },
+      body: JSON.stringify({
+        itemRequestType: "ITEM",
+        storeUuid,
+        sectionUuid,
+        subsectionUuid,
+        menuItemUuid,
+        diningMode: "DELIVERY",
+        cbType: "EATER_ENDORSED"
+      })
+    });
+    if (!response.ok) throw new Error(`商品オプションを取得できませんでした（HTTP ${response.status}）。`);
+    const result = await response.json() as { status?: unknown; data?: unknown };
+    if (result.status !== "success" || !result.data || typeof result.data !== "object") {
+      throw new Error("商品オプションが返されませんでした。");
+    }
+    return result.data as Record<string, unknown>;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function hydrateUberOptions(items: MenuItem[], sourceUrl: string, previousByKey: Map<string, PreviousItem>) {
+  const storeUuid = uberStoreUuid(sourceUrl);
+  if (!storeUuid) return items;
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      const previous = previousByKey.get(item.externalKey);
+      if (item.rawPayload.hasCustomizations !== true) {
+        item.rawPayload = { ...item.rawPayload, customizationsList: [], _optionDetailsLoaded: true };
+      } else {
+        try {
+          const detail = await fetchUberItemDetails(storeUuid, item);
+          item.rawPayload = {
+            ...item.rawPayload,
+            customizationsList: Array.isArray(detail.customizationsList) ? detail.customizationsList : [],
+            _optionDetailsLoaded: true
+          };
+        } catch {
+          // A temporary detail-endpoint failure must not look like every option was removed.
+          if (previous && optionDetailsLoaded(previous.rawPayload)) {
+            item.rawPayload = {
+              ...item.rawPayload,
+              customizationsList: previous.rawPayload.customizationsList,
+              _optionDetailsLoaded: true
+            };
+          } else {
+            item.rawPayload = { ...item.rawPayload, _optionDetailsLoaded: false };
+          }
+        }
+      }
+      item.details = comparableDetails(item.rawPayload);
+      item.options = comparableOptions(item.rawPayload);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(6, items.length) }, () => worker()));
+  return items;
+}
+
 function isPrivateAddress(address: string) {
   const normalized = address.toLowerCase();
   if (isIP(address) === 4) {
@@ -557,6 +652,7 @@ async function fetchPublicMenu(input: string) {
 
 function publicItemValue(item: MenuItem | PreviousItem) {
   const details = "details" in item ? item.details : comparableDetails(item.rawPayload);
+  const options = "options" in item ? item.options : comparableOptions(item.rawPayload);
   const promotionDetails = "promotionDetails" in item ? item.promotionDetails : comparablePromotionDetails(item.rawPayload);
   return {
     name: item.name,
@@ -568,6 +664,7 @@ function publicItemValue(item: MenuItem | PreviousItem) {
     imageUrl: item.imageUrl,
     isAvailable: item.isAvailable,
     details,
+    options,
     promotionDetails
   };
 }
@@ -637,7 +734,7 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
       `,
       sql`select count(*)::int as count from competitor_menu_snapshots where source_id = ${source.id}`
     ]);
-    const items = parseMenuItems(body, contentType, finalUrl);
+    let items = parseMenuItems(body, contentType, finalUrl);
     const storeMetrics = parseStoreMetrics(body);
     if (!items.length) {
       throw new Error("商品データを検出できませんでした。公開メニューのURL、または専用読取方式の設定を確認してください。");
@@ -645,6 +742,9 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
     const baseline = Number(snapshotCountRows[0]?.count ?? 0) === 0;
     const typedPreviousRows = previousRows as PreviousItem[];
     const previousByKey = new Map(typedPreviousRows.map((item) => [item.externalKey, item]));
+    if (source.sourceType === "uber_eats") {
+      items = await hydrateUberOptions(items, source.sourceUrl, previousByKey);
+    }
     const currentByKey = new Map(items.map((item) => [item.externalKey, item]));
     const changes: Change[] = [];
 
@@ -701,7 +801,11 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
           changes.push({ type: "availability_changed", externalKey: item.externalKey, title: item.name, summary: item.isAvailable ? "販売が再開されました。" : "売り切れ・販売停止になりました。", previousValue: publicItemValue(previous), currentValue: publicItemValue(item) });
         }
         if (stableJson(comparableDetails(previous.rawPayload)) !== stableJson(item.details)) {
-          changes.push({ type: "details_changed", externalKey: item.externalKey, title: item.name, summary: "オプション・仕様などの商品詳細が変更されました。", previousValue: publicItemValue(previous), currentValue: publicItemValue(item) });
+          changes.push({ type: "details_changed", externalKey: item.externalKey, title: item.name, summary: "商品の仕様・表示情報が変更されました。", previousValue: publicItemValue(previous), currentValue: publicItemValue(item) });
+        }
+        if (optionDetailsLoaded(previous.rawPayload) && optionDetailsLoaded(item.rawPayload)
+          && stableJson(comparableOptions(previous.rawPayload)) !== stableJson(item.options)) {
+          changes.push({ type: "options_changed", externalKey: item.externalKey, title: item.name, summary: "必須選択・追加商品・選択価格・販売状態などの商品選択内容が変更されました。", previousValue: publicItemValue(previous), currentValue: publicItemValue(item) });
         }
         if (stableJson(comparablePromotionDetails(previous.rawPayload)) !== stableJson(item.promotionDetails)) {
           changes.push({ type: "item_promotion_changed", externalKey: item.externalKey, title: item.name, summary: "商品の割引・キャンペーン内容が変更されました。", previousValue: publicItemValue(previous), currentValue: publicItemValue(item) });
