@@ -675,6 +675,35 @@ function formatPrice(price: number | null, currency: string) {
   return `${currency} ${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(price)}`;
 }
 
+function itemPromotionChangeSummary(previous: PreviousItem, current: MenuItem) {
+  const previousPromotion = comparablePromotionDetails(previous.rawPayload);
+  const currentPromotion = current.promotionDetails;
+  const currentDiscountPrice = numericPrice(currentPromotion.currentPrice);
+  const previousDiscountPrice = numericPrice(previousPromotion.currentPrice);
+  const basePriceSame = previous.price !== null && current.price !== null && previous.price === current.price;
+  const basePriceText = current.price === null ? "通常価格は不明" : `通常価格は${formatPrice(current.price, current.currency)}`;
+  const baseRelation = basePriceSame ? `${basePriceText}で前回から変更なし` : previous.price !== null && current.price !== null
+    ? `通常価格は${formatPrice(previous.price, previous.currency)}から${formatPrice(current.price, current.currency)}に変更`
+    : basePriceText;
+  const discountRate = current.price && currentDiscountPrice !== null
+    ? Math.round((1 - currentDiscountPrice / current.price) * 1_000) / 10
+    : null;
+  const discountText = currentDiscountPrice === null
+    ? "割引"
+    : `${formatPrice(currentDiscountPrice, current.currency)}${discountRate !== null && discountRate > 0 ? `（${discountRate}%OFF）` : ""}`;
+
+  if (!Object.keys(previousPromotion).length && Object.keys(currentPromotion).length) {
+    return `${baseRelation}、${discountText}の割引が開始されました。`;
+  }
+  if (Object.keys(previousPromotion).length && !Object.keys(currentPromotion).length) {
+    return `${baseRelation}、割引が終了しました。`;
+  }
+  if (previousDiscountPrice !== null && currentDiscountPrice !== null && previousDiscountPrice !== currentDiscountPrice) {
+    return `${baseRelation}、割引価格が${formatPrice(previousDiscountPrice, previous.currency)}から${discountText}に変わりました。`;
+  }
+  return `${baseRelation}、割引・キャンペーン内容が変更されました。`;
+}
+
 async function notifyNewProducts(source: SourceRow, changes: Change[]) {
   const newProducts = changes.filter((change) => change.type === "new_product");
   if (!newProducts.length) return;
@@ -808,7 +837,7 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
           changes.push({ type: "options_changed", externalKey: item.externalKey, title: item.name, summary: "必須選択・追加商品・選択価格・販売状態などの商品選択内容が変更されました。", previousValue: publicItemValue(previous), currentValue: publicItemValue(item) });
         }
         if (stableJson(comparablePromotionDetails(previous.rawPayload)) !== stableJson(item.promotionDetails)) {
-          changes.push({ type: "item_promotion_changed", externalKey: item.externalKey, title: item.name, summary: "商品の割引・キャンペーン内容が変更されました。", previousValue: publicItemValue(previous), currentValue: publicItemValue(item) });
+          changes.push({ type: "item_promotion_changed", externalKey: item.externalKey, title: item.name, summary: itemPromotionChangeSummary(previous, item), previousValue: publicItemValue(previous), currentValue: publicItemValue(item) });
         }
       }
       const safeCompleteSnapshot = typedPreviousRows.length === 0 || items.length >= Math.max(1, Math.floor(typedPreviousRows.length * 0.7));
