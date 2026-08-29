@@ -247,7 +247,7 @@ export function describeOptionChanges(previous: Record<string, unknown>, current
   const hiddenLabels = hidden.map((option) => `${option.title}（${optionPriceLabel(option.price)}）`);
   const parts = [
     addedLabels.length ? `選択肢追加：${shortList(addedLabels)}` : "",
-    hiddenLabels.length ? `選択肢がメニューから非表示：${shortList(hiddenLabels)}` : "",
+    hiddenLabels.length ? `選択肢がメニューから非表示：${hiddenLabels.join("、")}` : "",
     availabilityChanged.length ? `選択肢の販売状態変更：${shortList(availabilityChanged)}` : "",
     priceChanged.length ? `選択価格変更：${shortList(priceChanged)}` : "",
     renamed.length ? `選択肢名称変更：${shortList(renamed)}` : "",
