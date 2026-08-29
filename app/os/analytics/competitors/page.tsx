@@ -39,6 +39,11 @@ type Change = {
     imageUrl?: string;
     isAvailable?: boolean;
     promotionDetails?: { currentPrice?: string; originalPrice?: string };
+    optionChangeDetails?: {
+      priority: "low" | "normal" | "high";
+      kind: "visibility" | "availability" | "catalog" | "price" | "rules" | "mixed" | "display";
+      affectedProducts?: string[];
+    };
   };
   detectedAt: string;
 };
@@ -163,6 +168,20 @@ function priceLabel(value: Change["currentValue"], changeType: string) {
   if (typeof value?.price !== "number") return "";
   if ((value.currency || "JPY") === "JPY") return `¥${new Intl.NumberFormat("ja-JP").format(value.price)}`;
   return `${value.currency} ${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value.price)}`;
+}
+
+function changeLabel(change: Change) {
+  const kind = change.currentValue?.optionChangeDetails?.kind;
+  if (change.changeType !== "options_changed" || !kind) return changeTypeLabels[change.changeType] || change.changeType;
+  return {
+    visibility: "選択肢が非表示",
+    availability: "選択肢の販売状態変更",
+    catalog: "選択肢の追加・非表示",
+    price: "選択肢価格変更",
+    rules: "選択ルール変更",
+    mixed: "選択内容変更",
+    display: "選択肢表示変更"
+  }[kind];
 }
 
 function productPriceLabel(price: number | null, currency: string) {
@@ -641,7 +660,11 @@ export default function CompetitorMenuMonitorPage() {
                     <span className="competitor-change-dot" />
                     <time>{formatDate(change.detectedAt)}</time>
                     <div>
-                      <p><span>{changeTypeLabels[change.changeType] || change.changeType}</span><small>{change.competitorName}</small></p>
+                      <p>
+                        <span>{changeLabel(change)}</span>
+                        {change.currentValue?.optionChangeDetails?.priority === "low" ? <small className="competitor-change-priority">優先度 低</small> : null}
+                        <small>{change.competitorName}</small>
+                      </p>
                       <strong>{change.title}</strong>
                       <em>{priceLabel(change.currentValue, change.changeType)}</em>
                       <div>{change.summary}{change.currentValue?.itemUrl ? <a href={change.currentValue.itemUrl} target="_blank" rel="noreferrer">商品を見る<ExternalLink size={11} /></a> : null}</div>

@@ -44892,6 +44892,16 @@ a:focus-visible {
   font-size: 12px;
 }
 
+.competitor-change-row > div > p .competitor-change-priority {
+  padding: 2px 7px;
+  border: 1px solid var(--competitor-line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--competitor-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
 .competitor-change-row strong {
   color: var(--competitor-ink);
   font-size: 14px;

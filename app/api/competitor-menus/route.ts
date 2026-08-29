@@ -1,5 +1,5 @@
 import { requireMasterOsSession } from "../../../lib/api-auth";
-import { scanCompetitorMenuSource, type CompetitorSourceType } from "../../../lib/competitor-menu-monitor";
+import { describeOptionChanges, scanCompetitorMenuSource, type CompetitorSourceType } from "../../../lib/competitor-menu-monitor";
 import { sql } from "../../../lib/db";
 
 export const runtime = "nodejs";
@@ -98,6 +98,50 @@ function promotionFromRaw(raw: Record<string, unknown>) {
   return { active, currentPrice: active ? currentPrice : "", originalPrice };
 }
 
+function objectValue(value: unknown) {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function visibleChangeRows(rows: Record<string, unknown>[]) {
+  const corrected = rows.flatMap((row) => {
+    const currentValue = objectValue(row.currentValue);
+    const currentCategory = plainText(currentValue.category);
+    if (row.changeType === "category_changed" && /^save on select items$/i.test(currentCategory)) return [];
+    if (row.changeType !== "options_changed" || currentValue.optionChangeDetails) return [row];
+    const previousValue = objectValue(row.previousValue);
+    const described = describeOptionChanges(objectValue(previousValue.options), objectValue(currentValue.options));
+    return [{
+      ...row,
+      summary: described.summary,
+      currentValue: { ...currentValue, optionChangeDetails: described.details }
+    }];
+  });
+  const grouped = new Map<string, Record<string, unknown>[]>();
+  for (const row of corrected) {
+    if (row.changeType !== "options_changed") continue;
+    const previousValue = objectValue(row.previousValue);
+    const currentValue = objectValue(row.currentValue);
+    const minute = Math.floor(new Date(String(row.detectedAt)).getTime() / 60_000);
+    const signature = JSON.stringify([row.sourceId, minute, previousValue.options, currentValue.options]);
+    grouped.set(signature, [...(grouped.get(signature) ?? []), row]);
+  }
+  const duplicates = new Set<string>();
+  for (const group of grouped.values()) {
+    if (group.length < 2) continue;
+    const [first, ...rest] = group;
+    const affectedProducts = group.map((row) => String(row.title));
+    first.title = `${String(first.title)} ほか${rest.length}商品`;
+    first.summary = `${String(first.summary)} 共通の選択内容として${group.length}商品に反映されました。`;
+    const currentValue = objectValue(first.currentValue);
+    first.currentValue = {
+      ...currentValue,
+      optionChangeDetails: { ...objectValue(currentValue.optionChangeDetails), affectedProducts }
+    };
+    for (const row of rest) duplicates.add(String(row.id));
+  }
+  return corrected.filter((row) => !duplicates.has(String(row.id)));
+}
+
 export async function GET() {
   const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -126,7 +170,8 @@ export async function GET() {
     sql`
       select changes.id::text, changes.source_id::text as "sourceId", sources.competitor_name as "competitorName",
         sources.source_name as "sourceName", changes.change_type as "changeType", changes.title,
-        changes.summary, changes.current_value as "currentValue", changes.detected_at as "detectedAt"
+        changes.summary, changes.previous_value as "previousValue", changes.current_value as "currentValue",
+        changes.detected_at as "detectedAt"
       from competitor_menu_changes changes
       join competitor_menu_sources sources on sources.id = changes.source_id
       order by changes.detected_at desc
@@ -266,6 +311,7 @@ export async function GET() {
       ...optionTotals(optionGroups)
     };
   });
+  const visibleChanges = visibleChangeRows(changes as Record<string, unknown>[]);
   return Response.json({
     sources,
     items,
@@ -275,7 +321,7 @@ export async function GET() {
       lastSyncedAt: ownItemRows.find((row) => row.lastSyncedAt)?.lastSyncedAt ?? null,
       items: ownItems
     },
-    changes,
+    changes: visibleChanges,
     recentRuns,
     summary: summaryRows[0] ?? { activeSources: 0, newProducts30d: 0, lastCompletedAt: null }
   });

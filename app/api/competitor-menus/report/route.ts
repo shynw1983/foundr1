@@ -1,4 +1,5 @@
 import { requireMasterOsSession } from "../../../../lib/api-auth";
+import { describeOptionChanges } from "../../../../lib/competitor-menu-monitor";
 import { sql } from "../../../../lib/db";
 
 export const runtime = "nodejs";
@@ -57,6 +58,58 @@ function optionsLabel(record: unknown) {
   return JSON.stringify(options);
 }
 
+function optionChangeValue(record: unknown, key: string) {
+  const details = value(record, "optionChangeDetails");
+  if (!details || typeof details !== "object") return "";
+  return (details as Record<string, unknown>)[key] ?? "";
+}
+
+function optionPriorityLabel(record: unknown) {
+  const priority = optionChangeValue(record, "priority");
+  return priority === "high" ? "高" : priority === "normal" ? "通常" : priority === "low" ? "低" : "";
+}
+
+function affectedProductsLabel(record: unknown) {
+  const products = optionChangeValue(record, "affectedProducts");
+  return Array.isArray(products) ? products.join("、") : "";
+}
+
+function objectValue(record: unknown) {
+  return record && typeof record === "object" ? record as Record<string, unknown> : {};
+}
+
+function reportChangeRows(rows: Record<string, unknown>[]) {
+  const corrected = rows.flatMap((row) => {
+    const current = objectValue(row.currentValue);
+    if (row.changeType === "category_changed" && /^save on select items$/i.test(String(current.category ?? "").trim())) return [];
+    if (row.changeType !== "options_changed" || current.optionChangeDetails) return [row];
+    const previous = objectValue(row.previousValue);
+    const described = describeOptionChanges(objectValue(previous.options), objectValue(current.options));
+    return [{ ...row, summary: described.summary, currentValue: { ...current, optionChangeDetails: described.details } }];
+  });
+  const grouped = new Map<string, Record<string, unknown>[]>();
+  for (const row of corrected) {
+    if (row.changeType !== "options_changed") continue;
+    const previous = objectValue(row.previousValue);
+    const current = objectValue(row.currentValue);
+    const minute = Math.floor(new Date(String(row.detectedAt)).getTime() / 60_000);
+    const signature = JSON.stringify([row.competitorName, minute, previous.options, current.options]);
+    grouped.set(signature, [...(grouped.get(signature) ?? []), row]);
+  }
+  const duplicates = new Set<Record<string, unknown>>();
+  for (const group of grouped.values()) {
+    if (group.length < 2) continue;
+    const [first, ...rest] = group;
+    const affectedProducts = group.map((row) => String(row.title));
+    first.title = `${String(first.title)} ほか${rest.length}商品`;
+    first.summary = `${String(first.summary)} 共通の選択内容として${group.length}商品に反映されました。`;
+    const current = objectValue(first.currentValue);
+    first.currentValue = { ...current, optionChangeDetails: { ...objectValue(current.optionChangeDetails), affectedProducts } };
+    for (const row of rest) duplicates.add(row);
+  }
+  return corrected.filter((row) => !duplicates.has(row));
+}
+
 function promotionsLabel(record: unknown) {
   const promotions = value(record, "promotionDetails") || value(record, "promotions");
   if (!promotions || typeof promotions !== "object" || !Object.keys(promotions as Record<string, unknown>).length) return "";
@@ -94,13 +147,13 @@ export async function GET(request: Request) {
     "変更前価格", "変更後価格", "通貨", "変更前分類", "変更後分類",
     "変更前販売状態", "変更後販売状態", "変更前商品説明", "変更後商品説明",
     "変更前画像", "変更後画像", "変更前その他情報", "変更後その他情報",
-    "変更前商品選択内容", "変更後商品選択内容",
+    "変更前商品選択内容", "変更後商品選択内容", "選択内容変更の優先度", "共通選択内容の対象商品",
     "変更前店舗評価", "変更後店舗評価", "変更前評価件数", "変更後評価件数",
     "変更前割引・キャンペーン", "変更後割引・キャンペーン",
     "商品URL", "メニューURL"
   ];
   const lines = [headers.map(csvCell).join(",")];
-  for (const row of rows) {
+  for (const row of reportChangeRows(rows as Record<string, unknown>[])) {
     const previous = row.previousValue;
     const current = row.currentValue;
     lines.push([
@@ -125,6 +178,8 @@ export async function GET(request: Request) {
       detailsLabel(current),
       optionsLabel(previous),
       optionsLabel(current),
+      optionPriorityLabel(current),
+      affectedProductsLabel(current),
       value(previous, "rating"),
       value(current, "rating"),
       value(previous, "reviewCount"),

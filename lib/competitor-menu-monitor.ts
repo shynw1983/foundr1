@@ -125,6 +125,163 @@ function optionDetailsLoaded(record: Record<string, unknown>) {
   return record._optionDetailsLoaded === true;
 }
 
+type OptionChangeDetails = {
+  priority: "low" | "normal" | "high";
+  kind: "visibility" | "availability" | "catalog" | "price" | "rules" | "mixed" | "display";
+  added: string[];
+  hidden: string[];
+  availabilityChanged: string[];
+  priceChanged: string[];
+  ruleChanged: string[];
+  affectedProducts?: string[];
+};
+
+type ComparableOption = {
+  id: string;
+  title: string;
+  groupTitle: string;
+  price: number;
+  isSoldOut: boolean;
+};
+
+type ComparableOptionGroup = {
+  id: string;
+  title: string;
+  min: number;
+  max: number;
+};
+
+function optionText(value: unknown) {
+  if (typeof value === "string" || typeof value === "number") return normalizeWhitespace(value);
+  if (!value || typeof value !== "object") return "";
+  const record = value as Record<string, unknown>;
+  return optionText(record.text ?? record.title ?? record.label);
+}
+
+function optionSnapshot(value: Record<string, unknown>) {
+  const options: ComparableOption[] = [];
+  const groups: ComparableOptionGroup[] = [];
+  const rootGroups = value.customizationsList;
+
+  function visit(groupValues: unknown, depth = 0) {
+    if (!Array.isArray(groupValues) || depth > 6) return;
+    for (const [groupIndex, entry] of groupValues.entries()) {
+      if (!entry || typeof entry !== "object") continue;
+      const group = entry as Record<string, unknown>;
+      const groupTitle = optionText(group.title ?? group.name) || "選択内容";
+      const groupId = optionText(group.uuid ?? group.id) || `${depth}:${groupIndex}:${groupTitle}`;
+      const uniqueMin = Number(group.minPermittedUnique ?? 0) || 0;
+      const uniqueMax = Number(group.maxPermittedUnique ?? 0) || 0;
+      groups.push({
+        id: groupId,
+        title: groupTitle,
+        min: uniqueMin > 0 ? uniqueMin : Number(group.minPermitted ?? 0) || 0,
+        max: uniqueMax > 0 ? uniqueMax : Number(group.maxPermitted ?? 0) || 0
+      });
+      const groupOptions = Array.isArray(group.options) ? group.options : [];
+      for (const [optionIndex, optionEntry] of groupOptions.entries()) {
+        if (!optionEntry || typeof optionEntry !== "object") continue;
+        const option = optionEntry as Record<string, unknown>;
+        const title = optionText(option.title ?? option.name) || "名称未設定";
+        const id = optionText(option.uuid ?? option.id) || `${groupId}:${optionIndex}:${title}`;
+        const rawPrice = Number(option.price ?? option.priceAmount ?? 0);
+        options.push({
+          id,
+          title,
+          groupTitle,
+          price: Number.isFinite(rawPrice) ? rawPrice / 100 : 0,
+          isSoldOut: option.isSoldOut === true || option.isAvailable === false
+        });
+        visit(option.childCustomizationList ?? option.customizationsList, depth + 1);
+      }
+    }
+  }
+
+  visit(rootGroups);
+  return { options, groups };
+}
+
+function shortList(values: string[], limit = 4) {
+  const visible = values.slice(0, limit).join("、");
+  return values.length > limit ? `${visible}ほか${values.length - limit}件` : visible;
+}
+
+function optionPriceLabel(value: number) {
+  return value > 0 ? `+¥${new Intl.NumberFormat("ja-JP").format(value)}` : "無料";
+}
+
+export function describeOptionChanges(previous: Record<string, unknown>, current: Record<string, unknown>) {
+  const before = optionSnapshot(previous);
+  const after = optionSnapshot(current);
+  const beforeOptions = new Map(before.options.map((option) => [option.id, option]));
+  const afterOptions = new Map(after.options.map((option) => [option.id, option]));
+  const beforeGroups = new Map(before.groups.map((group) => [group.id, group]));
+  const afterGroups = new Map(after.groups.map((group) => [group.id, group]));
+  const added = after.options.filter((option) => !beforeOptions.has(option.id));
+  const hidden = before.options.filter((option) => !afterOptions.has(option.id));
+  const availabilityChanged = after.options.flatMap((option) => {
+    const old = beforeOptions.get(option.id);
+    if (!old || old.isSoldOut === option.isSoldOut) return [];
+    return [`${option.title}（${old.isSoldOut ? "売り切れ" : "販売中"}→${option.isSoldOut ? "売り切れ" : "販売再開"}）`];
+  });
+  const priceChanged = after.options.flatMap((option) => {
+    const old = beforeOptions.get(option.id);
+    if (!old || old.price === option.price) return [];
+    return [`${option.title}（${optionPriceLabel(old.price)}→${optionPriceLabel(option.price)}）`];
+  });
+  const renamed = after.options.flatMap((option) => {
+    const old = beforeOptions.get(option.id);
+    return old && old.title !== option.title ? [`${old.title}→${option.title}`] : [];
+  });
+  const ruleChanged = after.groups.flatMap((group) => {
+    const old = beforeGroups.get(group.id);
+    if (!old) return [`選択グループ追加：${group.title}（${group.min}～${group.max}件）`];
+    if (old.title === group.title && old.min === group.min && old.max === group.max) return [];
+    return [`${old.title}${old.title !== group.title ? `→${group.title}` : ""}（${old.min}～${old.max}件→${group.min}～${group.max}件）`];
+  });
+  for (const group of before.groups) {
+    if (!afterGroups.has(group.id)) ruleChanged.push(`選択グループが非表示：${group.title}`);
+  }
+
+  const addedLabels = added.map((option) => `${option.title}（${optionPriceLabel(option.price)}）`);
+  const hiddenLabels = hidden.map((option) => `${option.title}（${optionPriceLabel(option.price)}）`);
+  const parts = [
+    addedLabels.length ? `選択肢追加：${shortList(addedLabels)}` : "",
+    hiddenLabels.length ? `選択肢がメニューから非表示：${shortList(hiddenLabels)}` : "",
+    availabilityChanged.length ? `選択肢の販売状態変更：${shortList(availabilityChanged)}` : "",
+    priceChanged.length ? `選択価格変更：${shortList(priceChanged)}` : "",
+    renamed.length ? `選択肢名称変更：${shortList(renamed)}` : "",
+    ruleChanged.length ? `選択ルール変更：${shortList(ruleChanged)}` : ""
+  ].filter(Boolean);
+  const hasPrice = priceChanged.length > 0;
+  const hasRules = ruleChanged.length > 0;
+  const onlyVisibility = hidden.length > 0 && !added.length && !availabilityChanged.length && !hasPrice && !renamed.length && !hasRules;
+  const onlyAvailability = availabilityChanged.length > 0 && !added.length && !hidden.length && !hasPrice && !renamed.length && !hasRules;
+  const kind: OptionChangeDetails["kind"] = hasPrice ? "price"
+    : hasRules ? "rules"
+      : onlyVisibility ? "visibility"
+        : onlyAvailability ? "availability"
+          : added.length || hidden.length || renamed.length ? "catalog"
+            : "display";
+  const details: OptionChangeDetails = {
+    priority: hasPrice || hasRules ? "high" : onlyVisibility || onlyAvailability || !parts.length ? "low" : "normal",
+    kind,
+    added: addedLabels,
+    hidden: hiddenLabels,
+    availabilityChanged,
+    priceChanged,
+    ruleChanged
+  };
+  return {
+    summary: parts.length ? `${parts.join("。")}。` : "選択肢の並び順または表示情報が変更されました。",
+    details
+  };
+}
+
+function isUberPromotionCategory(category: string) {
+  return /^(save on select items|selected items? offer|対象商品.*割引|一部商品.*割引)$/i.test(normalizeWhitespace(category));
+}
+
 function nestedText(value: unknown) {
   const texts = new Set<string>();
   function visit(entry: unknown, depth: number) {
@@ -267,6 +424,7 @@ function collectUberStoreItems(root: unknown, sourceUrl: string) {
   if (!catalogSectionsMap) return [];
   const currency = firstText(data?.currencyCode) || "JPY";
   const items = new Map<string, MenuItem>();
+  const promotionSectionByKey = new Map<string, boolean>();
   for (const sectionCollection of Object.values(catalogSectionsMap)) {
     if (!Array.isArray(sectionCollection)) continue;
     for (const section of sectionCollection) {
@@ -280,6 +438,7 @@ function collectUberStoreItems(root: unknown, sourceUrl: string) {
         ? (standard.title as Record<string, unknown>).text
         : standard.title;
       const category = firstText(titleValue);
+      const isPromotionSection = Boolean(normalizeWhitespace(standard.promoUUID)) || isUberPromotionCategory(category);
       const catalogItems = Array.isArray(standard.catalogItems) ? standard.catalogItems : [];
       for (const rawItem of catalogItems) {
         if (!rawItem || typeof rawItem !== "object") continue;
@@ -302,14 +461,21 @@ function collectUberStoreItems(root: unknown, sourceUrl: string) {
         const existing = items.get(item.externalKey);
         const isFeatured = /featured|おすすめ/i.test(category);
         const existingFeatured = existing ? /featured|おすすめ/i.test(existing.category) : false;
-        const isPromotional = Boolean(normalizeWhitespace(standard.promoUUID)) || Object.keys(item.promotionDetails).length > 0;
-        const existingPromotional = existing ? Object.keys(existing.promotionDetails).length > 0 : false;
         if (!existing) {
-          items.set(item.externalKey, item);
-        } else if (isPromotional && !existingPromotional) {
-          items.set(item.externalKey, { ...item, category: existing.category });
-        } else if (!isPromotional && existingPromotional) {
-          items.set(item.externalKey, { ...existing, category: item.category });
+          items.set(item.externalKey, isPromotionSection ? { ...item, category: "" } : item);
+          promotionSectionByKey.set(item.externalKey, isPromotionSection);
+        } else if (isPromotionSection && !promotionSectionByKey.get(item.externalKey)) {
+          items.set(item.externalKey, {
+            ...existing,
+            promotionDetails: Object.keys(item.promotionDetails).length ? item.promotionDetails : existing.promotionDetails,
+            rawPayload: Object.keys(item.promotionDetails).length ? item.rawPayload : existing.rawPayload
+          });
+        } else if (!isPromotionSection && promotionSectionByKey.get(item.externalKey)) {
+          items.set(item.externalKey, {
+            ...item,
+            promotionDetails: Object.keys(item.promotionDetails).length ? item.promotionDetails : existing.promotionDetails
+          });
+          promotionSectionByKey.set(item.externalKey, false);
         } else if (existingFeatured && !isFeatured) {
           items.set(item.externalKey, item);
         }
@@ -705,6 +871,36 @@ function itemPromotionChangeSummary(previous: PreviousItem, current: MenuItem) {
   return `${baseRelation}、割引・キャンペーン内容が変更されました。`;
 }
 
+function consolidateSharedOptionChanges(changes: Change[]) {
+  const optionGroups = new Map<string, Change[]>();
+  for (const change of changes) {
+    if (change.type !== "options_changed") continue;
+    const signature = stableJson({
+      previousOptions: change.previousValue.options,
+      currentOptions: change.currentValue.options,
+      optionChangeDetails: change.currentValue.optionChangeDetails
+    });
+    optionGroups.set(signature, [...(optionGroups.get(signature) ?? []), change]);
+  }
+  const duplicateChanges = new Set<Change>();
+  for (const group of optionGroups.values()) {
+    if (group.length < 2) continue;
+    const [first, ...duplicates] = group;
+    const affectedProducts = group.map((change) => change.title);
+    first.title = `${first.title} ほか${duplicates.length}商品`;
+    first.summary = `${first.summary} 共通の選択内容として${group.length}商品に反映されました。`;
+    first.currentValue = {
+      ...first.currentValue,
+      optionChangeDetails: {
+        ...(first.currentValue.optionChangeDetails as OptionChangeDetails),
+        affectedProducts
+      }
+    };
+    for (const duplicate of duplicates) duplicateChanges.add(duplicate);
+  }
+  return changes.filter((change) => !duplicateChanges.has(change));
+}
+
 async function notifyNewProducts(source: SourceRow, changes: Change[]) {
   const newProducts = changes.filter((change) => change.type === "new_product");
   if (!newProducts.length) return;
@@ -794,6 +990,14 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
       const previous = previousByIdentity.get(canonicalCompetitorProductIdentity(item.externalKey));
       if (previous) item.externalKey = previous.externalKey;
     }
+    // Uber's campaign shelf is a duplicate display location, not the product's
+    // category. If it is the only section returned temporarily, retain the last
+    // real category instead of recording a false category change.
+    for (const item of items) {
+      if (item.category && !isUberPromotionCategory(item.category)) continue;
+      const previous = previousByKey.get(item.externalKey) ?? previousByIdentity.get(canonicalCompetitorProductIdentity(item.externalKey));
+      if (previous?.category && !isUberPromotionCategory(previous.category)) item.category = previous.category;
+    }
     const currentByKey = new Map(items.map((item) => [item.externalKey, item]));
     const currentIdentities = new Set(items.map((item) => canonicalCompetitorProductIdentity(item.externalKey)));
     const changes: Change[] = [];
@@ -855,7 +1059,15 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
         }
         if (optionDetailsLoaded(previous.rawPayload) && optionDetailsLoaded(item.rawPayload)
           && stableJson(comparableOptions(previous.rawPayload)) !== stableJson(item.options)) {
-          changes.push({ type: "options_changed", externalKey: item.externalKey, title: item.name, summary: "必須選択・追加商品・選択価格・販売状態などの商品選択内容が変更されました。", previousValue: publicItemValue(previous), currentValue: publicItemValue(item) });
+          const optionChange = describeOptionChanges(comparableOptions(previous.rawPayload), item.options);
+          changes.push({
+            type: "options_changed",
+            externalKey: item.externalKey,
+            title: item.name,
+            summary: optionChange.summary,
+            previousValue: publicItemValue(previous),
+            currentValue: { ...publicItemValue(item), optionChangeDetails: optionChange.details }
+          });
         }
         if (stableJson(comparablePromotionDetails(previous.rawPayload)) !== stableJson(item.promotionDetails)) {
           changes.push({ type: "item_promotion_changed", externalKey: item.externalKey, title: item.name, summary: itemPromotionChangeSummary(previous, item), previousValue: publicItemValue(previous), currentValue: publicItemValue(item) });
@@ -871,6 +1083,8 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
         }
       }
     }
+
+    const recordedChanges = consolidateSharedOptionChanges(changes);
 
     const payload = items.map((item) => ({
       externalKey: item.externalKey,
@@ -910,14 +1124,14 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
         raw_payload = excluded.raw_payload, is_present = true,
         last_seen_at = now(), missing_at = null, updated_at = now()
     `;
-    const removedKeys = changes.filter((change) => change.type === "removed").map((change) => change.externalKey);
+    const removedKeys = recordedChanges.filter((change) => change.type === "removed").map((change) => change.externalKey);
     for (const key of removedKeys) {
       await sql`
         update competitor_menu_items set is_present = false, missing_at = now(), updated_at = now()
         where source_id = ${source.id} and external_key = ${key} and is_present = true
       `;
     }
-    for (const change of changes) {
+    for (const change of recordedChanges) {
       const itemRows = await sql`
         select id::text from competitor_menu_items where source_id = ${source.id} and external_key = ${change.externalKey} limit 1
       `;
@@ -930,7 +1144,7 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
         )
       `;
     }
-    await notifyNewProducts(source, changes);
+    await notifyNewProducts(source, recordedChanges);
     await sql`
       update competitor_menu_changes set notified_at = now()
       where source_id = ${source.id} and notified_at is null
@@ -939,8 +1153,8 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
     await Promise.all([
       sql`
         update competitor_menu_scan_runs set status = 'succeeded', item_count = ${items.length},
-          new_item_count = ${changes.filter((change) => change.type === "new_product").length},
-          change_count = ${changes.length}, completed_at = now() where id = ${runId}
+          new_item_count = ${recordedChanges.filter((change) => change.type === "new_product").length},
+          change_count = ${recordedChanges.length}, completed_at = now() where id = ${runId}
       `,
       sql`
         update competitor_menu_sources set last_scanned_at = now(), last_success_at = now(),
@@ -949,7 +1163,7 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
           last_error = '', updated_at = now() where id = ${source.id}
       `
     ]);
-    return { ok: true, sourceId: source.id, baseline, itemCount: items.length, changeCount: changes.length, newItemCount: changes.filter((change) => change.type === "new_product").length };
+    return { ok: true, sourceId: source.id, baseline, itemCount: items.length, changeCount: recordedChanges.length, newItemCount: recordedChanges.filter((change) => change.type === "new_product").length };
   } catch (error) {
     const message = error instanceof Error ? error.message : "メニューの読取に失敗しました。";
     await Promise.all([
