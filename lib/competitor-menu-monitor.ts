@@ -876,8 +876,6 @@ function consolidateSharedOptionChanges(changes: Change[]) {
   for (const change of changes) {
     if (change.type !== "options_changed") continue;
     const signature = stableJson({
-      previousOptions: change.previousValue.options,
-      currentOptions: change.currentValue.options,
       optionChangeDetails: change.currentValue.optionChangeDetails
     });
     optionGroups.set(signature, [...(optionGroups.get(signature) ?? []), change]);
@@ -887,8 +885,14 @@ function consolidateSharedOptionChanges(changes: Change[]) {
     if (group.length < 2) continue;
     const [first, ...duplicates] = group;
     const affectedProducts = group.map((change) => change.title);
-    first.title = `${first.title} ほか${duplicates.length}商品`;
-    first.summary = `${first.summary} 共通の選択内容として${group.length}商品に反映されました。`;
+    const details = first.currentValue.optionChangeDetails as OptionChangeDetails;
+    if (details.hidden.length === 1 && !details.added.length && !details.availabilityChanged.length && !details.priceChanged.length && !details.ruleChanged.length) {
+      first.title = `共通選択肢が1件非表示`;
+      first.summary = `共通選択肢が1件、メニューから非表示になりました：${details.hidden[0]}。`;
+    } else {
+      first.title = `共通選択内容の変更`;
+      first.summary = `${first.summary} ${group.length}商品で共通する1件の変更として記録しました。`;
+    }
     first.currentValue = {
       ...first.currentValue,
       optionChangeDetails: {

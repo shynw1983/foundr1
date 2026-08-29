@@ -119,25 +119,40 @@ function visibleChangeRows(rows: Record<string, unknown>[]) {
   const grouped = new Map<string, Record<string, unknown>[]>();
   for (const row of corrected) {
     if (row.changeType !== "options_changed") continue;
-    const previousValue = objectValue(row.previousValue);
     const currentValue = objectValue(row.currentValue);
+    const changeDetails = { ...objectValue(currentValue.optionChangeDetails) };
+    delete changeDetails.affectedProducts;
     const minute = Math.floor(new Date(String(row.detectedAt)).getTime() / 60_000);
-    const signature = JSON.stringify([row.sourceId, minute, previousValue.options, currentValue.options]);
+    const signature = JSON.stringify([row.sourceId, minute, changeDetails]);
     grouped.set(signature, [...(grouped.get(signature) ?? []), row]);
   }
   const duplicates = new Set<string>();
   for (const group of grouped.values()) {
     if (group.length < 2) continue;
-    const [first, ...rest] = group;
-    const affectedProducts = group.map((row) => String(row.title));
-    first.title = `${String(first.title)} ほか${rest.length}商品`;
-    first.summary = `${String(first.summary)} 共通の選択内容として${group.length}商品に反映されました。`;
+    const [first] = group;
+    const affectedProducts = [...new Set(group.flatMap((row) => {
+      const existing = objectValue(objectValue(row.currentValue).optionChangeDetails).affectedProducts;
+      return Array.isArray(existing) ? existing.map(String) : [String(row.title)];
+    }))];
     const currentValue = objectValue(first.currentValue);
+    const details = objectValue(currentValue.optionChangeDetails);
+    const hidden = Array.isArray(details.hidden) ? details.hidden : [];
+    const added = Array.isArray(details.added) ? details.added : [];
+    const availability = Array.isArray(details.availabilityChanged) ? details.availabilityChanged : [];
+    const prices = Array.isArray(details.priceChanged) ? details.priceChanged : [];
+    const rules = Array.isArray(details.ruleChanged) ? details.ruleChanged : [];
+    if (hidden.length === 1 && !added.length && !availability.length && !prices.length && !rules.length) {
+      first.title = "共通選択肢が1件非表示";
+      first.summary = `共通選択肢が1件、メニューから非表示になりました：${String(hidden[0])}。`;
+    } else {
+      first.title = "共通選択内容の変更";
+      first.summary = `${String(first.summary)} ${group.length}商品で共通する1件の変更として記録しました。`;
+    }
     first.currentValue = {
       ...currentValue,
       optionChangeDetails: { ...objectValue(currentValue.optionChangeDetails), affectedProducts }
     };
-    for (const row of rest) duplicates.add(String(row.id));
+    for (const row of group.slice(1)) duplicates.add(String(row.id));
   }
   return corrected.filter((row) => !duplicates.has(String(row.id)));
 }
