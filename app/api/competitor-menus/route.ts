@@ -138,10 +138,11 @@ function visibleChangeRows(rows: Record<string, unknown>[]) {
     const details = objectValue(currentValue.optionChangeDetails);
     const hidden = Array.isArray(details.hidden) ? details.hidden : [];
     const added = Array.isArray(details.added) ? details.added : [];
+    const returned = Array.isArray(details.returned) ? details.returned : [];
     const availability = Array.isArray(details.availabilityChanged) ? details.availabilityChanged : [];
     const prices = Array.isArray(details.priceChanged) ? details.priceChanged : [];
     const rules = Array.isArray(details.ruleChanged) ? details.ruleChanged : [];
-    if (hidden.length === 1 && !added.length && !availability.length && !prices.length && !rules.length) {
+    if (hidden.length === 1 && !added.length && !returned.length && !availability.length && !prices.length && !rules.length) {
       first.title = "共通選択肢が1件非表示";
       first.summary = `共通選択肢が1件、メニューから非表示になりました：${String(hidden[0])}。`;
     } else {

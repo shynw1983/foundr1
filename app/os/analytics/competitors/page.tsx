@@ -41,7 +41,7 @@ type Change = {
     promotionDetails?: { currentPrice?: string; originalPrice?: string };
     optionChangeDetails?: {
       priority: "low" | "normal" | "high";
-      kind: "visibility" | "availability" | "catalog" | "price" | "rules" | "mixed" | "display";
+      kind: "visibility" | "availability" | "catalog" | "returned" | "price" | "rules" | "mixed" | "display";
       affectedProducts?: string[];
     };
   };
@@ -177,6 +177,7 @@ function changeLabel(change: Change) {
     visibility: "選択肢が非表示",
     availability: "選択肢の販売状態変更",
     catalog: "選択肢の追加・非表示",
+    returned: "選択肢が再表示",
     price: "選択肢価格変更",
     rules: "選択ルール変更",
     mixed: "選択内容変更",

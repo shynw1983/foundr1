@@ -74,6 +74,10 @@ function normalizeName(value: unknown) {
   return normalizeWhitespace(value).normalize("NFKC").toLocaleLowerCase("ja-JP");
 }
 
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
 function hash(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -127,8 +131,9 @@ function optionDetailsLoaded(record: Record<string, unknown>) {
 
 type OptionChangeDetails = {
   priority: "low" | "normal" | "high";
-  kind: "visibility" | "availability" | "catalog" | "price" | "rules" | "mixed" | "display";
+  kind: "visibility" | "availability" | "catalog" | "returned" | "price" | "rules" | "mixed" | "display";
   added: string[];
+  returned: string[];
   hidden: string[];
   availabilityChanged: string[];
   priceChanged: string[];
@@ -210,14 +215,23 @@ function optionPriceLabel(value: number) {
   return value > 0 ? `+¥${new Intl.NumberFormat("ja-JP").format(value)}` : "無料";
 }
 
-export function describeOptionChanges(previous: Record<string, unknown>, current: Record<string, unknown>) {
+export function describeOptionChanges(
+  previous: Record<string, unknown>,
+  current: Record<string, unknown>,
+  historicallySeenOptionKeys: ReadonlySet<string> = new Set(),
+  historicalPricesByTitle: ReadonlyMap<string, number> = new Map()
+) {
   const before = optionSnapshot(previous);
   const after = optionSnapshot(current);
   const beforeOptions = new Map(before.options.map((option) => [option.id, option]));
   const afterOptions = new Map(after.options.map((option) => [option.id, option]));
   const beforeGroups = new Map(before.groups.map((group) => [group.id, group]));
   const afterGroups = new Map(after.groups.map((group) => [group.id, group]));
-  const added = after.options.filter((option) => !beforeOptions.has(option.id));
+  const appeared = after.options.filter((option) => !beforeOptions.has(option.id));
+  const wasSeen = (option: ComparableOption) => historicallySeenOptionKeys.has(`id:${option.id}`)
+    || historicallySeenOptionKeys.has(`title:${normalizeName(option.title)}`);
+  const returned = appeared.filter(wasSeen);
+  const added = appeared.filter((option) => !wasSeen(option));
   const hidden = before.options.filter((option) => !afterOptions.has(option.id));
   const availabilityChanged = after.options.flatMap((option) => {
     const old = beforeOptions.get(option.id);
@@ -226,8 +240,12 @@ export function describeOptionChanges(previous: Record<string, unknown>, current
   });
   const priceChanged = after.options.flatMap((option) => {
     const old = beforeOptions.get(option.id);
-    if (!old || old.price === option.price) return [];
-    return [`${option.title}（${optionPriceLabel(old.price)}→${optionPriceLabel(option.price)}）`];
+    const historicalPrice = returned.includes(option)
+      ? historicalPricesByTitle.get(normalizeName(option.title))
+      : undefined;
+    const previousPrice = old?.price ?? historicalPrice;
+    if (previousPrice === undefined || previousPrice === option.price) return [];
+    return [`${option.title}（${optionPriceLabel(previousPrice)}→${optionPriceLabel(option.price)}）`];
   });
   const renamed = after.options.flatMap((option) => {
     const old = beforeOptions.get(option.id);
@@ -244,9 +262,11 @@ export function describeOptionChanges(previous: Record<string, unknown>, current
   }
 
   const addedLabels = added.map((option) => `${option.title}（${optionPriceLabel(option.price)}）`);
+  const returnedLabels = returned.map((option) => `${option.title}（${optionPriceLabel(option.price)}）`);
   const hiddenLabels = hidden.map((option) => `${option.title}（${optionPriceLabel(option.price)}）`);
   const parts = [
     addedLabels.length ? `選択肢追加：${shortList(addedLabels)}` : "",
+    returnedLabels.length ? `選択肢が再表示：${shortList(returnedLabels)}` : "",
     hiddenLabels.length ? `選択肢がメニューから非表示：${hiddenLabels.join("、")}` : "",
     availabilityChanged.length ? `選択肢の販売状態変更：${shortList(availabilityChanged)}` : "",
     priceChanged.length ? `選択価格変更：${shortList(priceChanged)}` : "",
@@ -255,18 +275,21 @@ export function describeOptionChanges(previous: Record<string, unknown>, current
   ].filter(Boolean);
   const hasPrice = priceChanged.length > 0;
   const hasRules = ruleChanged.length > 0;
-  const onlyVisibility = hidden.length > 0 && !added.length && !availabilityChanged.length && !hasPrice && !renamed.length && !hasRules;
-  const onlyAvailability = availabilityChanged.length > 0 && !added.length && !hidden.length && !hasPrice && !renamed.length && !hasRules;
+  const onlyVisibility = hidden.length > 0 && !added.length && !returned.length && !availabilityChanged.length && !hasPrice && !renamed.length && !hasRules;
+  const onlyAvailability = availabilityChanged.length > 0 && !added.length && !returned.length && !hidden.length && !hasPrice && !renamed.length && !hasRules;
+  const onlyReturned = returned.length > 0 && !added.length && !hidden.length && !availabilityChanged.length && !hasPrice && !renamed.length && !hasRules;
   const kind: OptionChangeDetails["kind"] = hasPrice ? "price"
     : hasRules ? "rules"
       : onlyVisibility ? "visibility"
         : onlyAvailability ? "availability"
-          : added.length || hidden.length || renamed.length ? "catalog"
+          : onlyReturned ? "returned"
+            : added.length || returned.length || hidden.length || renamed.length ? "catalog"
             : "display";
   const details: OptionChangeDetails = {
-    priority: hasPrice || hasRules ? "high" : onlyVisibility || onlyAvailability || !parts.length ? "low" : "normal",
+    priority: hasPrice || hasRules ? "high" : onlyVisibility || onlyAvailability || onlyReturned || !parts.length ? "low" : "normal",
     kind,
     added: addedLabels,
+    returned: returnedLabels,
     hidden: hiddenLabels,
     availabilityChanged,
     priceChanged,
@@ -886,7 +909,7 @@ function consolidateSharedOptionChanges(changes: Change[]) {
     const [first, ...duplicates] = group;
     const affectedProducts = group.map((change) => change.title);
     const details = first.currentValue.optionChangeDetails as OptionChangeDetails;
-    if (details.hidden.length === 1 && !details.added.length && !details.availabilityChanged.length && !details.priceChanged.length && !details.ruleChanged.length) {
+    if (details.hidden.length === 1 && !details.added.length && !details.returned.length && !details.availabilityChanged.length && !details.priceChanged.length && !details.ruleChanged.length) {
       first.title = `共通選択肢が1件非表示`;
       first.summary = `共通選択肢が1件、メニューから非表示になりました：${details.hidden[0]}。`;
     } else {
@@ -954,7 +977,7 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
   const runId = String(runRows[0].id);
 
   try {
-    const [{ body, contentType, finalUrl }, previousRows, snapshotCountRows] = await Promise.all([
+    const [{ body, contentType, finalUrl }, previousRows, snapshotCountRows, optionHistoryRows] = await Promise.all([
       source.sourceType === "uber_eats" ? fetchUberMenu(source.sourceUrl) : fetchPublicMenu(source.sourceUrl),
       sql`
         select id::text, external_key as "externalKey", name, normalized_name as "normalizedName",
@@ -962,7 +985,14 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
           is_available as "isAvailable", raw_payload as "rawPayload", is_present as "isPresent"
         from competitor_menu_items where source_id = ${source.id}
       `,
-      sql`select count(*)::int as count from competitor_menu_snapshots where source_id = ${source.id}`
+      sql`select count(*)::int as count from competitor_menu_snapshots where source_id = ${source.id}`,
+      sql`
+        select title, current_value #> '{optionChangeDetails}' as details
+        from competitor_menu_changes
+        where source_id = ${source.id}
+          and change_type = 'options_changed'
+        order by detected_at
+      `
     ]);
     let items = parseMenuItems(body, contentType, finalUrl);
     const storeMetrics = parseStoreMetrics(body);
@@ -971,6 +1001,52 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
     }
     const baseline = Number(snapshotCountRows[0]?.count ?? 0) === 0;
     const typedPreviousRows = previousRows as PreviousItem[];
+    const historicallySeenOptionsByProduct = new Map<string, Set<string>>();
+    const historicalOptionPricesByProduct = new Map<string, Map<string, number>>();
+    const rememberOptions = (productName: string, value: Record<string, unknown>) => {
+      const key = normalizeName(productName);
+      if (!key) return;
+      const known = historicallySeenOptionsByProduct.get(key) ?? new Set<string>();
+      const prices = historicalOptionPricesByProduct.get(key) ?? new Map<string, number>();
+      for (const option of optionSnapshot(value).options) {
+        known.add(`id:${option.id}`);
+        known.add(`title:${normalizeName(option.title)}`);
+        prices.set(normalizeName(option.title), option.price);
+      }
+      historicallySeenOptionsByProduct.set(key, known);
+      historicalOptionPricesByProduct.set(key, prices);
+    };
+    for (const previous of typedPreviousRows) {
+      rememberOptions(previous.name, comparableOptions(previous.rawPayload));
+    }
+    for (const historyRow of optionHistoryRows as Array<Record<string, unknown>>) {
+      const optionDetails = objectValue(historyRow.details);
+      const affectedProducts = Array.isArray(optionDetails.affectedProducts)
+        ? optionDetails.affectedProducts.map(String)
+        : [String(historyRow.title ?? "")];
+      const historicalLabels = [
+        ...(Array.isArray(optionDetails.added) ? optionDetails.added : []),
+        ...(Array.isArray(optionDetails.returned) ? optionDetails.returned : []),
+        ...(Array.isArray(optionDetails.hidden) ? optionDetails.hidden : [])
+      ].map(String);
+      for (const productName of affectedProducts) {
+        const key = normalizeName(productName);
+        if (!key) continue;
+        const known = historicallySeenOptionsByProduct.get(key) ?? new Set<string>();
+        const prices = historicalOptionPricesByProduct.get(key) ?? new Map<string, number>();
+        for (const label of historicalLabels) {
+          const title = label.replace(/（(?:\+¥[\d,]+|無料)）$/, "");
+          if (title) {
+            const normalizedTitle = normalizeName(title);
+            known.add(`title:${normalizedTitle}`);
+            const priceText = label.match(/（(?:\+¥([\d,]+)|無料)）$/)?.[1];
+            prices.set(normalizedTitle, priceText ? Number(priceText.replace(/,/g, "")) : 0);
+          }
+        }
+        historicallySeenOptionsByProduct.set(key, known);
+        historicalOptionPricesByProduct.set(key, prices);
+      }
+    }
     const previousByKey = new Map(typedPreviousRows.map((item) => [item.externalKey, item]));
     const previousByIdentity = new Map<string, PreviousItem>();
     for (const previous of typedPreviousRows) {
@@ -1063,7 +1139,20 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
         }
         if (optionDetailsLoaded(previous.rawPayload) && optionDetailsLoaded(item.rawPayload)
           && stableJson(comparableOptions(previous.rawPayload)) !== stableJson(item.options)) {
-          const optionChange = describeOptionChanges(comparableOptions(previous.rawPayload), item.options);
+          const seenOptionIds = new Set([
+            ...(historicallySeenOptionsByProduct.get(normalizeName(previous.name)) ?? []),
+            ...(historicallySeenOptionsByProduct.get(normalizeName(item.name)) ?? [])
+          ]);
+          const historicalPrices = new Map([
+            ...(historicalOptionPricesByProduct.get(normalizeName(previous.name)) ?? []),
+            ...(historicalOptionPricesByProduct.get(normalizeName(item.name)) ?? [])
+          ]);
+          const optionChange = describeOptionChanges(
+            comparableOptions(previous.rawPayload),
+            item.options,
+            seenOptionIds,
+            historicalPrices
+          );
           changes.push({
             type: "options_changed",
             externalKey: item.externalKey,
