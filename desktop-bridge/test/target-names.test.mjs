@@ -5,6 +5,7 @@ import { normalizeText, targetNameTiers, tieredTargetCandidates } from "../src/a
 import { withPlatformTargetAliases } from "../src/adapters/platform-target-aliases.mjs";
 import { rocketInventoryUrl, uniqueLocatedRows } from "../src/adapters/rocket-now.mjs";
 import {
+  allowUberInventoryNameFallback,
   parseUberSoldOutDuration,
   preferCurrentUberMatches,
   projectUberInventoryAudit,
@@ -18,6 +19,12 @@ test("normalizes decorative vinegar text used differently by platforms", () => {
     normalizeText("【別添容器】香酢👈️超おすすめです🤫"),
     normalizeText("香酢超おすすめです")
   );
+});
+
+test("never falls back to a same-name Uber item for an unmapped option", () => {
+  assert.equal(allowUberInventoryNameFallback({ kind: "option", knownExternalIds: [] }), false);
+  assert.equal(allowUberInventoryNameFallback({ kind: "item", knownExternalIds: [] }), true);
+  assert.equal(allowUberInventoryNameFallback({ kind: "item", knownExternalIds: ["uber-id"] }), false);
 });
 
 test("opens Rocket inventory directly on the configured merchant store", () => {

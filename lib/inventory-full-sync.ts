@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "./db";
 import { projectInventoryTargetsForPlatform } from "./inventory-platform-targets";
+import {
+  inventoryPlatformExternalIds,
+  loadInventoryPlatformExternalIdMap
+} from "./inventory-platform-object-mappings";
 import { resolveFullSyncAvailability } from "./inventory-availability-policy";
 import { publishBridgeCommandAvailable } from "./local-bridge-realtime";
 import {
@@ -281,6 +285,10 @@ export async function scheduleFullInventorySyncForStore(input: {
     ]);
     const enabled = new Set(sourceRows.map((row) => String(row.platform)));
     const platforms = PLATFORM_KEYS.filter((platform) => enabled.has(platform));
+    const externalIdMappings = await loadInventoryPlatformExternalIdMap(
+      input.storeId,
+      targetGroups.flatMap((group) => group)
+    );
     const overrides = new Map(overrideRows.map((row) => [
       `${row.targetKind}:${row.targetId}:${row.platform}`,
       String(row.availability)
@@ -315,7 +323,8 @@ export async function scheduleFullInventorySyncForStore(input: {
             targetId: target.targetId,
             groupKey: target.kind === "option" ? target.groupKey : "",
             label: target.label,
-            aliases: target.aliases
+            aliases: target.aliases,
+            knownExternalIds: inventoryPlatformExternalIds(externalIdMappings, platform, target)
           }));
           const payload = {
             inventoryKey: `full-sync:${runId}:${platform}:${bucketKey}:${batchNumber}`,

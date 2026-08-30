@@ -14,6 +14,10 @@ import {
   type UberInventoryTarget
 } from "./uber-inventory-targets";
 import { projectInventoryTargetsForPlatform } from "./inventory-platform-targets";
+import {
+  inventoryPlatformExternalIds,
+  loadInventoryPlatformExternalIdMap
+} from "./inventory-platform-object-mappings";
 import { loadLinkedMenuTargets } from "./menu-availability-links";
 import { shouldResetPlatformAvailabilityOverrides } from "./inventory-availability-policy";
 
@@ -358,6 +362,7 @@ export async function applyInventoryAvailability(input: {
     configuredPlatforms = platforms;
   }
   const commandRows: Array<{ id: string; platform: string; status: "pending" | "succeeded"; error: string }> = [];
+  const externalIdMappings = await loadInventoryPlatformExternalIdMap(storeId, resolution.targets);
   for (const platform of configuredPlatforms) {
     const projectedTargets = projectInventoryTargetsForPlatform(
       platform as "uber_eats" | "rocket_now" | "demae_can",
@@ -449,7 +454,8 @@ export async function applyInventoryAvailability(input: {
         targetId: target.targetId,
         groupKey: target.kind === "option" ? target.groupKey : "",
         label: target.label,
-        aliases: target.aliases
+        aliases: target.aliases,
+        knownExternalIds: inventoryPlatformExternalIds(externalIdMappings, platform, target)
       }));
       const commandTargets = platform === "rocket_now" || platform === "demae_can"
         ? Array.from(new Map(serializedTargets.map((target) => [target.label.trim(), target])).values())

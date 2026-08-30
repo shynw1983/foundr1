@@ -39,6 +39,13 @@ export function uberTargetNameTiers(target) {
   };
 }
 
+export function allowUberInventoryNameFallback(target) {
+  const knownExternalIds = Array.isArray(target?.knownExternalIds)
+    ? target.knownExternalIds.map(String).filter(Boolean)
+    : [];
+  return !knownExternalIds.length && target?.kind !== "option";
+}
+
 export function parseUberSoldOutDuration(value) {
   return String(value ?? "")
     .trim()
@@ -217,7 +224,13 @@ export class UberEatsAdapter {
     const page = await this.connect();
     try {
       await this.openItemsPage(page);
-      const requested = targets.map((target) => ({ kind: target.kind, label: target.label, ...uberTargetNameTiers(target) }));
+      const requested = targets.map((target) => ({
+        kind: target.kind,
+        label: target.label,
+        knownExternalIds: Array.isArray(target.knownExternalIds) ? target.knownExternalIds.map(String).filter(Boolean) : [],
+        allowNameFallback: allowUberInventoryNameFallback(target),
+        ...uberTargetNameTiers(target)
+      }));
       return await page.evaluate(`(() => {
         ${NORMALIZE_SOURCE}
         const items = ${JSON.stringify(requested)};
@@ -227,7 +240,12 @@ export class UberEatsAdapter {
           const findMatches = (names) => {
             const wanted = new Set(names.map(normalize));
             const found = anchors
-              .filter((anchor) => normalize(anchor.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())))
+              .filter((anchor) => item.knownExternalIds.length
+                ? item.knownExternalIds.some((externalId) => {
+                    const pathParts = new URL(anchor.href, location.origin).pathname.split("/").filter(Boolean);
+                    return pathParts.includes(String(externalId).split("/").filter(Boolean).at(-1));
+                  })
+                : item.allowNameFallback && normalize(anchor.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())))
               .map((anchor) => {
                 let record = anchor.closest('tr, [role="row"], .cw.bd.il.r6.cu');
                 if (!record) {
