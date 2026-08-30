@@ -14,6 +14,18 @@ function normalizedCommandStatus(status: string, error: string) {
   return "queued";
 }
 
+function failedItemLabels(error: string, result: unknown) {
+  const resultRows = result && typeof result === "object" && Array.isArray((result as Record<string, unknown>).missingTargets)
+    ? (result as Record<string, unknown>).missingTargets as unknown[]
+    : [];
+  if (resultRows.length) return resultRows.map(String).filter(Boolean);
+  const retryList = error.match(/(?:正在重试|再試行中)[:：]\s*(.+)$/u)?.[1];
+  if (retryList) return retryList.split("、").map((value) => value.trim()).filter(Boolean);
+  const matchList = error.match(/(?:Multiple target matches|Target verification failed):\s*(.+?)(?:;|$)/iu)?.[1];
+  if (!matchList) return [];
+  return matchList.split(",").map((value) => value.replace(/=\d+\s*$/u, "").trim()).filter(Boolean);
+}
+
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
@@ -63,6 +75,8 @@ export async function GET(request: Request) {
       commands.platform,
       commands.status as "commandStatus",
       commands.last_error as "lastError",
+      commands.attempts,
+      commands.result as "commandResult",
       commands.updated_at::text as "commandUpdatedAt"
     from recent_runs
     left join local_bridge_commands commands
@@ -70,7 +84,7 @@ export async function GET(request: Request) {
     order by recent_runs.created_at desc, commands.created_at
   `;
 
-  const grouped = new Map<string, Record<string, unknown> & { commands: Array<Record<string, string>> }>();
+  const grouped = new Map<string, Record<string, unknown> & { commands: Array<Record<string, unknown>> }>();
   for (const row of rows) {
     const id = String(row.id);
     const run = grouped.get(id) ?? {
@@ -84,7 +98,7 @@ export async function GET(request: Request) {
       details: row.details && typeof row.details === "object" ? row.details : {},
       createdAt: String(row.createdAt),
       actorName: String(row.actorName),
-      commands: [] as Array<Record<string, string>>
+      commands: [] as Array<Record<string, unknown>>
     };
     if (row.commandId) {
       run.commands.push({
@@ -92,6 +106,8 @@ export async function GET(request: Request) {
         platform: String(row.platform),
         status: normalizedCommandStatus(String(row.commandStatus), String(row.lastError)),
         error: String(row.lastError),
+        attempts: Number(row.attempts ?? 0),
+        failedItems: failedItemLabels(String(row.lastError), row.commandResult),
         updatedAt: String(row.commandUpdatedAt)
       });
     }
@@ -104,8 +120,9 @@ export async function GET(request: Request) {
     // soon as the source-of-truth change or daily reconciliation is recorded.
     platformMap.set("foundr1", { platform: "foundr1", total: 1, succeeded: 1, failed: 0, timedOut: 0, processing: 0, queued: 0 });
     for (const command of run.commands) {
-      const current = platformMap.get(command.platform) ?? {
-        platform: command.platform,
+      const platform = String(command.platform);
+      const current = platformMap.get(platform) ?? {
+        platform,
         total: 0,
         succeeded: 0,
         failed: 0,
@@ -119,7 +136,7 @@ export async function GET(request: Request) {
       else if (command.status === "timed_out") current.timedOut += 1;
       else if (command.status === "processing") current.processing += 1;
       else current.queued += 1;
-      platformMap.set(command.platform, current);
+      platformMap.set(platform, current);
     }
     const platforms = [...platformMap.values()];
     const details = run.details as Record<string, unknown>;
@@ -128,7 +145,13 @@ export async function GET(request: Request) {
       : platforms.some((platform) => platform.processing || platform.queued)
         ? "processing"
         : "succeeded";
-    return { ...run, status, platforms, commands: undefined };
+    return {
+      ...run,
+      status,
+      platforms,
+      failedCommands: run.commands.filter((command) => command.status === "failed" || command.status === "timed_out"),
+      commands: undefined
+    };
   });
 
   return Response.json({ reports }, { headers: { "Cache-Control": "no-store" } });

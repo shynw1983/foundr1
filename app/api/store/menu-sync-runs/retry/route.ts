@@ -56,8 +56,17 @@ export async function POST(request: Request) {
         where newer.store_id = target.store_id
           and newer.platform = target.platform
           and newer.command_type = target.command_type
-          and newer.payload->>'inventoryKey' = target.payload->>'inventoryKey'
           and newer.created_at > target.created_at
+          and (
+            newer.payload->>'inventoryKey' = target.payload->>'inventoryKey'
+            or exists (
+              select 1
+              from jsonb_array_elements(coalesce(newer.payload->'targets', '[]'::jsonb)) newer_target
+              join jsonb_array_elements(coalesce(target.payload->'targets', '[]'::jsonb)) old_target
+                on newer_target->>'kind' = old_target->>'kind'
+                and newer_target->>'targetId' = old_target->>'targetId'
+            )
+          )
       )
     returning target.id::text, target.platform
   `;
