@@ -26,6 +26,20 @@ function failedItemLabels(error: string, result: unknown) {
   return matchList.split(",").map((value) => value.replace(/=\d+\s*$/u, "").trim()).filter(Boolean);
 }
 
+function failedTargets(error: string, result: unknown, payload: unknown) {
+  const labels = failedItemLabels(error, result);
+  const targets = payload && typeof payload === "object" && Array.isArray((payload as Record<string, unknown>).targets)
+    ? (payload as Record<string, unknown>).targets as unknown[]
+    : [];
+  return labels.map((label) => {
+    const target = targets.find((value) => value && typeof value === "object" && String((value as Record<string, unknown>).label ?? "") === label);
+    return {
+      label,
+      kind: target && typeof target === "object" && (target as Record<string, unknown>).kind === "option" ? "option" : "item"
+    };
+  });
+}
+
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
@@ -76,6 +90,7 @@ export async function GET(request: Request) {
       commands.status as "commandStatus",
       commands.last_error as "lastError",
       commands.attempts,
+      commands.payload as "commandPayload",
       commands.result as "commandResult",
       commands.updated_at::text as "commandUpdatedAt"
     from recent_runs
@@ -108,6 +123,10 @@ export async function GET(request: Request) {
         error: String(row.lastError),
         attempts: Number(row.attempts ?? 0),
         failedItems: failedItemLabels(String(row.lastError), row.commandResult),
+        failedTargets: failedTargets(String(row.lastError), row.commandResult, row.commandPayload),
+        desiredAvailable: row.commandPayload && typeof row.commandPayload === "object"
+          ? (row.commandPayload as Record<string, unknown>).isAvailable === true
+          : null,
         updatedAt: String(row.commandUpdatedAt)
       });
     }

@@ -34,6 +34,8 @@ type InventoryReport = {
     error: string;
     attempts: number;
     failedItems: string[];
+    failedTargets: Array<{ label: string; kind: "item" | "option" }>;
+    desiredAvailable: boolean | null;
     updatedAt: string;
   }>;
 };
@@ -64,12 +66,17 @@ function copy(language: Language) {
     showDetails: "查看失败详情",
     hideDetails: "收起失败详情",
     reason: "失败原因",
-    affectedItems: "未能匹配的商品",
+    affectedItems: "未能匹配的目标",
+    attemptedAction: "本次尝试动作",
+    attemptedAvailable: "恢复销售",
+    attemptedUnavailable: "设为缺货",
+    itemKind: "主商品",
+    optionKind: "选项",
     retryPlatform: "重试该平台失败项",
     retrying: "正在提交重试…",
     retryStarted: "已提交重试，请稍后刷新确认结果。",
     retryPartial: "部分任务无法重试，可能已有更新的库存操作。",
-    missingTarget: "平台菜单中找不到这些商品；同批内其他商品已成功同步。",
+    missingTarget: "平台菜单中找不到这些商品或选项；同批内其他目标已成功同步。",
     duplicateTarget: "平台菜单中存在多个同名商品，为防止改错，系统已安全停止。",
     genericError: "平台同步失败，请查看下方原始信息。",
     originalError: "原始错误信息"
@@ -99,12 +106,17 @@ function copy(language: Language) {
     showDetails: "查看失敗詳情",
     hideDetails: "收起失敗詳情",
     reason: "失敗原因",
-    affectedItems: "未能配對的商品",
+    affectedItems: "未能配對的目標",
+    attemptedAction: "本次嘗試動作",
+    attemptedAvailable: "恢復銷售",
+    attemptedUnavailable: "設為缺貨",
+    itemKind: "主商品",
+    optionKind: "選項",
     retryPlatform: "重試該平台失敗項",
     retrying: "正在提交重試…",
     retryStarted: "已提交重試，請稍後重新整理確認結果。",
     retryPartial: "部分工作無法重試，可能已有較新的庫存操作。",
-    missingTarget: "平台選單中找不到這些商品；同批內其他商品已成功同步。",
+    missingTarget: "平台選單中找不到這些商品或選項；同批內其他目標已成功同步。",
     duplicateTarget: "平台選單中存在多個同名商品，為避免改錯，系統已安全停止。",
     genericError: "平台同步失敗，請查看下方原始資訊。",
     originalError: "原始錯誤資訊"
@@ -134,12 +146,17 @@ function copy(language: Language) {
     showDetails: "失敗詳細を確認",
     hideDetails: "失敗詳細を閉じる",
     reason: "失敗理由",
-    affectedItems: "一致しなかった商品",
+    affectedItems: "一致しなかった対象",
+    attemptedAction: "今回の実行内容",
+    attemptedAvailable: "販売再開",
+    attemptedUnavailable: "在庫切れに設定",
+    itemKind: "主商品",
+    optionKind: "オプション",
     retryPlatform: "このプラットフォームの失敗分を再実行",
     retrying: "再実行を依頼中…",
     retryStarted: "再実行を依頼しました。しばらくしてから更新してください。",
     retryPartial: "一部は再実行できませんでした。新しい在庫操作がある可能性があります。",
-    missingTarget: "プラットフォームのメニューで商品が見つかりません。同じバッチの他の商品は同期済みです。",
+    missingTarget: "プラットフォームのメニューで商品・オプションが見つかりません。同じバッチの他の対象は同期済みです。",
     duplicateTarget: "同名商品が複数あるため、誤変更を防ぐため安全に停止しました。",
     genericError: "同期に失敗しました。下の原文を確認してください。",
     originalError: "元のエラー情報"
@@ -352,8 +369,11 @@ export default function InventoryHistoryPage() {
                             <div className="store-inventory-history-error" key={command.id}>
                               <strong>{labels.reason} {index + 1}</strong>
                               <p>{readableError(command.error, labels)}</p>
-                              {command.failedItems.length ? (
-                                <div><span>{labels.affectedItems}</span><ul>{command.failedItems.map((item) => <li key={item}>{item}</li>)}</ul></div>
+                              {command.desiredAvailable !== null ? (
+                                <p><strong>{labels.attemptedAction}:</strong> {command.desiredAvailable ? labels.attemptedAvailable : labels.attemptedUnavailable}</p>
+                              ) : null}
+                              {command.failedTargets.length ? (
+                                <div><span>{labels.affectedItems}</span><ul>{command.failedTargets.map((target) => <li key={`${target.kind}:${target.label}`}><small>{target.kind === "option" ? labels.optionKind : labels.itemKind}</small>{target.label}</li>)}</ul></div>
                               ) : null}
                               {command.error && readableError(command.error, labels) !== command.error ? <details><summary>{labels.originalError}</summary><code>{command.error}</code></details> : null}
                             </div>
