@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeftRight, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Layers3, PackageSearch, Plus, Radar, RefreshCw, Search, ShieldCheck, Store, Trash2 } from "lucide-react";
-import type { FormEvent } from "react";
+import type { CSSProperties, FormEvent } from "react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { ActionNotice, useActionNotice } from "../../components/ActionNotice";
 import { AnalyticsShell } from "../components/AnalyticsShell";
@@ -32,20 +32,50 @@ type Change = {
   changeType: string;
   title: string;
   summary: string;
-  currentValue: {
+  previousValue: ChangeValue;
+  currentValue: ChangeValue;
+  detectedAt: string;
+};
+
+type PromotionItem = {
+  key?: string;
+  name?: string;
+  currentPrice?: string;
+  originalPrice?: string;
+  discountLabels?: string[];
+};
+
+type PromotionCampaign = {
+  title?: string;
+  itemCount?: number;
+  discountLabels?: string[];
+  items?: PromotionItem[];
+};
+
+type ChangeValue = {
     price?: number | null;
     currency?: string;
+    name?: string;
+    category?: string;
+    description?: string;
     itemUrl?: string;
     imageUrl?: string;
     isAvailable?: boolean;
-    promotionDetails?: { currentPrice?: string; originalPrice?: string };
+    rating?: number | null;
+    reviewCount?: string;
+    promotionDetails?: { currentPrice?: string; originalPrice?: string; labels?: string[] };
+    promotions?: { active?: boolean; campaigns?: PromotionCampaign[] };
     optionChangeDetails?: {
       priority: "low" | "normal" | "high";
       kind: "visibility" | "availability" | "catalog" | "returned" | "price" | "rules" | "mixed" | "display";
       affectedProducts?: string[];
+      added?: string[];
+      hidden?: string[];
+      returned?: string[];
+      priceChanged?: string[];
+      availabilityChanged?: string[];
+      ruleChanged?: string[];
     };
-  };
-  detectedAt: string;
 };
 
 type ScanRun = {
@@ -160,16 +190,6 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function priceLabel(value: Change["currentValue"], changeType: string) {
-  if (changeType === "item_promotion_changed" && value?.promotionDetails?.currentPrice) {
-    const original = value.promotionDetails.originalPrice;
-    return original ? `${value.promotionDetails.currentPrice}（通常 ${original}）` : value.promotionDetails.currentPrice;
-  }
-  if (typeof value?.price !== "number") return "";
-  if ((value.currency || "JPY") === "JPY") return `¥${new Intl.NumberFormat("ja-JP").format(value.price)}`;
-  return `${value.currency} ${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value.price)}`;
-}
-
 function changeLabel(change: Change) {
   const kind = change.currentValue?.optionChangeDetails?.kind;
   if (change.changeType !== "options_changed" || !kind) return changeTypeLabels[change.changeType] || change.changeType;
@@ -183,6 +203,178 @@ function changeLabel(change: Change) {
     mixed: "選択内容変更",
     display: "選択肢表示変更"
   }[kind];
+}
+
+type ChangeDirection = "appeared" | "disappeared" | "changed" | "temporary" | "information";
+type ChangeCategory = "promotion" | "price" | "product" | "options" | "rating" | "display";
+
+const categoryMeta: Record<ChangeCategory, { symbol: string; label: string }> = {
+  promotion: { symbol: "%", label: "割引" },
+  price: { symbol: "¥", label: "価格" },
+  product: { symbol: "□", label: "商品" },
+  options: { symbol: "⚙", label: "選択肢" },
+  rating: { symbol: "★", label: "評価" },
+  display: { symbol: "●", label: "表示" }
+};
+
+function changeCategory(change: Change): ChangeCategory {
+  if (["store_promotion_changed", "item_promotion_changed"].includes(change.changeType)) return "promotion";
+  if (change.changeType === "price_changed") return "price";
+  if (change.changeType === "options_changed") return "options";
+  if (["store_rating_changed", "store_review_count_changed"].includes(change.changeType)) return "rating";
+  if (["new_product", "removed", "returned", "renamed"].includes(change.changeType)) return "product";
+  return "display";
+}
+
+function hasPromotion(value: ChangeValue) {
+  return Boolean(value.promotionDetails && Object.keys(value.promotionDetails).length)
+    || value.promotions?.active === true;
+}
+
+function changeDirection(change: Change): ChangeDirection {
+  if (["new_product", "returned"].includes(change.changeType)) return "appeared";
+  if (change.changeType === "removed") return "disappeared";
+  if (["item_promotion_changed", "store_promotion_changed"].includes(change.changeType)) {
+    if (!hasPromotion(change.previousValue) && hasPromotion(change.currentValue)) return "appeared";
+    if (hasPromotion(change.previousValue) && !hasPromotion(change.currentValue)) return "disappeared";
+    return "changed";
+  }
+  if (change.changeType === "availability_changed") return change.currentValue.isAvailable === false ? "temporary" : "appeared";
+  if (change.changeType === "options_changed" && change.currentValue.optionChangeDetails?.priority === "low") return "temporary";
+  if (["store_rating_changed", "store_review_count_changed"].includes(change.changeType)) return "information";
+  return "changed";
+}
+
+const directionLabels: Record<ChangeDirection, string> = {
+  appeared: "出現・開始",
+  disappeared: "消失・終了",
+  changed: "変更",
+  temporary: "一時変化",
+  information: "情報更新"
+};
+
+function promotionCount(value: ChangeValue) {
+  return value.promotions?.campaigns?.reduce((sum, campaign) => sum + Number(campaign.itemCount ?? campaign.items?.length ?? 0), 0) ?? 0;
+}
+
+function promotionLabel(value: ChangeValue) {
+  const itemPromotion = value.promotionDetails;
+  if (itemPromotion && Object.keys(itemPromotion).length) {
+    const label = itemPromotion.labels?.join("・") || "割引中";
+    return itemPromotion.currentPrice
+      ? `${itemPromotion.currentPrice}${itemPromotion.originalPrice ? `（通常 ${itemPromotion.originalPrice}）` : ""}・${label}`
+      : label;
+  }
+  if (value.promotions?.active) {
+    const labels = [...new Set(value.promotions.campaigns?.flatMap((campaign) => campaign.discountLabels ?? []) ?? [])];
+    const count = promotionCount(value);
+    return `${labels.join("・") || "キャンペーンあり"}${count ? `・対象 ${count}商品` : ""}`;
+  }
+  return "割引なし";
+}
+
+function formattedChangePrice(value: ChangeValue) {
+  if (typeof value.price !== "number") return "価格不明";
+  return productPriceLabel(value.price, value.currency || "JPY");
+}
+
+function beforeAfterValues(change: Change): { before: string; after: string } | null {
+  if (change.changeType === "price_changed") return { before: formattedChangePrice(change.previousValue), after: formattedChangePrice(change.currentValue) };
+  if (["item_promotion_changed", "store_promotion_changed"].includes(change.changeType)) return { before: promotionLabel(change.previousValue), after: promotionLabel(change.currentValue) };
+  if (change.changeType === "renamed") return { before: change.previousValue.name || "名称不明", after: change.currentValue.name || change.title };
+  if (change.changeType === "category_changed") return { before: change.previousValue.category || "未分類", after: change.currentValue.category || "未分類" };
+  if (change.changeType === "availability_changed") return { before: change.previousValue.isAvailable === false ? "売り切れ・停止" : "販売中", after: change.currentValue.isAvailable === false ? "売り切れ・停止" : "販売中" };
+  if (change.changeType === "store_rating_changed") return { before: String(change.previousValue.rating ?? "—"), after: String(change.currentValue.rating ?? "—") };
+  if (change.changeType === "store_review_count_changed") return { before: change.previousValue.reviewCount || "—", after: change.currentValue.reviewCount || "—" };
+  if (["new_product", "returned"].includes(change.changeType)) return { before: "未掲載", after: `掲載中・${formattedChangePrice(change.currentValue)}` };
+  if (change.changeType === "removed") return { before: `掲載中・${formattedChangePrice(change.previousValue)}`, after: "掲載終了" };
+  return null;
+}
+
+function promotionItems(value: ChangeValue) {
+  return value.promotions?.campaigns?.flatMap((campaign) => (campaign.items ?? []).map((item) => ({
+    ...item,
+    campaign: campaign.title || "割引対象商品",
+    campaignLabels: campaign.discountLabels ?? []
+  }))) ?? [];
+}
+
+function PromotionDetailTable({ change }: { change: Change }) {
+  const previous = promotionItems(change.previousValue);
+  const current = promotionItems(change.currentValue);
+  if (!previous.length && !current.length) return null;
+  const previousMap = new Map(previous.map((item) => [item.key || item.name || "", item]));
+  const currentMap = new Map(current.map((item) => [item.key || item.name || "", item]));
+  const keys = [...new Set([...previousMap.keys(), ...currentMap.keys()])].filter(Boolean);
+  return (
+    <div className={styles.promotionDetailTable}>
+      <div className={styles.promotionDetailHead}><span>対象商品</span><span>通常価格</span><span>割引価格</span><span>状態・力度</span></div>
+      {keys.map((key) => {
+        const before = previousMap.get(key);
+        const after = currentMap.get(key);
+        const direction = !before ? "appeared" : !after ? "disappeared" : before.currentPrice !== after.currentPrice ? "changed" : "information";
+        const item = after ?? before!;
+        return <div className={`${styles.promotionDetailRow} ${styles[`direction_${direction}`]}`} key={key}>
+          <strong>{item.name || "商品名不明"}</strong>
+          <span>{item.originalPrice || "—"}</span>
+          <span>{before?.currentPrice && after?.currentPrice && before.currentPrice !== after.currentPrice ? `${before.currentPrice} → ${after.currentPrice}` : item.currentPrice || "—"}</span>
+          <em>{!before ? "対象に追加" : !after ? "対象から終了" : after?.discountLabels?.join("・") || item.campaignLabels.join("・") || "継続"}</em>
+        </div>;
+      })}
+    </div>
+  );
+}
+
+function OptionChangeDetails({ change }: { change: Change }) {
+  const details = change.currentValue.optionChangeDetails;
+  if (!details) return null;
+  const groups = ([
+    { label: "追加", tone: "appeared", values: details.added ?? [] },
+    { label: "再表示", tone: "appeared", values: details.returned ?? [] },
+    { label: "非表示", tone: "temporary", values: details.hidden ?? [] },
+    { label: "価格変更", tone: "changed", values: details.priceChanged ?? [] },
+    { label: "販売状態", tone: "temporary", values: details.availabilityChanged ?? [] },
+    { label: "選択ルール", tone: "changed", values: details.ruleChanged ?? [] }
+  ] satisfies Array<{ label: string; tone: ChangeDirection; values: string[] }>).filter((group) => group.values.length);
+  return <div className={styles.optionChangeDetails}>
+    {groups.map((group) => <div key={group.label}><span className={styles[`direction_${group.tone}`]}>{group.label}</span><ul>{group.values.map((value) => <li key={value}>{value}</li>)}</ul></div>)}
+    {details.affectedProducts?.length ? <p><strong>影響する商品</strong>{details.affectedProducts.join("、")}</p> : null}
+  </div>;
+}
+
+function ChangeEntryBody({ change }: { change: Change }) {
+  const values = beforeAfterValues(change);
+  const hasStructuredDetail = change.changeType === "store_promotion_changed" && (promotionItems(change.previousValue).length || promotionItems(change.currentValue).length);
+  return <>
+    {values ? <div className={styles.beforeAfter}><div><span>変更前</span><strong>{values.before}</strong></div><b aria-hidden="true">→</b><div><span>変更後</span><strong>{values.after}</strong></div></div> : null}
+    {!hasStructuredDetail ? <p className={styles.changeSummary}>{change.summary}</p> : null}
+    <PromotionDetailTable change={change} />
+    <OptionChangeDetails change={change} />
+    {change.currentValue?.itemUrl ? <a className={styles.changeLink} href={change.currentValue.itemUrl} target="_blank" rel="noreferrer">元の商品を見る<ExternalLink size={11} /></a> : null}
+  </>;
+}
+
+function ChangeEntryHeader({ change }: { change: Change }) {
+  const category = categoryMeta[changeCategory(change)];
+  const direction = changeDirection(change);
+  return <span className={styles.changeEntryHeader}>
+    <span className={styles.categoryChip}><b>{category.symbol}</b>{category.label}</span>
+    <span className={`${styles.directionChip} ${styles[`direction_${direction}`]}`}>{directionLabels[direction]}</span>
+    <span className={styles.changeTypeText}>{changeLabel(change)}</span>
+    <strong>{change.title}</strong>
+  </span>;
+}
+
+function ChangeEntry({ change }: { change: Change }) {
+  const isLowPriority = change.currentValue.optionChangeDetails?.priority === "low";
+  if (isLowPriority) return <details className={`${styles.changeEntry} ${styles.lowPriorityChange}`}>
+    <summary><ChangeEntryHeader change={change} /><span className={styles.expandHint}>詳細を見る</span></summary>
+    <div className={styles.changeEntryBody}><ChangeEntryBody change={change} /></div>
+  </details>;
+  return <article className={`${styles.changeEntry} ${styles[`entry_${changeDirection(change)}`]}`}>
+    <ChangeEntryHeader change={change} />
+    <div className={styles.changeEntryBody}><ChangeEntryBody change={change} /></div>
+  </article>;
 }
 
 function productPriceLabel(price: number | null, currency: string) {
@@ -314,6 +506,7 @@ export default function CompetitorMenuMonitorPage() {
   const [productCategory, setProductCategory] = useState("all");
   const [expandedItemId, setExpandedItemId] = useState("");
   const [selectedOwnItemId, setSelectedOwnItemId] = useState("");
+  const [timelineFilter, setTimelineFilter] = useState<"all" | "important" | ChangeCategory>("all");
   const { notice, showNotice, clearNotice } = useActionNotice();
 
   async function loadData() {
@@ -330,6 +523,22 @@ export default function CompetitorMenuMonitorPage() {
   const visibleChanges = useMemo(() => selectedSourceId === "all"
     ? data.changes
     : data.changes.filter((change) => change.sourceId === selectedSourceId), [data.changes, selectedSourceId]);
+  const filteredTimelineChanges = useMemo(() => visibleChanges.filter((change) => {
+    if (timelineFilter === "all") return true;
+    if (timelineFilter === "important") return change.currentValue.optionChangeDetails?.priority !== "low";
+    return changeCategory(change) === timelineFilter;
+  }), [timelineFilter, visibleChanges]);
+  const timelineGroups = useMemo(() => {
+    const groups = new Map<string, { sourceId: string; competitorName: string; detectedAt: string; changes: Change[] }>();
+    for (const change of filteredTimelineChanges) {
+      const scanWindow = Math.floor(new Date(change.detectedAt).getTime() / (5 * 60_000));
+      const key = `${change.sourceId}:${scanWindow}`;
+      const group = groups.get(key) ?? { sourceId: change.sourceId, competitorName: change.competitorName, detectedAt: change.detectedAt, changes: [] };
+      group.changes.push(change);
+      groups.set(key, group);
+    }
+    return [...groups.values()];
+  }, [filteredTimelineChanges]);
   const sourceItems = useMemo(() => selectedSourceId === "all"
     ? data.items
     : data.items.filter((item) => item.sourceId === selectedSourceId), [data.items, selectedSourceId]);
@@ -652,26 +861,50 @@ export default function CompetitorMenuMonitorPage() {
                   </div>
                 </section>
               </div>
-            ) : !visibleChanges.length ? (
-              <div className="competitor-monitor-empty is-compact"><strong>まだ変更はありません</strong><span>初回読取で基準を作成した後、新商品・価格・割引・商品選択内容などの変更をここに記録します。</span></div>
             ) : (
-              <div className="competitor-change-timeline">
-                {visibleChanges.map((change) => (
-                  <article className={`competitor-change-row is-${change.changeType}`} key={change.id}>
-                    <span className="competitor-change-dot" />
-                    <time>{formatDate(change.detectedAt)}</time>
-                    <div>
-                      <p>
-                        <span>{changeLabel(change)}</span>
-                        {change.currentValue?.optionChangeDetails?.priority === "low" ? <small className="competitor-change-priority">優先度 低</small> : null}
-                        <small>{change.competitorName}</small>
-                      </p>
-                      <strong>{change.title}</strong>
-                      <em>{priceLabel(change.currentValue, change.changeType)}</em>
-                      <div>{change.summary}{change.currentValue?.itemUrl ? <a href={change.currentValue.itemUrl} target="_blank" rel="noreferrer">商品を見る<ExternalLink size={11} /></a> : null}</div>
-                    </div>
-                  </article>
-                ))}
+              <div className={styles.timelineWorkspace}>
+                <div className={styles.timelineTools}>
+                  <div className={styles.timelineFilters} role="group" aria-label="変更種類で絞り込み">
+                    {([
+                      ["all", "すべて"], ["important", "重要のみ"], ["promotion", "割引"], ["price", "価格"],
+                      ["product", "商品"], ["options", "選択肢"], ["rating", "評価"], ["display", "表示"]
+                    ] as const).map(([value, label]) => <button className={timelineFilter === value ? styles.activeTimelineFilter : ""} type="button" key={value} onClick={() => setTimelineFilter(value)}>{label}</button>)}
+                  </div>
+                  <div className={styles.timelineLegend} aria-label="色の意味">
+                    <span className={styles.direction_appeared}>出現・開始</span>
+                    <span className={styles.direction_disappeared}>消失・終了</span>
+                    <span className={styles.direction_changed}>変更</span>
+                    <span className={styles.direction_temporary}>一時変化</span>
+                  </div>
+                </div>
+                {!visibleChanges.length ? (
+                  <div className="competitor-monitor-empty is-compact"><strong>まだ変更はありません</strong><span>初回読取で基準を作成した後、新商品・価格・割引・商品選択内容などの変更をここに記録します。</span></div>
+                ) : !timelineGroups.length ? (
+                  <div className="competitor-monitor-empty is-compact"><strong>条件に合う変更はありません</strong><span>変更種類の絞り込みを変更してください。</span></div>
+                ) : <div className={styles.timelineGroups}>
+                  {timelineGroups.map((group) => {
+                    const sourceIndex = Math.max(0, data.sources.findIndex((source) => source.id === group.sourceId));
+                    const storeColors = ["#287a70", "#496b8a", "#765b78", "#8a6a3b", "#55765d"];
+                    const directionCounts = group.changes.reduce<Record<ChangeDirection, number>>((counts, change) => {
+                      counts[changeDirection(change)] += 1;
+                      return counts;
+                    }, { appeared: 0, disappeared: 0, changed: 0, temporary: 0, information: 0 });
+                    return <section className={styles.timelineGroup} style={{ "--store-accent": storeColors[sourceIndex % storeColors.length] } as CSSProperties} key={`${group.sourceId}-${group.detectedAt}`}>
+                      <header className={styles.timelineGroupHeader}>
+                        <span className={styles.storeMarker}>{group.competitorName.slice(0, 1)}</span>
+                        <div><strong>{group.competitorName}</strong><small>{formatDate(group.detectedAt)}・同じ確認で {group.changes.length}件</small></div>
+                        <div className={styles.groupSummary}>
+                          {directionCounts.appeared ? <span className={styles.direction_appeared}>+{directionCounts.appeared}</span> : null}
+                          {directionCounts.disappeared ? <span className={styles.direction_disappeared}>−{directionCounts.disappeared}</span> : null}
+                          {directionCounts.changed ? <span className={styles.direction_changed}>{directionCounts.changed}変更</span> : null}
+                          {directionCounts.temporary ? <span className={styles.direction_temporary}>{directionCounts.temporary}一時</span> : null}
+                          {directionCounts.information ? <span className={styles.direction_information}>{directionCounts.information}情報</span> : null}
+                        </div>
+                      </header>
+                      <div className={styles.changeEntries}>{group.changes.map((change) => <ChangeEntry change={change} key={change.id} />)}</div>
+                    </section>;
+                  })}
+                </div>}
               </div>
             )}
           </section>
