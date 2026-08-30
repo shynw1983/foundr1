@@ -6,6 +6,9 @@ import { sql } from "./db";
 import { sendLarkTextMessage } from "./lark";
 import { createOsNotification } from "./web-push";
 import { canonicalCompetitorProductIdentity } from "./competitor-menu-identity";
+import { describeStorePromotionChange, storePromotionSnapshotChanged } from "./competitor-promotion-history";
+
+export { describeStorePromotionChange } from "./competitor-promotion-history";
 
 export type CompetitorSourceType = "website" | "uber_eats" | "delivery_platform" | "json";
 
@@ -590,7 +593,11 @@ function parseStoreMetrics(body: string) {
     for (const child of Object.values(record)) visit(child, depth + 1);
   }
   for (const root of roots) visit(root, 0);
-  const campaigns = new Map<string, { title: string; itemKeys: Set<string>; discountLabels: Set<string> }>();
+  const campaigns = new Map<string, {
+    title: string;
+    items: Map<string, { key: string; name: string; currentPrice: string; originalPrice: string; discountLabels: string[] }>;
+    discountLabels: Set<string>;
+  }>();
   let hasStorePromotion = false;
   for (const root of roots) {
     if (!root || typeof root !== "object") continue;
@@ -623,11 +630,23 @@ function parseStoreMetrics(body: string) {
           const details = comparablePromotionDetails(item as Record<string, unknown>);
           return Array.isArray(details.labels) ? details.labels.map(String) : [];
         });
-        const campaign = campaigns.get(title) ?? { title, itemKeys: new Set<string>(), discountLabels: new Set<string>() };
+        const campaign = campaigns.get(title) ?? { title, items: new Map(), discountLabels: new Set<string>() };
         for (const item of catalogItems) {
           if (!item || typeof item !== "object") continue;
           const itemRecord = item as Record<string, unknown>;
-          campaign.itemKeys.add(firstText(itemRecord.uuid, itemRecord.id, itemRecord.title));
+          const key = firstText(itemRecord.uuid, itemRecord.id, itemRecord.title);
+          const promotion = comparablePromotionDetails(itemRecord);
+          const titleRecord = objectValue(itemRecord.title);
+          const name = firstText(titleRecord.text, itemRecord.title, itemRecord.name) || key || "商品名不明";
+          if (key || name) {
+            campaign.items.set(key || name, {
+              key: key || name,
+              name,
+              currentPrice: firstText(promotion.currentPrice),
+              originalPrice: firstText(promotion.originalPrice),
+              discountLabels: Array.isArray(promotion.labels) ? promotion.labels.map(String) : []
+            });
+          }
         }
         for (const label of discountLabels) campaign.discountLabels.add(label);
         campaigns.set(title, campaign);
@@ -638,8 +657,9 @@ function parseStoreMetrics(body: string) {
     active: hasStorePromotion || campaigns.size > 0,
     campaigns: [...campaigns.values()].map((campaign) => ({
       title: campaign.title,
-      itemCount: campaign.itemKeys.size,
-      discountLabels: [...campaign.discountLabels].sort((a, b) => a.localeCompare(b, "ja"))
+      itemCount: campaign.items.size,
+      discountLabels: [...campaign.discountLabels].sort((a, b) => a.localeCompare(b, "ja")),
+      items: [...campaign.items.values()].sort((a, b) => a.name.localeCompare(b.name, "ja"))
     })).sort((a, b) => a.title.localeCompare(b.title, "ja"))
   };
   return { rating, reviewCountLabel, promotions };
@@ -1099,10 +1119,10 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
           currentValue: { rating: storeMetrics.rating, reviewCount: storeMetrics.reviewCountLabel, itemUrl: source.sourceUrl }
         });
       }
-      if (source.lastPromotions !== null && stableJson(source.lastPromotions) !== stableJson(storeMetrics.promotions)) {
+      if (source.lastPromotions !== null && storePromotionSnapshotChanged(source.lastPromotions, storeMetrics.promotions)) {
         changes.push({
           type: "store_promotion_changed", externalKey: `store:${source.id}`, title: source.competitorName,
-          summary: "店舗の割引・キャンペーン内容が変更されました。",
+          summary: describeStorePromotionChange(source.lastPromotions, storeMetrics.promotions),
           previousValue: { promotions: source.lastPromotions, itemUrl: source.sourceUrl },
           currentValue: { promotions: storeMetrics.promotions, itemUrl: source.sourceUrl }
         });

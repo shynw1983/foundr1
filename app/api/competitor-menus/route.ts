@@ -1,5 +1,5 @@
 import { requireMasterOsSession } from "../../../lib/api-auth";
-import { describeOptionChanges, scanCompetitorMenuSource, type CompetitorSourceType } from "../../../lib/competitor-menu-monitor";
+import { describeOptionChanges, describeStorePromotionChange, scanCompetitorMenuSource, type CompetitorSourceType } from "../../../lib/competitor-menu-monitor";
 import { sql } from "../../../lib/db";
 
 export const runtime = "nodejs";
@@ -107,6 +107,13 @@ function visibleChangeRows(rows: Record<string, unknown>[]) {
     const currentValue = objectValue(row.currentValue);
     const currentCategory = plainText(currentValue.category);
     if (row.changeType === "category_changed" && /^save on select items$/i.test(currentCategory)) return [];
+    if (row.changeType === "store_promotion_changed") {
+      const previousValue = objectValue(row.previousValue);
+      return [{
+        ...row,
+        summary: describeStorePromotionChange(previousValue.promotions, currentValue.promotions)
+      }];
+    }
     if (row.changeType !== "options_changed" || currentValue.optionChangeDetails) return [row];
     const previousValue = objectValue(row.previousValue);
     const described = describeOptionChanges(objectValue(previousValue.options), objectValue(currentValue.options));

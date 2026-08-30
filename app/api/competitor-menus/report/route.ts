@@ -1,5 +1,5 @@
 import { requireMasterOsSession } from "../../../../lib/api-auth";
-import { describeOptionChanges } from "../../../../lib/competitor-menu-monitor";
+import { describeOptionChanges, describeStorePromotionChange } from "../../../../lib/competitor-menu-monitor";
 import { sql } from "../../../../lib/db";
 
 export const runtime = "nodejs";
@@ -82,6 +82,10 @@ function reportChangeRows(rows: Record<string, unknown>[]) {
   const corrected = rows.flatMap((row) => {
     const current = objectValue(row.currentValue);
     if (row.changeType === "category_changed" && /^save on select items$/i.test(String(current.category ?? "").trim())) return [];
+    if (row.changeType === "store_promotion_changed") {
+      const previous = objectValue(row.previousValue);
+      return [{ ...row, summary: describeStorePromotionChange(previous.promotions, current.promotions) }];
+    }
     if (row.changeType !== "options_changed" || current.optionChangeDetails) return [row];
     const previous = objectValue(row.previousValue);
     const described = describeOptionChanges(objectValue(previous.options), objectValue(current.options));
