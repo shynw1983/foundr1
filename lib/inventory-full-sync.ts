@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "./db";
 import { projectInventoryTargetsForPlatform } from "./inventory-platform-targets";
+import { resolveFullSyncAvailability } from "./inventory-availability-policy";
 import { publishBridgeCommandAvailable } from "./local-bridge-realtime";
 import {
   resolveUberInventoryTargets,
@@ -153,7 +154,15 @@ async function loadFullSyncTargets(storeId: string) {
       coalesce(menu_catalog_items.external_id, '') as "externalId",
       menu_catalog_items.name,
       menu_catalog_items.display_names as "displayNames",
-      coalesce(menu_store_settings.is_available, true) as "isAvailable"
+      case
+        when exists (
+          select 1 from menu_inventory_availability_blocks blocks
+          where blocks.store_id::text = ${storeId}
+            and blocks.target_kind = 'item'
+            and blocks.target_id = menu_catalog_items.id
+        ) then false
+        else coalesce(menu_store_settings.is_available, true)
+      end as "isAvailable"
     from menu_catalog_items
     join store_brands
       on store_brands.brand_id = menu_catalog_items.brand_id
@@ -174,7 +183,15 @@ async function loadFullSyncTargets(storeId: string) {
       coalesce(menu_options.external_id, '') as "externalId",
       menu_options.name,
       menu_options.display_names as "displayNames",
-      coalesce(menu_option_store_settings.is_available, true) as "isAvailable"
+      case
+        when exists (
+          select 1 from menu_inventory_availability_blocks blocks
+          where blocks.store_id::text = ${storeId}
+            and blocks.target_kind = 'option'
+            and blocks.target_id = menu_options.id
+        ) then false
+        else coalesce(menu_option_store_settings.is_available, true)
+      end as "isAvailable"
     from menu_options
     join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
     join store_brands
@@ -276,9 +293,10 @@ export async function scheduleFullInventorySyncForStore(input: {
       for (const group of targetGroups) {
         for (const target of projectInventoryTargetsForPlatform(platform, group)) {
           const override = overrides.get(`${target.kind}:${target.targetId}:${platform}`);
-          const desiredAvailable = override === "available"
-            ? true
-            : override === "unavailable" ? false : target.isAvailable !== false;
+          const desiredAvailable = resolveFullSyncAvailability(
+            target.isAvailable !== false,
+            override === "available" || override === "unavailable" ? override : undefined
+          );
           const key = `${target.kind}:${desiredAvailable ? "available" : "unavailable"}`;
           buckets.set(key, [...(buckets.get(key) ?? []), target]);
         }

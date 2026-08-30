@@ -15,6 +15,7 @@ import {
 } from "./uber-inventory-targets";
 import { projectInventoryTargetsForPlatform } from "./inventory-platform-targets";
 import { loadLinkedMenuTargets } from "./menu-availability-links";
+import { shouldResetPlatformAvailabilityOverrides } from "./inventory-availability-policy";
 
 type InventoryAvailabilityTarget = (UberInventoryItemTarget | UberInventoryTarget) & {
   linkedByDependency?: boolean;
@@ -134,7 +135,13 @@ export async function applyInventoryAvailability(input: {
     brandId, targetKind, targetId, linked
   })));
 
-  if (input.resetPlatformOverrides && targetRows.length) {
+  const resetPlatformOverrides = shouldResetPlatformAvailabilityOverrides({
+    requestedReset: input.resetPlatformOverrides,
+    persistOverall: input.persistOverall,
+    stockStatus,
+    hasPlatformOverride: Boolean(input.platformOverride)
+  });
+  if (resetPlatformOverrides && targetRows.length) {
     const resetJson = JSON.stringify(targetRows.map(({ targetKind, targetId }) => ({ targetKind, targetId })));
     await sql`
       with targets as (

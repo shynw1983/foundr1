@@ -66,8 +66,18 @@ async function applyInventoryAuditResult(storeId: string, result: Record<string,
       menu_option_groups.brand_id,
       ${storeId}::uuid,
       menu_options.id,
-      audited."isAvailable",
-      case when audited."isAvailable" then 'available' else 'unavailable' end,
+      audited."isAvailable" and not exists (
+        select 1 from menu_inventory_availability_blocks blocks
+        where blocks.store_id::text = ${storeId}
+          and blocks.target_kind = 'option'
+          and blocks.target_id = menu_options.id
+      ),
+      case when audited."isAvailable" and not exists (
+        select 1 from menu_inventory_availability_blocks blocks
+        where blocks.store_id::text = ${storeId}
+          and blocks.target_kind = 'option'
+          and blocks.target_id = menu_options.id
+      ) then 'available' else 'unavailable' end,
       'Uber Eats 手動完全チェック',
       now()
     from audited
@@ -107,8 +117,18 @@ async function applyInventoryAuditResult(storeId: string, result: Record<string,
       menu_catalog_items.brand_id,
       ${storeId}::uuid,
       menu_catalog_items.id,
-      audited."isAvailable",
-      case when audited."isAvailable" then 'available' else 'unavailable' end,
+      audited."isAvailable" and not exists (
+        select 1 from menu_inventory_availability_blocks blocks
+        where blocks.store_id::text = ${storeId}
+          and blocks.target_kind = 'item'
+          and blocks.target_id = menu_catalog_items.id
+      ),
+      case when audited."isAvailable" and not exists (
+        select 1 from menu_inventory_availability_blocks blocks
+        where blocks.store_id::text = ${storeId}
+          and blocks.target_kind = 'item'
+          and blocks.target_id = menu_catalog_items.id
+      ) then 'available' else 'unavailable' end,
       'Uber Eats 手動完全チェック',
       now()
     from audited
