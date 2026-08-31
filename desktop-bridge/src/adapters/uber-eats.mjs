@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 import { CdpPage } from "../cdp-page.mjs";
+import { buildUberCompetitorSnapshot } from "../competitor-snapshot.mjs";
 import { loginState, normalizeText, platformUiChanged, targetNameTiers, tieredTargetCandidates } from "./common.mjs";
 
 const UBER_ORIGIN = "https://merchants.ubereats.com/";
@@ -215,6 +216,54 @@ export class UberEatsAdapter {
         text: (document.body?.innerText ?? "").slice(0, 5000)
       })`);
       return { platform: "uber_eats", ...loginState(summary, "商品") };
+    } finally {
+      page.close();
+    }
+  }
+
+  async captureCompetitorMenuSnapshot(payload = {}) {
+    const sourceId = String(payload.sourceId ?? "").trim();
+    const sourceUrl = String(payload.sourceUrl ?? "").trim();
+    const storeUuid = String(payload.storeUuid ?? "").trim();
+    if (!sourceId || !sourceUrl || !storeUuid) throw new Error("competitor_snapshot_target_missing");
+    const port = await this.session.ensureRunning();
+    const page = await CdpPage.connect(port, "https://www.ubereats.com/");
+    try {
+      await page.navigate(sourceUrl);
+      await page.waitFor(`Boolean(document.querySelector('h1') && document.querySelector('a[href*="mod=quickView"]'))`, 30000);
+      const pageState = await page.evaluate(`(() => ({
+        menuLoaded: Boolean(document.querySelector('h1') && document.querySelectorAll('a[href*="mod=quickView"]').length),
+        locationReady: !/(?:Enter delivery address|配達先(?:住所)?を入力)/iu.test((document.body?.innerText || "").slice(0, 3000)),
+        cards: [...document.querySelectorAll('a[href*="mod=quickView"]')].map((anchor) => ({
+          href: anchor.href,
+          text: anchor.innerText || anchor.textContent || ""
+        }))
+      }))()`);
+      const apiData = await page.evaluate(`fetch("https://www.ubereats.com/_p/api/getStoreV1?localeCode=ja-JP", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "x-csrf-token": "x" },
+        body: JSON.stringify({ storeUuid: ${JSON.stringify(storeUuid)}, diningMode: "DELIVERY" })
+      }).then(async (response) => {
+        if (!response.ok) throw new Error("competitor_store_http_" + response.status);
+        const body = await response.json();
+        if (body.status !== "success") throw new Error("competitor_store_payload_invalid");
+        const data = body.data || {};
+        return {
+          isOpen: data.isOpen,
+          isOrderable: data.isOrderable,
+          closedMessage: data.closedMessage,
+          workingHoursTagline: data.workingHoursTagline,
+          storeInfoMetadata: data.storeInfoMetadata
+        };
+      })`);
+      return buildUberCompetitorSnapshot({
+        sourceId,
+        apiData,
+        cards: pageState?.cards,
+        menuLoaded: pageState?.menuLoaded === true,
+        locationReady: pageState?.locationReady === true
+      });
     } finally {
       page.close();
     }

@@ -7,6 +7,7 @@ import { sendLarkTextMessage } from "./lark";
 import { createOsNotification } from "./web-push";
 import { canonicalCompetitorProductIdentity } from "./competitor-menu-identity";
 import { describeStorePromotionChange, storePromotionSnapshotChanged } from "./competitor-promotion-history";
+import { resolvePromotionObservation, type StoreStatusSnapshot } from "./competitor-promotion-observation";
 
 export { describeStorePromotionChange } from "./competitor-promotion-history";
 
@@ -21,6 +22,7 @@ type SourceRow = {
   lastRating: number | null;
   lastReviewCountLabel: string;
   lastPromotions: Record<string, unknown> | null;
+  lastStoreStatus: Record<string, unknown>;
 };
 
 type MenuItem = {
@@ -331,6 +333,9 @@ function nestedText(value: unknown) {
 }
 
 function comparablePromotionDetails(record: Record<string, unknown>) {
+  if (record._promotionDetails && typeof record._promotionDetails === "object") {
+    return record._promotionDetails as Record<string, unknown>;
+  }
   const promoInfo = record.promoInfo && typeof record.promoInfo === "object"
     ? record.promoInfo as Record<string, unknown>
     : null;
@@ -593,6 +598,31 @@ function parseStoreMetrics(body: string) {
     for (const child of Object.values(record)) visit(child, depth + 1);
   }
   for (const root of roots) visit(root, 0);
+  let storeStatus: StoreStatusSnapshot = {
+    isOpen: null,
+    isOrderable: null,
+    availabilityState: "",
+    availabilityMessage: "",
+    workingHoursLabel: "",
+    observedAt: new Date().toISOString(),
+    source: "server"
+  };
+  for (const root of roots) {
+    const rootRecord = objectValue(root);
+    const data = objectValue(rootRecord.data ?? rootRecord);
+    if (!Object.keys(data).length) continue;
+    const metadata = objectValue(data.storeInfoMetadata);
+    const availability = objectValue(metadata.storeAvailablityStatus ?? metadata.storeAvailabilityStatus);
+    storeStatus = {
+      isOpen: typeof data.isOpen === "boolean" ? data.isOpen : storeStatus.isOpen,
+      isOrderable: typeof data.isOrderable === "boolean" ? data.isOrderable : storeStatus.isOrderable,
+      availabilityState: firstText(availability.state, storeStatus.availabilityState),
+      availabilityMessage: firstText(availability.displayMessage, data.closedMessage, storeStatus.availabilityMessage),
+      workingHoursLabel: firstText(data.workingHoursTagline, metadata.workingHoursTagline, storeStatus.workingHoursLabel),
+      observedAt: storeStatus.observedAt,
+      source: "server"
+    };
+  }
   const campaigns = new Map<string, {
     title: string;
     items: Map<string, { key: string; name: string; currentPrice: string; originalPrice: string; discountLabels: string[] }>;
@@ -662,7 +692,7 @@ function parseStoreMetrics(body: string) {
       items: [...campaign.items.values()].sort((a, b) => a.name.localeCompare(b.name, "ja"))
     })).sort((a, b) => a.title.localeCompare(b.title, "ja"))
   };
-  return { rating, reviewCountLabel, promotions };
+  return { rating, reviewCountLabel, promotions, storeStatus };
 }
 
 function uberStoreUuid(sourceUrl: string) {
@@ -983,7 +1013,8 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
   const sourceRows = await sql`
     select id::text, competitor_name as "competitorName", source_name as "sourceName",
       source_url as "sourceUrl", source_type as "sourceType", last_rating::float as "lastRating",
-      last_review_count_label as "lastReviewCountLabel", last_promotions as "lastPromotions"
+      last_review_count_label as "lastReviewCountLabel", last_promotions as "lastPromotions",
+      last_store_status as "lastStoreStatus"
     from competitor_menu_sources
     where id::text = ${sourceId}
     limit 1
@@ -1015,7 +1046,17 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
       `
     ]);
     let items = parseMenuItems(body, contentType, finalUrl);
-    const storeMetrics = parseStoreMetrics(body);
+    const rawStoreMetrics = parseStoreMetrics(body);
+    const promotionObservation = resolvePromotionObservation({
+      previous: source.lastPromotions,
+      current: rawStoreMetrics.promotions,
+      isOpen: rawStoreMetrics.storeStatus.isOpen,
+      // Vercel's anonymous Uber response can omit campaign shelves and is not
+      // authoritative for promotion removals. The Bridge supplies a complete,
+      // delivery-location-aware observation separately.
+      complete: source.sourceType !== "uber_eats"
+    });
+    const storeMetrics = { ...rawStoreMetrics, promotions: promotionObservation.promotions };
     if (!items.length) {
       throw new Error("商品データを検出できませんでした。公開メニューのURL、または専用読取方式の設定を確認してください。");
     }
@@ -1097,6 +1138,21 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
       if (item.category && !isUberPromotionCategory(item.category)) continue;
       const previous = previousByKey.get(item.externalKey) ?? previousByIdentity.get(canonicalCompetitorProductIdentity(item.externalKey));
       if (previous?.category && !isUberPromotionCategory(previous.category)) item.category = previous.category;
+    }
+    if (source.sourceType === "uber_eats" && promotionObservation.status !== "reliable") {
+      for (const item of items) {
+        const previous = previousByKey.get(item.externalKey) ?? previousByIdentity.get(canonicalCompetitorProductIdentity(item.externalKey));
+        if (!previous || Object.keys(item.promotionDetails).length) continue;
+        const previousPromotion = comparablePromotionDetails(previous.rawPayload);
+        if (!Object.keys(previousPromotion).length) continue;
+        item.promotionDetails = previousPromotion;
+        item.rawPayload = { ...item.rawPayload, _promotionDetails: previousPromotion };
+      }
+    }
+    for (const item of items) {
+      if (Object.keys(item.promotionDetails).length) {
+        item.rawPayload = { ...item.rawPayload, _promotionDetails: item.promotionDetails };
+      }
     }
     const currentByKey = new Map(items.map((item) => [item.externalKey, item]));
     const currentIdentities = new Set(items.map((item) => canonicalCompetitorProductIdentity(item.externalKey)));
@@ -1267,12 +1323,14 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
       sql`
         update competitor_menu_scan_runs set status = 'succeeded', item_count = ${items.length},
           new_item_count = ${recordedChanges.filter((change) => change.type === "new_product").length},
-          change_count = ${recordedChanges.length}, completed_at = now() where id = ${runId}
+          change_count = ${recordedChanges.length}, store_status = ${JSON.stringify(storeMetrics.storeStatus)}::jsonb,
+          promotion_observation_status = ${promotionObservation.status}, completed_at = now() where id = ${runId}
       `,
       sql`
         update competitor_menu_sources set last_scanned_at = now(), last_success_at = now(),
           last_rating = ${storeMetrics.rating}, last_review_count_label = ${storeMetrics.reviewCountLabel},
           last_promotions = ${JSON.stringify(storeMetrics.promotions)}::jsonb,
+          last_store_status = ${JSON.stringify(storeMetrics.storeStatus)}::jsonb,
           last_error = '', updated_at = now() where id = ${source.id}
       `
     ]);
@@ -1288,8 +1346,41 @@ export async function scanCompetitorMenuSource(sourceId: string, triggerType: "s
 }
 
 export async function scanAllActiveCompetitorMenus() {
-  const rows = await sql`select id::text from competitor_menu_sources where is_active = true order by created_at`;
+  const rows = await sql`
+    select id::text, source_url as "sourceUrl", source_type as "sourceType"
+    from competitor_menu_sources where is_active = true order by created_at
+  `;
   const results = [];
-  for (const row of rows) results.push(await scanCompetitorMenuSource(String(row.id), "scheduled"));
+  for (const row of rows) {
+    results.push(await scanCompetitorMenuSource(String(row.id), "scheduled"));
+    if (String(row.sourceType) !== "uber_eats") continue;
+    const bridgeRows = await sql`
+      select store_id::text as "storeId"
+      from local_bridge_devices
+      where platform = 'desktop' and is_enabled = true
+      order by last_seen_at desc nulls last, created_at
+      limit 1
+    `;
+    const storeId = String(bridgeRows[0]?.storeId ?? "");
+    if (!storeId) continue;
+    const sourceUrl = String(row.sourceUrl ?? "");
+    const storeUuid = uberStoreUuid(sourceUrl);
+    if (!storeUuid) continue;
+    const hourKey = new Date().toISOString().slice(0, 13);
+    await sql`
+      insert into local_bridge_commands (
+        store_id, platform, command_type, idempotency_key, payload
+      ) values (
+        ${storeId}, 'uber_eats', 'capture_competitor_menu_snapshot',
+        ${`competitor-menu:${String(row.id)}:${hourKey}`},
+        ${JSON.stringify({
+          sourceId: String(row.id),
+          sourceUrl,
+          storeUuid,
+          syncSource: "scheduled"
+        })}::jsonb
+      ) on conflict (idempotency_key) do nothing
+    `;
+  }
   return { ok: results.every((result) => result.ok), scanned: results.length, results };
 }

@@ -175,6 +175,7 @@ export async function GET() {
         sources.source_url as "sourceUrl", sources.source_type as "sourceType", sources.is_active as "isActive",
         sources.last_scanned_at as "lastScannedAt", sources.last_success_at as "lastSuccessAt",
         sources.last_rating::float as "lastRating", sources.last_review_count_label as "lastReviewCountLabel",
+        sources.last_store_status as "lastStoreStatus",
         sources.last_error as "lastError", sources.created_at as "createdAt",
         coalesce(items.item_count, 0)::int as "itemCount",
         coalesce(items.present_count, 0)::int as "presentItemCount",
@@ -204,7 +205,9 @@ export async function GET() {
       select runs.id::text, runs.source_id::text as "sourceId", sources.competitor_name as "competitorName",
         runs.trigger_type as "triggerType", runs.status, runs.item_count as "itemCount",
         runs.new_item_count as "newItemCount", runs.change_count as "changeCount",
-        runs.error_detail as "errorDetail", runs.started_at as "startedAt", runs.completed_at as "completedAt"
+        runs.error_detail as "errorDetail", runs.store_status as "storeStatus",
+        runs.promotion_observation_status as "promotionObservationStatus",
+        runs.started_at as "startedAt", runs.completed_at as "completedAt"
       from competitor_menu_scan_runs runs
       join competitor_menu_sources sources on sources.id = runs.source_id
       order by runs.started_at desc

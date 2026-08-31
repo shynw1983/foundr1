@@ -166,6 +166,13 @@ async function executeMenuCommand(command) {
     await reportProgress(command, { phase: "capturing", attempt: 1, maxAttempts: 3 });
     return adapter.captureMenuSnapshot(payload);
   }
+  if (command.type === "capture_competitor_menu_snapshot") {
+    await reportProgress(command, { phase: "capturing_competitor_menu", attempt: 1, maxAttempts: 3 });
+    if (typeof adapter.captureCompetitorMenuSnapshot !== "function") {
+      throw new Error(`unsupported_competitor_snapshot:${platform}`);
+    }
+    return adapter.captureCompetitorMenuSnapshot(payload);
+  }
   if (command.type === "publish_menu_changes") {
     await reportProgress(command, { phase: "locating", attempt: 1, maxAttempts: 3 });
     return adapter.publishMenuChanges(payload, async (progress) => reportProgress(command, progress));
@@ -230,7 +237,7 @@ for (;;) {
     if (command) {
       const result = command.type === "audit_inventory"
         ? await executeAuditCommand(command)
-        : ["publish_menu_changes", "capture_menu_snapshot"].includes(command.type)
+        : ["publish_menu_changes", "capture_menu_snapshot", "capture_competitor_menu_snapshot"].includes(command.type)
           ? await executeMenuCommand(command)
           : await executeInventoryCommand(command);
       await api.acknowledge(command.id, "succeeded", result);

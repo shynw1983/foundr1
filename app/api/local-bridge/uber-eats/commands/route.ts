@@ -1,5 +1,6 @@
 import { sql } from "../../../../../lib/db";
 import { authorizeLocalBridge } from "../../../../../lib/local-bridge-auth";
+import { applyCompetitorBridgeSnapshot } from "../../../../../lib/competitor-bridge-snapshot";
 import {
   publishBridgeCommandUpdated,
   publishBridgeInventoryUpdated
@@ -434,8 +435,8 @@ export async function GET(request: Request) {
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
       and (
-        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
-        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
+        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
+        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
       )
       and status in ('pending', 'processing')
       and created_at < now() - interval '2 hours'
@@ -444,13 +445,13 @@ export async function GET(request: Request) {
   await sql`
     update local_bridge_commands
     set
-      status = case when (command_type in ('publish_menu_changes', 'capture_menu_snapshot') and attempts >= 3) or attempts >= 5 then 'failed' else 'pending' end,
-      available_at = case when (command_type in ('publish_menu_changes', 'capture_menu_snapshot') and attempts >= 3) or attempts >= 5 then available_at else now() end,
+      status = case when (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3) or attempts >= 5 then 'failed' else 'pending' end,
+      available_at = case when (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3) or attempts >= 5 then available_at else now() end,
       claimed_by_device_id = null,
       claimed_at = null,
       claim_expires_at = null,
       last_error = case
-        when (command_type in ('publish_menu_changes', 'capture_menu_snapshot') and attempts >= 3) or attempts >= 5 then coalesce(nullif(last_error, ''), 'Bridge command timed out.')
+        when (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3) or attempts >= 5 then coalesce(nullif(last_error, ''), 'Bridge command timed out.')
         else last_error
       end,
       updated_at = now()
@@ -461,8 +462,8 @@ export async function GET(request: Request) {
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
       and (
-        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
-        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
+        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
+        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
       )
       and status = 'processing'
       and claim_expires_at < now()
@@ -549,8 +550,8 @@ export async function GET(request: Request) {
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
       and (
-        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
-        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
+        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
+        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
       )
       and status = 'processing'
       and (
@@ -571,7 +572,7 @@ export async function GET(request: Request) {
       claimed_by_device_id = ${authorization.deviceId || null}::uuid,
       claimed_at = now(),
       claim_expires_at = now() + case
-        when command_type in ('audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot') then interval '30 minutes'
+        when command_type in ('audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') then interval '30 minutes'
         when command_type = 'set_inventory_availability'
           and (${authorization.isDesktop} or platform = 'rocket_now') then interval '15 minutes'
         else interval '2 minutes'
@@ -587,8 +588,8 @@ export async function GET(request: Request) {
           or (platform = 'demae_can' and ${authorization.supportsDemae})
         )
         and (
-          (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
-          or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot'))
+          (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
+          or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
         )
         and status = 'pending'
         and available_at <= now()
@@ -699,6 +700,9 @@ export async function POST(request: Request) {
   if (status === "succeeded" && String(commandRows[0].commandType) === "audit_inventory") {
     auditSummary = await applyInventoryAuditResult(authorization.storeId, result);
   }
+  if (status === "succeeded" && String(commandRows[0].commandType) === "capture_competitor_menu_snapshot") {
+    await applyCompetitorBridgeSnapshot(result);
+  }
 
   const rows = status === "succeeded" ? await sql`
     update local_bridge_commands
@@ -722,7 +726,7 @@ export async function POST(request: Request) {
     set
       status = case
         when command_type in ('mark_order_ready', 'set_inventory_availability')
-          or (command_type in ('publish_menu_changes', 'capture_menu_snapshot') and attempts >= 3)
+          or (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3)
           or attempts >= 5 then 'failed'
         else 'pending'
       end,
@@ -734,7 +738,7 @@ export async function POST(request: Request) {
       claim_expires_at = null,
       completed_at = case
         when command_type in ('mark_order_ready', 'set_inventory_availability')
-          or (command_type in ('publish_menu_changes', 'capture_menu_snapshot') and attempts >= 3)
+          or (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3)
           or attempts >= 5 then now()
         else null
       end,

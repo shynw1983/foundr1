@@ -4252,6 +4252,7 @@ create table if not exists competitor_menu_sources (
   last_rating numeric(4, 2),
   last_review_count_label text not null default '',
   last_promotions jsonb,
+  last_store_status jsonb not null default '{}'::jsonb,
   last_error text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -4261,6 +4262,7 @@ create table if not exists competitor_menu_sources (
 alter table competitor_menu_sources add column if not exists last_rating numeric(4, 2);
 alter table competitor_menu_sources add column if not exists last_review_count_label text not null default '';
 alter table competitor_menu_sources add column if not exists last_promotions jsonb;
+alter table competitor_menu_sources add column if not exists last_store_status jsonb not null default '{}'::jsonb;
 
 create table if not exists competitor_menu_scan_runs (
   id uuid primary key default gen_random_uuid(),
@@ -4271,11 +4273,16 @@ create table if not exists competitor_menu_scan_runs (
   new_item_count integer not null default 0,
   change_count integer not null default 0,
   error_detail text not null default '',
+  store_status jsonb not null default '{}'::jsonb,
+  promotion_observation_status text not null default 'unknown',
   started_at timestamptz not null default now(),
   completed_at timestamptz,
   check (trigger_type in ('scheduled', 'manual', 'system')),
   check (status in ('running', 'succeeded', 'failed'))
 );
+
+alter table competitor_menu_scan_runs add column if not exists store_status jsonb not null default '{}'::jsonb;
+alter table competitor_menu_scan_runs add column if not exists promotion_observation_status text not null default 'unknown';
 
 create table if not exists competitor_menu_snapshots (
   id uuid primary key default gen_random_uuid(),

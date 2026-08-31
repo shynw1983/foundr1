@@ -18,6 +18,14 @@ type Source = {
   lastSuccessAt: string | null;
   lastRating: number | null;
   lastReviewCountLabel: string;
+  lastStoreStatus?: {
+    isOpen?: boolean | null;
+    isOrderable?: boolean | null;
+    availabilityState?: string;
+    availabilityMessage?: string;
+    workingHoursLabel?: string;
+    source?: "server" | "bridge";
+  };
   lastError: string;
   itemCount: number;
   presentItemCount: number;
@@ -700,7 +708,7 @@ export default function CompetitorMenuMonitorPage() {
                     <div className="competitor-source-copy">
                       <div><strong>{source.competitorName}</strong><span>{source.sourceName || sourceTypeLabels[source.sourceType] || source.sourceType}</span></div>
                       <a href={source.sourceUrl} target="_blank" rel="noreferrer">{new URL(source.sourceUrl).hostname}<ExternalLink size={12} /></a>
-                      <p className={source.lastError ? "is-error" : ""}>{source.lastError || `評価 ${source.lastRating ?? "—"}・評価件数 ${source.lastReviewCountLabel || "—"}・商品 ${source.presentItemCount}件・最終確認 ${formatDate(source.lastSuccessAt)}`}</p>
+                      <p className={source.lastError ? "is-error" : ""}>{source.lastError || `${source.lastStoreStatus?.isOpen === true ? "営業中" : source.lastStoreStatus?.isOpen === false ? "営業時間外" : "営業状態未確認"}・評価 ${source.lastRating ?? "—"}・評価件数 ${source.lastReviewCountLabel || "—"}・商品 ${source.presentItemCount}件・最終確認 ${formatDate(source.lastSuccessAt)}`}</p>
                     </div>
                     <div className="competitor-source-actions">
                       <button className="secondary-button" type="button" disabled={Boolean(scanningId)} onClick={() => void scanSource(source)}>
