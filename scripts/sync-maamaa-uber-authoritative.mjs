@@ -237,7 +237,7 @@ for (const group of desiredGroups) {
     const uberPrice = priceFor(item);
     desiredOptions.push({
       uberId, id: existing?.id ?? randomUUID(), existing, groupId: group.id, groupUberId: group.uberId,
-      optionKey: existing?.optionKey ?? keyify(title.ja, "uber-option"), rawTitle: textValue(item.itemInfo?.title),
+      optionKey: existing?.optionKey ?? keyify(splitPromotionPrefix(title.ja).name, `uber-${uberId.slice(0, 12)}`), rawTitle: textValue(item.itemInfo?.title),
       name: title.ja, localized: { ...(existing?.displayNames ?? {}), ...title.localized }, imageUrl: imageUrl(item),
       uberPrice, basePrice: websitePrice(uberPrice), sortOrder: (index + 1) * 10, status: availability(item)
     });

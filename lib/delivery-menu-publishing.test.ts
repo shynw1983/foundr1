@@ -5,8 +5,15 @@ import { buildDeliveryMenuPublishPreview, projectDeliveryName, projectDeliveryPr
 test("projects names according to each delivery platform rule", () => {
   const displayNames = { zh: "玉米面", ko: "옥수수면", en: "Corn noodles" };
   assert.equal(projectDeliveryName("uber_eats", "トウモロコシ麺", displayNames), "トウモロコシ麺｜玉米面｜옥수수면｜Corn noodles");
-  assert.equal(projectDeliveryName("rocket_now", "トウモロコシ麺", displayNames), "トウモロコシ麺");
+  assert.equal(projectDeliveryName("rocket_now", "トウモロコシ麺", displayNames), "トウモロコシ麺（玉米面）");
   assert.equal(projectDeliveryName("demae_can", "トウモロコシ麺", displayNames), "トウモロコシ麺｜玉米面｜옥수수면｜Corn noodles");
+});
+
+test("uses Rocket-compatible ASCII parentheses for option names", () => {
+  assert.equal(
+    projectDeliveryName("rocket_now", "微シビレ", { zh: "微微麻" }, undefined, undefined, "option"),
+    "微シビレ(微微麻)"
+  );
 });
 
 test("uses the provisional high-tier price rule for new prices", () => {
@@ -16,7 +23,7 @@ test("uses the provisional high-tier price rule for new prices", () => {
 
 test("applies platform emoji and price rules with per-target overrides", () => {
   assert.equal(projectDeliveryName("uber_eats", "おすすめ🔥", { zh: "推荐🔥", ko: "추천🔥", en: "Recommended 🔥" }), "おすすめ🔥｜推荐🔥｜추천🔥｜Recommended 🔥");
-  assert.equal(projectDeliveryName("rocket_now", "おすすめ🔥", {}), "おすすめ");
+  assert.equal(projectDeliveryName("rocket_now", "おすすめ🔥", { zh: "推荐🔥" }), "おすすめ（推荐）");
   assert.equal(projectDeliveryName("demae_can", "おすすめ🔥", { zh: "推荐🔥", ko: "추천🔥", en: "Recommended 🔥" }), "おすすめ｜推荐｜추천｜Recommended");
   assert.equal(projectDeliveryName("rocket_now", "おすすめ🔥", {}, { emojiMode: "show" }), "おすすめ🔥");
   assert.equal(projectDeliveryPrice("uber_eats", 170), 213);
@@ -24,7 +31,7 @@ test("applies platform emoji and price rules with per-target overrides", () => {
   assert.equal(projectDeliveryPrice("demae_can", 170), 170);
 });
 
-test("keeps the authoritative Uber delivery price when projecting to Rocket", () => {
+test("uses the exact Uber price when projecting to Rocket", () => {
   const preview = buildDeliveryMenuPublishPreview({
     items: [],
     options: [{
@@ -33,7 +40,7 @@ test("keeps the authoritative Uber delivery price when projecting to Rocket", ()
       groupLabel: "ベーシックトッピング",
       optionKey: "fish-roll",
       name: "チーズ入りフィッシュロール",
-      displayNames: {},
+      displayNames: { zh: "芝士鱼卷" },
       priceDelta: 170,
       isActive: true,
       platformSettings: {
@@ -81,13 +88,13 @@ test("keeps the authoritative Uber delivery price when projecting to Rocket", ()
   assert.equal(demae?.changes.some((change) => change.targetId === "fish-roll" && change.kind === "reprice"), false);
 });
 
-test("keeps the shared Uber price ahead of an old Rocket price override", () => {
+test("keeps an explicit Rocket price override ahead of the Uber price", () => {
   const preview = buildDeliveryMenuPublishPreview({
     items: [{
       id: "custom-price",
       externalId: "custom-price",
       name: "個別価格商品",
-      displayNames: {},
+      displayNames: { zh: "单独定价商品" },
       basePrice: 170,
       isActive: true,
       platformSettings: {
@@ -106,7 +113,7 @@ test("keeps the shared Uber price ahead of an old Rocket price override", () => 
   });
   const rocket = preview.platforms.find((platform) => platform.platformKey === "rocket_now");
   const priceChange = rocket?.changes.find((change) => change.targetId === "custom-price" && change.kind === "reprice");
-  assert.equal(priceChange?.projectedValue, "¥216");
+  assert.equal(priceChange?.projectedValue, undefined);
 });
 
 test("keeps an adopted platform name exact instead of appending translations again", () => {
@@ -116,6 +123,33 @@ test("keeps an adopted platform name exact instead of appending translations aga
     { zh: "玉米面", ko: "옥수수면", en: "Corn noodles" },
     { nameOverride: "プラットフォームで直接編集した名称｜Custom name", placementConfig: { useExactNameOverride: true } }
   ), "プラットフォームで直接編集した名称｜Custom name");
+});
+
+test("uses the Uber Japanese name and creates a confirmed Rocket item hidden", () => {
+  const preview = buildDeliveryMenuPublishPreview({
+    items: [{
+      id: "beef-noodles",
+      externalId: "beef-noodles",
+      name: "麻辣牛肉麺",
+      displayNames: { zh: "麻辣牛肉面" },
+      basePrice: 2300,
+      isActive: true,
+      platformSettings: {
+        uber_eats: { nameOverride: "【国産牛スネ採用】🐃麻辣牛肉麺｜麻辣牛肉面｜마라 우육면｜Mala Beef Noodles" },
+        rocket_now: { placementConfig: { confirmedPlatformCreate: true, createHidden: true } }
+      }
+    }],
+    options: [],
+    platformBaselines: {
+      rocket_now: { capturedAt: "2026-09-06", complete: true, missingTargets: [], items: [], options: [] }
+    }
+  });
+  const rocket = preview.platforms.find((platform) => platform.platformKey === "rocket_now");
+  const create = rocket?.changes.find((change) => change.kind === "create");
+  assert.equal(create?.projectedState?.name, "【国産牛スネ採用】麻辣牛肉麺（麻辣牛肉面）");
+  assert.equal(create?.projectedState?.price, 2300);
+  assert.equal(create?.projectedState?.isActive, false);
+  assert.equal(create?.confidence, "confirmed");
 });
 
 test("reports Uber name and direct price differences without mutating platform data", () => {

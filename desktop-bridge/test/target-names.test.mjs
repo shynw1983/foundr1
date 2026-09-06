@@ -3,7 +3,12 @@ import test from "node:test";
 
 import { normalizeText, targetNameTiers, tieredTargetCandidates } from "../src/adapters/common.mjs";
 import { withPlatformTargetAliases } from "../src/adapters/platform-target-aliases.mjs";
-import { rocketInventoryUrl, uniqueLocatedRows } from "../src/adapters/rocket-now.mjs";
+import {
+  rocketInventoryExternalIds,
+  rocketInventoryNameVariants,
+  rocketInventoryUrl,
+  uniqueLocatedRows
+} from "../src/adapters/rocket-now.mjs";
 import {
   allowUberInventoryNameFallback,
   parseUberSoldOutDuration,
@@ -36,6 +41,27 @@ test("opens Rocket inventory directly on the configured merchant store", () => {
     rocketInventoryUrl("118575", "item"),
     "https://store.rocketnow.co.jp/merchant/management/oos/118575/menu"
   );
+});
+
+test("matches Rocket names after a trailing Chinese translation is appended", () => {
+  assert.deepEqual(
+    rocketInventoryNameVariants("【コリコリ】白玉木耳(白玉木耳)"),
+    ["白玉木耳(白玉木耳)", "白玉木耳"]
+  );
+  assert.deepEqual(
+    rocketInventoryNameVariants("イカ (約50g )(鱿鱼)"),
+    ["イカ (約50g )(鱿鱼)", "イカ (約50g )"]
+  );
+  assert.deepEqual(
+    rocketInventoryNameVariants("広島県産牡蠣(3個)(广岛县产牡蛎(3个))"),
+    ["広島県産牡蠣(3個)(广岛县产牡蛎(3个))", "広島県産牡蠣(3個)"]
+  );
+});
+
+test("splits combined Rocket mappings into physical checkbox ids", () => {
+  assert.deepEqual(rocketInventoryExternalIds({
+    knownExternalIds: ["sub_checkbox_1_10,sub_checkbox_2_10", "sub_checkbox_1_10"]
+  }), ["sub_checkbox_1_10", "sub_checkbox_2_10"]);
 });
 
 test("keeps Japanese source variants ahead of shared translated aliases", () => {

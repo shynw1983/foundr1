@@ -1,10 +1,23 @@
 import { setTimeout as delay } from "node:timers/promises";
 
-import { loginState, pageSummary, platformUiChanged, targetNameTiers } from "./common.mjs";
+import { loginState, normalizeText, pageSummary, platformUiChanged, targetNameTiers } from "./common.mjs";
 import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 
 const OOS_URL = "https://store.rocketnow.co.jp/merchant/management/oos";
 const INVENTORY_ROW_SELECTOR = ".nested-checkbox-list__sub_title";
+
+export function rocketInventoryNameVariants(value) {
+  const normalized = normalizeText(value);
+  const withoutTranslation = normalized.replace(/\s*\((?:[^()]|\([^()]*\))*\)\s*$/u, "").trim();
+  return [...new Set([normalized, withoutTranslation].filter(Boolean))];
+}
+
+export function rocketInventoryExternalIds(target) {
+  return [...new Set((Array.isArray(target?.knownExternalIds) ? target.knownExternalIds : [])
+    .flatMap((externalId) => String(externalId).split(","))
+    .map((externalId) => externalId.trim())
+    .filter(Boolean))];
+}
 
 export function rocketInventoryUrl(storeId, targetKind = "item") {
   const merchantStoreId = String(storeId ?? "").trim();
@@ -92,10 +105,15 @@ async function selectInventoryTab(page, targetKind) {
 async function readRows(page, targets) {
   const requested = targets.map((target) => {
     const projected = withPlatformTargetAliases("rocket_now", target);
-    return { kind: projected.kind, label: projected.label, ...targetNameTiers(projected) };
+    return { kind: projected.kind, label: projected.label, knownExternalIds: rocketInventoryExternalIds(projected), ...targetNameTiers(projected) };
   });
   return page.evaluate((items) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const nameVariants = (value) => {
+      const normalized = normalize(value);
+      const withoutTranslation = normalized.replace(/\s*\((?:[^()]|\([^()]*\))*\)\s*$/u, "").trim();
+      return [...new Set([normalized, withoutTranslation].filter(Boolean))];
+    };
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
     const rowFor = (element) => {
       const stable = element?.closest('label, [role="row"], li, div[class*=e1iqhfx24]');
@@ -110,19 +128,23 @@ async function readRows(page, targets) {
     const checkboxRows = [...document.querySelectorAll('input[type="checkbox"], input[type="checkBox"]')]
       .map(rowFor).filter((row) => row?.getClientRects().length);
     const rowParts = (row) => (row?.innerText ?? row?.textContent ?? "")
-      .split(/\n|[|｜]/u).map(normalize).filter(Boolean);
+      .split(/\n|[|｜]/u).flatMap(nameVariants).filter(Boolean);
     return items.map((item) => {
       const findRows = (names) => {
         const wanted = new Set(names.map(normalize));
         const primary = titles
-          .filter((title) => normalize(title.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())))
+          .filter((title) => String(title.textContent ?? "").split(/[|｜]/u).flatMap(nameVariants).some((part) => wanted.has(part)))
           .map(rowFor)
           .filter(Boolean);
         const found = primary.length ? primary : checkboxRows
           .filter((row) => rowParts(row).some((part) => wanted.has(part)));
         return [...new Set(found)];
       };
-      const exactRows = findRows(item.exactNames);
+      const externalIdRows = item.knownExternalIds
+        .map((externalId) => document.getElementById(externalId))
+        .map(rowFor)
+        .filter(Boolean);
+      const exactRows = externalIdRows.length ? [...new Set(externalIdRows)] : findRows(item.exactNames);
       const fallbackRows = exactRows.length ? [] : findRows(item.fallbackNames);
       const aliasRows = exactRows.length || fallbackRows.length ? [] : findRows(item.aliasNames);
       const rows = exactRows.length ? exactRows : fallbackRows.length ? fallbackRows : aliasRows;
@@ -134,6 +156,8 @@ async function readRows(page, targets) {
       return {
         kind: item.kind,
         label: item.label,
+        knownExternalIds: item.knownExternalIds,
+        matchBasis: externalIdRows.length ? "external_id" : exactRows.length ? "exact_name" : fallbackRows.length ? "fallback_name" : "alias",
         names: exactRows.length
           ? item.exactNames
           : fallbackRows.length
@@ -160,12 +184,17 @@ async function readAllRows(page, targets, targetKind) {
       optionKey: target.optionKey ?? "",
      sourceBasePrice: target.sourceBasePrice ?? null,
      label: target.label,
-      knownExternalIds: Array.isArray(target.knownExternalIds) ? target.knownExternalIds : [],
+      knownExternalIds: rocketInventoryExternalIds(target),
      names: [...tiers.exactNames, ...tiers.fallbackNames, ...tiers.aliasNames]
     };
   });
   return page.evaluate(({ targets: items, defaultKind }) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const nameVariants = (value) => {
+      const normalized = normalize(value);
+      const withoutTranslation = normalized.replace(/\s*\((?:[^()]|\([^()]*\))*\)\s*$/u, "").trim();
+      return [...new Set([normalized, withoutTranslation].filter(Boolean))];
+    };
     const targetRows = items.map((item) => ({ ...item, normalizedNames: [...new Set(item.names.map(normalize).filter(Boolean))] }));
     const unmappedTargetRows = targetRows.filter((target) => !target.knownExternalIds.length);
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")]
@@ -192,7 +221,7 @@ async function readAllRows(page, targets, targetKind) {
    const entries = [...grouped.entries()].map(([normalizedName, group]) => {
       const checkboxIds = [...new Set(group.rows.map((row) => row.querySelector('input[type="checkbox"], input[type="checkBox"]')?.id ?? "").filter(Boolean))].sort();
       const externalId = checkboxIds.join(",") || defaultKind + ":" + normalizedName;
-     const parts = normalizedName.split(/[|｜]/u).map((part) => part.trim()).filter(Boolean);
+     const parts = String(group.name ?? "").split(/[|｜]/u).flatMap(nameVariants).filter(Boolean);
       const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.some((knownId) => knownId === externalId || checkboxIds.includes(knownId)));
       const candidates = mappedCandidates.length
         ? mappedCandidates
@@ -316,6 +345,11 @@ function mergeCatalogEntries(inventoryEntries, catalog, targetKind) {
 async function waitForRows(page, items, hidden, targetKind) {
   const verify = async () => page.waitForFunction(({ requested, expectedHidden }) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+    const nameVariants = (value) => {
+      const normalized = normalize(value);
+      const withoutTranslation = normalized.replace(/\s*\((?:[^()]|\([^()]*\))*\)\s*$/u, "").trim();
+      return [...new Set([normalized, withoutTranslation].filter(Boolean))];
+    };
     const titles = [...document.querySelectorAll(".nested-checkbox-list__sub_title")];
     const rowFor = (element) => {
       const stable = element?.closest('label, [role="row"], li, div[class*=e1iqhfx24]');
@@ -329,11 +363,18 @@ async function waitForRows(page, items, hidden, targetKind) {
     const checkboxRows = [...document.querySelectorAll('input[type="checkbox"], input[type="checkBox"]')]
       .map(rowFor).filter((row) => row?.getClientRects().length);
     const rowParts = (row) => (row?.innerText ?? row?.textContent ?? "")
-      .split(/\n|[|｜]/u).map(normalize).filter(Boolean);
+      .split(/\n|[|｜]/u).flatMap(nameVariants).filter(Boolean);
     return requested.every((item) => {
       const wanted = new Set(item.names.map(normalize));
-      const matchingTitles = titles.filter((candidate) => normalize(candidate.textContent).split(/[|｜]/u).some((part) => wanted.has(part.trim())));
-      const matching = matchingTitles.length
+      const checkboxIds = [...new Set([
+        ...(Array.isArray(item.knownExternalIds) ? item.knownExternalIds : []),
+        ...(Array.isArray(item.matches) ? item.matches.flatMap((match) => match?.rowMatches ?? [match]).map((match) => match?.checkboxId) : [])
+      ].filter(Boolean))];
+      const idRows = checkboxIds.map((checkboxId) => rowFor(document.getElementById(checkboxId))).filter(Boolean);
+      const matchingTitles = titles.filter((candidate) => String(candidate.textContent ?? "").split(/[|｜]/u).flatMap(nameVariants).some((part) => wanted.has(part)));
+      const matching = idRows.length
+        ? [...new Set(idRows)]
+        : matchingTitles.length
         ? matchingTitles.map(rowFor).filter(Boolean)
         : checkboxRows.filter((row) => rowParts(row).some((part) => wanted.has(part)));
       return matching.length > 0 && matching.every((row) => {
@@ -394,7 +435,15 @@ export class RocketNowAdapter {
     const page = await this.session.goto(this.inventoryUrl(targetKind));
     await selectInventoryTab(page, targetKind);
     const desiredHidden = payload.isAvailable !== true;
-    const fresh = await readRows(page, located.map((item) => ({ kind: item.kind, label: item.label, aliases: item.names })));
+    const fresh = await readRows(page, located.map((item) => ({
+      kind: item.kind,
+      label: item.label,
+      aliases: item.names,
+      knownExternalIds: [...new Set([
+        ...(Array.isArray(item.knownExternalIds) ? item.knownExternalIds : []),
+        ...(item.matches[0]?.rowMatches ?? item.matches).map((match) => match?.checkboxId).filter(Boolean)
+      ])]
+    })));
     const changing = fresh.flatMap((item) => {
       const rowMatches = (item.matches[0]?.rowMatches ?? item.matches)
         .filter((match) => match.hidden !== desiredHidden);

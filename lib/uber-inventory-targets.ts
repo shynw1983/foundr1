@@ -141,9 +141,22 @@ export function resolveUberInventoryTargets(
   );
   if (exactRows.length) {
     const exactKeys = new Set(exactRows.map(({ canonicalKey }) => canonicalKey).filter(Boolean));
-    const inventoryKey = exactKeys.size === 1 ? [...exactKeys][0] : normalizedInput;
-    const selectedRows = exactKeys.size === 1
+    const sharedKeyRows = exactKeys.size === 1
       ? preparedRows.filter(({ canonicalKey }) => exactKeys.has(canonicalKey))
+      : [];
+    // Imported option keys can accidentally contain only a promotion prefix
+    // such as "new". Never let that generic key link unrelated products. A
+    // shared key is trustworthy only when every row also matched the requested
+    // product name (normal/replacement/cold noodle aliases remain supported).
+    const hasAmbiguousSharedKey = sharedKeyRows.length > exactRows.length
+      && !sharedKeyRows.every(({ row }) => /noodle|麺|面/i.test(row.groupKey));
+    const inventoryKey = exactKeys.size === 1 && !hasAmbiguousSharedKey
+      ? [...exactKeys][0]
+      : exactRows.length === 1
+        ? `option:${exactRows[0].row.externalId || exactRows[0].row.id}`
+        : normalizedInput;
+    const selectedRows = exactKeys.size === 1 && !hasAmbiguousSharedKey
+      ? sharedKeyRows
       : exactRows;
     return {
       inventoryKey,

@@ -101,6 +101,17 @@ test("matches a customer-facing topping label directly", () => {
   assert.equal(result.targets[0]?.menuOptionId, "vinegar");
 });
 
+test("does not group unrelated NEW options that inherited the same generic option key", () => {
+  const result = resolveUberInventoryTargets("鱼籽福袋", [
+    row({ id: "fish-roe", groupKey: "base", optionKey: "new", externalId: "uber-fish-roe", name: "【NEW】魚卵入り巾着", displayNames: { zh: "鱼籽福袋" } }),
+    row({ id: "sausage", groupKey: "premium", optionKey: "new", externalId: "uber-sausage", name: "【NEW】黒豚ソーセージ", displayNames: { zh: "黑猪香肠" } }),
+    row({ id: "bamboo", groupKey: "standard", optionKey: "new", externalId: "uber-bamboo", name: "【NEW】丸ごとたけのこ", displayNames: { zh: "整根竹笋" } })
+  ]);
+
+  assert.equal(result.inventoryKey, "option:uber-fish-roe");
+  assert.deepEqual(result.targets.map((target) => target.menuOptionId), ["fish-roe"]);
+});
+
 test("keeps the stable OS inventory key when a platform import replaces externalId", () => {
   const result = resolveUberInventoryTargets("チンゲン菜", [
     row({

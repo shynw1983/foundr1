@@ -72,9 +72,10 @@ export type MenuPlatformBaseline = {
 export type DeliveryPlatformRule = {
   name: string;
   ruleVersion: string;
-  nameMode: "multilingual_join" | "japanese";
+  nameMode: "multilingual_join" | "japanese" | "japanese_chinese_parentheses";
+  optionParenthesesStyle?: "fullwidth" | "ascii";
   emojiMode: "preserve" | "strip";
-  priceMode: "base" | "high_tier";
+  priceMode: "base" | "high_tier" | "uber_exact";
   priceMultiplier: number;
   roundingMode: "nearest" | "ceil" | "floor";
   roundingUnit: number;
@@ -127,7 +128,7 @@ export type MenuPublishPreviewPlatform = {
 };
 
 const multilingualOrder = ["zh", "ko", "en"] as const;
-const emojiPattern = /[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu;
+const emojiPattern = /[\p{Extended_Pictographic}\u{13000}-\u{1342F}\uFE0F\u200D\u20E3]/gu;
 
 export const deliveryPlatformRules: Record<DeliveryMenuPlatformKey, DeliveryPlatformRule> = {
   uber_eats: {
@@ -144,14 +145,15 @@ export const deliveryPlatformRules: Record<DeliveryMenuPlatformKey, DeliveryPlat
   },
   rocket_now: {
     name: "Rocket Now",
-    ruleVersion: "rocket-v2",
-    nameMode: "japanese",
+    ruleVersion: "rocket-v5",
+    nameMode: "japanese_chinese_parentheses",
+    optionParenthesesStyle: "ascii",
     emojiMode: "strip",
-    priceMode: "high_tier",
-    priceMultiplier: 1.25,
+    priceMode: "uber_exact",
+    priceMultiplier: 1,
     roundingMode: "nearest",
     roundingUnit: 1,
-    requiredLanguages: [],
+    requiredLanguages: ["zh"],
     groupLimits: { standard: 35, basic: 24, premium: 20, vip: 3, noodles: 2, "noodle-replacement": 2, "cold-noodles": 1 }
   },
   demae_can: {
@@ -181,18 +183,37 @@ function applyEmojiRule(value: string, rule: DeliveryPlatformRule, setting?: Men
   return mode === "strip" ? stripEmoji(value) : value.trim();
 }
 
+function uberAuthoritativeJapaneseName(
+  platformKey: DeliveryMenuPlatformKey,
+  fallbackName: string,
+  platformSettings?: MenuProjectionItem["platformSettings"] | MenuProjectionOption["platformSettings"]
+) {
+  if (platformKey !== "rocket_now") return fallbackName;
+  const uberName = String(platformSettings?.uber_eats?.nameOverride ?? "").trim();
+  return uberName ? (uberName.split(/[|｜]/u)[0]?.trim() || fallbackName) : fallbackName;
+}
+
 export function projectDeliveryName(
   platformKey: DeliveryMenuPlatformKey,
   name: string,
   displayNames: Record<string, string> = {},
   setting?: MenuPlatformTargetSetting,
-  rule: DeliveryPlatformRule = deliveryPlatformRules[platformKey]
+  rule: DeliveryPlatformRule = deliveryPlatformRules[platformKey],
+  targetType: "item" | "option" = "item"
 ) {
   const sourceName = String(setting?.nameOverride ?? "").trim() || name.trim();
   if (setting?.nameOverride && setting.placementConfig?.useExactNameOverride === true) {
     return applyEmojiRule(sourceName, rule, setting);
   }
   if (rule.nameMode === "japanese") return applyEmojiRule(sourceName, rule, setting);
+  if (rule.nameMode === "japanese_chinese_parentheses") {
+    const japanese = applyEmojiRule(sourceName, rule, setting);
+    const chinese = applyEmojiRule(String(displayNames.zh ?? ""), rule, setting);
+    if (!chinese || chinese === japanese) return japanese;
+    return targetType === "option" && rule.optionParenthesesStyle === "ascii"
+      ? `${japanese}(${chinese})`
+      : `${japanese}（${chinese}）`;
+  }
   return [sourceName, ...multilingualOrder.map((language) => displayNames[language])]
     .map((value) => applyEmojiRule(String(value ?? ""), rule, setting))
     .filter(Boolean)
@@ -303,16 +324,21 @@ function compareTarget(input: {
 }) {
   const { platform, platformKey, rule, targetType, target, baseline, basePrice, setting, sharedHighTierPrice } = input;
   const enabled = target.isActive && setting?.isEnabled !== false;
+  const createHidden = !baseline && setting?.placementConfig?.createHidden === true;
   const locationLabel = targetType === "item"
     ? `分類: ${(target as MenuProjectionItem).category || "未分類"}`
     : `選択グループ: ${(target as MenuProjectionOption).groupLabel || (target as MenuProjectionOption).groupKey || "未設定"}`;
-  const projectedName = projectDeliveryName(platformKey, target.name, target.displayNames, setting, rule);
+  const authoritativeName = uberAuthoritativeJapaneseName(platformKey, target.name, target.platformSettings);
+  const projectedName = projectDeliveryName(platformKey, authoritativeName, target.displayNames, setting, rule, targetType);
   const hasPlatformPriceOverride = setting?.priceOverride !== undefined && setting.priceOverride !== null;
-  const inheritedHighTierPrice = sharedHighTierPrice !== null && sharedHighTierPrice !== undefined
-    ? Number(sharedHighTierPrice)
-    : null;
+  const uberExactPrice = target.platformSettings?.uber_eats?.priceOverride;
+  const inheritedHighTierPrice = !hasPlatformPriceOverride && rule.priceMode === "uber_exact" && uberExactPrice !== null && uberExactPrice !== undefined
+    ? Number(uberExactPrice)
+    : !hasPlatformPriceOverride && rule.priceMode === "high_tier" && sharedHighTierPrice !== null && sharedHighTierPrice !== undefined
+      ? Number(sharedHighTierPrice)
+      : null;
   const projectedPrice = inheritedHighTierPrice ?? projectDeliveryPrice(platformKey, basePrice, setting, rule);
-  const projectedState = { name: projectedName, price: projectedPrice, sourceBasePrice: basePrice, isActive: enabled };
+  const projectedState = { name: projectedName, price: projectedPrice, sourceBasePrice: basePrice, isActive: enabled && !createHidden };
   if (!baseline) {
     if (!enabled) return;
     platform.changes.push({
@@ -383,8 +409,8 @@ function compareTarget(input: {
       confidence: "confirmed"
     });
   }
-  // Always compare the platform price with the current OS projection. A price
-  // edited directly in a platform keeps the same OS sourceBasePrice, so gating
+  // Always compare the platform price with the current authoritative projection.
+  // A price edited directly in a platform keeps the same OS sourceBasePrice, so gating
   // this comparison on a source-price change would incorrectly hide that edit.
   if (projectedPrice !== null && Number(projectedPrice) !== Number(baseline.price)) {
     platform.changes.push({
@@ -469,7 +495,7 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
         baseline: findItemBaseline(item, baseline?.items ?? []),
         basePrice: item.basePrice,
         setting: item.platformSettings?.[platformKey],
-        sharedHighTierPrice: platformKey === "rocket_now" ? item.platformSettings?.uber_eats?.priceOverride : null
+        sharedHighTierPrice: null
       });
     }
     for (const option of input.options) {
@@ -482,7 +508,7 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
         baseline: findOptionBaseline(option, baseline?.options ?? []),
         basePrice: option.priceDelta,
         setting: option.platformSettings?.[platformKey],
-        sharedHighTierPrice: platformKey === "rocket_now" ? option.platformSettings?.uber_eats?.priceOverride : null
+        sharedHighTierPrice: null
       });
     }
 
