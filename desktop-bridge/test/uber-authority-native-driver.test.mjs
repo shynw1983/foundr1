@@ -105,24 +105,27 @@ test('a changed group is reported as a move, never as a missing native option',a
  assert.equal(observed[0].exists,true);assert.equal(observed[0].structureVerified,false);
 });
 
-test('moving a known option into a newly created group preserves identity and stock',async()=>{
+test('approved replacement into a new group preserves the OS identity and stock with a new native ID',async()=>{
  const {payload,driver,rows}=fixture();
+ payload.optionMigrationPolicy='preserve_stock';
  payload.targets[1].mappings=[];
  rows[1].id='9';rows[2].parentIds=['9'];rows[2].native={displayStatus:'NOT_EXPOSE'};rows[3].groupIds=['9'];
  let creates=0,moves=0;
  driver.client.createGroup=async marker=>{creates++;rows.push({kind:'option_group',id:'6',name:marker,price:null,childIds:[],hidden:true});return {optionId:6};};
- driver.client.moveOption=async(id,to)=>{
-  moves++;assert.equal(id,'3');assert.equal(to,'6');rows[1].childIds=[];
-  rows.find(row=>row.id==='6').childIds=['3'];rows[2].parentIds=['6'];
+ driver.client.createHiddenOption=async({marker,price,groupId})=>{
+  moves++;assert.equal(groupId,'6');rows.push({kind:'option',id:'8',name:marker,price,hidden:true,parentIds:['6'],native:{displayStatus:'NOT_EXPOSE'}});
+  rows.find(row=>row.id==='6').childIds=['8'];return {optionItemId:8};
  };
- driver.client.catalog=async()=>({groups:[{optionId:6}]});
- driver.client.detail=async()=>({options:rows[3].groupIds.map(optionId=>({optionId})),mappingMenus:[{menuId:1}]});
+ driver.client.retireOption=async id=>{assert.equal(id,'3');rows[1].childIds=[];rows.splice(rows.findIndex(row=>row.kind==='option'&&row.id===id),1);};
+ driver.client.catalog=async()=>({groups:rows.filter(row=>row.kind==='option_group').map(group=>({optionId:Number(group.id),optionItems:rows.filter(row=>row.kind==='option'&&row.parentIds.includes(group.id)).map(row=>({optionItemId:Number(row.id),optionItemName:row.name,salePrice:row.price,displayStatus:row.hidden?'NOT_EXPOSE':'ON_SALE'}))}))});
+ driver.client.detail=async()=>({options:rows.find(row=>row.kind==='item').groupIds.map(optionId=>({optionId})),mappingMenus:[{menuId:1}]});
  const update=driver.client.updateDish;
- driver.client.updateDish=async(id,patch)=>{await update(id,patch);if(patch.groups)rows[3].groupIds=patch.groups.map(row=>String(row.optionId));};
+ driver.client.updateDish=async(id,patch)=>{await update(id,patch);if(patch.groups)rows.find(row=>row.kind==='item').groupIds=patch.groups.map(row=>String(row.optionId));};
  const result=await runUberAuthorityPublication(payload,driver,async()=>{});
  assert.equal(creates,1);assert.equal(moves,1);
  assert.equal(result.observations.find(row=>row.sourceKey==='option:o').hidden,true);
- assert.deepEqual(rows[3].groupIds,['6']);
+ assert.equal(result.observations.find(row=>row.sourceKey==='option:o').externalId,'sub_checkbox_6_8');
+ assert.deepEqual(rows.find(row=>row.kind==='item').groupIds,['6']);
 });
 
 test('an unowned old group containing an unknown option blocks before any write',async()=>{

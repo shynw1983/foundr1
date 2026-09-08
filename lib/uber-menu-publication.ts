@@ -38,6 +38,7 @@ export function buildUberPublication(input: {
   nodes:UberPublicationNode[]; mappings:UberPublicationMapping[];
   quarantinedSourceKeys?:string[];
   excludedSourceKeys?:string[];
+  optionMigrationPolicy?:'preserve_stock';
 }) {
   // Explicit, persisted owner decisions only; never infer exclusions from price.
   // Retain the source in OS while omitting it from downstream relationships.
@@ -60,6 +61,7 @@ export function buildUberPublication(input: {
     ...(input.platform==='demae_can'&&input.draftPatternCode?{draftPatternCode:input.draftPatternCode}:{}),
     ...(input.platform==='demae_can'&&input.draftCarrierItemCode?{draftCarrierItemCode:input.draftCarrierItemCode}:{}),
     selectionPolicy:input.platform==='demae_can'?(input.selectionPolicy??'strict'):'strict',
+    ...(input.platform==='rocket_now'&&input.optionMigrationPolicy?{optionMigrationPolicy:input.optionMigrationPolicy}:{}),
     ruleVersion:'uber-authority-v1',imagePolicy:'read_only',newItemsHidden:true,targets};
 }
 

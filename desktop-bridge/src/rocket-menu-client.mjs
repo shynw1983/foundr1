@@ -131,6 +131,20 @@ export class RocketMenuClient {
       salePrice:yen(price),displayStatus:'NOT_EXPOSE'
     },{receiptKey:`rocket:${this.storeId}:option:${marker}`});
   }
+  async setMigratedOptionStatus(id,{name,price,displayStatus,groupId}) {
+    if(!['ON_SALE','NOT_EXPOSE'].includes(displayStatus))throw Error('rocket_migration_status_invalid');
+    const physicalId=rocketPhysicalId(id),before=await this.catalog();
+    const matches=before.groups.flatMap(group=>(group.optionItems??[]).filter(item=>String(item.optionItemId)===physicalId).map(item=>({group,item})));
+    if(matches.length!==1)throw Error('rocket_migration_identity_ambiguous');
+    const {group,item}=matches[0];
+    if(String(group.optionId)!==String(groupId)||item.optionItemName!==name||Number(item.salePrice)!==price||item.forceNotExpose||!['ON_SALE','NOT_EXPOSE'].includes(item.displayStatus))throw Error('rocket_migration_content_drift');
+    await this.transport.request(`${this.writeBase}/option-items/${physicalId}/update`,'POST',{
+      optionId:Number(group.optionId),optionItemName:name,salePrice:yen(price),displayStatus,
+      salePriceMoney:{currencyCode:'JPY',units:yen(price),nanos:0}
+    });
+    const after=await this.catalog(),actual=after.groups.find(row=>row.optionId===group.optionId)?.optionItems?.find(row=>String(row.optionItemId)===physicalId);
+    if(!actual||actual.optionItemName!==name||Number(actual.salePrice)!==price||actual.displayStatus!==displayStatus)throw Error('rocket_migration_status_unverified');
+  }
   createCategory(marker) {
     if(!/^FS[0-9a-f]{14}$/.test(marker))throw new Error('rocket_menu_marker_required');
     return this.transport.request(`${this.writeBase}/menus/create`,'POST',{menuName:marker,description:'',menuType:null},{receiptKey:`rocket:${this.storeId}:category:${marker}`});
@@ -149,15 +163,9 @@ export class RocketMenuClient {
     if(String(owners[0].optionId)===optionId)return;
     const item=owners[0].optionItems.find(item=>String(item.optionItemId)===physicalId);
     if(!['ON_SALE','NOT_EXPOSE'].includes(item.displayStatus))throw Error('rocket_menu_move_requires_stable_availability');
-    await this.transport.request(`${this.writeBase}/option-items/${physicalId}/update`,'POST',{
-      optionId:Number(optionId),optionItemName:item.optionItemName,displayStatus:item.displayStatus,
-      salePrice:yen(Number(item.salePrice)),salePriceMoney:{currencyCode:'JPY',units:yen(Number(item.salePrice)),nanos:0}
-    });
-    const after=await this.catalog(),matches=after.groups.filter(group=>group.optionItems?.some(row=>String(row.optionItemId)===physicalId));
-    const actual=matches[0]?.optionItems?.find(row=>String(row.optionItemId)===physicalId);
-    if(matches.length!==1||String(matches[0].optionId)!==optionId||actual.optionItemName!==item.optionItemName
-      ||Number(actual.salePrice)!==Number(item.salePrice)||actual.displayStatus!==item.displayStatus)throw Error('rocket_menu_option_move_unverified');
-    return actual;
+    // Both official edit endpoints reject foreign-group option IDs. Use the
+    // journaled replacement migration instead of pretending this is a move.
+    throw Error('rocket_menu_option_move_requires_recreation');
   }
   async updateGroup(id,patch) {
     const physicalId=positiveId(id);
@@ -169,7 +177,11 @@ export class RocketMenuClient {
     const actual=(await this.catalog()).groups.find(row=>String(row.optionId)===physicalId);
     if(!actual||!sameMenuValue(rocketGroupUpdate(actual),body)
       ||actual.exposeStatus!==before.exposeStatus||!sameMenuValue(actual.mappingDishes,before.mappingDishes)
-      ||actual.mappingDishCount!==before.mappingDishCount)throw Error('rocket_menu_group_verification_failed');
+      ||actual.mappingDishCount!==before.mappingDishCount) {
+      const readback=actual?rocketGroupUpdate(actual):{};
+      const fields=Object.keys(body).filter(key=>!sameMenuValue(readback[key],body[key]));
+      throw Error(`rocket_menu_group_verification_failed:${physicalId}:${JSON.stringify({fields,expectedLimits:{min:body.minSelect,max:body.maxSelect,multi:body.isMultiSelect},actualLimits:{min:actual?.minSelect,max:actual?.maxSelect,multi:actual?.isMultiSelect},consumerChanged:!sameMenuValue(actual?.mappingDishes,before.mappingDishes)||actual?.mappingDishCount!==before.mappingDishCount,exposureChanged:actual?.exposeStatus!==before.exposeStatus})}`);
+    }
     return actual;
   }
   async retireUnlinkedGroup(id) {
@@ -196,9 +208,14 @@ export class RocketMenuClient {
     if(after.groups.some(group=>group.optionItems?.some(row=>String(row.optionItemId)===physicalId)))throw Error('rocket_menu_option_still_exists');
     // A removal may update native counts, but must not alter any other option's
     // content, parent, price or stock state, nor any group definition.
-    const retained=rows=>rows.map(group=>({id:group.optionId,name:group.optionName,min:group.minSelect,max:group.maxSelect,
+    const retained=rows=>rows.map(group=>({id:group.optionId,name:group.optionName,
       options:(group.optionItems??[]).filter(row=>String(row.optionItemId)!==physicalId)}));
     if(!sameMenuValue(retained(before.groups),retained(after.groups)))throw Error('rocket_menu_option_retirement_changed_other_records');
+    for(const group of before.groups) {
+      const actual=after.groups.find(row=>row.optionId===group.optionId),count=actual.optionItems?.length??0;
+      for(const key of ['minSelect','maxSelect'])if(actual[key]!==group[key]
+        &&!(group.optionItems?.some(item=>String(item.optionItemId)===physicalId)&&actual[key]===Math.min(group[key],count)))throw Error('rocket_menu_option_retirement_changed_group_limits');
+    }
   }
   async updateCategory(id,patch) {
     const before=(await this.catalog()).menus.find(row=>String(row.menuId)===positiveId(id));

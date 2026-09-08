@@ -4,6 +4,7 @@ import {authorityPhysicalId} from './uber-authority-parents.mjs';
 import {sameMenuValue} from './merchant-menu-client.mjs';
 import {DemaeStagedOption} from './demae-staged-option.mjs';
 import {DemaeDraftClient} from './demae-draft-client.mjs';
+import {migrateRocketOption,rocketMigrationIdentity} from './rocket-option-migration.mjs';
 
 const ordered=rows=>[...rows].sort((a,b)=>a.sortOrder-b.sortOrder);
 const equalIds=(a,b)=>sameMenuValue(a.map(String),b.map(String));
@@ -29,7 +30,11 @@ export class AuthorityNativeDriver {
     if(this.platform==='demae_can'&&rows.some(row=>row.kind==='option'&&row.staged&&row.hidden&&row.parentIds.includes(String(id))))return true;
     if(this.payload.targets.some(group=>group.kind==='option_group'&&this.ids(group).includes(String(id))))return true;
     const group=rows.find(row=>row.kind==='option_group'&&row.id===String(id));
-    return Boolean(group&&group.childIds.length&&group.childIds.every(id=>this.payload.targets.some(child=>child.kind==='option'&&!child.quarantined&&this.ids(child).includes(String(id)))));
+    const migrations=Object.values(this.payload.migrationState??{}).filter(state=>state.fromParentId===String(id)
+      &&this.payload.targets.some(target=>target.targetId===state.targetId&&!target.quarantined));
+    return Boolean(group&&(group.childIds.length||migrations.length)&&group.childIds.every(childId=>
+      this.payload.targets.some(child=>child.kind==='option'&&!child.quarantined&&this.ids(child).includes(String(childId)))
+      ||migrations.some(state=>state.fromId===String(childId))));
   }
   hiddenOptionParent(target,rows) {
     if(this.platform!=='rocket_now'||target.kind!=='option')return null;
@@ -252,6 +257,32 @@ export class AuthorityNativeDriver {
   async preflight(payload) {
     this.payload=payload;
     const rows=await this.snapshot(),issues=[];
+    if(this.platform==='rocket_now')for(const state of Object.values(payload.migrationState??{}).filter(state=>state.phase!=='complete')) {
+      const target=payload.targets.find(target=>target.sourceKey===state.sourceKey&&target.targetId===state.targetId&&!target.quarantined&&!target.archived);
+      const fail=code=>issues.push({sourceKey:state.sourceKey,code});
+      if(!target||payload.optionMigrationPolicy!=='preserve_stock'||state.name!==target.name||state.price!==target.price){fail('migration_intent_changed');continue;}
+      let newId=state.newId;
+      if(!newId) {
+        const receipt=await this.client.transport.creationReceipt(`rocket:${this.merchantId}:option:${state.marker}`);
+        if(receipt?.status==='received')newId=String(receipt.data?.optionItemId??'');
+      }
+      if(!newId){fail('migration_creation_uncertain');continue;}
+      const next=rows.filter(row=>row.kind==='option'&&row.id===newId),old=rows.filter(row=>row.kind==='option'&&row.id===state.fromId);
+      if(next.length!==1||old.length>1||!equalIds(next[0].parentIds,[state.toParentId])||next[0].price!==state.price
+        ||![state.marker,state.name].includes(next[0].name)||next[0].native?.forceNotExpose
+        ||!['NOT_EXPOSE',...(state.phase==='prepared'?[state.displayStatus]:[])].includes(next[0].native?.displayStatus)) {fail('migration_replacement_invalid');continue;}
+      if(!old.length) {
+        if(state.phase!=='prepared'||next[0].name!==state.name||next[0].native.displayStatus!==state.displayStatus){fail('migration_predecessor_missing');continue;}
+        target.mappings=target.mappings.map(mapping=>mapping.externalId===state.fromExternalId
+          ?{externalId:`sub_checkbox_${state.toParentId}_${newId}`,externalParentId:state.toParentId,migrated:true}:mapping);
+      }else {
+        if(old[0].name!==state.name||old[0].price!==state.price||!equalIds(old[0].parentIds,[state.fromParentId])||old[0].native.displayStatus!==state.displayStatus){fail('migration_predecessor_changed');continue;}
+        // This journaled replacement is not yet part of the source graph.
+        // Exclude only its independently validated ID during transition.
+        rows.splice(rows.indexOf(next[0]),1);
+        for(const group of rows.filter(row=>row.kind==='option_group'))group.childIds=group.childIds.filter(id=>id!==newId);
+      }
+    }
     this.contentSnapshot=rows;
     this.plannedMoves=[];
     if(this.platform==='rocket_now')for(const target of payload.targets.filter(row=>row.kind==='option'&&!row.archived&&!row.quarantined)) {
@@ -265,6 +296,15 @@ export class AuthorityNativeDriver {
           else this.plannedMoves.push({sourceKey:target.sourceKey,id,from:actual[0].parentIds[0],to:to[0],toTargetId:parent.targetId});
         }
       }
+    }
+    if(this.platform==='rocket_now') {
+      for(const state of Object.values(payload.migrationState??{}).filter(state=>state.phase!=='complete')) {
+        if(!this.plannedMoves.some(move=>move.id===state.fromId)) {
+          const target=payload.targets.find(row=>row.sourceKey===state.sourceKey);
+          if(target)this.plannedMoves.push({sourceKey:state.sourceKey,id:state.fromId,from:state.fromParentId,to:state.toParentId,toTargetId:target.parentId});
+        }
+      }
+      if(this.plannedMoves.length&&payload.optionMigrationPolicy!=='preserve_stock')for(const move of this.plannedMoves)issues.push({sourceKey:move.sourceKey,code:'option_migration_policy_required'});
     }
     const owners=new Map();
     for(const target of payload.targets.filter(row=>!row.quarantined)) {
@@ -368,7 +408,7 @@ export class AuthorityNativeDriver {
     if(this.platform==='rocket_now'&&target.kind==='option_group') {
       const expected=this.children(target).flatMap(child=>this.ids(child));
       for(const id of this.ids(target)) {
-        const rows=await this.snapshot();
+        const rows=await this.snapshot({itemDetails:false});
         const actual=rows.find(row=>row.kind==='option_group'&&row.id===id);
         if(!actual||!equalIds([...actual.childIds].sort(),[...expected].sort()))throw Error(`uber_authority_relationship_drift:${target.sourceKey}`);
         const emptyOptional=expected.length===0&&target.source?.min===0;
@@ -432,7 +472,7 @@ export class AuthorityNativeDriver {
       return matches.map(row=>({sourceKey:target.sourceKey,externalId:mapping.externalId,exists:true,name:row.name,price:row.price,hidden:row.hidden,...(row.staged?{placement:'staged'}:{}),structureVerified:structureVerified&&this.quantityMatches(target,row)}));
     });
   }
-  async beginPhase(phase) {
+  async beginPhase(phase,reportProgress) {
     if(phase==='relationships') {
       if(this.platform==='demae_can') {
         const rows=await this.snapshot();
@@ -449,9 +489,15 @@ export class AuthorityNativeDriver {
         const parent=this.payload.targets.find(row=>row.targetId===move.toTargetId);
         if(!parent||this.ids(parent).length!==1)throw Error('uber_authority_move_parent_ambiguous');
         move.to=this.ids(parent)[0];
-        const current=(await this.snapshot()).filter(row=>row.kind==='option'&&row.id===move.id);
-        if(current.length!==1||current[0].parentIds.length!==1||![move.from,move.to].includes(current[0].parentIds[0]))throw Error('uber_authority_move_drift');
-        await this.client.moveOption(move.id,move.to);
+        if(this.platform!=='rocket_now'||this.payload.optionMigrationPolicy!=='preserve_stock'||typeof reportProgress!=='function')throw Error('uber_authority_migration_not_authorized');
+        const target=this.payload.targets.find(row=>row.sourceKey===move.sourceKey);
+        const {key}=rocketMigrationIdentity(this.payload.sourceId,target.sourceKey,move.id,move.to);
+        await migrateRocketOption({client:this.client,sourceId:this.payload.sourceId,target,fromId:move.id,toParentId:move.to,state:this.payload.migrationState?.[key],save:async state=>{
+          await reportProgress({phase:'migrating',sourceKey:target.sourceKey,authorityMigration:state});
+          this.payload.migrationState??={};this.payload.migrationState[key]=state;
+          if(state.phase==='complete')target.mappings=[...target.mappings.filter(mapping=>mapping.externalId!==state.fromExternalId&&this.id('option',mapping.externalId)!==state.newId),
+            {externalId:`sub_checkbox_${state.toParentId}_${state.newId}`,externalParentId:state.toParentId,migrated:true}];
+        }});
       }
       this.relationshipSnapshot=await this.snapshot();
     }

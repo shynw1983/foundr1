@@ -37,6 +37,8 @@ const mappings=await sql`select target_type as kind,target_id::text as "targetId
 const payload=buildUberPublication({sourceId:source.id,storeId:config.storeId,brandId,revision:source.revision,platform,...settings,nodes:preview.nodes,mappings});
 const attempts=await sql`select source_key as "sourceKey",status,external_id as "externalId",external_parent_id as "externalParentId" from menu_uber_creation_attempts where source_id=${source.id} and platform=${platform}`;
 payload.authorityState=Object.fromEntries(attempts.map(row=>[row.sourceKey,row]));
+const migrations=await sql`select migration_key,state from menu_uber_option_migrations where source_id=${source.id} and platform=${platform}`;
+payload.migrationState=Object.fromEntries(migrations.map(row=>[row.migration_key,row.state]));
 const transport=await connectMerchantMenuClient(new BrowserSession(config,platform),platform==='rocket_now'?'https://store.rocketnow.co.jp':'https://partner.demae-can.com',platform==='rocket_now'?'SUCCESS':'MSA0000');
 const request=transport.request.bind(transport);let checked=0,lastReport=Date.now();
 transport.request=async(...args)=>{const result=await request(...args);checked++;if(Date.now()-lastReport>10000){console.log(JSON.stringify({phase:'native-requests-completed',count:checked}));lastReport=Date.now();}return result;};
@@ -50,6 +52,11 @@ try {
   let completed=0,lastPhase='';
   const result=await runUberAuthorityPublication(payload,driver,async progress=>{
    if(progress.phase!==lastPhase||progress.phase==='content'&&++completed%10===0) {console.log(JSON.stringify({phase:progress.phase,completed,sourceKey:progress.sourceKey}));lastPhase=progress.phase;}
+   if(progress.authorityMigration) {
+    const {recordUberOptionMigration}=await import('../lib/uber-option-migration-store.ts');
+    await recordUberOptionMigration({sourceId:source.id,storeId:config.storeId,brandId,platformId,revision:source.revision,payload,state:progress.authorityMigration,acceptance:true});
+    return;
+   }
    const op=progress.authorityOperation;if(!op)return;
    const target=payload.targets.find(row=>row.sourceKey===op.sourceKey);
    if(!target||target.quarantined)throw Error('acceptance_operation_invalid');

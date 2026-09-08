@@ -1,5 +1,50 @@
 # Uber-authoritative menu synchronization
 
+## Replacement migration checkpoint — 2026-09-08 (latest)
+
+Automatic source ingestion/publication remains OFF, revision 1. This is not
+a completed full-CRUD launch. The sections below describe older checkpoints.
+
+- Owner approved Rocket replacement migrations preserving original stock;
+  `publish_config.rocket_now.optionMigrationPolicy=preserve_stock` is persisted.
+  The additive migration-journal schema is applied. Ordinary new sellable
+  records still receive a permanent hidden hold; images are read-only.
+- Demae full native acceptance completed: 275 verified source objects and one
+  explicitly quarantined object, 276 observations, revision 1. Verification is
+  saved in `menu_platform_snapshots`. Prices follow OS; selection counts retain
+  the authorized native policy. The quarantined quail was not touched.
+- Rocket's official option/group update endpoints reject foreign-group option
+  IDs. A replacement must be reserved in OS before hidden creation, have its
+  native receipt saved, be independently checked, then receive the original
+  stock state before the old physical record is deleted. Final OS mapping swap
+  and completed checkpoint share a transaction. Fault tests cover uncertain
+  creation, acknowledgement loss, concurrent stock change and failed cutover.
+- The live plan executed 37 physical replacements (the earlier 35 estimate
+  missed two occurrences). All 37 ledger entries reached complete. Independent
+  native readback found every replacement at the correct name/price/group and
+  original stock, with every predecessor absent: 34 ON_SALE, three NOT_EXPOSE.
+  Two rice-cake occurrences were already mapped to the same source target;
+  their different original stock states were preserved, not consolidated.
+- Full Rocket acceptance subsequently stopped on group-save readback mismatch.
+  New diagnostics report the exact group, mismatched fields, limits and consumer
+  drift; group-only checks no longer refetch unrelated dish details.
+- Independent mapping acceptance found the old rice-cake comma-separated OS
+  mapping and an inactive noodle-group alias still referencing retired IDs.
+  The journal writer now normalizes surviving siblings rather than deleting
+  only exact whole-row IDs. `repair-rocket-migration-mappings.mjs` backs up and
+  removes wholly obsolete legacy rows only after fresh native cutover proof;
+  foreign active ownership or partially obsolete rows fail closed.
+- That repair has NOT run successfully: Rocket started returning HTTP 403
+  Access Denied again, and native work was stopped. The full retry also stopped
+  during read-only preflight. Do not bypass the denial, recreate replacements,
+  or enable auto publication based on the completed migration ledger alone.
+- `audit-rocket-option-migrations.mjs` provides read-only native/OS verification.
+  The current result is 36/37 fully verified because of the stale rice-cake OS
+  alias, not a native stock or price discrepancy. The old aliases still need
+  safe removal, followed by resolving group readback and full acceptance.
+- Generic Demae category moves and non-option retirement remain guarded adapter
+  gaps. Current baseline acceptance does not prove future arbitrary CRUD.
+
 ## Live acceptance in progress — 2026-09-08 (latest)
 
 - Server release `3240d84c` is deployed READY to production; the mapped-ID

@@ -8,6 +8,11 @@ export async function recordUberPublicationProgress(input:{commandId:string;stor
   const payload=scope.payload as Record<string,unknown>;
   if(Number(payload.revision)!==Number(scope.revision))throw new Error('uber_publication_superseded');
   if(input.result) return verifyUberPublication(payload,input.result);
+  if(input.progress.authorityMigration) {
+    const {recordUberOptionMigration}=await import('./uber-option-migration-store');
+    await recordUberOptionMigration({sourceId:scope.sourceId,storeId:input.storeId,brandId:scope.brandId,platformId:scope.platformId,revision:Number(scope.revision),payload,state:input.progress.authorityMigration as Record<string,unknown>,commandId:input.commandId});
+    return;
+  }
   const operation=input.progress.authorityOperation as Record<string,unknown>|undefined;
   if(!operation)return;
   const targets=payload.targets as Array<Record<string,unknown>>;

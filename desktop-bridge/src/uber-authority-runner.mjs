@@ -50,7 +50,7 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
     await driver.retire(target,payload);
   }
   // Relationship changes come last, after children are persisted and hidden.
-  await driver.beginPhase?.('relationships');
+  await driver.beginPhase?.('relationships',reportProgress);
   for(const target of ['option_group','item','category'].flatMap(kind=>active.filter(target=>target.kind===kind))) {
     await reportProgress({phase:'relationships',sourceKey:target.sourceKey});
     await driver.updateRelationships(target,payload);

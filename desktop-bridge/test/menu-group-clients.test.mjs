@@ -50,18 +50,14 @@ test('Rocket group creation is empty, unlinked and tied to a durable marker rece
  assert.equal(call[3].receiptKey,'rocket:1:group:FS0123456789abcd');
  assert.equal('mapToDishIdList' in call[2],false);
 });
-test('Rocket moving an option needs an independent ID, parent, price and stock readback',async()=>{
+test('Rocket foreign-group edits are blocked instead of pretending the native ID can move',async()=>{
  for(const noMove of [false,true]) {
   let groups=[group(),{...group(),optionId:10,optionItems:[]}];
   const client=new RocketMenuClient({request:async(path,method,body)=>{
-   if(method){
-    if(!noMove){const item=groups[0].optionItems.shift();groups[1].optionItems.push(item);}
-    assert.equal(body.displayStatus,'NOT_EXPOSE');assert.equal(body.salePrice,123);return {};
-   }
+   if(method)throw Error('must not issue unsupported write');
    return path.includes('all-menu-dishes')?{menus:[]}:structuredClone(groups);
   }},'1');
-  if(noMove)await assert.rejects(()=>client.moveOption('8','10'),/move_unverified/);
-  else assert.equal((await client.moveOption('8','10')).optionItemId,8);
+  await assert.rejects(()=>client.moveOption('8','10'),/requires_recreation/);
  }
 });
 

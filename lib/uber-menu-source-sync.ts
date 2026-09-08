@@ -159,11 +159,20 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
   const revision = Number(source.revision)+1;
   if(source.auto_publish && !input.verifyRollback) {
     const deliveryMappings=await sql`select p.platform_key as platform,m.target_type as kind,m.target_id::text as "targetId",m.external_id as "externalId",m.external_parent_id as "externalParentId" from menu_platform_object_mappings m join menu_external_platforms p on p.id=m.external_platform_id where p.brand_id=${source.brand_id} and p.store_id is null and (m.store_id is null or m.store_id=${source.store_id}) and p.platform_key in ('rocket_now','demae_can')`;
-    const config=source.publish_config as Record<string,{merchantId?:string;menuPatternCode?:string;draftPatternCode?:string;draftCarrierItemCode?:string;selectionPolicy?:'strict'|'preserve_native';quarantinedSourceKeys?:string[];excludedSourceKeys?:string[]}>;
+    const config=source.publish_config as Record<string,{merchantId?:string;menuPatternCode?:string;draftPatternCode?:string;draftCarrierItemCode?:string;selectionPolicy?:'strict'|'preserve_native';quarantinedSourceKeys?:string[];excludedSourceKeys?:string[];optionMigrationPolicy?:'preserve_stock'}>;
+    const [creationAttempts,migrations]=await Promise.all([
+      sql`select platform,source_key as "sourceKey",status,external_id as "externalId",external_parent_id as "externalParentId" from menu_uber_creation_attempts where source_id=${source.id}`,
+      sql`select platform,migration_key,state from menu_uber_option_migrations where source_id=${source.id}`
+    ]);
     const retired: UberPublicationNode[]=[...archived,...sourceObjects.filter(row=>row.archived && !nodes.some(node=>node.sourceKey===row.sourceKey || (node.kind===row.kind && node.targetId===row.targetId)))].map(row=>({...row,name:'',displayNames:{},price:null,uberPrice:null,description:'',imageUrl:'',sortOrder:0,parentId:null,payload:{},archived:true}));
     for(const platform of ['rocket_now','demae_can'] as const) {
       if(!config?.[platform]?.merchantId || (platform==='demae_can' && !config[platform]?.menuPatternCode)) throw new Error(`uber_publish_store_not_configured:${platform}`);
       const payload=buildUberPublication({sourceId:String(source.id),brandId:String(source.brand_id),storeId:String(source.store_id),revision,platform,merchantId:config[platform].merchantId!,menuPatternCode:config[platform].menuPatternCode,draftPatternCode:config[platform].draftPatternCode,draftCarrierItemCode:config[platform].draftCarrierItemCode,selectionPolicy:config[platform].selectionPolicy,quarantinedSourceKeys:config[platform].quarantinedSourceKeys,excludedSourceKeys:config[platform].excludedSourceKeys,nodes:[...nodes,...retired],mappings:deliveryMappings.filter(row=>row.platform===platform) as UberPublicationMapping[]});
+      Object.assign(payload,{
+        ...(platform==='rocket_now'&&config[platform].optionMigrationPolicy?{optionMigrationPolicy:config[platform].optionMigrationPolicy}:{}),
+        authorityState:Object.fromEntries(creationAttempts.filter(row=>row.platform===platform).map(row=>[row.sourceKey,row])),
+        migrationState:Object.fromEntries(migrations.filter(row=>row.platform===platform).map(row=>[row.migration_key,row.state]))
+      });
       statements.push(sql`insert into local_bridge_commands(store_id,platform,command_type,idempotency_key,payload) values(${source.store_id},${platform},'publish_menu_changes',${`uber-publish:${source.id}:${revision}:${platform}`},${JSON.stringify(payload)}::jsonb) on conflict(idempotency_key) do nothing`);
     }
   }
