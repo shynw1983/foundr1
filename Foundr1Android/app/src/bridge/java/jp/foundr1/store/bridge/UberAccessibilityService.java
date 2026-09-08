@@ -1900,7 +1900,10 @@ public class UberAccessibilityService extends AccessibilityService {
     }
 
     private boolean containsOrderOverview(JSONArray nodes) {
-        return containsNodeId(nodes, "/ub__ueo_orders_header_title");
+        // History/settings reuse the orders header ID. Require the actual order workbench.
+        return containsNodeId(nodes, "/ub__ueo_orders_header_title")
+            && (containsNodeId(nodes, "/ub_ueo_active_order_land_container")
+                || containsNodeId(nodes, "/ub__ueo_orders_tab_item_title"));
     }
 
     private boolean containsActiveOrderAction(JSONArray nodes) {
@@ -2023,19 +2026,26 @@ public class UberAccessibilityService extends AccessibilityService {
             }
             if (UberRecoveryState.isPending(this) || finishingRecovery) return;
             if (!idleScan.isDue(now)) return;
-            if (hasViewId(root, "ub__ueo_orders_header_title")) {
+            if (isActiveOrderOverview(root)) {
                 idleScan.reachedOverview();
                 ensureActiveOrderRecovery(root);
                 return;
             }
             // Never press save, confirm, accept, cancel, or availability actions.
             if (idleScan.allowBack(now)) {
-                performGlobalAction(GLOBAL_ACTION_BACK);
-                uploadRecoveryStatus("idle_return_to_orders", "");
+                boolean dispatched = performGlobalAction(GLOBAL_ACTION_BACK);
+                Log.i(TAG, "Idle return to orders dispatched=" + dispatched);
+                uploadRecoveryStatus(dispatched ? "idle_return_to_orders" : "idle_return_failed", "");
             }
         } finally {
             root.recycle();
         }
+    }
+
+    private boolean isActiveOrderOverview(AccessibilityNodeInfo root) {
+        return hasViewId(root, "ub__ueo_orders_header_title")
+            && (hasViewId(root, "ub_ueo_active_order_land_container")
+                || hasViewId(root, "ub__ueo_orders_tab_item_title"));
     }
 
     private boolean hasOpenEditor(AccessibilityNodeInfo node) {
@@ -2074,14 +2084,14 @@ public class UberAccessibilityService extends AccessibilityService {
             return;
         }
         if (BridgeCommandState.current(this) != null || hasOpenEditor(root)
-            || (!hasViewId(root, "ub__ueo_orders_header_title")
+            || (!isActiveOrderOverview(root)
                 && idleScan.recentInteraction(SystemClock.uptimeMillis()))) {
             root.recycle();
             if (pending) scheduleRecovery(1500L);
             return;
         }
         if (!pending) {
-            if (hasViewId(root, "ub__ueo_orders_header_title")) {
+            if (isActiveOrderOverview(root)) {
                 ensureActiveOrderRecovery(root);
             }
             root.recycle();
@@ -2101,7 +2111,7 @@ public class UberAccessibilityService extends AccessibilityService {
             }
             return;
         }
-        if (hasViewId(root, "ub__ueo_orders_header_title")) {
+        if (isActiveOrderOverview(root)) {
             AccessibilityNodeInfo orderCard = findActiveOrderCard(root, false);
             root.recycle();
             if (orderCard != null) {

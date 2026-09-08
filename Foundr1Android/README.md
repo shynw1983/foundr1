@@ -152,3 +152,18 @@ Repeat while scrolling/editing and with an open save dialog; navigation should
 wait. Check a new-order notification on those pages, multiple simultaneous orders,
 and an active OS inventory command. OEM/Uber dialog accessibility varies, so
 verify this on the installed Uber version before relying on unattended operation.
+
+Bridge 1.0.50 fixes a device-confirmed history-page detection error: Uber reuses
+`ub__ueo_orders_header_title` for both `注文履歴` and `注文の品`. Both event-driven
+recovery and idle scanning now also require the active-order container or order
+tabs. The presence of the shared header alone must never identify the order
+workbench. Idle Back dispatch success/failure is recorded in recovery diagnostics.
+
+Verified on the paired 24075RP89G tablet on 2026-09-09: installed 1.0.50,
+opened history, and observed automatic Back followed by the active order page.
+A second run entered history at 03:28:41 JST and logged successful idle Back at
+03:29:30 JST (49 seconds). No orders were accepted, modified, or cancelled.
+A swipe on non-scrollable content did not emit a scroll event and therefore did
+not defer scanning; idle detection depends on accessibility interaction events.
+Android build, standalone idle-policy tests, TypeScript, and diff checks passed.
+The unrelated Next.js production build stalled during compilation and was stopped.
