@@ -22,7 +22,10 @@ export async function connectMerchantMenuClient(session, origin, successCode) {
       if(receiptKey && (method!=='POST'||!/^[A-Za-z0-9:_-]{1,160}$/.test(receiptKey)))throw Error('merchant_menu_receipt_key_invalid');
       // Writes are deliberately not retried here. Create retry safety belongs
       // to the persistent authority reservation/marker protocol.
-      return paced(()=>page.evaluate(`(${executeMenuRequest.toString()})(${JSON.stringify({path,method,body,successCode,origin,receiptKey})})`));
+      return paced(async()=>{
+        try {return await page.evaluate(`(${executeMenuRequest.toString()})(${JSON.stringify({path,method,body,successCode,origin,receiptKey})})`);}
+        catch(error) {throw new Error(`merchant_menu_operation_failed:${method}:${path}:${error.message}`,{cause:error});}
+      });
     }
   };
 }

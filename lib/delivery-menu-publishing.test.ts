@@ -34,6 +34,7 @@ test("adapts only Demae-prohibited width and punctuation without changing source
   assert.equal(projectDeliveryName("rocket_now", "麻辣牛肉麺", {zh:"麻辣牛肉面"}), "麻辣牛肉麺(麻辣牛肉面)");
   assert.equal(projectDeliveryName("rocket_now", "旨味とは？", {}), "旨味とは");
   assert.equal(projectDeliveryName("rocket_now", "みんなが選ぶ！人気具材", {}), "みんなが選ぶ!人気具材");
+  assert.equal(projectDeliveryName("rocket_now", "丸ごとイイダコ１匹", {zh:"整只小章鱼"}), "丸ごとイイダコ1匹(整只小章鱼)");
 });
 
 test("uses Demae-compatible full-width parentheses without changing other platforms", () => {

@@ -199,7 +199,7 @@ function nativeDeliveryText(platformKey: DeliveryMenuPlatformKey, value: string)
       .replace(/[\uFF66-\uFF9F]+/gu, chars => chars.normalize("NFKC"))
       .replace(/[!"#$&'~^@{}`;\[\]?_,()]/gu, char => String.fromCharCode(char.charCodeAt(0) + 0xFEE0))
       .replace(/[ \u3000]{2,}/gu, " ")
-    : platformKey === "rocket_now" ? value.replaceAll("＆", "・").replaceAll("！", "!").replaceAll("（", "(").replaceAll("）", ")").replace(/[？]/gu, "") : value;
+    : platformKey === "rocket_now" ? value.replace(/[Ａ-Ｚａ-ｚ０-９]/gu, char => char.normalize("NFKC")).replaceAll("＆", "・").replaceAll("！", "!").replaceAll("（", "(").replaceAll("）", ")").replace(/[？]/gu, "") : value;
 }
 
 export function projectDeliveryDescription(platformKey: DeliveryMenuPlatformKey, value: string) {
