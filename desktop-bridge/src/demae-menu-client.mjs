@@ -25,7 +25,8 @@ export function demaeItemUpdate(detail,patch,today) {
     // fields as null; echoing null makes the server treat it as a new period.
     originalApplyStartDate:size.applyStartDate,originalApplyEndDate:size.applyEndDate,
     price:patch.price!==undefined && size===active[0]?yen(patch.price):size.price,
-    ...(patch.groupLinks!==undefined&&size===active[0]?{sizeOptionGroupLinkList:patch.groupLinks}:{})}));
+    ...(patch.groupLinks!==undefined&&size===active[0]?{sizeOptionGroupLinkList:patch.groupLinks}:{}),
+    ...(patch.retireGroupId!==undefined?{sizeOptionGroupLinkList:(size.sizeOptionGroupLinkList??[]).filter(link=>String(link.optionGroupCode)!==String(patch.retireGroupId))}:{})}));
   output.categoryItemLinkList=patch.categoryLinks??detail.categoryItemLinkList;
   output.itemImageEditType='NOT_EDIT';output.itemImage=null;
   return output;
@@ -128,6 +129,7 @@ export class DemaeMenuClient {
     // Reject before any write: attaching a draft could expose it. The future
     // publication planner must verify a permanent hold before linking.
     if(patch.categoryLinks!==undefined && (!Array.isArray(patch.categoryLinks)||patch.categoryLinks.length>1||patch.categoryLinks.length&&patch.allowCategoryMove!==true))throw new Error('demae_menu_category_link_publication_not_supported');
+    if(patch.retireGroupId!==undefined&&(patch.groupLinks!==undefined||!String(patch.retireGroupId)))throw Error('demae_menu_group_retirement_invalid');
     await this.assertScope();
     const occurrences=await this.itemOccurrences(id);
     const stock=await this.stockState('item',id);
@@ -190,7 +192,7 @@ export class DemaeMenuClient {
     if(!/^FS[0-9a-f]{14}$/.test(marker))throw Error('demae_menu_marker_required');
     await this.assertScope();
     return this.transport.request(`${this.base}/category`,'POST',{
-      chainId:1,categoryCode:'',applyStartDate:this.today.replaceAll('-','/'),applyEndDate:'9999/12/31',
+      chainId:Number(this.chainId),categoryCode:'',applyStartDate:this.today.replaceAll('-','/'),applyEndDate:'9999/12/31',
       categoryName:marker,adminCategoryName:marker,type:'NORMAL_CATEGORY',categoryType:'NORMAL_CATEGORY',
       businessType:'NORMAL',isSideOrderCategory:false,categoryDescription:'',
       menuPatternCategoryLinkList:[{menuPatternCode:this.pattern}],categoryItemLinkList:[]
@@ -209,10 +211,16 @@ export class DemaeMenuClient {
     const body={};
     for(const key of ['chainId','categoryCode','applyStartDate','applyEndDate','categoryName','adminCategoryName','type','categoryType','businessType','isSideOrderCategory','categoryDescription'])body[key]=detail[key];
     body.categoryName=patch.name??detail.categoryName;
-    body.menuPatternCategoryLinkList=links.map(row=>({menuPatternCode:row.menuPatternCode}));
+    if(patch.retire&&ids.length)throw Error('demae_menu_category_still_populated');
+    body.menuPatternCategoryLinkList=patch.retire?[]:links.map(row=>({menuPatternCode:row.menuPatternCode}));
     body.categoryItemLinkList=ids.map((id,index)=>({itemCode:id,dispOrder:index+1}));
     await this.transport.request(path,'PUT',body);
     const actual=(await this.catalog()).items.categoryList.find(row=>String(row.categoryCode)===String(id));
+    if(patch.retire) {
+      const remaining=await this.transport.request(`${this.base}/category/${code(id)}/menu-pattern-list`);
+      if(actual||!Array.isArray(remaining)||remaining.length)throw Error('demae_menu_category_retirement_unverified');
+      return;
+    }
     if(!actual||actual.categoryName!==body.categoryName||!sameMenuValue(actual.itemList.map(item=>item.itemCode),ids)
       ||!sameMenuValue(await this.transport.request(`${this.base}/category/${code(id)}/menu-pattern-list`),links))throw Error('demae_menu_category_verification_failed');
     return actual;
@@ -223,6 +231,20 @@ export class DemaeMenuClient {
     const {items}=await this.catalog();
     if(items.categoryList.some(category=>category.itemList?.some(item=>String(item.itemCode)===String(id))))throw new Error('demae_menu_item_still_linked');
     return actual;
+  }
+  async retireGroup(id,{ownedItemIds=[]}={}) {
+    const before=await this.group(id);
+    const consumers=[...new Set(before.items.map(row=>String(row.itemCode)))];
+    if(consumers.some(itemId=>!ownedItemIds.includes(itemId)))throw Error('demae_menu_group_unowned_consumer');
+    // Remove every dated size link, including future periods, so the group
+    // cannot silently return tomorrow. Item stock, prices and images are kept.
+    for(const itemId of consumers)await this.updateItem(itemId,{retireGroupId:String(id)});
+    if((await this.group(id)).items.length)throw Error('demae_menu_group_retirement_unverified');
+  }
+  async retireCategory(id) {
+    const {items}=await this.catalog();
+    if(!items.categoryList.some(row=>String(row.categoryCode)===String(id)))return;
+    await this.updateCategory(id,{retire:true});
   }
   async options() {
     await this.assertScope();

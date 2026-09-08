@@ -45,17 +45,20 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
   }
   // Remove retired choices before validating the remaining group membership.
   // Content updates never restore stock; removals cannot expose a new choice.
-  for(const target of payload.targets.filter(target=>target.archived&&!target.quarantined&&target.kind==='option')) {
+  for(const target of payload.targets.filter(target=>target.archived&&!target.quarantined&&['option','item'].includes(target.kind))) {
     await reportProgress({phase:'retiring',sourceKey:target.sourceKey});
     await driver.retire(target,payload);
   }
   // Relationship changes come last, after children are persisted and hidden.
   await driver.beginPhase?.('relationships',reportProgress);
-  for(const target of ['option_group','item','category'].flatMap(kind=>active.filter(target=>target.kind===kind))) {
-    await reportProgress({phase:'relationships',sourceKey:target.sourceKey});
-    await driver.updateRelationships(target,payload);
+  for(const kind of ['option_group','item','category']) {
+    if(kind==='category')await driver.beginPhase?.('categories');
+    for(const target of active.filter(target=>target.kind===kind)) {
+      await reportProgress({phase:'relationships',sourceKey:target.sourceKey});
+      await driver.updateRelationships(target,payload);
+    }
   }
-  for(const kind of ['item','option_group','category'])for(const target of payload.targets.filter(target=>target.archived&&!target.quarantined&&target.kind===kind)) {
+  for(const kind of ['option_group','category'])for(const target of payload.targets.filter(target=>target.archived&&!target.quarantined&&target.kind===kind)) {
     await reportProgress({phase:'retiring',sourceKey:target.sourceKey});
     await driver.retire(target,payload);
   }

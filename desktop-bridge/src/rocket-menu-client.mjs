@@ -8,7 +8,9 @@ export function rocketPhysicalId(value) {
 function optionMappings(groups = []) {
   return groups.map(group => ({
     optionId: Number(group.optionId), exposeOrder: group.exposeOrder,
-    optionItemSaveDtos: (group.optionItems ?? []).map(item => ({optionItemId:Number(item.optionItemId),displayStatus:item.displayStatus}))
+    // Item ordering belongs to the separate group ordering endpoint. This
+    // dish association contains only identity and stock, so compare by ID.
+    optionItemSaveDtos: (group.optionItems ?? []).map(item => ({optionItemId:Number(item.optionItemId),displayStatus:item.displayStatus})).sort((a,b)=>a.optionItemId-b.optionItemId)
   }));
 }
 
@@ -43,7 +45,7 @@ export function rocketDishUpdate(detail, patch, storeId) {
   // The merchant's edit serializer (FNe) omits image fields entirely. Image
   // approvals/deletions have separate endpoints; even an empty image array
   // is inappropriate here. Pending reviews must not block content edits.
-  const groups=patch.groups??detail.options??[];
+  const groups=patch.groups?.map((group,index)=>({...group,exposeOrder:index}))??detail.options??[];
   const priorStatuses=new Map((detail.options??[]).flatMap(group=>(group.optionItems??[]).map(item=>[String(item.optionItemId),item.displayStatus])));
   const mappingDtos=optionMappings(groups).map(group=>({...group,optionItemSaveDtos:group.optionItemSaveDtos.map(item=>({...item,displayStatus:priorStatuses.get(String(item.optionItemId))??item.displayStatus}))}));
   return {
@@ -76,7 +78,13 @@ export class RocketMenuClient {
     if (!Array.isArray(menus?.menus) || !Array.isArray(groups)) throw new Error('rocket_menu_incomplete_catalog');
     return {menus:menus.menus,groups};
   }
-  detail(id) {return this.transport.request(`${this.readBase}/dishes/${rocketPhysicalId(id)}/detail`);}
+  async detail(id) {
+    const detail=await this.transport.request(`${this.readBase}/dishes/${rocketPhysicalId(id)}/detail`);
+    // The API array retains creation order; exposeOrder is the actual
+    // customer-facing order (also used by the merchant frontend).
+    if(Array.isArray(detail.options))detail.options=[...detail.options].sort((a,b)=>(Number.isFinite(a.exposeOrder)?a.exposeOrder:Infinity)-(Number.isFinite(b.exposeOrder)?b.exposeOrder:Infinity));
+    return detail;
+  }
   async updateDish(id, patch) {
     // Fetch immediately before the write so a prior sold-out state is retained.
     const detail=await this.detail(id);
@@ -92,7 +100,7 @@ export class RocketMenuClient {
       || !sameMenuValue(optionMappings(actual.options),body.optionMappingDtos)
       || !sameMenuValue(actual.allDishImages,detail.allDishImages)
       || !sameMenuValue(actual.allDetailImages,detail.allDetailImages)
-      || (patch.menuId ? actual.mappingMenus?.length!==1 || String(actual.mappingMenus[0].menuId)!==String(patch.menuId) : !sameMenuValue(actual.mappingMenus,detail.mappingMenus))) throw new Error('rocket_menu_dish_verification_failed');
+      || (patch.menuId ? actual.mappingMenus?.length!==1 || String(actual.mappingMenus[0].menuId)!==String(patch.menuId) : !sameMenuValue(actual.mappingMenus,detail.mappingMenus))) throw new Error(`rocket_menu_dish_verification_failed:${rocketPhysicalId(id)}:${JSON.stringify({name:actual.dishName!==body.dishName,price:Number(actual.salePrice)!==body.salePrice,description:actual.description!==body.description,stock:actual.displayStatus!==body.displayStatus,groups:optionMappings(actual.options),expectedGroups:body.optionMappingDtos,category:actual.mappingMenus?.map(row=>row.menuId),expectedCategory:body.toMenuId,images:!sameMenuValue(actual.allDishImages,detail.allDishImages)||!sameMenuValue(actual.allDetailImages,detail.allDetailImages)})}`);
     return actual;
   }
   async createHiddenDish({marker,price,description='',menuId,groups=[]}) {
@@ -173,7 +181,20 @@ export class RocketMenuClient {
     if(!before)throw Error('rocket_menu_group_missing');
     if(before.optionRestrictionType&&before.optionRestrictionType!=='NONE')throw Error('rocket_menu_restricted_group');
     const body=rocketGroupUpdate(before,patch);
-    await this.transport.request(`${this.writeBase}/options/${physicalId}/update`,'POST',body);
+    const priorBody=rocketGroupUpdate(before);
+    const byId=value=>({...value,optionItems:[...value.optionItems].sort((a,b)=>a.optionItemId-b.optionItemId)});
+    // Native group editing does not persist display order. Use its dedicated
+    // ordering endpoint; sorting must never require rewriting stock or limits.
+    if(!sameMenuValue(byId(priorBody),byId(body))) {
+      await this.transport.request(`${this.writeBase}/options/${physicalId}/update`,'POST',body);
+      const saved=(await this.catalog()).groups.find(row=>String(row.optionId)===physicalId);
+      if(!saved||!sameMenuValue(byId(rocketGroupUpdate(saved)),byId(body)))throw Error(`rocket_menu_group_content_verification_failed:${physicalId}`);
+    }
+    if(!sameMenuValue(priorBody.optionItems.map(row=>row.optionItemId),body.optionItems.map(row=>row.optionItemId))) {
+      await this.transport.request(`${this.writeBase}/option-items/update-expose-order`,'POST',[
+        {optionId:Number(physicalId),optionItemExposeOrderDtos:body.optionItems.map((row,index)=>({optionItemId:row.optionItemId,exposeOrder:index}))}
+      ]);
+    }
     const actual=(await this.catalog()).groups.find(row=>String(row.optionId)===physicalId);
     if(!actual||!sameMenuValue(rocketGroupUpdate(actual),body)
       ||actual.exposeStatus!==before.exposeStatus||!sameMenuValue(actual.mappingDishes,before.mappingDishes)

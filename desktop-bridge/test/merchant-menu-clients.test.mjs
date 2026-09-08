@@ -4,6 +4,16 @@ import {RocketMenuClient,rocketDishUpdate,rocketPhysicalId} from '../src/rocket-
 import {DemaeMenuClient,demaeItemUpdate} from '../src/demae-menu-client.mjs';
 
 const dish=()=>({dishId:12,dishName:'old',description:'old description',salePrice:100,displayStatus:'NOT_EXPOSE',mappingMenus:[{menuId:2}],options:[{optionId:3,exposeOrder:0,optionItems:[{optionItemId:4,displayStatus:'NOT_EXPOSE'}]}]});
+test('Rocket ordering uses its separate endpoint and preserves native limits and stock',async()=>{
+ for(const ignored of [false,true]) {
+  const group={optionId:3,optionName:'group',minSelect:0,maxSelect:2,isMandatory:false,isMultiSelect:true,optionItems:[{optionItemId:4,optionItemName:'a',salePrice:100,displayStatus:'NOT_EXPOSE'},{optionItemId:5,optionItemName:'b',salePrice:200,displayStatus:'ON_SALE'}]};
+  const calls=[];const client=new RocketMenuClient({},'1');client.catalog=async()=>({groups:[structuredClone(group)]});
+  client.transport.request=async(path,method,body)=>{calls.push(path);assert.match(path,/option-items\/update-expose-order$/);assert.equal(method,'POST');assert.deepEqual(body,[{optionId:3,optionItemExposeOrderDtos:[{optionItemId:5,exposeOrder:0},{optionItemId:4,exposeOrder:1}]}]);if(!ignored)group.optionItems.reverse();};
+  if(ignored)await assert.rejects(()=>client.updateGroup('3',{memberIds:['5','4']}),/verification_failed/);
+  else {const actual=await client.updateGroup('3',{memberIds:['5','4']});assert.equal(actual.maxSelect,2);assert.equal(actual.optionItems[1].displayStatus,'NOT_EXPOSE');}
+  assert.equal(calls.length,1);
+ }
+});
 test('Rocket content edits preserve permanent hidden state and option availability',()=>{
  const payload=rocketDishUpdate(dish(),{name:'new',price:227},'1');
  assert.equal(payload.salePrice,227);assert.equal(payload.displayStatus,'NOT_EXPOSE');assert.equal(payload.soldOutHour,null);
@@ -42,6 +52,25 @@ test('Demae group ordering changes leave historical price periods and old associ
  assert.deepEqual(body.sizeInfoList[0].sizeOptionGroupLinkList,[{optionGroupCode:'old'}]);
  assert.deepEqual(body.sizeInfoList[1].sizeOptionGroupLinkList,links);
  assert.deepEqual(body.sizeInfoList.map(row=>row.price),[80,180]);
+});
+test('Demae retirement removes group links from every period without changing prices or other groups',()=>{
+ const before=demaeItem();before.sizeInfoList.push({...before.sizeInfoList[1],applyStartDate:'2027/01/01',price:280});
+ for(const size of before.sizeInfoList)size.sizeOptionGroupLinkList=[{optionGroupCode:'retired'},{optionGroupCode:'keep',dispOrder:2}];
+ const body=demaeItemUpdate(before,{retireGroupId:'retired'},'2026-09-08');
+ assert.deepEqual(body.sizeInfoList.map(row=>row.sizeOptionGroupLinkList),Array.from({length:3},()=>[{optionGroupCode:'keep',dispOrder:2}]));
+ assert.deepEqual(body.sizeInfoList.map(row=>row.price),[80,180,280]);
+ assert.equal(body.itemImageEditType,'NOT_EDIT');
+ assert.deepEqual(before.sizeInfoList[0].sizeOptionGroupLinkList,[{optionGroupCode:'retired'},{optionGroupCode:'keep',dispOrder:2}]);
+});
+test('Demae group retirement refuses unknown consumers and verifies all links were removed',async()=>{
+ for(const mode of ['unknown','success','ignored']) {
+  const client=new DemaeMenuClient({},'1','one');let consumers=[{itemCode:'a'},{itemCode:'a'}],writes=0;
+  client.group=async()=>({items:consumers});
+  client.updateItem=async(id,patch)=>{writes++;assert.equal(id,'a');assert.deepEqual(patch,{retireGroupId:'g'});if(mode==='success')consumers=[];};
+  if(mode==='success')await client.retireGroup('g',{ownedItemIds:['a']});
+  else await assert.rejects(()=>client.retireGroup('g',{ownedItemIds:mode==='unknown'?[]:['a']}),mode==='unknown'?/unowned_consumer/:/retirement_unverified/);
+  assert.equal(writes,mode==='unknown'?0:1);
+ }
 });
 test('Demae rejects the wrong chain and shared patterns before any write',async()=>{
  let writes=0;
@@ -97,6 +126,15 @@ test('Rocket group edits cannot reopen an already hidden member',()=>{
  const groups=[{optionId:3,exposeOrder:0,optionItems:[{optionItemId:4,displayStatus:'ON_SALE'}]}];
  assert.equal(rocketDishUpdate(dish(),{groups},'1').optionMappingDtos[0].optionItemSaveDtos[0].displayStatus,'NOT_EXPOSE');
  assert.equal(rocketDishUpdate({...dish(),displayStatus:'ON_SALE',forceNotExpose:true},{name:'new'},'1').displayStatus,'NOT_EXPOSE');
+});
+test('Rocket explicit group changes send sequential native display orders',()=>{
+ const groups=[{optionId:8,optionItems:[]},{optionId:3,exposeOrder:99,optionItems:[]}];
+ assert.deepEqual(rocketDishUpdate(dish(),{groups},'1').optionMappingDtos.map(row=>row.exposeOrder),[0,1]);
+ assert.equal(rocketDishUpdate(dish(),{name:'new'},'1').optionMappingDtos[0].exposeOrder,0);
+});
+test('Rocket readback uses explicit display order rather than API creation order',async()=>{
+ const client=new RocketMenuClient({request:async()=>({...dish(),options:[{optionId:3,exposeOrder:2},{optionId:8,exposeOrder:0},{optionId:9,exposeOrder:1}]})},'1');
+ assert.deepEqual((await client.detail('12')).options.map(row=>row.optionId),[8,9,3]);
 });
 test('Demae refuses linking a draft before any merchant request',async()=>{
  let requests=0;

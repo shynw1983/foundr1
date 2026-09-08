@@ -140,6 +140,15 @@ test('matching quantity limits cannot conceal a single-select native group',()=>
  assert.equal(driver.quantityMatches(target,{native:{minSelect:0,maxSelect:2,isMultiSelect:false}}),false);
  assert.equal(driver.quantityMatches(target,{native:{minSelect:0,maxSelect:2,isMultiSelect:true}}),true);
 });
+test('approved Rocket native quantity policy does not overwrite limits when sorting',async()=>{
+ const {payload,driver,rows}=fixture();payload.selectionPolicy='preserve_native';
+ const group=payload.targets[1];group.source={min:0,max:50};
+ rows[1].native={minSelect:0,maxSelect:1,isMultiSelect:false};
+ assert.equal(driver.quantityMatches(group,rows[1]),true);
+ let writes=0;driver.client.updateGroup=async()=>writes++;
+ await driver.updateRelationships(group);assert.equal(writes,0);
+ payload.selectionPolicy='strict';assert.equal(driver.quantityMatches(group,rows[1]),false);
+});
 
 test('Demae permits only identified additions to a verified private draft carrier',async()=>{
  for(const mode of ['owned','isolated-option','unknown','selling','removed']) {

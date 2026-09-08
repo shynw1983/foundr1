@@ -3,6 +3,19 @@ import assert from 'node:assert/strict';
 import {buildUberPublication,verifyUberPublication,type UberPublicationNode} from './uber-menu-publication.ts';
 const node:UberPublicationNode={sourceKey:'item:a',kind:'item',targetId:'a',parentId:'c',name:'湯',displayNames:{zh:'汤'},price:180,uberPrice:227,description:'Soup',imageUrl:'',sortOrder:0,payload:{}};
 const input={sourceId:'s',storeId:'store',brandId:'b',revision:1,merchantId:'123',nodes:[node],mappings:[]};
+test('unlinked Uber products are retired downstream without losing their stable identity',()=>{
+ for(const platform of ['rocket_now','demae_can'] as const) {
+  const publication=buildUberPublication({...input,platform,nodes:[{...node,parentId:null,payload:{attached:false}}]});
+  assert.equal(publication.targets[0].archived,true);assert.equal(publication.targets[0].targetId,node.targetId);assert.equal(publication.targets[0].price,null);
+  assert.equal(buildUberPublication({...input,platform,nodes:[{...node,payload:{attached:true}}]}).targets[0].archived,false);
+ }
+});
+test('both downstream platforms require explicit approval to preserve native quantities',()=>{
+ for(const platform of ['rocket_now','demae_can'] as const) {
+  assert.equal(buildUberPublication({...input,platform}).selectionPolicy,'strict');
+  assert.equal(buildUberPublication({...input,platform,selectionPolicy:'preserve_native'}).selectionPolicy,'preserve_native');
+ }
+});
 test('Rocket replaces the rejected full-width ampersand without losing source words',()=>{
  assert.equal(buildUberPublication({...input,platform:'rocket_now',nodes:[{...node,kind:'category',name:'ミニ麻辣湯＆旬のフルーツセット',displayNames:{}}]}).targets[0].name,'ミニ麻辣湯・旬のフルーツセット');
 });

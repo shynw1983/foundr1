@@ -1,5 +1,40 @@
 # Uber-authoritative menu synchronization
 
+## Lifecycle and native ordering fixes — 2026-09-08
+
+- The obsolete rice-cake mappings were backed up and removed after native
+  replacement proof (two rows, three stale occurrences).
+- Owner explicitly approved Rocket `selectionPolicy=preserve_native`; it is
+  persisted in source configuration. This does not relax name, price, identity,
+  stock, membership or image checks. Demae retains its prior native policy.
+- Rocket group ordering uses the official separate `update-expose-order`
+  endpoint. Dish group changes send sequential `exposeOrder`; reads sort by
+  that field instead of incidental API array order. Group member stock is
+  compared by identity, never inferred from names or array positions.
+- Rocket full native acceptance passed revision 1: 276 targets, 277 physical
+  observations (one source target has two physical occurrences). This is saved
+  as a verification snapshot, not inferred from merchant write acknowledgements.
+- All 37 replacement identities and deleted predecessors were independently
+  checked. 36 still match their original migration stock; rice cake 7112171 is
+  now permanently hidden by the later successful store inventory command at
+  2026-09-08T10:26:04.887Z (both mapped rice-cake IDs). Do not restore the old
+  ledger stock over this newer explicit inventory operation.
+- Demae can move identified existing items between live categories, preserving
+  stock and images. Retired items/categories are unlinked permanently; retired
+  groups are removed from all item size periods, including future periods.
+  Unknown consumers block before writes. Library records remain recoverable.
+- An Uber item retained in the library but detached from every category is
+  inactive in OS and retired downstream. A reappearing mapped Demae library
+  item stays hidden rather than being silently republished.
+- A fresh Demae acceptance attempt passed preflight/content checks, but its
+  browser was navigated during a read. Earlier revision-1 acceptance remains
+  recorded (275 verified plus one quarantined). Do not treat interruption as
+  successful verification or clear the quail quarantine.
+- Source automatic flags remain OFF at this checkpoint. Deployment and the
+  first scheduled, single-worker production cycle are not yet verified.
+
+Older sections below are historical checkpoints, not current readiness claims.
+
 ## Rocket request compatibility fix — 2026-09-08 (latest)
 
 The merchant UI and Bridge window both displayed menus normally. In the same

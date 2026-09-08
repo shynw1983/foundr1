@@ -25,6 +25,7 @@ export class AuthorityNativeDriver {
     return [...new Set([...ids,...carriers])].filter(id=>!(this.platform==='demae_can'&&snapshot.some(row=>row.kind==='option_group'&&row.id===id&&row.staged&&row.childIds.length===0)));
   }
   children(target){return ordered(this.payload.targets.filter(row=>!row.archived&&!row.quarantined&&row.parentId===target.targetId));}
+  ownsItem(id){return this.payload.targets.some(target=>target.kind==='item'&&!target.quarantined&&this.ids(target).includes(String(id)));}
   activeChildIds(target,rows){return this.children(target).flatMap(child=>this.ids(child)).filter(id=>!rows.some(row=>row.kind==='option'&&row.id===id&&row.staged&&row.hidden));}
   managedGroup(id,rows) {
     if(this.platform==='demae_can'&&rows.some(row=>row.kind==='option'&&row.staged&&row.hidden&&row.parentIds.includes(String(id))))return true;
@@ -143,6 +144,7 @@ export class AuthorityNativeDriver {
   }
   quantityMatches(target,row) {
     if(target.kind!=='option_group'||target.source?.min===undefined)return true;
+    if(this.payload.selectionPolicy==='preserve_native')return true;
     if(this.platform==='demae_can')return this.payload.selectionPolicy==='preserve_native';
     const max=target.source.max??-1;
     // Rocket normalizes an empty optional group to 0/0. With no source
@@ -184,22 +186,30 @@ export class AuthorityNativeDriver {
       const itemIds=[...new Set(remote.items.categoryList.flatMap(category=>category.itemList??[]).map(item=>String(item.itemCode)))];
       const draftIds=this.payload.targets.filter(target=>target.kind==='item'&&!target.quarantined).flatMap(target=>[...target.mappings,this.payload.authorityState?.[target.sourceKey]].filter(mapping=>mapping?.externalId).map(mapping=>this.id('item',mapping.externalId))).filter(id=>!itemIds.includes(id));
       const draftClient=new DemaeDraftClient(c.transport,this.merchantId,this.payload.menuPatternCode);
-      const items=await Promise.all([...itemIds.map(id=>c.item(id)),...[...new Set(draftIds)].map(id=>draftClient.assertHiddenItem(this.payload.draftPatternCode,id))]);
+      const items=await Promise.all([...itemIds.map(id=>c.item(id)),...[...new Set(draftIds)].map(async id=>{
+        const item=await c.item(id);
+        if(String(item.itemCode)!==id||String(item.chainId)!==this.merchantId)throw Error('demae_retired_item_identity_invalid');
+        // Stable owned IDs may remain in the library after retirement. A
+        // reappearing source must not release them: keep them staged/hidden.
+        if(Array.isArray(item.categoryItemLinkList)&&item.categoryItemLinkList.length===0)return item;
+        return draftClient.assertHiddenItem(this.payload.draftPatternCode,id);
+      })]);
       for(const item of items) {
         const sizes=(item.sizeInfoList??[]).filter(size=>String(size.applyStartDate).replaceAll('/','-')<=c.today&&String(size.applyEndDate).replaceAll('/','-')>=c.today);
-        rows.push({kind:'item',id:String(item.itemCode),name:item.itemName,price:sizes.length===1?Number(sizes[0].price):null,description:String(item.itemDescription??'').replaceAll('<br>','\n'),hidden:hidden('item',item.itemCode),staged:!itemIds.includes(String(item.itemCode)),parentIds:remote.items.categoryList.filter(cat=>cat.itemList?.some(row=>row.itemCode===item.itemCode)).map(cat=>String(cat.categoryCode)),groupIds:sizes.length===1?(sizes[0].sizeOptionGroupLinkList??[]).map(row=>String(row.optionGroupCode)):[],native:item});
+        rows.push({kind:'item',id:String(item.itemCode),name:item.itemName,price:sizes.length===1?Number(sizes[0].price):null,description:String(item.itemDescription??'').replaceAll('<br>','\n'),hidden:!itemIds.includes(String(item.itemCode))||hidden('item',item.itemCode),staged:!itemIds.includes(String(item.itemCode)),parentIds:remote.items.categoryList.filter(cat=>cat.itemList?.some(row=>row.itemCode===item.itemCode)).map(cat=>String(cat.categoryCode)),groupIds:sizes.length===1?(sizes[0].sizeOptionGroupLinkList??[]).map(row=>String(row.optionGroupCode)):[],native:item});
       }
       const liveGroupIds=remote.groups.map(row=>String(row.optionGroupCode));
       const knownGroupIds=this.payload.targets.filter(target=>target.kind==='option_group'&&!target.quarantined).flatMap(target=>[...target.mappings,this.payload.authorityState?.[target.sourceKey]].filter(mapping=>mapping?.externalId).map(mapping=>this.id('option_group',mapping.externalId)));
       const groups=await Promise.all([...new Set([...liveGroupIds,...knownGroupIds])].map(id=>c.group(id)));
       const hiddenConsumers=[...new Map(groups.filter(group=>!liveGroupIds.includes(String(group.detail.optionGroupCode)))
         .flatMap(group=>group.items).map(item=>[String(item.itemCode),item])).values()];
-      if(hiddenConsumers.length)await c.hiddenGroupItems(hiddenConsumers);
+      const drafts=hiddenConsumers.filter(consumer=>!items.some(item=>String(item.itemCode)===String(consumer.itemCode)&&!itemIds.includes(String(item.itemCode))&&Array.isArray(item.categoryItemLinkList)&&item.categoryItemLinkList.length===0));
+      if(drafts.length)await c.hiddenGroupItems(drafts);
       for(const group of groups) {
         const id=String(group.detail.optionGroupCode);
         const staged=!liveGroupIds.includes(id);
         const options=group.options.filter(row=>String(row.applyStartDate).replaceAll('/','-')<=c.today&&String(row.applyEndDate).replaceAll('/','-')>=c.today);
-        rows.push({kind:'option_group',id,name:group.detail.optionGroupName,price:null,childIds:[...new Set(options.map(row=>String(row.optionCode)))],staged,hidden:group.items.every(item=>hidden('item',item.itemCode)),native:group});
+        rows.push({kind:'option_group',id,name:group.detail.optionGroupName,price:null,childIds:[...new Set(options.map(row=>String(row.optionCode)))],staged,hidden:staged||group.items.every(item=>hidden('item',item.itemCode)),native:group});
         for(const option of options)rows.push({kind:'option',id:String(option.optionCode),name:option.optionName,price:Number(option.price),hidden:hidden('option',option.optionCode),parentIds:[id],native:option});
       }
       for(const category of remote.items.categoryList)rows.push({kind:'category',id:String(category.categoryCode),name:category.categoryName,price:null,childIds:(category.itemList??[]).map(row=>String(row.itemCode)),hidden:(category.itemList??[]).every(item=>hidden('item',item.itemCode)),native:category});
@@ -238,11 +248,12 @@ export class AuthorityNativeDriver {
         }
         if(target.kind==='category') {
           const expected=this.children(target).filter(child=>child.kind==='item').flatMap(child=>this.ids(child)).filter(id=>!rows.some(row=>row.kind==='item'&&row.id===id&&row.staged));
-          if(!equalIds([...row.childIds].sort(),[...expected].sort())&&!(preflight&&this.platform==='rocket_now'&&row.childIds.every(id=>this.payload.targets.some(child=>child.kind==='item'&&this.ids(child).includes(String(id))))))add('category_membership_migration_required');
+          const retained=row.childIds.filter(id=>!this.payload.targets.some(child=>child.archived&&!child.quarantined&&child.kind==='item'&&this.ids(child).includes(String(id))&&(preflight||rows.some(item=>item.kind==='item'&&item.id===String(id)&&item.hidden))));
+          if(!equalIds([...retained].sort(),[...expected].sort())&&!(preflight&&row.childIds.every(id=>this.ownsItem(id))))add('category_membership_migration_required');
         }
         if(target.kind==='item') {
           const parent=this.payload.targets.find(row=>row.targetId===target.parentId);
-          if(parent&&!row.staged&&!equalIds(row.parentIds,this.ids(parent))&&!(preflight&&this.platform==='rocket_now'&&row.parentIds.length===1&&(parent.mappings.length===1||!parent.mappings.length)))add('item_category_migration_required');
+          if(parent&&!row.staged&&!equalIds(row.parentIds,this.ids(parent))&&!(preflight&&row.parentIds.length===1&&(parent.mappings.length===1||!parent.mappings.length)))add('item_category_migration_required');
           if(!equalIds(row.groupIds,this.groupIds(target))&&!(preflight&&row.groupIds.every(id=>this.managedGroup(id,rows))))add('item_group_migration_required');
         }
         if(target.kind==='option') {
@@ -317,7 +328,11 @@ export class AuthorityNativeDriver {
         owners.set(key,target);
       }
       if(target.archived) {
-        if(this.platform!=='rocket_now'&&target.kind!=='option'&&target.mappings.length)issues.push({sourceKey:target.sourceKey,code:'permanent_retirement_requires_adapter'});
+        if(this.platform==='demae_can')for(const id of this.ids(target)) {
+          const row=rows.find(row=>row.kind===target.kind&&row.id===id);
+          if(target.kind==='category'&&row?.childIds.some(childId=>!this.ownsItem(childId)))issues.push({sourceKey:target.sourceKey,code:'retirement_unowned_item'});
+          if(target.kind==='option_group'&&row?.native?.items?.some(item=>!this.ownsItem(item.itemCode)))issues.push({sourceKey:target.sourceKey,code:'retirement_unowned_consumer'});
+        }
         continue;
       }
       if(!target.mappings.length){
@@ -385,14 +400,17 @@ export class AuthorityNativeDriver {
             &&this.managedGroup(groupId,this.relationshipSnapshot));
         if(!before||!current||!equalIds(before.parentIds,current.parentIds)
           ||!equalIds(before.groupIds,current.groupIds)&&!ownedDraftAdditions)throw Error('uber_authority_relationship_drift');
-        if(equalIds(current.groupIds,this.groupIds(target)))continue;
+        const parent=this.payload.targets.find(row=>row.targetId===target.parentId&&!row.archived&&!row.quarantined);
+        const categoryChanged=!current.staged&&parent&&!equalIds(current.parentIds,this.ids(parent));
+        if(categoryChanged&&(current.parentIds.length!==1||this.ids(parent).length!==1))throw Error('demae_menu_category_move_ambiguous');
+        if(equalIds(current.groupIds,this.groupIds(target))&&!categoryChanged)continue;
         if(current.groupIds.some(id=>!this.managedGroup(id,this.relationshipSnapshot)))throw Error('uber_authority_unowned_item_group');
         const links=[];
         for(const groupId of this.groupIds(target)) {
           const group=await this.client.group(groupId);
           links.push({chainId:Number(this.merchantId),optionGroupCode:groupId,optionGroupName:group.detail.optionGroupName,dispOrder:links.length+1});
         }
-        await this.client.updateItem(id,{groupLinks:links});
+        await this.client.updateItem(id,{groupLinks:links,...(categoryChanged?{categoryLinks:[{categoryCode:this.ids(parent)[0]}],allowCategoryMove:true}:{})});
       }
       return;
     }
@@ -412,7 +430,7 @@ export class AuthorityNativeDriver {
         const actual=rows.find(row=>row.kind==='option_group'&&row.id===id);
         if(!actual||!equalIds([...actual.childIds].sort(),[...expected].sort()))throw Error(`uber_authority_relationship_drift:${target.sourceKey}`);
         const emptyOptional=expected.length===0&&target.source?.min===0;
-        const limits=target.source?.min!==undefined?{min:target.source.min,max:emptyOptional?0:target.source.max??-1,isMultiSelect:!emptyOptional&&(target.source.max==null||target.source.max===-1||target.source.max>1)}:{};
+        const limits=this.payload.selectionPolicy!=='preserve_native'&&target.source?.min!==undefined?{min:target.source.min,max:emptyOptional?0:target.source.max??-1,isMultiSelect:!emptyOptional&&(target.source.max==null||target.source.max===-1||target.source.max>1)}:{};
         // Apply quantities after creating and moving all children. Empty
         // freshly-created native groups cannot retain a positive maximum.
         if(!equalIds(actual.childIds,expected)||!this.quantityMatches(target,actual))await this.client.updateGroup(id,{memberIds:expected,...limits});
@@ -444,8 +462,8 @@ export class AuthorityNativeDriver {
       }
       return;
     }
-    if(this.platform==='rocket_now'&&target.kind==='category') {
-      if(this.structureIssues(target,await this.snapshot()).length)throw Error(`uber_authority_relationship_drift:${target.sourceKey}`);
+    if(target.kind==='category') {
+      if(this.structureIssues(target,this.categorySnapshot??await this.snapshot()).length)throw Error(`uber_authority_relationship_drift:${target.sourceKey}`);
       return;
     }
     // Preflight currently admits only verified unchanged relationships. Any
@@ -456,8 +474,14 @@ export class AuthorityNativeDriver {
     for(const id of this.ids(target)) {
       const row=(await this.snapshot()).find(row=>row.kind===target.kind&&row.id===id);
       if(target.kind==='option') {await this.client.retireOption(id);continue;}
+      if(this.platform==='demae_can') {
+        if(target.kind==='item') {
+          if(row?.native?.categoryItemLinkList?.length||row?.parentIds?.length)await this.client.retireItem(id);
+        }else if(target.kind==='option_group')await this.client.retireGroup(id,{ownedItemIds:this.payload.targets.filter(target=>target.kind==='item'&&!target.quarantined).flatMap(target=>this.ids(target))});
+        else if(target.kind==='category')await this.client.retireCategory(id);
+        continue;
+      }
       if(!row||row.hidden)continue;
-      if(this.platform!=='rocket_now')throw Error('uber_authority_permanent_retirement_unsupported');
       if(target.kind==='item')await this.client.updateDish(id,{retire:true});
       else if(target.kind==='option')await this.client.updateOption(id,{retire:true});
       else throw Error('uber_authority_parent_still_available');
@@ -473,6 +497,7 @@ export class AuthorityNativeDriver {
     });
   }
   async beginPhase(phase,reportProgress) {
+    if(phase==='categories')this.categorySnapshot=await this.snapshot();
     if(phase==='relationships') {
       if(this.platform==='demae_can') {
         const rows=await this.snapshot();

@@ -10,6 +10,10 @@ export type UberPublicationNode = {
 };
 export type UberPublicationMapping = {kind:string; targetId:string; externalId:string; externalParentId:string};
 
+export function isUberPublicationRetired(node:UberPublicationNode) {
+  return node.archived===true||(node.kind==='item'&&node.payload.attached===false);
+}
+
 // Keep image ingestion in OS, but never give a downstream publisher image
 // instructions (including images nested inside the captured source object).
 function publicationSource(value: unknown): unknown {
@@ -47,10 +51,10 @@ export function buildUberPublication(input: {
     sourceKey:node.sourceKey,kind:node.kind,targetId:node.targetId,parentId:node.parentId,
     marker:`FS${createHash('sha256').update(`${input.sourceId}:${node.sourceKey}`).digest('hex').slice(0,14)}`,
     name:nativePublicationName(input.platform,node),
-    price:['item','option'].includes(node.kind) && !node.archived
+    price:['item','option'].includes(node.kind) && !isUberPublicationRetired(node)
       ? authoritativeDeliveryPrice(input.platform,node.uberPrice as number,node.price as number) : null,
     description:projectDeliveryDescription(input.platform,node.description),sortOrder:node.sortOrder,
-    archived:node.archived===true,source:publicationSource(node.payload) as Record<string,unknown>,
+    archived:isUberPublicationRetired(node),source:publicationSource(node.payload) as Record<string,unknown>,
     quarantined:input.quarantinedSourceKeys?.includes(node.sourceKey)===true,
     mappings:input.mappings.filter(mapping=>mapping.kind===node.kind && mapping.targetId===node.targetId)
       .flatMap(mapping=>mapping.externalId.split(',').map(id=>id.trim()).filter(Boolean).map(externalId=>({externalId,externalParentId:mapping.externalParentId})))
@@ -60,7 +64,7 @@ export function buildUberPublication(input: {
     merchantId:input.merchantId,menuPatternCode:input.menuPatternCode??'',
     ...(input.platform==='demae_can'&&input.draftPatternCode?{draftPatternCode:input.draftPatternCode}:{}),
     ...(input.platform==='demae_can'&&input.draftCarrierItemCode?{draftCarrierItemCode:input.draftCarrierItemCode}:{}),
-    selectionPolicy:input.platform==='demae_can'?(input.selectionPolicy??'strict'):'strict',
+    selectionPolicy:input.selectionPolicy??'strict',
     ...(input.platform==='rocket_now'&&input.optionMigrationPolicy?{optionMigrationPolicy:input.optionMigrationPolicy}:{}),
     ruleVersion:'uber-authority-v1',imagePolicy:'read_only',newItemsHidden:true,targets};
 }
