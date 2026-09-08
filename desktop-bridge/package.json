@@ -13,6 +13,7 @@
     "locate": "node src/main.mjs locate",
     "voice": "node src/voice-command.mjs",
     "install:mac": "node macos/install-launch-agent.mjs",
+    "install:menu": "node macos/install-menu-bar.mjs",
     "uninstall:mac": "node macos/uninstall-launch-agent.mjs",
     "start": "node src/main.mjs run",
     "test": "node --test test/*.test.mjs"

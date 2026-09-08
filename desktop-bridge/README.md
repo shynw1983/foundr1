@@ -95,6 +95,17 @@ HTTP 403、またはメニューの一部しか読めない場合は前回の割
 
 ## macOS auto start
 
+### 菜单栏状态面板
+
+运行 `npm run install:menu` 编译并安装原生 Mac 菜单栏程序（需要 Xcode Command Line Tools）。
+程序安装于 `~/Applications/Foundr1 Bridge.app`，登录后自动启动；退出菜单栏不停止 Bridge。
+状态每两秒从本机 `~/Library/Application Support/Foundr1 Bridge/status.json` 读取。
+面板区分服务心跳、最近服务器连接、平台页面检查和最近任务结果；页面可访问不代表菜单接口授权正常。
+没有真实队列数量时引导查看网页，不显示估计值。完整历史和失败分重试仍在 Store。
+连接检查、打开专用后台和安全重启通过有时效的本地指令提交，仅在任务间处理，不会中断任务。
+本地文件不包含 Bridge token、商品载荷或原始错误；诊断复制仅包含脱敏运行状态。
+卸载菜单栏：`launchctl bootout gui/$(id -u)/jp.foundr1.bridge-menu`，然后移除对应 LaunchAgent 和应用；不会卸载后台 Bridge。
+
 実商品で「販売停止 → 販売再開」の往復確認が完了した後、
 `config.local.json` の `executionEnabled` を `true` にしてインストールします。
 

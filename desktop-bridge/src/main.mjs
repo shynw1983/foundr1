@@ -4,6 +4,7 @@ import { BridgeApiClient } from "./api-client.mjs";
 import { createAdapter } from "./adapters/index.mjs";
 import { BrowserSession } from "./browser-session.mjs";
 import { loadConfig } from "./config.mjs";
+import {createLocalStatus, publicError} from './local-status.mjs';
 import {
   DEMAE_CAN_CIRCUIT_FAILURE_THRESHOLD,
   DEMAE_CAN_CIRCUIT_OPEN_MS,
@@ -22,6 +23,7 @@ const requestedKind = locateHasKind
   : "item";
 const requestedTarget = String(process.argv.slice(locateHasKind ? 5 : 4).join(" ") ?? "").trim();
 const config = await loadConfig({ requireCredentials: mode === "run" });
+const localStatus = mode === 'run' ? await createLocalStatus(config) : null;
 const enabledPlatforms = ["uber_eats", "rocket_now", "demae_can"]
   .filter((platform) => config.platforms[platform]?.enabled !== false)
   .filter((platform) => !requestedPlatform || requestedPlatform === platform);
@@ -69,6 +71,7 @@ async function shutdown() {
 }
 
 async function reportProgress(command, progress, error = "") {
+  await localStatus?.progress(command, progress);
   await api.reportProgress(command.id, progress, error).catch((progressError) => {
     if (command.payload?.authoritativePublication === true) throw progressError;
     console.error(new Date().toISOString(), "progress update failed", progressError instanceof Error ? progressError.message : progressError);
@@ -234,18 +237,32 @@ let lastStatusAt = 0;
 for (;;) {
   let command = null;
   try {
+    const action=await localStatus.action();
+    if(action==='restart') {await shutdown();process.exit(0);}
+    if(action==='check') lastStatusAt=0;
+    if(action?.startsWith('open:')) {
+      const platform=action.slice(5);
+      const urls={uber_eats:'https://merchants.ubereats.com/',rocket_now:'https://store.rocketnow.co.jp/',demae_can:'https://partner.demae-can.com/merchant-admin/'};
+      if(sessions.has(platform)) {const page=await sessions.get(platform).goto(urls[platform]);await page.bringToFront();}
+    }
     command = await api.nextCommand();
+    localStatus.state.lastServerAt=Date.now();localStatus.state.serviceError='';
     if (command) {
+      await localStatus.progress(command,{phase:'starting'});
       const result = command.type === "audit_inventory"
         ? await executeAuditCommand(command)
         : ["publish_menu_changes", "capture_menu_snapshot", "capture_competitor_menu_snapshot"].includes(command.type)
           ? await executeMenuCommand(command)
           : await executeInventoryCommand(command);
       await api.acknowledge(command.id, "succeeded", result);
+      await localStatus.finish(command);
       continue;
     }
     if (Date.now() - lastStatusAt > 60000) {
+      localStatus.state.activity='检查平台页面';await localStatus.save();
       const checks = await inspectAll();
+      for(const check of checks) localStatus.state.platforms[check.platform]={...localStatus.state.platforms[check.platform],
+        page:{ok:check.ok===true,at:Date.now(),error:check.ok?'':publicError(check.error)}};
       const healthy = checks.every((item) => item.ok);
       await api.reportStatus({
         level: healthy ? "healthy" : "attention",
@@ -256,15 +273,17 @@ for (;;) {
       });
       lastStatusAt = Date.now();
     }
+    localStatus.state.activity='空闲';await localStatus.save();
     await delay(config.pollIntervalMs);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(new Date().toISOString(), message);
     if (command?.id) {
+      await localStatus.finish(command,message);
       await api.acknowledge(command.id, "failed", {}, message).catch((ackError) => {
         console.error(new Date().toISOString(), "acknowledgement failed", ackError instanceof Error ? ackError.message : ackError);
       });
-    }
+    } else {localStatus.state.serviceError=publicError(message);await localStatus.save();}
     await delay(config.pollIntervalMs);
   }
 }
