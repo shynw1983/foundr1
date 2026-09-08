@@ -51,7 +51,7 @@ export class AuthorityNativeDriver {
       if((await this.client.options()).some(row=>row.optionName===marker))throw Error('uber_authority_marker_already_published');
       return [];
     }
-    const rows=await this.snapshot();
+    const rows=await this.snapshot({itemDetails:target.kind==='item'});
     return rows.filter(row=>row.kind===target.kind&&row.name===marker).map(row=>this.creationIdentity(row));
   }
   creationIdentity(row) {
@@ -78,7 +78,7 @@ export class AuthorityNativeDriver {
       const actual=await new DemaeStagedOption(this.client).read({optionCode:this.id('option',externalId),groupCode:parent.slice(6),marker:target.marker});
       return {externalId,externalParentId:parent,marker:actual.option.optionName,hidden:actual.hidden};
     }
-    const rows=(await this.snapshot()).filter(row=>row.kind===target.kind&&row.id===this.id(target.kind,externalId));
+    const rows=(await this.snapshot({itemDetails:target.kind==='item'})).filter(row=>row.kind===target.kind&&row.id===this.id(target.kind,externalId));
     if(rows.length>1)throw Error('uber_authority_receipt_identity_ambiguous');
     return rows[0]?this.creationIdentity(rows[0]):null;
   }
@@ -112,7 +112,7 @@ export class AuthorityNativeDriver {
       const group=await this.client.createStagedGroup({marker:target.marker,optionCodes:this.activeChildIds(target,rows),buttonType:target.source?.max===1?'RADIO':'CHECKBOX'},async id=>context.saveReceipt({externalId:id,externalParentId:''}));
       return {externalId:String(group.detail.optionGroupCode),externalParentId:''};
     }
-    const rows=await this.snapshot();
+    const rows=await this.snapshot({itemDetails:target.kind==='item'});
     if(this.platform!=='rocket_now')throw Error('uber_authority_creation_requires_verified_staging');
     if(rows.some(row=>row.kind===target.kind&&[target.name,target.marker].includes(row.name)))throw Error('uber_authority_creation_existing_candidate');
     let receipt,parentId='',id;
@@ -140,6 +140,10 @@ export class AuthorityNativeDriver {
     if(target.kind!=='option_group'||target.source?.min===undefined)return true;
     if(this.platform==='demae_can')return this.payload.selectionPolicy==='preserve_native';
     const max=target.source.max??-1;
+    // Rocket normalizes an empty optional group to 0/0. With no source
+    // choices this is equivalent, but never accept it for a populated group.
+    if(target.source.min===0&&this.children(target).length===0&&row.childIds?.length===0)
+      return row.native?.minSelect===0&&row.native?.maxSelect===0&&row.native?.isMandatory===false;
     return row.native?.minSelect===target.source.min&&row.native?.maxSelect===max
       &&row.native?.isMultiSelect===(max===-1||max>1);
   }
@@ -152,18 +156,18 @@ export class AuthorityNativeDriver {
     // actual record visible to structural validation instead of creating a copy.
     return placed.length?placed:physical;
   }
-  async snapshot() {
+  async snapshot({itemDetails=true}={}) {
     const c=this.client,remote=await c.catalog(),rows=[];
     if(this.platform==='rocket_now') {
       const items=[...new Map(remote.menus.flatMap(menu=>menu.dishes??[]).map(item=>[String(item.dishId),item])).values()];
-      const details=await Promise.all(items.map(item=>c.detail(item.dishId)));
+      const details=itemDetails?await Promise.all(items.map(item=>c.detail(item.dishId))):[];
       for(const item of details)rows.push({kind:'item',id:String(item.dishId),name:item.dishName,price:Number(item.salePrice),description:item.description??'',hidden:item.displayStatus==='NOT_EXPOSE',
         parentIds:(item.mappingMenus??[]).map(row=>String(row.menuId)),groupIds:(item.options??[]).map(row=>String(row.optionId)),native:item});
       for(const group of remote.groups) {
-        rows.push({kind:'option_group',id:String(group.optionId),name:group.optionName,price:null,childIds:(group.optionItems??[]).map(row=>String(row.optionItemId)),hidden:!rows.some(row=>row.kind==='item'&&!row.hidden&&row.groupIds.includes(String(group.optionId))),native:group});
+        rows.push({kind:'option_group',id:String(group.optionId),name:group.optionName,price:null,childIds:(group.optionItems??[]).map(row=>String(row.optionItemId)),hidden:itemDetails?!rows.some(row=>row.kind==='item'&&!row.hidden&&row.groupIds.includes(String(group.optionId))):group.mappingDishCount===0, native:group});
         for(const option of group.optionItems??[])rows.push({kind:'option',id:String(option.optionItemId),name:option.optionItemName,price:Number(option.salePrice),hidden:option.displayStatus==='NOT_EXPOSE',parentIds:[String(group.optionId)],native:option});
       }
-      for(const menu of remote.menus)rows.push({kind:'category',id:String(menu.menuId),name:menu.menuName,price:null,childIds:(menu.dishes??[]).map(row=>String(row.dishId)),hidden:!(menu.dishes??[]).some(item=>rows.some(row=>row.kind==='item'&&row.id===String(item.dishId)&&!row.hidden)),native:menu});
+      for(const menu of remote.menus)rows.push({kind:'category',id:String(menu.menuId),name:menu.menuName,price:null,childIds:(menu.dishes??[]).map(row=>String(row.dishId)),hidden:itemDetails?!(menu.dishes??[]).some(item=>rows.some(row=>row.kind==='item'&&row.id===String(item.dishId)&&!row.hidden)):(menu.dishes??[]).length===0,native:menu});
     } else {
       const stock=await c.stockCatalog();
       const hidden=(kind,id)=>{
@@ -305,7 +309,7 @@ export class AuthorityNativeDriver {
         const actual=await new DemaeStagedOption(this.client).read({optionCode:this.id('option',mapping.externalId),groupCode:mapping.externalParentId.slice(6),marker:target.marker});
         return {kind:'option',id:String(actual.option.optionCode),name:actual.option.optionName,price:Number(actual.option.price),staged:true,parentIds:[actual.groupCode]};
       }));
-    }else rows=target.mappings.some(mapping=>mapping.created)?await this.snapshot():this.contentSnapshot;
+    }else rows=target.mappings.some(mapping=>mapping.created)?await this.snapshot({itemDetails:target.kind==='item'}):this.contentSnapshot;
     for(const id of this.ids(target)) {
       const before=rows.find(row=>row.kind===target.kind&&row.id===id);
       if(!before)throw Error('uber_authority_native_object_missing');
@@ -315,13 +319,13 @@ export class AuthorityNativeDriver {
         &&!this.contentSnapshot.some(row=>row.kind==='item'&&row.id===id))this.contentSnapshot.push(structuredClone(before));
       const nameChanged=before.name!==target.name,priceChanged=target.price!==null&&before.price!==target.price;
       const descriptionChanged=target.kind==='item'&&before.description!==target.description;
-      const quantityChanged=!this.quantityMatches(target,before);
+      const quantityChanged=target.kind!=='option_group'&&!this.quantityMatches(target,before);
       if(!nameChanged&&!priceChanged&&!descriptionChanged&&!quantityChanged)continue;
       const patch={name:target.name,...(target.price!==null?{price:target.price}:{}),...(target.kind==='item'?{description:target.description}:{})};
       if(target.kind==='item')await (this.platform==='rocket_now'?this.client.updateDish(id,patch):this.client.updateItem(id,patch));
       else if(target.kind==='option'&&before.staged)await new DemaeStagedOption(this.client).update({optionCode:id,groupCode:before.parentIds[0],marker:target.marker},patch);
       else if(target.kind==='option')await this.client.updateOption(id,patch);
-      else if(target.kind==='option_group')await this.client.updateGroup(id,{name:target.name,...(this.platform==='rocket_now'&&target.source?.min!==undefined?{min:target.source.min,max:target.source.max??-1,isMultiSelect:target.source.max==null||target.source.max===-1||target.source.max>1}:{})});
+      else if(target.kind==='option_group')await this.client.updateGroup(id,{name:target.name});
       else await this.client.updateCategory(id,{name:target.name});
     }
   }
@@ -367,7 +371,11 @@ export class AuthorityNativeDriver {
         const rows=await this.snapshot();
         const actual=rows.find(row=>row.kind==='option_group'&&row.id===id);
         if(!actual||!equalIds([...actual.childIds].sort(),[...expected].sort()))throw Error(`uber_authority_relationship_drift:${target.sourceKey}`);
-        if(!equalIds(actual.childIds,expected))await this.client.updateGroup(id,{memberIds:expected});
+        const emptyOptional=expected.length===0&&target.source?.min===0;
+        const limits=target.source?.min!==undefined?{min:target.source.min,max:emptyOptional?0:target.source.max??-1,isMultiSelect:!emptyOptional&&(target.source.max==null||target.source.max===-1||target.source.max>1)}:{};
+        // Apply quantities after creating and moving all children. Empty
+        // freshly-created native groups cannot retain a positive maximum.
+        if(!equalIds(actual.childIds,expected)||!this.quantityMatches(target,actual))await this.client.updateGroup(id,{memberIds:expected,...limits});
       }
       return;
     }

@@ -35,6 +35,26 @@ function storedSizes(sizes) {
   return sizes.map(({originalApplyStartDate,originalApplyEndDate,...size})=>size);
 }
 
+export function sameDemaeImage(before, actual) {
+  // Native text/price saves refresh the CDN cache version without changing
+  // the image. Ignore only that parameter on the observed image CDN path;
+  // unknown hosts, other parameters, file names and cropping stay strict.
+  const identity = value => {
+    if (typeof value !== 'string') return value;
+    try {
+      const url = new URL(value);
+      if (url.origin === 'https://cdn.demae-can.com' && url.pathname.startsWith('/files/imgix/item720/')) {
+        url.searchParams.delete('v');
+        return url.href;
+      }
+    } catch {}
+    return value;
+  };
+  return identity(before.itemImageUri) === identity(actual.itemImageUri)
+    && before.itemImageFileName === actual.itemImageFileName
+    && sameMenuValue(before.imageTrimmingRange, actual.imageTrimmingRange);
+}
+
 export class DemaeMenuClient {
   constructor(transport,chainId,menuPatternCode,{today,draftPatternCode,draftCarrierItemCode}={}) {
     this.transport=transport;this.chainId=positiveId(chainId);this.pattern=String(menuPatternCode);
@@ -140,7 +160,7 @@ export class DemaeMenuClient {
       || (patch.price!==undefined && (active.length!==1||Number(active[0].price)!==patch.price))
       || !sameMenuValue(actual.categoryItemLinkList,body.categoryItemLinkList)
       || !sameMenuValue(storedSizes(actual.sizeInfoList),storedSizes(body.sizeInfoList))
-      || actual.itemImageUri!==before.itemImageUri)throw new Error('demae_menu_item_verification_failed');
+      || !sameDemaeImage(before,actual))throw new Error('demae_menu_item_verification_failed');
     const afterOccurrences=await this.itemOccurrences(id);
     if(patch.categoryLinks?.length===0) {
       if(afterOccurrences.length)throw new Error('demae_menu_item_still_linked');

@@ -155,6 +155,26 @@ test('Demae permits only identified additions to a verified private draft carrie
  }
 });
 
+test('Rocket non-item creation checks use fresh catalog identities without reading unrelated dish details',async()=>{
+ const driver=new AuthorityNativeDriver({},{platformKey:'rocket_now',merchantId:'1',targets:[]});
+ driver.client={catalog:async()=>({menus:[{menuId:1,dishes:[{dishId:2}]}],groups:[{optionId:3,optionName:'empty',mappingDishCount:0,optionItems:[]},{optionId:4,optionName:'unknown',optionItems:[{optionItemId:5,optionItemName:'hidden',salePrice:12,displayStatus:'NOT_EXPOSE'}]}]}),detail:async()=>{throw Error('unrelated detail');}};
+ const rows=await driver.snapshot({itemDetails:false});
+ assert.equal(rows.find(r=>r.id==='3'&&r.kind==='option_group').hidden,true);
+ assert.equal(rows.find(r=>r.id==='4'&&r.kind==='option_group').hidden,false);
+ assert.equal(rows.find(r=>r.id==='1'&&r.kind==='category').hidden,false);
+ assert.equal(rows.find(r=>r.id==='5'&&r.kind==='option').hidden,true);
+ assert.equal(rows.some(r=>r.kind==='item'),false);
+});
+
+test('Rocket empty optional group normalization cannot hide a populated-group mismatch',()=>{
+ const target={kind:'option_group',targetId:'g',source:{min:0,max:1}};
+ const driver=new AuthorityNativeDriver({},{platformKey:'rocket_now',merchantId:'1',targets:[target]});
+ const row={childIds:[],native:{minSelect:0,maxSelect:0,isMandatory:false,isMultiSelect:false}};
+ assert.equal(driver.quantityMatches(target,row),true);
+ driver.payload.targets.push({kind:'option',targetId:'o',parentId:'g'});
+ assert.equal(driver.quantityMatches(target,row),false);
+});
+
 test('unchanged Demae staged options reuse the independently verified phase snapshot',async()=>{
  const target={kind:'option',sourceKey:'option:o',targetId:'o',name:'same',price:170,mappings:[{externalId:'itemList_151true',externalParentId:'stage:g'}]};
  const driver=new AuthorityNativeDriver({},{platformKey:'demae_can',merchantId:'1',targets:[target]});

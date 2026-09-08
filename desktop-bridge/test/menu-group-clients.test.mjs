@@ -7,6 +7,11 @@ const group=()=>({optionId:7,optionName:'old',minSelect:0,maxSelect:50,isMandato
  exposeStatus:'EXPOSE',mappingDishes:[],mappingDishCount:0,
  optionItems:[{optionItemId:8,optionItemName:'one',salePrice:123,displayStatus:'NOT_EXPOSE'},
  {optionItemId:9,optionItemName:'two',salePrice:227,displayStatus:'ON_SALE'}]});
+test('only empty Rocket groups may retain the native zero maximum',()=>{
+ assert.equal(rocketGroupUpdate({...group(),optionItems:[],maxSelect:0},{name:'empty'}).maxSelect,1);
+ assert.throws(()=>rocketGroupUpdate({...group(),maxSelect:0}),/quantity_invalid/);
+ assert.throws(()=>rocketGroupUpdate({...group(),optionItems:[],minSelect:1,maxSelect:0}),/quantity_invalid/);
+});
 test('Rocket group limits are exact, not clamped to current option count; reordering keeps stock and price',()=>{
  const body=rocketGroupUpdate(group(),{name:'new',min:2,max:100,memberIds:['9','8']});
  assert.equal(body.maxSelect,100);assert.equal(body.minSelect,2);assert.equal(body.isMandatory,true);

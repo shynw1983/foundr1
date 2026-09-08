@@ -441,6 +441,23 @@ primitives or image changes as a completed full publisher.
 
 ## Local verification
 
+2026-09-08 acceptance hardening:
+
+- Demae non-image saves can refresh only the `v` query parameter on the
+  `cdn.demae-can.com/files/imgix/item720/` image URI. Verification compares the
+  stable URI, filename and cropping metadata; other URI differences still fail.
+  Outbound updates remain `NOT_EDIT` with no image content.
+- Rocket empty optional groups read back a zero maximum although the edit
+  endpoint requires a positive maximum. Preserve this empty-group equivalence
+  only when both the source and native group contain no options. Apply actual
+  selection limits after children have been created/moved, not before.
+- New Rocket categories/groups/options use independently read catalog identities
+  without fetching every unrelated dish detail. Full preflight and final graph
+  verification still read all dish details. Missing consumer counts never prove
+  a new group hidden.
+- Automatic activation still requires successful native verification on both
+  platforms. Unit tests and a READY server deployment alone do not qualify.
+
 Creation receipt hardening (2026-09-07): keyed Demae option creates now save
 their intent in merchant-origin local storage before the request and the complete
 creation receipt before returning over CDP. Storage failure blocks the request;
