@@ -45180,3 +45180,34 @@ a:focus-visible {
   .competitor-change-row time { grid-column: 2; margin-bottom: -6px; }
   .competitor-change-row > div { grid-column: 2; }
 }
+.inventory-preview-rows {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 16px;
+}
+.inventory-calibration-panel button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.inventory-preview-rows li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  overflow-wrap: anywhere;
+  font-weight: 400;
+}
+.inventory-preview-rows li > span:first-child {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.inventory-preview-transition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
