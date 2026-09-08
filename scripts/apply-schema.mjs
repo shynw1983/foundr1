@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { neon } from "@neondatabase/serverless";
 import { loadLocalEnv } from "./db-env.mjs";
+import { splitSqlStatements } from './sql-statements.mjs';
 
 loadLocalEnv();
 
@@ -10,7 +11,7 @@ if (!process.env.DATABASE_URL) {
 
 const sql = neon(process.env.DATABASE_URL);
 const schema = readFileSync("db/schema.sql", "utf8");
-const statements = schema.split(";").map((statement) => statement.trim()).filter(Boolean);
+const statements = splitSqlStatements(schema);
 
 for (const statement of statements) {
   await sql.query(statement);

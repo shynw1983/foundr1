@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/uber-menu-sync",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/daily-maintenance",
       "schedule": "0 1 * * *"
     },

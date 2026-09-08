@@ -70,6 +70,7 @@ async function shutdown() {
 
 async function reportProgress(command, progress, error = "") {
   await api.reportProgress(command.id, progress, error).catch((progressError) => {
+    if (command.payload?.authoritativePublication === true) throw progressError;
     console.error(new Date().toISOString(), "progress update failed", progressError instanceof Error ? progressError.message : progressError);
   });
 }

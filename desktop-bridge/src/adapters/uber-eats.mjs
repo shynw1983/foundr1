@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 import { CdpPage } from "../cdp-page.mjs";
+import { captureUberAuthoritativeCatalog } from "../uber-authoritative-catalog.mjs";
 import { buildUberCompetitorSnapshot } from "../competitor-snapshot.mjs";
 import { loginState, normalizeText, platformUiChanged, targetNameTiers, tieredTargetCandidates } from "./common.mjs";
 
@@ -478,6 +479,9 @@ export class UberEatsAdapter {
   }
 
   async captureMenuSnapshot(payload) {
+    if (payload.authoritativeSource === true && payload.expectedUberStoreUuid !== this.platformConfig.storeUuid) {
+      throw new Error('uber_source_store_mismatch');
+    }
     const targets = Array.isArray(payload.targets) ? payload.targets : [];
     const requested = targets.map((target) => {
       const tiers = uberTargetNameTiers(target);
@@ -513,6 +517,9 @@ export class UberEatsAdapter {
       page.close();
     }
     const snapshot = projectUberMenuSnapshot(rawMenu, requested);
+    if (payload.authoritativeSource === true) {
+      snapshot.sourceCatalog = captureUberAuthoritativeCatalog(rawMenu, String(this.platformConfig.storeUuid ?? ""));
+    }
     const entries = [...snapshot.items, ...snapshot.options];
     const missingTargets = snapshot.missingTargets;
     return {

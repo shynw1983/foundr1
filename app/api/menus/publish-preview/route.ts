@@ -25,7 +25,7 @@ function cleanBrandId(request: Request) {
 }
 
 async function loadPreview(brandId: string) {
-  const [brands, items, groups, options, platforms, targetSettings, snapshots, mappings] = await Promise.all([
+  const [brands, items, groups, options, platforms, targetSettings, snapshots, mappings, authority] = await Promise.all([
     sql`select id::text, name from brands where id = ${brandId} limit 1`,
     sql`
       select
@@ -95,7 +95,8 @@ async function loadPreview(brandId: string) {
       from menu_platform_object_mappings mappings
       join menu_external_platforms platforms on platforms.id = mappings.external_platform_id
       where mappings.brand_id = ${brandId} and mappings.store_id is null
-    `
+    `,
+    sql`select enabled from menu_uber_sources where brand_id=${brandId} and enabled=true`
   ]);
 
   if (!brands.length) throw new Error("ブランドが見つかりません。");
@@ -188,6 +189,7 @@ async function loadPreview(brandId: string) {
   }
 
   const preview = buildDeliveryMenuPublishPreview({
+    uberAuthority:authority.length>0,
     items: items.map((item) => ({
       id: String(item.id),
       externalId: String(item.externalId),
@@ -287,6 +289,10 @@ export async function POST(request: Request) {
   const confirmDestructive = body.confirmDestructive === true;
   if (!brandId || !storeId || !requestedPlatforms.length) {
     return Response.json({ error: "ブランド、店舗、配信先を選択してください。" }, { status: 400 });
+  }
+  const authority = await sql`select id from menu_uber_sources where brand_id=${brandId} and enabled=true`;
+  if (authority.length && action !== 'capture') {
+    return Response.json({error:'Uber を原本とするメニューは専用の同期処理から配信します。通常の差分配信は使用できません。'},{status:409});
   }
   const storeRows = await sql`
     select stores.id::text from stores

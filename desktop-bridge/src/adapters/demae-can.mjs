@@ -1,6 +1,8 @@
 import { loginState, pageSummary, platformUiChanged, targetNameTiers } from "./common.mjs";
+import {selectDemaeSalesMenu} from '../demae-menu-scope.mjs';
 import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 import { loadDemaeCredentials } from "../demae-credentials.mjs";
+import {publishNativeAuthority} from '../uber-authority-publisher.mjs';
 
 const STOCKOUT_URL = "https://partner.demae-can.com/merchant-admin/shop/stockout";
 const LOGIN_FAILURE_COOLDOWN_MS = 30 * 60 * 1000;
@@ -39,10 +41,10 @@ async function waitForInventoryRows(page) {
   }, { timeout: 30000 });
 }
 
-async function readRows(page, targets) {
+export async function readDemaeInventoryRows(page, targets) {
   const requested = targets.map((target) => {
     const projected = withPlatformTargetAliases("demae_can", target);
-    return { kind: projected.kind, label: projected.label, ...targetNameTiers(projected) };
+    return { kind: projected.kind, label: projected.label, knownExternalIds:[...new Set((target.knownExternalIds??[]).flatMap(id=>String(id).split(',')).map(id=>id.trim()).filter(Boolean))], ...targetNameTiers(projected) };
   });
   return page.evaluate((items) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
@@ -67,9 +69,12 @@ async function readRows(page, targets) {
           .filter((row) => wanted.some((name) => rowParts(row).includes(name)))
           .sort((left, right) => normalize(left.textContent).length - normalize(right.textContent).length);
       };
-      const exactRows = findRows(item.exactNames);
-      const fallbackRows = exactRows.length ? [] : findRows(item.fallbackNames);
-      const aliasRows = exactRows.length || fallbackRows.length ? [] : findRows(item.aliasNames);
+      const mapped=item.knownExternalIds.length>0;
+      const idRows=mapped?checkboxRows.filter(row=>item.knownExternalIds.includes(row.querySelector('input[type="checkbox"]')?.id)):[];
+      const complete=mapped&&item.knownExternalIds.every(id=>idRows.some(row=>row.querySelector('input[type="checkbox"]')?.id===id));
+      const exactRows = mapped?(complete?idRows:[]):findRows(item.exactNames);
+      const fallbackRows = mapped||exactRows.length ? [] : findRows(item.fallbackNames);
+      const aliasRows = mapped||exactRows.length || fallbackRows.length ? [] : findRows(item.aliasNames);
       const rows = exactRows.length ? exactRows : fallbackRows.length ? fallbackRows : aliasRows;
       const matches = rows.map((row, index) => ({
         text: normalize(row.textContent),
@@ -81,6 +86,8 @@ async function readRows(page, targets) {
       return {
         kind: item.kind,
         label: item.label,
+        knownExternalIds:item.knownExternalIds,
+        matchBasis:mapped?'external_id':'name',
         names: exactRows.length
           ? item.exactNames
           : fallbackRows.length
@@ -96,6 +103,8 @@ async function readRows(page, targets) {
     });
   }, requested);
 }
+
+const readRows=readDemaeInventoryRows;
 
 async function readAllRows(page, targets) {
   const requested = targets.map((target) => {
@@ -456,7 +465,8 @@ export class DemaeCanAdapter {
     const desiredUnavailable = payload.isAvailable !== true;
     const fresh = await this.readInventoryRowsWithAuthRecovery(
       page,
-      located.map((item) => ({ label: item.label, aliases: item.names }))
+      located.map((item) => ({ kind:item.kind,label: item.label, aliases: item.names,
+        knownExternalIds:item.knownExternalIds?.length?item.knownExternalIds:(item.matches[0]?.rowMatches??item.matches).map(row=>row.rowId).filter(Boolean) }))
     );
     const disappeared = fresh.filter((item) => item.matches.length === 0);
     if (disappeared.length) {
@@ -540,19 +550,34 @@ export class DemaeCanAdapter {
     const scan = await this.readInventoryRowsWithAuthRecovery(page, targets);
     if (scan.some((item) => item.matches.length === 0)) await this.refreshInventoryPage(page);
     const inventoryResult = await readAllRows(page, targets);
-    const catalog = await page.evaluate(async () => {
-      const getData = async (path) => {
-        const response = await fetch(path, { credentials: "include" });
+    const catalogScope = await page.evaluate(async () => {
+      if(location.origin!=='https://partner.demae-can.com')throw Error('demae_can_catalog_origin_changed');
+      const getData = async (path,queryBody) => {
+        const response = await fetch(path, { credentials: "include",cache:'no-store',signal:AbortSignal.timeout(10000),
+          method:queryBody?'POST':'GET',headers:queryBody?{'Content-Type':'application/json'}:undefined,
+          body:queryBody?JSON.stringify(queryBody):undefined });
         if (!response.ok) throw new Error(`demae_can_catalog_api_${response.status}`);
         const body = await response.json();
         if (body?.code !== "MSA0000") throw new Error(`demae_can_catalog_api_${body?.code ?? "unknown"}`);
         return body.data;
       };
       const chains = await getData("/merchant-admin/api/v1/product/search/chain-menu-pattern");
-      const chain = chains?.[0];
+      if(!Array.isArray(chains)||chains.length!==1)throw Error('demae_can_catalog_chain_ambiguous');
+      const chain = chains[0];
       const chainId = Number(chain?.chain?.chainId ?? 0);
-      const menuPatternCode = String(chain?.menuPatternList?.[0]?.menuPatternCode ?? "");
-      if (!chainId || !menuPatternCode) throw new Error("demae_can_catalog_identity_missing");
+      if(!chainId)throw Error('demae_can_catalog_identity_missing');
+      const patterns=await getData('/merchant-admin/api/v1/product/search/menu-pattern',{chainId,keyword:'',offset:0,limit:100});
+      return {chainId,patterns};
+    });
+    const scope=selectDemaeSalesMenu(catalogScope.chainId,catalogScope.patterns);
+    const catalog = await page.evaluate(async ({chainId,menuPatternCode}) => {
+      if(location.origin!=='https://partner.demae-can.com')throw Error('demae_can_catalog_origin_changed');
+      const getData=async path=>{
+        const response=await fetch(path,{credentials:'include',cache:'no-store',signal:AbortSignal.timeout(10000)});
+        const body=await response.json();
+        if(!response.ok||body.code!=='MSA0000')throw Error('demae_can_catalog_read_failed');
+        return body.data;
+      };
       const [categories, patternItems, groups] = await Promise.all([
         getData(`/merchant-admin/api/v1/product/search/category?chainId=${chainId}&menuPatternCode=${encodeURIComponent(menuPatternCode)}`),
         getData(`/merchant-admin/api/v1/product/chain/${chainId}/menu-pattern/${encodeURIComponent(menuPatternCode)}/item-list`),
@@ -564,7 +589,7 @@ export class DemaeCanAdapter {
         optionGroups.push({ ...group, options: optionRows ?? [] });
       }
       return { chainId, menuPatternCode, categories, patternItems, optionGroups };
-    });
+    },scope);
     const inventoryByExternalId = new Map(inventoryResult.entries.map((entry) => [entry.externalId, entry]));
     const patternItems = new Map((catalog.patternItems?.categoryList ?? [])
       .flatMap((category) => category.itemList ?? [])
@@ -626,6 +651,7 @@ export class DemaeCanAdapter {
   }
 
   async publishMenuChanges(payload, reportProgress = async () => undefined) {
+    if(payload.authoritativePublication===true)return publishNativeAuthority(this.session,'demae_can',payload,reportProgress,this.config.chainId);
     const changes = Array.isArray(payload.changes) ? payload.changes : [];
     const availabilityChanges = changes.filter((change) => change.kind === "disable"
       || (change.kind === "update" && change.currentState?.isActive === false && change.projectedState?.isActive === true));
@@ -657,11 +683,10 @@ export class DemaeCanAdapter {
     for (const entry of [...snapshotResult.snapshot.items, ...snapshotResult.snapshot.options]) {
       const change = changes.find((candidate) => candidate.targetId === entry.targetId);
       if (!change) continue;
-      entry.name = change.projectedState?.name ?? entry.name;
-      entry.price = change.projectedState?.price ?? entry.price;
       entry.sourceBasePrice = change.projectedState?.sourceBasePrice ?? entry.sourceBasePrice;
-      entry.isActive = change.projectedState?.isActive !== false;
+      if (entry.isActive !== (change.projectedState?.isActive !== false)) throw new Error(`menu_availability_verification_failed:demae_can:${entry.targetId}`);
     }
+    if (!snapshotResult.snapshot.complete) throw new Error('menu_verification_incomplete:demae_can');
     return { outcome: "applied", changed: changes.length, snapshot: snapshotResult.snapshot };
   }
 }

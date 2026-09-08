@@ -426,6 +426,8 @@ export async function POST(request: Request) {
   const kind = String(body.kind ?? "");
 
   try {
+    const { menuAuthorityWriteBlocked, MENU_AUTHORITY_MESSAGE } = await import('../../../lib/menu-authority-guard');
+    if (await menuAuthorityWriteBlocked(body)) return Response.json({error:MENU_AUTHORITY_MESSAGE},{status:409});
     let result: unknown;
     if (kind === "source") result = await upsertSource(body);
     else if (kind === "category") result = await upsertCategory(body, session.id);
@@ -458,6 +460,9 @@ export async function DELETE(request: Request) {
   const body = await request.json().catch(() => ({})) as { kind?: string; id?: string };
   const id = String(body.id ?? "").trim();
   if (!id) return Response.json({ error: "IDが必要です。" }, { status: 400 });
+
+  const { menuAuthorityWriteBlocked, MENU_AUTHORITY_MESSAGE } = await import('../../../lib/menu-authority-guard');
+  if (await menuAuthorityWriteBlocked(body)) return Response.json({error:MENU_AUTHORITY_MESSAGE},{status:409});
 
   if (body.kind === "source") await sql`delete from menu_sources where id = ${id}`;
   else if (body.kind === "category") await deleteCategory(id, session.id);
@@ -723,7 +728,7 @@ async function adoptPlatformObjectMapping(body: Record<string, unknown>, employe
     sql`
       delete from menu_platform_object_mappings
       where external_platform_id = ${externalPlatformId} and target_type = ${targetType}
-        and (target_id = ${targetId} or external_id = ${externalId})
+        and external_id = ${externalId}
     `,
     sql`
       insert into menu_platform_object_mappings (

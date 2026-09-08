@@ -2,10 +2,23 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildDeliveryMenuPublishPreview, projectDeliveryName, projectDeliveryPrice, projectNewHighTierPrice } from "./delivery-menu-publishing.ts";
 
+test('Uber authority ignores downstream override prices, never reopens stock, and never writes to Uber',()=>{
+  const item={id:'a',externalId:'uber-a',name:'スープ',displayNames:{zh:'汤',ko:'수프',en:'Soup'},basePrice:180,isActive:true,platformSettings:{uber_eats:{priceOverride:227,placementConfig:{authoritativeSource:'uber_eats'}},rocket_now:{priceOverride:999,nameOverride:'Old'},demae_can:{priceOverride:500}}};
+  const baseline={targetId:'a',externalId:'native',name:'スープ',price:999,isActive:false};
+  const preview=buildDeliveryMenuPublishPreview({uberAuthority:true,items:[item],options:[],platformBaselines:{uber_eats:{capturedAt:'2026-09-07',items:[{...baseline,targetId:'orphan'}],options:[]},rocket_now:{capturedAt:'2026-09-07',items:[baseline],options:[]},demae_can:{capturedAt:'2026-09-07',items:[baseline],options:[]}}});
+  assert.equal(preview.platforms.find(row=>row.platformKey==='uber_eats')?.changes.length,0);
+  for(const [key,price] of [['rocket_now',227],['demae_can',180]] as const) {
+    const changes=preview.platforms.find(row=>row.platformKey===key)!.changes;
+    assert.equal(changes.find(row=>row.kind==='reprice')?.projectedState?.price,price);
+    assert.equal(changes.some(row=>row.kind==='update'),false);
+    assert.equal(changes.every(row=>row.projectedState?.isActive===false),true);
+  }
+});
+
 test("projects names according to each delivery platform rule", () => {
   const displayNames = { zh: "玉米面", ko: "옥수수면", en: "Corn noodles" };
   assert.equal(projectDeliveryName("uber_eats", "トウモロコシ麺", displayNames), "トウモロコシ麺｜玉米面｜옥수수면｜Corn noodles");
-  assert.equal(projectDeliveryName("rocket_now", "トウモロコシ麺", displayNames), "トウモロコシ麺（玉米面）");
+  assert.equal(projectDeliveryName("rocket_now", "トウモロコシ麺", displayNames), "トウモロコシ麺(玉米面)");
   assert.equal(projectDeliveryName("demae_can", "トウモロコシ麺", displayNames), "トウモロコシ麺｜玉米面｜옥수수면｜Corn noodles");
 });
 
@@ -16,6 +29,23 @@ test("uses Rocket-compatible ASCII parentheses for option names", () => {
   );
 });
 
+test("adapts only Demae-prohibited width and punctuation without changing source words", () => {
+  assert.equal(projectDeliveryName("demae_can", "ＮＥＷ  ﾄｯﾎﾟｷﾞ!", {en:"Chef's [new] rice, cake"}), "NEW トッポギ！｜Chef＇s ［new］ rice， cake");
+  assert.equal(projectDeliveryName("rocket_now", "麻辣牛肉麺", {zh:"麻辣牛肉面"}), "麻辣牛肉麺(麻辣牛肉面)");
+  assert.equal(projectDeliveryName("rocket_now", "旨味とは？", {}), "旨味とは");
+});
+
+test("uses Demae-compatible full-width parentheses without changing other platforms", () => {
+  const names = { en: "Hot Pot Noodles (Extra Wide)" };
+  assert.equal(projectDeliveryName("demae_can", "火鍋春雨（極太）50g", names),
+    "火鍋春雨（極太）50g｜Hot Pot Noodles （Extra Wide）");
+  assert.equal(projectDeliveryName("uber_eats", "火鍋春雨（極太）50g", names),
+    "火鍋春雨（極太）50g｜Hot Pot Noodles (Extra Wide)");
+  assert.equal(projectDeliveryName("demae_can", "source", {}, {
+    nameOverride: "Name (Wide)", placementConfig: { useExactNameOverride: true }
+  }), "Name （Wide）");
+});
+
 test("uses the provisional high-tier price rule for new prices", () => {
   assert.equal(projectNewHighTierPrice(330), 413);
   assert.equal(projectNewHighTierPrice(1780), 2225);
@@ -23,7 +53,7 @@ test("uses the provisional high-tier price rule for new prices", () => {
 
 test("applies platform emoji and price rules with per-target overrides", () => {
   assert.equal(projectDeliveryName("uber_eats", "おすすめ🔥", { zh: "推荐🔥", ko: "추천🔥", en: "Recommended 🔥" }), "おすすめ🔥｜推荐🔥｜추천🔥｜Recommended 🔥");
-  assert.equal(projectDeliveryName("rocket_now", "おすすめ🔥", { zh: "推荐🔥" }), "おすすめ（推荐）");
+  assert.equal(projectDeliveryName("rocket_now", "おすすめ🔥", { zh: "推荐🔥" }), "おすすめ(推荐)");
   assert.equal(projectDeliveryName("demae_can", "おすすめ🔥", { zh: "推荐🔥", ko: "추천🔥", en: "Recommended 🔥" }), "おすすめ｜推荐｜추천｜Recommended");
   assert.equal(projectDeliveryName("rocket_now", "おすすめ🔥", {}, { emojiMode: "show" }), "おすすめ🔥");
   assert.equal(projectDeliveryPrice("uber_eats", 170), 213);
@@ -146,7 +176,7 @@ test("uses the Uber Japanese name and creates a confirmed Rocket item hidden", (
   });
   const rocket = preview.platforms.find((platform) => platform.platformKey === "rocket_now");
   const create = rocket?.changes.find((change) => change.kind === "create");
-  assert.equal(create?.projectedState?.name, "【国産牛スネ採用】麻辣牛肉麺（麻辣牛肉面）");
+  assert.equal(create?.projectedState?.name, "【国産牛スネ採用】麻辣牛肉麺(麻辣牛肉面)");
   assert.equal(create?.projectedState?.price, 2300);
   assert.equal(create?.projectedState?.isActive, false);
   assert.equal(create?.confidence, "confirmed");

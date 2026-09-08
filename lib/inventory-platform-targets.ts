@@ -25,8 +25,9 @@ const EXCLUDED_LABELS: Record<InventoryPlatform, Set<string>> = {
 
 export function projectInventoryTargetsForPlatform(
   platform: InventoryPlatform,
-  targets: InventoryTarget[]
+  targets: InventoryTarget[],
+  externalIdMappings?: Map<string, string[]>
 ) {
   const excluded = EXCLUDED_LABELS[platform];
-  return targets.filter((target) => !excluded.has(target.label.trim()));
+  return targets.filter((target) => Boolean(externalIdMappings?.get(`${platform}:${target.kind}:${target.targetId}`)?.length) || !excluded.has(target.label.trim()));
 }

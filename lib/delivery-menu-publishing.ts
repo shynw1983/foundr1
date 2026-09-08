@@ -201,21 +201,29 @@ export function projectDeliveryName(
   rule: DeliveryPlatformRule = deliveryPlatformRules[platformKey],
   targetType: "item" | "option" = "item"
 ) {
+  // Demae's native option-name validator rejects ASCII parentheses, including
+  // those in translated names. Preserve their meaning with full-width forms.
+  const nativeName = (value: string) => platformKey === "demae_can"
+    ? value.replace(/[！-～]/gu, char => /[Ａ-Ｚａ-ｚ０-９]/u.test(char) ? char.normalize("NFKC") : char)
+      .replace(/[\uFF66-\uFF9F]+/gu, chars => chars.normalize("NFKC"))
+      .replace(/[!"#$&'~^@{}`;\[\]?_,()]/gu, char => String.fromCharCode(char.charCodeAt(0) + 0xFEE0))
+      .replace(/[ \u3000]{2,}/gu, " ")
+    : platformKey === "rocket_now" ? value.replaceAll("＆", "・").replaceAll("（", "(").replaceAll("）", ")").replace(/[？]/gu, "") : value;
   const sourceName = String(setting?.nameOverride ?? "").trim() || name.trim();
   if (setting?.nameOverride && setting.placementConfig?.useExactNameOverride === true) {
-    return applyEmojiRule(sourceName, rule, setting);
+    return nativeName(applyEmojiRule(sourceName, rule, setting));
   }
-  if (rule.nameMode === "japanese") return applyEmojiRule(sourceName, rule, setting);
+  if (rule.nameMode === "japanese") return nativeName(applyEmojiRule(sourceName, rule, setting));
   if (rule.nameMode === "japanese_chinese_parentheses") {
-    const japanese = applyEmojiRule(sourceName, rule, setting);
-    const chinese = applyEmojiRule(String(displayNames.zh ?? ""), rule, setting);
+    const japanese = nativeName(applyEmojiRule(sourceName, rule, setting));
+    const chinese = nativeName(applyEmojiRule(String(displayNames.zh ?? ""), rule, setting));
     if (!chinese || chinese === japanese) return japanese;
-    return targetType === "option" && rule.optionParenthesesStyle === "ascii"
+    return platformKey === "rocket_now" || targetType === "option" && rule.optionParenthesesStyle === "ascii"
       ? `${japanese}(${chinese})`
       : `${japanese}（${chinese}）`;
   }
   return [sourceName, ...multilingualOrder.map((language) => displayNames[language])]
-    .map((value) => applyEmojiRule(String(value ?? ""), rule, setting))
+    .map((value) => nativeName(applyEmojiRule(String(value ?? ""), rule, setting)))
     .filter(Boolean)
     .join("｜");
 }
@@ -261,6 +269,7 @@ function missingRequiredTranslations(
 }
 
 type BuildPreviewInput = {
+  uberAuthority?: boolean;
   items: MenuProjectionItem[];
   options: MenuProjectionOption[];
   platformBaselines?: Partial<Record<DeliveryMenuPlatformKey, MenuPlatformBaseline>>;
@@ -323,13 +332,15 @@ function compareTarget(input: {
   sharedHighTierPrice?: number | null;
 }) {
   const { platform, platformKey, rule, targetType, target, baseline, basePrice, setting, sharedHighTierPrice } = input;
+  const sourceOwned = target.platformSettings?.uber_eats?.placementConfig?.authoritativeSource === 'uber_eats';
+  if (sourceOwned && platformKey === 'uber_eats') return;
   const enabled = target.isActive && setting?.isEnabled !== false;
-  const createHidden = !baseline && setting?.placementConfig?.createHidden === true;
+  const createHidden = !baseline && (sourceOwned || setting?.placementConfig?.createHidden === true);
   const locationLabel = targetType === "item"
     ? `分類: ${(target as MenuProjectionItem).category || "未分類"}`
     : `選択グループ: ${(target as MenuProjectionOption).groupLabel || (target as MenuProjectionOption).groupKey || "未設定"}`;
   const authoritativeName = uberAuthoritativeJapaneseName(platformKey, target.name, target.platformSettings);
-  const projectedName = projectDeliveryName(platformKey, authoritativeName, target.displayNames, setting, rule, targetType);
+  const projectedName = projectDeliveryName(platformKey, authoritativeName, target.displayNames, sourceOwned?undefined:setting, rule, targetType);
   const hasPlatformPriceOverride = setting?.priceOverride !== undefined && setting.priceOverride !== null;
   const uberExactPrice = target.platformSettings?.uber_eats?.priceOverride;
   const inheritedHighTierPrice = !hasPlatformPriceOverride && rule.priceMode === "uber_exact" && uberExactPrice !== null && uberExactPrice !== undefined
@@ -337,8 +348,13 @@ function compareTarget(input: {
     : !hasPlatformPriceOverride && rule.priceMode === "high_tier" && sharedHighTierPrice !== null && sharedHighTierPrice !== undefined
       ? Number(sharedHighTierPrice)
       : null;
-  const projectedPrice = inheritedHighTierPrice ?? projectDeliveryPrice(platformKey, basePrice, setting, rule);
-  const projectedState = { name: projectedName, price: projectedPrice, sourceBasePrice: basePrice, isActive: enabled && !createHidden };
+  const authoritativePrice = platformKey === 'rocket_now' ? uberExactPrice : basePrice;
+  if (sourceOwned && (authoritativePrice === null || authoritativePrice === undefined || !Number.isSafeInteger(Number(authoritativePrice)) || Number(authoritativePrice) < 0)) {
+    platform.blockers.push(`${target.name}: 同期元の確定価格がありません。推定価格では配信しません。`);
+    return;
+  }
+  const projectedPrice = sourceOwned ? Number(authoritativePrice) : inheritedHighTierPrice ?? projectDeliveryPrice(platformKey, basePrice, setting, rule);
+  const projectedState = { name: projectedName, price: projectedPrice, sourceBasePrice: basePrice, isActive: enabled && !createHidden && (!sourceOwned || baseline?.isActive!==false) };
   if (!baseline) {
     if (!enabled) return;
     platform.changes.push({
@@ -377,7 +393,7 @@ function compareTarget(input: {
     return;
   }
   if (!enabled) return;
-  if (baseline.isActive === false) {
+  if (baseline.isActive === false && !sourceOwned) {
     platform.changes.push({
       id: `${platformKey}:${targetType}:${target.id}:update`,
       targetType,
@@ -420,7 +436,9 @@ function compareTarget(input: {
       targetLabel: target.name,
       locationLabel,
       kind: "reprice",
-      summary: inheritedHighTierPrice !== null
+      summary: sourceOwned
+        ? platformKey==='rocket_now'?'Uber Eats の実価格と完全一致させます。':'OS 基準価格と完全一致させます。'
+        : inheritedHighTierPrice !== null
         ? "Uber Eats の確定済み配達価格を共通価格として反映します。"
         : hasPlatformPriceOverride
           ? "プラットフォーム個別価格を反映します。"
@@ -429,7 +447,7 @@ function compareTarget(input: {
       projectedValue: yen(projectedPrice),
       currentState,
       projectedState,
-      confidence: hasPlatformPriceOverride || inheritedHighTierPrice !== null ? "confirmed" : "provisional"
+      confidence: sourceOwned || hasPlatformPriceOverride || inheritedHighTierPrice !== null ? "confirmed" : "provisional"
     });
   }
 }
@@ -452,6 +470,10 @@ export function buildDeliveryMenuPublishPreview(input: BuildPreviewInput) {
       warnings: [],
       blockers: []
     };
+    if(input.uberAuthority && platformKey==='uber_eats') {
+      platform.warnings.push('Uber はメニュー原本です。OS から名称・価格・構成を上書きしません。');
+      return platform;
+    }
     let unresolvedBaselineTargets = baseline?.missingTargets?.length ?? 0;
     if (baseline?.missingTargets?.length) {
       const unhandledMissingLabels = [...baseline.missingTargets];

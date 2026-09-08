@@ -33,6 +33,7 @@ import { MobileNavMenu } from "../components/MobileNavMenu";
 import { ModalHistoryScope } from "../components/useModalHistory";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
+import { UberSourcePanel } from './UberSourcePanel';
 
 type OptionItem = {
   id: string;
@@ -2281,11 +2282,12 @@ export default function MenuAdminPage() {
             </span>
           </summary>
           <div className="menu-sync-body">
+            <UberSourcePanel key={activeBrandId} brandId={activeBrandId}/>
             <section className="menu-publish-preview" aria-live="polite">
               <div className="menu-publish-preview-head">
                 <div>
                   <strong>配信前差分プレビュー</strong>
-                  <span>OS を正として、基準取込 → 差分確認 → Bridge 反映 → 回読検証の順に実行します。</span>
+                  <span>通常配信の基準取込 → 差分確認 → Bridge 反映 → 回読検証。Uber 原本連携ブランドは上の専用同期を使用します。</span>
                 </div>
                 <button
                   className="secondary-button compact-button"

@@ -366,7 +366,8 @@ export async function applyInventoryAvailability(input: {
   for (const platform of configuredPlatforms) {
     const projectedTargets = projectInventoryTargetsForPlatform(
       platform as "uber_eats" | "rocket_now" | "demae_can",
-      resolution.targets
+      resolution.targets,
+      externalIdMappings
     );
     const projectedTargetIds = JSON.stringify(projectedTargets.map((target) => ({ targetId: target.targetId })));
     // A manual change made while the 08:00 reconciliation is still queued must

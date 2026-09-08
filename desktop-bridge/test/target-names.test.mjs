@@ -3,8 +3,11 @@ import test from "node:test";
 
 import { normalizeText, targetNameTiers, tieredTargetCandidates } from "../src/adapters/common.mjs";
 import { withPlatformTargetAliases } from "../src/adapters/platform-target-aliases.mjs";
+import {readDemaeInventoryRows} from '../src/adapters/demae-can.mjs';
 import {
   rocketInventoryExternalIds,
+  rocketInventoryPhysicalIds,
+  readRocketInventoryRows,
   rocketInventoryNameVariants,
   rocketInventoryUrl,
   uniqueLocatedRows
@@ -62,6 +65,44 @@ test("splits combined Rocket mappings into physical checkbox ids", () => {
   assert.deepEqual(rocketInventoryExternalIds({
     knownExternalIds: ["sub_checkbox_1_10,sub_checkbox_2_10", "sub_checkbox_1_10"]
   }), ["sub_checkbox_1_10", "sub_checkbox_2_10"]);
+});
+
+test("Rocket inventory identity survives changed group prefixes and ignores malformed ids", () => {
+  assert.deepEqual(rocketInventoryPhysicalIds({knownExternalIds:[
+    'sub_checkbox_1438212_6265527,sub_checkbox_1438216_6265527',
+    'sub_checkbox_1438216_6878749','beef','sub_checkbox_x_123','sub_checkbox_1_2_extra'
+  ]}),['6265527','6878749']);
+});
+
+test("Rocket stock read finds moved records by native id and refuses a same-name replacement", async () => {
+  const label='test option';
+  const checkbox={id:'sub_checkbox_20_50',closest:()=>row};
+  const row={textContent:label,innerText:label,querySelector:()=>checkbox,getClientRects:()=>[{}]};
+  const title={textContent:label,closest:()=>row};
+  const documentMock={getElementById:()=>null,querySelectorAll:selector=>selector==='.nested-checkbox-list__sub_title'?[title]:[checkbox]};
+  const page={evaluate:(fn,args)=>{
+    const previous=globalThis.document;globalThis.document=documentMock;
+    try{return fn(args);}finally{if(previous===undefined)delete globalThis.document;else globalThis.document=previous;}
+  }};
+  const target={kind:'option',label,knownExternalIds:['sub_checkbox_10_50']};
+  const [moved]=await readRocketInventoryRows(page,[target]);
+  assert.equal(moved.matches[0].checkboxId,'sub_checkbox_20_50');
+  assert.equal(moved.matchBasis,'external_id');
+  const [deleted]=await readRocketInventoryRows(page,[{...target,knownExternalIds:['sub_checkbox_10_99']}]);
+  assert.deepEqual(deleted.matches,[]);
+});
+
+test('Demae inventory uses every saved physical ID and never substitutes a same-name option for a draft',async()=>{
+ const label='チーズトッポギ';
+ const checkbox={id:'itemList_41064900000183true',closest:()=>row};
+ const row={textContent:label,innerText:label,querySelector:()=>checkbox,getClientRects:()=>[{}]};
+ const title={textContent:label,closest:()=>row};
+ const page={evaluate:(fn,args)=>{const prior=globalThis.document;globalThis.document={querySelectorAll:selector=>selector.includes('Styles_name')?[title]:[checkbox]};try{return fn(args);}finally{if(prior===undefined)delete globalThis.document;else globalThis.document=prior;}}};
+ const target={kind:'option',label,knownExternalIds:[checkbox.id]};
+ const [found]=await readDemaeInventoryRows(page,[target]);assert.equal(found.matches[0].rowId,checkbox.id);
+ for(const ids of [['itemList_41064900000999true'],[checkbox.id,'itemList_41064900000999true']]) {
+  const [missing]=await readDemaeInventoryRows(page,[{...target,knownExternalIds:ids}]);assert.deepEqual(missing.matches,[]);
+ }
 });
 
 test("keeps Japanese source variants ahead of shared translated aliases", () => {

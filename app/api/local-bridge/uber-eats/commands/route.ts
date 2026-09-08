@@ -1,4 +1,7 @@
 import { sql } from "../../../../../lib/db";
+import { mergePlatformSnapshotEntries } from "../../../../../lib/menu-platform-snapshot-merge";
+import { ingestUberMenuSource } from "../../../../../lib/uber-menu-source-sync";
+import { publishPublicMenuUpdatedEvent } from "../../../../../lib/order-realtime";
 import { authorizeLocalBridge } from "../../../../../lib/local-bridge-auth";
 import { applyCompetitorBridgeSnapshot } from "../../../../../lib/competitor-bridge-snapshot";
 import {
@@ -235,24 +238,10 @@ async function applyMenuPublishResult(input: {
     const previous = baselineRows[0]?.payload && typeof baselineRows[0].payload === "object"
       ? baselineRows[0].payload as Record<string, unknown>
       : {};
-    const mergeEntries = (oldEntries: unknown, changedEntries: unknown) => {
-      const merged = new Map<string, Record<string, unknown>>();
-      for (const value of Array.isArray(oldEntries) ? oldEntries : []) {
-        if (!value || typeof value !== "object") continue;
-        const entry = value as Record<string, unknown>;
-        merged.set(cleanText(entry.targetId || entry.externalId, 240), entry);
-      }
-      for (const value of Array.isArray(changedEntries) ? changedEntries : []) {
-        if (!value || typeof value !== "object") continue;
-        const entry = value as Record<string, unknown>;
-        merged.set(cleanText(entry.targetId || entry.externalId, 240), entry);
-      }
-      return [...merged.values()];
-    };
     const mergedSnapshot = {
       ...previous,
-      items: mergeEntries(previous.items, snapshot.items),
-      options: mergeEntries(previous.options, snapshot.options),
+      items: mergePlatformSnapshotEntries(previous.items, snapshot.items),
+      options: mergePlatformSnapshotEntries(previous.options, snapshot.options),
       complete: previous.complete !== false,
       missingTargets: Array.isArray(previous.missingTargets) ? previous.missingTargets : []
     };
@@ -281,8 +270,9 @@ async function applyMenuPublishResult(input: {
           ${externalId}, ${cleanText(entry.externalParentId, 240)}, ${cleanText(entry.name, 500)},
           ${JSON.stringify(entry)}::jsonb, now(), now()
         )
-        on conflict (external_platform_id, target_type, target_id) do update set
-          external_id = excluded.external_id,
+        on conflict (external_platform_id, target_type, external_id) do update set
+          target_id = case when menu_platform_object_mappings.target_id = excluded.target_id
+            then excluded.target_id else null end,
           external_parent_id = excluded.external_parent_id,
           external_name = excluded.external_name,
           last_observed_state = excluded.last_observed_state,
@@ -385,8 +375,9 @@ async function applyMenuSnapshotResult(input: {
         ${externalId}, ${cleanText(entry.externalParentId, 240)}, ${cleanText(entry.name, 500)},
         ${JSON.stringify(entry)}::jsonb, now(), now()
       )
-      on conflict (external_platform_id, target_type, target_id) do update set
-        external_id = excluded.external_id,
+      on conflict (external_platform_id, target_type, external_id) do update set
+        target_id = case when menu_platform_object_mappings.target_id = excluded.target_id
+          then excluded.target_id else null end,
         external_parent_id = excluded.external_parent_id,
         external_name = excluded.external_name,
         last_observed_state = excluded.last_observed_state,
@@ -486,6 +477,9 @@ export async function GET(request: Request) {
       and commands.status in ('pending', 'processing', 'failed')
   `;
   await reconcileMenuPublishBatches(authorization.storeId);
+  // A source-owned menu must never be overwritten by an old OS-led batch,
+  // including a retry queued before authority mode was enabled.
+  await sql`update local_bridge_commands c set status='failed',last_error='uber_authority_superseded_publication',completed_at=now(),updated_at=now() from menu_uber_sources s where c.store_id=s.store_id and c.store_id::text=${authorization.storeId} and s.enabled=true and c.payload->>'brandId'=s.brand_id::text and c.command_type='publish_menu_changes' and c.status='pending' and (c.payload->>'authoritativePublication' is distinct from 'true' or c.payload->>'revision' is distinct from s.revision::text)`;
 
   // Inventory availability is a desired state, not a sequence of actions. Keep
   // only the newest command that has not started. Never supersede a processing
@@ -660,6 +654,12 @@ export async function POST(request: Request) {
   if (!commandRows[0]) return Response.json({ error: "Command is no longer claimable." }, { status: 409 });
 
   if (status === "processing") {
+    if ((commandRows[0].payload as Record<string,unknown>)?.authoritativePublication===true) {
+      if(!authorization.isDesktop)return Response.json({error:'Desktop publication required.'},{status:403});
+      const {recordUberPublicationProgress}=await import('../../../../../lib/uber-menu-publication-store');
+      try {await recordUberPublicationProgress({commandId,storeId:authorization.storeId,platform:String(commandRows[0].platform),progress:(result.progress??{}) as Record<string,unknown>});}
+      catch(failure){return Response.json({error:failure instanceof Error?failure.message:'uber_publication_progress_failed'},{status:409});}
+    }
     const progressRows = await sql`
       update local_bridge_commands
       set
@@ -702,6 +702,25 @@ export async function POST(request: Request) {
   }
   if (status === "succeeded" && String(commandRows[0].commandType) === "capture_competitor_menu_snapshot") {
     await applyCompetitorBridgeSnapshot(result);
+  }
+  const commandPayload = commandRows[0].payload as Record<string, unknown>;
+  const authoritativeCapture = commandRows[0].commandType === 'capture_menu_snapshot' && commandPayload?.authoritativeSource === true;
+  if(status==='succeeded' && commandPayload?.authoritativePublication===true) {
+    const {recordUberPublicationProgress}=await import('../../../../../lib/uber-menu-publication-store');
+    try {await recordUberPublicationProgress({commandId,storeId:authorization.storeId,platform:String(commandRows[0].platform),progress:{},result});}
+    catch(failure){return Response.json({error:failure instanceof Error?failure.message:'uber_publication_verification_failed'},{status:409});}
+  }
+  if (status === 'succeeded' && authoritativeCapture) {
+    if (!authorization.isDesktop || commandRows[0].platform !== 'uber_eats') return Response.json({error:'Desktop Uber source required.'},{status:403});
+    try {
+      const snapshot = result.snapshot as Record<string, unknown>;
+      result.sourceImport = await ingestUberMenuSource({sourceId:String(commandPayload.sourceId),commandId,storeId:authorization.storeId,catalog:snapshot?.sourceCatalog});
+      await publishPublicMenuUpdatedEvent(authorization.storeId).catch(()=>undefined);
+    } catch (failure) {
+      const detail = failure instanceof Error ? failure.message : 'uber_source_import_failed';
+      await sql`update menu_uber_sources set last_error=${detail},updated_at=now() where id::text=${String(commandPayload.sourceId)} and store_id::text=${authorization.storeId}`;
+      return Response.json({error:detail},{status:409});
+    }
   }
 
   const rows = status === "succeeded" ? await sql`
@@ -759,7 +778,7 @@ export async function POST(request: Request) {
       ...auditSummary
     }).catch(() => undefined);
   }
-  if (status === "succeeded" && String(rows[0].commandType) === "capture_menu_snapshot") {
+  if (status === "succeeded" && String(rows[0].commandType) === "capture_menu_snapshot" && !authoritativeCapture) {
     const payload = commandRows[0].payload && typeof commandRows[0].payload === "object"
       ? commandRows[0].payload as Record<string, unknown>
       : {};

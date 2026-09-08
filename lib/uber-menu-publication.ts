@@ -1,0 +1,94 @@
+import { createHash } from 'node:crypto';
+import { deliveryPlatformRules, projectDeliveryName } from './delivery-menu-publishing.ts';
+import { authoritativeDeliveryPrice } from './uber-menu-authority.ts';
+
+export type UberPublicationNode = {
+  sourceKey: string; kind: string; targetId: string; parentId: string | null;
+  name: string; displayNames: Record<string,string>; uberPrice: number|null; price: number|null;
+  description: string; imageUrl: string; sortOrder: number; archived?: boolean;
+  payload: Record<string,unknown>;
+};
+export type UberPublicationMapping = {kind:string; targetId:string; externalId:string; externalParentId:string};
+
+// Keep image ingestion in OS, but never give a downstream publisher image
+// instructions (including images nested inside the captured source object).
+function publicationSource(value: unknown): unknown {
+  if(Array.isArray(value))return value.map(publicationSource);
+  if(value && typeof value==='object')return Object.fromEntries(Object.entries(value)
+    .filter(([key])=>!/image|photo|picture|thumbnail/i.test(key))
+    .map(([key,entry])=>[key,publicationSource(entry)]));
+  return value;
+}
+
+function nativePublicationName(platform:'rocket_now'|'demae_can',node:UberPublicationNode) {
+  const rule=deliveryPlatformRules[platform];
+  const full=projectDeliveryName(platform,node.name,node.displayNames,undefined,rule,node.kind==='option'?'option':'item');
+  if(platform!=='demae_can'||node.kind!=='option_group'||full.length<=50)return full;
+  // The merchant group form limits names to 50 characters. Keep the complete
+  // source Japanese name; omit optional appended translations before ever
+  // truncating the source name. An overlong source itself stays an error.
+  const bilingual=projectDeliveryName(platform,node.name,{zh:node.displayNames.zh},undefined,rule);
+  return bilingual.length<=50?bilingual:projectDeliveryName(platform,node.name,{},undefined,rule);
+}
+
+export function buildUberPublication(input: {
+  sourceId:string; storeId:string; brandId:string; revision:number;
+  platform:'rocket_now'|'demae_can'; merchantId:string; menuPatternCode?:string; draftPatternCode?:string; draftCarrierItemCode?:string; selectionPolicy?:'strict'|'preserve_native';
+  nodes:UberPublicationNode[]; mappings:UberPublicationMapping[];
+  quarantinedSourceKeys?:string[];
+  excludedSourceKeys?:string[];
+}) {
+  // Explicit, persisted owner decisions only; never infer exclusions from price.
+  // Retain the source in OS while omitting it from downstream relationships.
+  const excluded=new Set(input.excludedSourceKeys??[]);
+  const targets=input.nodes.filter(node=>!excluded.has(node.sourceKey)).map(node=>({
+    sourceKey:node.sourceKey,kind:node.kind,targetId:node.targetId,parentId:node.parentId,
+    marker:`FS${createHash('sha256').update(`${input.sourceId}:${node.sourceKey}`).digest('hex').slice(0,14)}`,
+    name:nativePublicationName(input.platform,node),
+    price:['item','option'].includes(node.kind) && !node.archived
+      ? authoritativeDeliveryPrice(input.platform,node.uberPrice as number,node.price as number) : null,
+    description:node.description,sortOrder:node.sortOrder,
+    archived:node.archived===true,source:publicationSource(node.payload) as Record<string,unknown>,
+    quarantined:input.quarantinedSourceKeys?.includes(node.sourceKey)===true,
+    mappings:input.mappings.filter(mapping=>mapping.kind===node.kind && mapping.targetId===node.targetId)
+      .flatMap(mapping=>mapping.externalId.split(',').map(id=>id.trim()).filter(Boolean).map(externalId=>({externalId,externalParentId:mapping.externalParentId})))
+  }));
+  return {authoritativePublication:true,sourceId:input.sourceId,brandId:input.brandId,
+    storeId:input.storeId,revision:input.revision,platformKey:input.platform,
+    merchantId:input.merchantId,menuPatternCode:input.menuPatternCode??'',
+    ...(input.platform==='demae_can'&&input.draftPatternCode?{draftPatternCode:input.draftPatternCode}:{}),
+    ...(input.platform==='demae_can'&&input.draftCarrierItemCode?{draftCarrierItemCode:input.draftCarrierItemCode}:{}),
+    selectionPolicy:input.platform==='demae_can'?(input.selectionPolicy??'strict'):'strict',
+    ruleVersion:'uber-authority-v1',imagePolicy:'read_only',newItemsHidden:true,targets};
+}
+
+/** Only independently read platform observations can satisfy a publication. */
+export function verifyUberPublication(payload: Record<string,unknown>, result: Record<string,unknown>) {
+  const expected=payload.targets as Array<Record<string,unknown>>;
+  const observed=result.observations as Array<Record<string,unknown>>;
+  if (!Array.isArray(expected) || !Array.isArray(observed)) throw new Error('uber_publication_observations_missing');
+  let quarantined=0;
+  for(const target of expected) {
+    const rows=observed.filter(row=>row.sourceKey===target.sourceKey);
+    if (!rows.length) throw new Error(`uber_publication_unverified:${target.sourceKey}`);
+    if(target.quarantined===true) {
+      if(rows.length!==1||rows[0].quarantined!==true||rows[0].created||rows[0].hidden===false)throw Error(`uber_publication_quarantine_violated:${target.sourceKey}`);
+      quarantined++;
+      continue;
+    }
+    for(const row of rows) {
+      if(target.archived) {
+        if(row.exists!==false && row.hidden!==true) throw new Error(`uber_publication_not_retired:${target.sourceKey}`);
+      } else {
+        if(!row.externalId || row.name!==target.name || (target.price!==null && row.price!==target.price)) throw new Error(`uber_publication_content_mismatch:${target.sourceKey}`);
+        const mapped=Array.isArray(target.mappings)?target.mappings as Array<Record<string,unknown>>:[];
+        const newEntity=['item','option'].includes(String(target.kind))&&(!mapped.length||mapped.some(mapping=>mapping.externalId===row.externalId&&mapping.created===true));
+        if((row.created===true||newEntity) && row.hidden!==true) throw new Error(`uber_publication_draft_exposed:${target.sourceKey}`);
+        if(row.structureVerified!==true) throw new Error(`uber_publication_structure_unverified:${target.sourceKey}`);
+      }
+    }
+    const mapped=Array.isArray(target.mappings)?target.mappings as Array<Record<string,unknown>>:[];
+    for(const mapping of mapped) if(!rows.some(row=>row.externalId===mapping.externalId)) throw new Error(`uber_publication_occurrence_missing:${target.sourceKey}:${mapping.externalId}`);
+  }
+  return {verified:expected.length-quarantined,observed:observed.length,...(quarantined?{quarantined}:{})};
+}

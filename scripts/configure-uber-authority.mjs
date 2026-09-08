@@ -1,0 +1,12 @@
+import {neon} from '@neondatabase/serverless';
+import {loadLocalEnv} from './db-env.mjs';
+import {loadConfig} from '../desktop-bridge/src/config.mjs';
+loadLocalEnv();
+const sql=neon(process.env.DATABASE_URL);
+const config=await loadConfig();
+const brandId=process.argv[2];
+if(!brandId)throw Error('Usage: node scripts/configure-uber-authority.mjs <brand UUID>');
+const brands=await sql`select b.id,b.name from brands b join store_brands sb on sb.brand_id=b.id where b.id::text=${brandId} and sb.store_id::text=${config.storeId}`;
+if(brands.length!==1)throw Error('Brand is not attached to the configured Bridge store.');
+const result=await sql`insert into menu_uber_sources(brand_id,store_id,uber_store_uuid) values(${brandId},${config.storeId},${config.platforms.uber_eats.storeUuid}) on conflict(brand_id) do nothing returning id::text,enabled,auto_publish`;
+console.log(JSON.stringify({brand:brands[0].name,source:result[0]??'already configured'},null,2));

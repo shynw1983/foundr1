@@ -33,6 +33,18 @@ export async function loadInventoryPlatformExternalIdMap(
     where platforms.platform_key in ('uber_eats', 'rocket_now', 'demae_can')
       and (mappings.store_id is null or mappings.store_id::text = ${storeId})
       and coalesce(mappings.external_id, '') <> ''
+      and not (platforms.platform_key='uber_eats' and exists (
+        select 1 from menu_uber_objects owned join menu_uber_sources source on source.id=owned.source_id
+        where source.enabled=true and source.store_id::text=${storeId}
+          and owned.kind=mappings.target_type and owned.target_id=mappings.target_id
+      ))
+    union
+    select 'uber_eats' as platform, objects.kind, objects.target_id::text as "targetId", objects.uber_id as "externalId"
+    from menu_uber_objects objects
+    join menu_uber_sources sources on sources.id=objects.source_id
+    join requested_targets targets on targets.kind=objects.kind and targets."targetId"=objects.target_id
+    where sources.enabled=true and sources.store_id::text=${storeId}
+      and objects.archived=false
   `;
   const result = new Map<string, string[]>();
   for (const row of rows) {

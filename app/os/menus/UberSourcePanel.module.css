@@ -1,0 +1,31 @@
+.panel {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  background: var(--surface, white);
+}
+
+.panel p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.panel details {
+  display: grid;
+  gap: 8px;
+}
+
+.panel select,
+.panel input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fields {
+  min-width: 0;
+  margin: 8px 0;
+}
+
+@media (max-width: 600px) {
+  .fields { grid-template-columns: minmax(0, 1fr); }
+}

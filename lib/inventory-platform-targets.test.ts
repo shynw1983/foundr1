@@ -3,6 +3,13 @@ import test from "node:test";
 
 import { projectInventoryTargetsForPlatform } from "./inventory-platform-targets.ts";
 
+test('verified IDs take priority over historical name exclusions',()=>{
+ const target={kind:'option' as const,targetId:'new',label:'豆腐皮の細切り',groupKey:'basic',optionKey:'tofu',menuOptionId:'new',brandId:'brand',inventoryKey:'option:new',aliases:[],isAvailable:false};
+ const mappings=new Map([['rocket_now:option:new',['sub_checkbox_1_2']]]);
+ assert.equal(projectInventoryTargetsForPlatform('rocket_now',[target],mappings).length,1);
+ assert.equal(projectInventoryTargetsForPlatform('demae_can',[target],mappings).length,0);
+});
+
 function item(label: string) {
   return {
     kind: "item" as const,

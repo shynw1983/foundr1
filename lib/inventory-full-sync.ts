@@ -299,7 +299,7 @@ export async function scheduleFullInventorySyncForStore(input: {
     for (const platform of platforms) {
       const buckets = new Map<string, FullSyncTarget[]>();
       for (const group of targetGroups) {
-        for (const target of projectInventoryTargetsForPlatform(platform, group)) {
+        for (const target of projectInventoryTargetsForPlatform(platform, group, externalIdMappings)) {
           const override = overrides.get(`${target.kind}:${target.targetId}:${platform}`);
           const desiredAvailable = resolveFullSyncAvailability(
             target.isAvailable !== false,

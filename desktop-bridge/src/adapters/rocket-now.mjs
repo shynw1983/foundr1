@@ -2,6 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { loginState, normalizeText, pageSummary, platformUiChanged, targetNameTiers } from "./common.mjs";
 import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
+import {publishNativeAuthority} from '../uber-authority-publisher.mjs';
 
 const OOS_URL = "https://store.rocketnow.co.jp/merchant/management/oos";
 const INVENTORY_ROW_SELECTOR = ".nested-checkbox-list__sub_title";
@@ -17,6 +18,11 @@ export function rocketInventoryExternalIds(target) {
     .flatMap((externalId) => String(externalId).split(","))
     .map((externalId) => externalId.trim())
     .filter(Boolean))];
+}
+
+export function rocketInventoryPhysicalIds(target) {
+  return [...new Set(rocketInventoryExternalIds(target)
+    .map(id=>id.match(/^sub_checkbox_\d+_(\d+)$/u)?.[1]).filter(Boolean))];
 }
 
 export function rocketInventoryUrl(storeId, targetKind = "item") {
@@ -102,10 +108,10 @@ async function selectInventoryTab(page, targetKind) {
   await waitForInventoryRows(page, targetKind);
 }
 
-async function readRows(page, targets) {
+export async function readRocketInventoryRows(page, targets) {
   const requested = targets.map((target) => {
     const projected = withPlatformTargetAliases("rocket_now", target);
-    return { kind: projected.kind, label: projected.label, knownExternalIds: rocketInventoryExternalIds(projected), ...targetNameTiers(projected) };
+    return { kind: projected.kind, label: projected.label, knownExternalIds: rocketInventoryExternalIds(projected), knownPhysicalIds:rocketInventoryPhysicalIds(projected), ...targetNameTiers(projected) };
   });
   return page.evaluate((items) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
@@ -140,13 +146,17 @@ async function readRows(page, targets) {
           .filter((row) => rowParts(row).some((part) => wanted.has(part)));
         return [...new Set(found)];
       };
-      const externalIdRows = item.knownExternalIds
-        .map((externalId) => document.getElementById(externalId))
+      const externalIdRows = [
+        ...item.knownExternalIds.map((externalId) => document.getElementById(externalId)),
+        ...[...document.querySelectorAll('input[id^="sub_checkbox_"]')].filter(input=>
+          rowFor(input)?.getClientRects().length && item.knownPhysicalIds.includes(input.id.match(/^sub_checkbox_\d+_(\d+)$/u)?.[1]))
+      ]
         .map(rowFor)
         .filter(Boolean);
-      const exactRows = externalIdRows.length ? [...new Set(externalIdRows)] : findRows(item.exactNames);
-      const fallbackRows = exactRows.length ? [] : findRows(item.fallbackNames);
-      const aliasRows = exactRows.length || fallbackRows.length ? [] : findRows(item.aliasNames);
+      const allowNameFallback=!item.knownExternalIds.length;
+      const exactRows = externalIdRows.length ? [...new Set(externalIdRows)] : allowNameFallback?findRows(item.exactNames):[];
+      const fallbackRows = exactRows.length || !allowNameFallback ? [] : findRows(item.fallbackNames);
+      const aliasRows = exactRows.length || fallbackRows.length || !allowNameFallback ? [] : findRows(item.aliasNames);
       const rows = exactRows.length ? exactRows : fallbackRows.length ? fallbackRows : aliasRows;
       const matches = rows.map((row) => ({
         text: normalize(row.textContent),
@@ -185,6 +195,7 @@ async function readAllRows(page, targets, targetKind) {
      sourceBasePrice: target.sourceBasePrice ?? null,
      label: target.label,
       knownExternalIds: rocketInventoryExternalIds(target),
+      knownPhysicalIds: rocketInventoryPhysicalIds(target),
      names: [...tiers.exactNames, ...tiers.fallbackNames, ...tiers.aliasNames]
     };
   });
@@ -222,7 +233,8 @@ async function readAllRows(page, targets, targetKind) {
       const checkboxIds = [...new Set(group.rows.map((row) => row.querySelector('input[type="checkbox"], input[type="checkBox"]')?.id ?? "").filter(Boolean))].sort();
       const externalId = checkboxIds.join(",") || defaultKind + ":" + normalizedName;
      const parts = String(group.name ?? "").split(/[|｜]/u).flatMap(nameVariants).filter(Boolean);
-      const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.some((knownId) => knownId === externalId || checkboxIds.includes(knownId)));
+      const mappedCandidates = targetRows.filter((target) => target.knownExternalIds.some((knownId) => knownId === externalId || checkboxIds.includes(knownId))
+        || checkboxIds.some(id=>target.knownPhysicalIds.includes(id.match(/^sub_checkbox_\d+_(\d+)$/u)?.[1])));
       const candidates = mappedCandidates.length
         ? mappedCandidates
         : unmappedTargetRows.filter((target) => target.normalizedNames.some((name) => parts.includes(name)));
@@ -427,7 +439,7 @@ export class RocketNowAdapter {
     const targetKind = targets.every((target) => target.kind === "option") ? "option" : "item";
     const page = await this.session.goto(this.inventoryUrl(targetKind));
     await selectInventoryTab(page, targetKind);
-    return readRows(page, targets);
+    return readRocketInventoryRows(page, targets);
   }
 
   async setInventory(payload, located) {
@@ -435,7 +447,7 @@ export class RocketNowAdapter {
     const page = await this.session.goto(this.inventoryUrl(targetKind));
     await selectInventoryTab(page, targetKind);
     const desiredHidden = payload.isAvailable !== true;
-    const fresh = await readRows(page, located.map((item) => ({
+    const fresh = await readRocketInventoryRows(page, located.map((item) => ({
       kind: item.kind,
       label: item.label,
       aliases: item.names,
@@ -544,6 +556,7 @@ export class RocketNowAdapter {
   }
 
   async publishMenuChanges(payload, reportProgress = async () => undefined) {
+    if(payload.authoritativePublication===true)return publishNativeAuthority(this.session,'rocket_now',payload,reportProgress,this.config.storeId);
     const changes = Array.isArray(payload.changes) ? payload.changes : [];
     const availabilityChanges = changes.filter((change) => change.kind === "disable"
       || (change.kind === "update" && change.currentState?.isActive === false && change.projectedState?.isActive === true));
@@ -583,11 +596,10 @@ export class RocketNowAdapter {
     for (const entry of [...snapshotResult.snapshot.items, ...snapshotResult.snapshot.options]) {
       const change = changes.find((candidate) => candidate.targetId === entry.targetId);
       if (!change) continue;
-      entry.name = change.projectedState?.name ?? entry.name;
-      entry.price = change.projectedState?.price ?? entry.price;
       entry.sourceBasePrice = change.projectedState?.sourceBasePrice ?? entry.sourceBasePrice;
-      entry.isActive = change.projectedState?.isActive !== false;
+      if (entry.isActive !== (change.projectedState?.isActive !== false)) throw new Error(`menu_availability_verification_failed:rocket_now:${entry.targetId}`);
     }
+    if (!snapshotResult.snapshot.complete) throw new Error('menu_verification_incomplete:rocket_now');
     return { outcome: "applied", changed: changes.length, snapshot: snapshotResult.snapshot };
   }
 }
