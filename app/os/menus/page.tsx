@@ -298,6 +298,7 @@ type MenuPublishPreviewPlatform = {
 };
 
 type MenuPublishPreview = {
+  uberAuthority: boolean;
   generatedAt: string;
   mode: "read_only";
   brandId: string;
@@ -760,6 +761,7 @@ export default function MenuAdminPage() {
   const [translationStatus, setTranslationStatus] = useState("");
   const [translationBusy, setTranslationBusy] = useState<"preview" | "apply" | "">("");
   const [publishPreview, setPublishPreview] = useState<MenuPublishPreview | null>(null);
+  const legacyPublishAvailable = publishPreview?.brandId === activeBrandId && publishPreview.uberAuthority === false;
   const [publishPreviewStatus, setPublishPreviewStatus] = useState<"loading" | "error" | "">("");
   const [publishStoreId, setPublishStoreId] = useState("");
   const [selectedPublishPlatforms, setSelectedPublishPlatforms] = useState<string[]>([]);
@@ -2275,14 +2277,19 @@ export default function MenuAdminPage() {
               <span className="menu-sync-summary-heading">外部プラットフォーム反映</span>
             </span>
             <span className="menu-sync-summary-actions">
-              <span className={pendingSyncTasks.length ? "menu-sync-count is-pending" : "menu-sync-count"}>
+              {legacyPublishAvailable && <span className={pendingSyncTasks.length ? "menu-sync-count is-pending" : "menu-sync-count"}>
                 未反映 {pendingSyncTasks.length}件
-              </span>
+              </span>}
               <ChevronDown className="menu-sync-chevron" size={20} aria-hidden="true" />
             </span>
           </summary>
           <div className="menu-sync-body">
+            <label><span>ブランド</span><select value={activeBrandId} onChange={(event) => selectBrand(event.target.value)}>
+              <option value="">ブランドを選択</option>
+              {data.brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
+            </select></label>
             <UberSourcePanel key={activeBrandId} brandId={activeBrandId}/>
+            {legacyPublishAvailable && <>
             <section className="menu-publish-preview" aria-live="polite">
               <div className="menu-publish-preview-head">
                 <div>
@@ -2671,6 +2678,7 @@ export default function MenuAdminPage() {
                 </div>
               </details>
             ) : null}
+            </>}
             <div className="menu-platform-list">
               {brandExternalPlatforms.map((platform) => (
                 <div className="menu-platform-row" key={platform.id}>
@@ -2705,6 +2713,7 @@ export default function MenuAdminPage() {
               ))}
               {!brandExternalPlatforms.length ? <p className="empty-state">ブランドを選ぶと Uber Eats などの反映先が表示されます。</p> : null}
             </div>
+            {legacyPublishAvailable && <>
             {brandPublishBatches.length ? (
               <div className="menu-publish-batch-list">
                 {brandPublishBatches.map((batch) => (
@@ -2769,6 +2778,7 @@ export default function MenuAdminPage() {
                 </div>
               </details>
             ) : null}
+            </>}
           </div>
         </details>
 

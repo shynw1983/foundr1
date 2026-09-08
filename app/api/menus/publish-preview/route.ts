@@ -291,7 +291,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "ブランド、店舗、配信先を選択してください。" }, { status: 400 });
   }
   const authority = await sql`select id from menu_uber_sources where brand_id=${brandId} and enabled=true`;
-  if (authority.length && action !== 'capture') {
+  if (authority.length) {
     return Response.json({error:'Uber を原本とするメニューは専用の同期処理から配信します。通常の差分配信は使用できません。'},{status:409});
   }
   const storeRows = await sql`

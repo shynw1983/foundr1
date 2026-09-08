@@ -7,14 +7,16 @@ import styles from './UberSourcePanel.module.css';
 type SourceData={
   source:null|{enabled:boolean;auto_publish:boolean;revision:number;last_checked_at:string|null;last_error:string};
   runs:Array<{revision:number;created_at:string;summary:{added:number;observed:number;archived:number;pendingRemoval:number}}>;
-  jobs:Array<{platform:string;status:string;updated_at:string;last_error:string;revision:string}>;
+  jobs:Array<{platform:string;status:string;updated_at:string;last_error:string;revision:string|null;phase:string|null}>;
   prices:Array<{id:string;kind:string;name:string;mode:'manual'|'automatic';price:number;uberPrice:number}>;
 };
-const platformNames:Record<string,string>={rocket_now:'Rocket Now',demae_can:'出前館'};
+const platformNames:Record<string,string>={uber_eats:'Uber → OS',rocket_now:'Rocket Now',demae_can:'出前館'};
 const statusNames:Record<string,string>={pending:'待機中',processing:'処理中',succeeded:'検証済み',failed:'失敗'};
+const phaseNames:Record<string,string>={capturing:'Uber 読取中',locating:'接続確認中',preflight:'事前確認中',content:'商品名・価格を同期中',creating:'非公開の商品を作成中',received:'作成結果を確認中',identified:'商品を識別済み',migrating:'選択グループを移行中',relationships:'分類・グループを同期中',retiring:'削除・非公開を反映中',verifying:'保存結果を確認中',blocked:'確認が必要です'};
 
 export function UberSourcePanel({brandId}:{brandId:string}) {
-  const {t}=useOsTranslation();
+  const {t,language}=useOsTranslation();
+  const dateLabel=(value:string)=>new Date(value).toLocaleString(language,{timeZone:'Asia/Tokyo'});
   const [data,setData]=useState<SourceData|null>(null);
   const [error,setError]=useState('');
   const [notice,setNotice]=useState('');
@@ -28,14 +30,19 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
     if(response.status===403){setData(null);return;}
     const value=await response.json();
     if(!response.ok)throw new Error(value.error??'連携状態を取得できませんでした。');
-    setData(value);setError('');
+    if(!signal?.aborted){setData(value);setError('');}
   },[brandId]);
   useEffect(()=>{
     setData(null);setSelected('');setSearch('');setNotice('');setError('');
     if(!brandId)return;
     const controller=new AbortController();
-    void load(controller.signal).catch(failure=>{if(!controller.signal.aborted)setError(failure.message);});
-    return()=>controller.abort();
+    let timer:ReturnType<typeof setTimeout>;
+    const refresh=async()=>{
+      try{await load(controller.signal);}catch(failure){if(!controller.signal.aborted)setError(failure instanceof Error?failure.message:'連携状態を取得できませんでした。');}
+      finally{if(!controller.signal.aborted)timer=setTimeout(()=>void refresh(),5000);}
+    };
+    void refresh();
+    return()=>{controller.abort();clearTimeout(timer);};
   },[brandId,load]);
   const submit=async(action:'scan'|'price')=>{
     setBusy(true);setNotice('');setError('');
@@ -51,7 +58,7 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
   if(!data?.source && !error)return null;
   const source=data?.source;
   const selectedPrice=data?.prices.find(row=>row.id===selected);
-  return <section className={`menu-publish-preview ${styles.panel}`} data-i18n-ignore aria-label={t('Uber 原本連携')}>
+  return <section id="uber-menu-sync" className={`menu-publish-preview ${styles.panel}`} data-i18n-ignore aria-label={t('Uber 原本連携')}>
     <div className="menu-publish-preview-head">
       <div><strong>{t('Uber 原本連携')}</strong><span>{t('Uber → OS → Rocket Now・出前館')}</span></div>
       <button type="button" className="secondary-button compact-button" disabled={busy} onClick={()=>void load().catch(failure=>setError(failure.message))}>{t('状態を更新')}</button>
@@ -60,13 +67,18 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
       <p>{t(source.enabled?'Uber 原本の読み取り：有効':'Uber 原本の読み取り：未有効化')} / {t(source.auto_publish?'他社への自動配信：有効':'他社への自動配信：未有効化')}</p>
       <p>{t('Rocket Now は Uber 実価格、出前館は OS 基準価格。新規作成は非公開。メニュー同期では販売を再開しません。')}</p>
       <p>{t('画像は読み取りのみです。画像の登録・変更・削除は各配達サービスの管理画面で行ってください。')}</p>
-      <p>{t('最終読み取り')}：{source.last_checked_at?new Date(source.last_checked_at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):t('未実行')} / {t('取込版')}：{source.revision}</p>
+      <p>{t('最終読み取り')}：{source.last_checked_at?dateLabel(source.last_checked_at):t('未実行')} / {t('取込版')}：{source.revision}</p>
+      <p>{t('Uber は10分ごとに確認します。この画面の状態は5秒ごとに更新します。')}</p>
       {source.last_error&&<p role="alert">{source.last_error}</p>}
       <button type="button" className="primary-button compact-button" disabled={busy||!source.enabled} onClick={()=>void submit('scan')}>{t('Uber から今すぐ読み取る')}</button>
-      <ul>{['rocket_now','demae_can'].map(platform=>{
+      <ul className={styles.jobs} aria-live="polite">{['uber_eats','rocket_now','demae_can'].map(platform=>{
         const job=data?.jobs.find(row=>row.platform===platform);
-        return <li key={platform}>{platformNames[platform]}：{job?t(statusNames[job.status]??job.status):t('未実行')}{job&&<> / {t('取込版')} {job.revision}{job.last_error&&<p role="alert">{job.last_error}</p>}</>}</li>;
+        const label=job?.status==='processing'&&job.phase?phaseNames[job.phase]??statusNames.processing:job?statusNames[job.status]??job.status:'未実行';
+        return <li key={platform}><strong>{platformNames[platform]}</strong><span>{t(label)}</span>{job&&<><small>{job.revision&&<>{t('取込版')} {job.revision} · </>}{dateLabel(job.updated_at)}</small>{job.last_error&&<details><summary>{t('エラー詳細')}</summary><p role="alert">{job.last_error}</p></details>}</>}</li>;
       })}</ul>
+      <details><summary>{t('最近の読み取り履歴')}</summary>
+        {data?.runs.length?<ul>{data.runs.slice(0,10).map(run=><li key={run.revision}>{dateLabel(run.created_at)} · {t('取込版')} {run.revision} · {t('新規')} {run.summary.added} / {t('削除')} {run.summary.archived}</li>)}</ul>:<p>{t('未実行')}</p>}
+      </details>
       <details><summary>{t('OS 基準価格の設定')}</summary>
         <p>{t('既存価格は維持。自動計算を選ぶと Uber 価格 × 0.8 を 10 円単位に丸めます。Rocket Now の価格には影響しません。')}</p>
         <div className={`menu-publish-scope-fields ${styles.fields}`}>
