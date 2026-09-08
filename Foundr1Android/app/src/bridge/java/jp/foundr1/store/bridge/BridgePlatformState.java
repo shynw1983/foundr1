@@ -30,6 +30,10 @@ final class BridgePlatformState {
             .apply();
     }
 
+    static boolean isActivePackage(Context context, String packageName) {
+        return packageName.equals(preferences(context).getString(KEY_ACTIVE_PACKAGE, ""));
+    }
+
     static void pauseForegroundGuard(Context context, long durationMs) {
         preferences(context).edit()
             .putLong(

@@ -125,3 +125,30 @@ printf '\x1b\x40Foundr1 OS Test Print\n80mm Printer OK\nIP 192.168.0.33\n\n\n\x1
 - Printing works only inside these Android app shells.
 - The web side currently sends test jobs, POS receipts, and brand-grouped kitchen tickets.
 - Star printer support uses the official `com.starmicronics:stario10` StarXpand SDK. Keep Bluetooth/USB permissions and USB filters in sync when updating the SDK.
+
+### Uber idle order scan
+
+Bridge 1.0.49 adds a five-second accessibility timer. When Uber is foreground and
+there have been no clicks, scrolls, focus changes, or text/touch interactions for
+45 seconds, it returns toward the active order overview and checks unread cards.
+It allows at most four Back actions per idle session, five seconds apart, and
+stops if it cannot reach the overview. It does not launch other apps for idle scans.
+Remote commands, focused editors, and detected save/confirmation dialogs defer
+scanning. Staff must finish or dismiss an open editor before scanning resumes.
+New-order notifications inside Uber defer navigation to the accessibility worker
+instead of immediately opening a notification intent; recent interaction delays
+that worker by at least five seconds. Notification recovery and its order-number
+upload deduplication remain in use.
+
+Policy test (JDK required):
+```sh
+javac -d /tmp/foundr1-idle-tests app/src/bridge/java/jp/foundr1/store/bridge/UberIdleScanPolicy.java tests/UberIdleScanPolicyTest.java
+java -cp /tmp/foundr1-idle-tests jp.foundr1.store.bridge.UberIdleScanPolicyTest
+```
+
+On-tablet verification: visit history, availability, and settings; stop interacting
+for 45–50 seconds and verify return to the overview and import of unread orders.
+Repeat while scrolling/editing and with an open save dialog; navigation should
+wait. Check a new-order notification on those pages, multiple simultaneous orders,
+and an active OS inventory command. OEM/Uber dialog accessibility varies, so
+verify this on the installed Uber version before relying on unattended operation.

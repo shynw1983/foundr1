@@ -35,6 +35,16 @@ public class UberAccessibilityService extends AccessibilityService {
     private static final long COMMAND_APP_RELAUNCH_COOLDOWN_MS = 15_000L;
     private static final long COMMAND_UNKNOWN_PAGE_GRACE_MS = 10_000L;
     private static final long ROCKET_INVENTORY_LOAD_TIMEOUT_MS = 300_000L;
+    private final UberIdleScanPolicy idleScan = new UberIdleScanPolicy();
+    private final Runnable idleScanRunnable = new Runnable() {
+        @Override public void run() {
+            try {
+                runGuarded("uber_idle_scan", UberAccessibilityService.this::scanUberWhenIdle);
+            } finally {
+                handler.postDelayed(this, 5000L);
+            }
+        }
+    };
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String pendingPackageName = "";
     private String pendingText = "";
@@ -197,6 +207,16 @@ public class UberAccessibilityService extends AccessibilityService {
     private void handleAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
         String packageName = event.getPackageName().toString();
+        int eventType = event.getEventType();
+        if (looksLikeUber(packageName) && (
+            eventType == AccessibilityEvent.TYPE_VIEW_CLICKED
+            || eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED
+            || eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED
+            || eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+            || eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED
+            || eventType == AccessibilityEvent.TYPE_TOUCH_INTERACTION_START
+            || eventType == AccessibilityEvent.TYPE_TOUCH_INTERACTION_END
+        )) idleScan.noteInteraction(SystemClock.uptimeMillis());
         if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             BridgePlatformState.noteActivePackage(this, packageName);
         }
@@ -551,6 +571,9 @@ public class UberAccessibilityService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        idleScan.noteInteraction(SystemClock.uptimeMillis());
+        handler.removeCallbacks(idleScanRunnable);
+        handler.postDelayed(idleScanRunnable, 5000L);
         BridgeHealthState.setAccessibilityConnected(this, true);
         BridgeServiceStarter.ensureStarted(this, "accessibility_connected");
         overlayController = new BridgeOverlayController(this);
@@ -598,6 +621,7 @@ public class UberAccessibilityService extends AccessibilityService {
             overlayController.destroy();
             overlayController = null;
         }
+        handler.removeCallbacks(idleScanRunnable);
         handler.removeCallbacks(recoveryRunnable);
         recoveryScheduledAt = 0L;
         handler.removeCallbacks(uploadRunnable);
@@ -1981,6 +2005,58 @@ public class UberAccessibilityService extends AccessibilityService {
         handler.postDelayed(recoveryRunnable, delayMs);
     }
 
+    // A timer is necessary: quiet history/settings pages produce no order events.
+    private void scanUberWhenIdle() {
+        long now = SystemClock.uptimeMillis();
+        if (!BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_UBER_EATS)) return;
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) {
+            idleScan.noteInteraction(now);
+            return;
+        }
+        try {
+            if (!looksLikeUber(value(root.getPackageName()))
+                || BridgeCommandState.current(this) != null
+                || hasOpenEditor(root)) {
+                idleScan.noteInteraction(now);
+                return;
+            }
+            if (UberRecoveryState.isPending(this) || finishingRecovery) return;
+            if (!idleScan.isDue(now)) return;
+            if (hasViewId(root, "ub__ueo_orders_header_title")) {
+                idleScan.reachedOverview();
+                ensureActiveOrderRecovery(root);
+                return;
+            }
+            // Never press save, confirm, accept, cancel, or availability actions.
+            if (idleScan.allowBack(now)) {
+                performGlobalAction(GLOBAL_ACTION_BACK);
+                uploadRecoveryStatus("idle_return_to_orders", "");
+            }
+        } finally {
+            root.recycle();
+        }
+    }
+
+    private boolean hasOpenEditor(AccessibilityNodeInfo node) {
+        if (!node.isVisibleToUser()) return false;
+        String className = value(node.getClassName());
+        String label = value(node.getText()).trim();
+        if ((node.isEditable() && node.isFocused()) || className.contains("Dialog")) return true;
+        // Keep pending changes/confirmation sheets for the employee to resolve.
+        if (node.isEnabled() && (label.equals("保存") || label.equals("変更を保存")
+            || label.equalsIgnoreCase("Save") || label.equalsIgnoreCase("Save changes")
+            || value(node.getViewIdResourceName()).equals("android:id/button1"))) return true;
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child == null) continue;
+            boolean editing = hasOpenEditor(child);
+            child.recycle();
+            if (editing) return true;
+        }
+        return false;
+    }
+
     private void recoverNewOrder() {
         boolean pending = UberRecoveryState.isPending(this);
         AccessibilityNodeInfo root = getRootInActiveWindow();
@@ -1995,6 +2071,13 @@ public class UberAccessibilityService extends AccessibilityService {
                 UberRecoveryState.launchUber(this);
                 scheduleRecovery(1500L);
             }
+            return;
+        }
+        if (BridgeCommandState.current(this) != null || hasOpenEditor(root)
+            || (!hasViewId(root, "ub__ueo_orders_header_title")
+                && idleScan.recentInteraction(SystemClock.uptimeMillis()))) {
+            root.recycle();
+            if (pending) scheduleRecovery(1500L);
             return;
         }
         if (!pending) {

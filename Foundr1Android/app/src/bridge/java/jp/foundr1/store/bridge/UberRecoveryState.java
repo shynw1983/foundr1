@@ -98,7 +98,10 @@ final class UberRecoveryState {
             editor.putBoolean(KEY_OPENED_AUTOMATICALLY, false);
         }
         editor.apply();
-        openUber(context, notification);
+        // Already inside Uber: let accessibility navigate after editing is finished.
+        if (!BridgePlatformState.isActivePackage(context, UBER_ORDERS_PACKAGE)) {
+            openUber(context, notification);
+        }
         sendRecoverySignal(context);
         return newlyReportedOrders;
     }
