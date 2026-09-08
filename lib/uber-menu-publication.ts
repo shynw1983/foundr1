@@ -9,6 +9,20 @@ export type UberPublicationNode = {
   payload: Record<string,unknown>;
 };
 export type UberPublicationMapping = {kind:string; targetId:string; externalId:string; externalParentId:string};
+export type UberCreationIdentity = {sourceKey:string;status:string;externalId:string;externalParentId:string};
+
+// A Demae carrier retains its creation marker when its option moves between
+// Uber groups. Recover it only from an exact, persisted external identity.
+function creationSourceKey(node:UberPublicationNode, mappings:UberPublicationMapping[], attempts:UberCreationIdentity[]) {
+  const staged=mappings.filter(row=>row.kind===node.kind&&row.targetId===node.targetId&&row.externalParentId.startsWith('stage:'));
+  const originals=staged.flatMap(mapping=>attempts.filter(row=>row.status==='identified'
+    &&row.externalId===mapping.externalId&&row.externalParentId===mapping.externalParentId
+    &&row.sourceKey.startsWith('option:')&&row.sourceKey.split(':').at(-1)===node.sourceKey.split(':').at(-1)).map(row=>row.sourceKey));
+  const keys=[...new Set(originals)];
+  if(keys.length>1)throw Error(`uber_creation_identity_ambiguous:${node.sourceKey}`);
+  if(staged.length&&keys.length!==1)throw Error(`uber_creation_identity_missing:${node.sourceKey}`);
+  return keys[0]??node.sourceKey;
+}
 
 export function isUberPublicationRetired(node:UberPublicationNode) {
   return node.archived===true||(node.kind==='item'&&node.payload.attached===false);
@@ -43,13 +57,14 @@ export function buildUberPublication(input: {
   quarantinedSourceKeys?:string[];
   excludedSourceKeys?:string[];
   optionMigrationPolicy?:'preserve_stock';
+  creationIdentities?:UberCreationIdentity[];
 }) {
   // Explicit, persisted owner decisions only; never infer exclusions from price.
   // Retain the source in OS while omitting it from downstream relationships.
   const excluded=new Set(input.excludedSourceKeys??[]);
   const targets=input.nodes.filter(node=>!excluded.has(node.sourceKey)).map(node=>({
     sourceKey:node.sourceKey,kind:node.kind,targetId:node.targetId,parentId:node.parentId,
-    marker:`FS${createHash('sha256').update(`${input.sourceId}:${node.sourceKey}`).digest('hex').slice(0,14)}`,
+    marker:`FS${createHash('sha256').update(`${input.sourceId}:${input.platform==='demae_can'&&input.creationIdentities?creationSourceKey(node,input.mappings,input.creationIdentities):node.sourceKey}`).digest('hex').slice(0,14)}`,
     name:nativePublicationName(input.platform,node),
     price:['item','option'].includes(node.kind) && !isUberPublicationRetired(node)
       ? authoritativeDeliveryPrice(input.platform,node.uberPrice as number,node.price as number) : null,

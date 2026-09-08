@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 import {buildUberPublication,verifyUberPublication,type UberPublicationNode} from './uber-menu-publication.ts';
 const node:UberPublicationNode={sourceKey:'item:a',kind:'item',targetId:'a',parentId:'c',name:'湯',displayNames:{zh:'汤'},price:180,uberPrice:227,description:'Soup',imageUrl:'',sortOrder:0,payload:{}};
 const input={sourceId:'s',storeId:'store',brandId:'b',revision:1,merchantId:'123',nodes:[node],mappings:[]};
+test('Demae hidden identity survives repeated group moves without relaxing isolation',()=>{
+ const original={...node,kind:'option',sourceKey:'option:first:a'};
+ const before=buildUberPublication({...input,platform:'demae_can',nodes:[original]}).targets[0];
+ const mappings=[{kind:'option',targetId:'a',externalId:'remote-a',externalParentId:'stage:0010'}];
+ const receipt={sourceKey:original.sourceKey,status:'identified',externalId:'remote-a',externalParentId:'stage:0010'};
+ for(const group of ['second','third']) {
+  const args={...input,platform:'demae_can' as const,nodes:[{...original,sourceKey:`option:${group}:a`}],mappings,creationIdentities:[receipt]};
+  const after=buildUberPublication(args).targets[0];
+  assert.equal(after.marker,before.marker);
+  assert.equal(after.sourceKey,`option:${group}:a`);
+  assert.equal(buildUberPublication(args).newItemsHidden,true);
+  for(const patch of [{status:'creating'},{externalId:'other'},{externalParentId:'stage:0020'},{sourceKey:'option:first:other'}])
+   assert.throws(()=>buildUberPublication({...args,creationIdentities:[{...receipt,...patch}]}),/identity_missing/);
+  assert.throws(()=>buildUberPublication({...args,creationIdentities:[receipt,{...receipt,sourceKey:'option:other:a'}]}),/identity_ambiguous/);
+ }
+});
 test('unlinked Uber products are retired downstream without losing their stable identity',()=>{
  for(const platform of ['rocket_now','demae_can'] as const) {
   const publication=buildUberPublication({...input,platform,nodes:[{...node,parentId:null,payload:{attached:false}}]});
