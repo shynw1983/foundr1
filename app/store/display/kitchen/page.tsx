@@ -683,31 +683,7 @@ export default function StoreKitchenPage() {
   }
 
   async function startInventoryAudit() {
-    if (inventoryAudit?.status === "pending") return;
-    const confirmed = window.confirm(isChinese
-      ? "开始完整检查后，Bridge 会逐项打开 Uber 菜单读取库存。检查期间请不要操作 Uber 平板。是否开始？"
-      : "完全チェック中は Bridge が Uber メニューを順番に開きます。完了まで Uber タブレットを操作しないでください。開始しますか？");
-    if (!confirmed) return;
-    setInventoryListError("");
-    const response = await fetch("/api/store/display/kitchen/inventory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "audit", storeId: selectedStoreId })
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok && body.commandId) {
-      setInventoryAudit({
-        commandId: String(body.commandId),
-        status: "pending",
-        targetCount: Number(body.targetCount ?? 0),
-        checkedCount: 0,
-        updatedCount: 0,
-        missingCount: 0,
-        error: ""
-      });
-    } else {
-      setInventoryListError(String(body.error ?? (isChinese ? "无法开始完整检查。" : "完全チェックを開始できませんでした。")));
-    }
+    window.location.assign("/store/menu");
   }
 
   async function updateTask(task: KitchenTask, status: "new" | "preparing" | "ready") {
@@ -1639,7 +1615,7 @@ export default function StoreKitchenPage() {
                 <button className="secondary-button" type="button" disabled={inventoryAudit?.status === "pending"} onClick={() => void startInventoryAudit()}>
                   {inventoryAudit?.status === "pending"
                     ? (isChinese ? `完整检查中 · ${inventoryAudit.targetCount}项` : `完全チェック中 · ${inventoryAudit.targetCount}件`)
-                    : (isChinese ? "手动完整检查" : "手動完全チェック")}
+                    : (isChinese ? "以 Uber 同步整店" : "Uber 基準で全店同期")}
                 </button>
                 <strong>{unavailableInventory.length}</strong>
               </div>
@@ -1647,8 +1623,8 @@ export default function StoreKitchenPage() {
             {inventoryAudit?.status === "succeeded" ? (
               <p className="store-kitchen-inventory-audit-result">
                 {isChinese
-                  ? `完整检查完成：已读取 ${inventoryAudit.checkedCount} 项，未识别 ${inventoryAudit.missingCount} 项。`
-                  : `完全チェック完了：${inventoryAudit.checkedCount}件を確認、未識別 ${inventoryAudit.missingCount}件。`}
+                  ? `Uber 读取完成：${inventoryAudit.checkedCount} 项。其他平台的结果请查看销售状态的同步履历。`
+                  : `Uber 読取完了：${inventoryAudit.checkedCount}件。連携先の結果は販売状態の同期履歴で確認してください。`}
               </p>
             ) : inventoryAudit?.status === "failed" ? (
               <p className="is-error">{inventoryAudit.error || (isChinese ? "完整检查失败，请重试。" : "完全チェックに失敗しました。再実行してください。")}</p>

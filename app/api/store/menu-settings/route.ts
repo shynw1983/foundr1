@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { assertNoWholeStoreSync, withInventoryOperationLock } from "../../../../lib/inventory-operation-lock";
 import { getStoreModuleSettings } from "../../../../lib/module-settings";
 import { publishPublicMenuUpdatedEvent } from "../../../../lib/order-realtime";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
@@ -237,6 +238,9 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 
+  try {
+  return await withInventoryOperationLock(storeId, async () => {
+  await assertNoWholeStoreSync(storeId);
   if (kind === "option") {
     const options = await sql`
       select menu_options.id::text, menu_option_groups.brand_id::text as "brandId"
@@ -371,4 +375,8 @@ export async function PATCH(request: Request) {
 
   await publishPublicMenuUpdatedEvent(storeId).catch(() => undefined);
   return Response.json({ ok: true, setting: rows[0] });
+  });
+  } catch (error) {
+    return Response.json({error:error instanceof Error?error.message:"販売状態を更新できませんでした。"},{status:409});
+  }
 }

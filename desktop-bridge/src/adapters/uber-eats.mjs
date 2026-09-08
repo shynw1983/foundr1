@@ -146,13 +146,13 @@ export function projectUberInventoryAudit(snapshot, targetCount) {
   const items = entries
     .filter((entry) => entry?.targetId && ["item", "option"].includes(entry.observedKind))
     .map((entry) => {
-      const isAvailable = entry.metadata?.isAvailable !== false;
+      const isAvailable = entry.metadata?.isAvailable;
       return {
         kind: entry.observedKind,
         targetId: entry.targetId,
         isAvailable,
-        found: true,
-        status: isAvailable ? "available" : "sold_out"
+        found: typeof isAvailable === "boolean",
+        status: typeof isAvailable === "boolean" ? (isAvailable ? "available" : "sold_out") : "unknown"
       };
     });
   return {

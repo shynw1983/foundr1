@@ -24,7 +24,7 @@ type InventoryReport = {
   source: string;
   actorName: string;
   createdAt: string;
-  status: "succeeded" | "processing" | "failed";
+  status: "succeeded" | "processing" | "failed" | "awaiting_confirmation";
   details: Record<string, unknown>;
   platforms: PlatformReport[];
   failedCommands: Array<{
@@ -43,7 +43,7 @@ type InventoryReport = {
 function copy(language: Language) {
   if (language === "zh-Hans") return {
     title: "库存同步履历",
-    description: "确认谁在什么时候设置了缺货或恢复，以及每天全平台同步的执行结果。",
+    description: "查看单品手动操作和以 Uber 为准的整店同步结果。销售状态不再定时同步。",
     back: "返回销售状态",
     refresh: "刷新",
     empty: "该期间内没有库存同步记录。",
@@ -83,7 +83,7 @@ function copy(language: Language) {
   };
   if (language === "zh-Hant") return {
     title: "庫存同步履歷",
-    description: "確認誰在何時設定缺貨或恢復，以及每天全平台同步的執行結果。",
+    description: "查看單品手動操作和以 Uber 為準的整店同步結果。銷售狀態不再定時同步。",
     back: "返回銷售狀態",
     refresh: "重新整理",
     empty: "該期間內沒有庫存同步記錄。",
@@ -123,7 +123,7 @@ function copy(language: Language) {
   };
   return {
     title: "在庫同期履歴",
-    description: "誰がいつ売切・販売再開を設定したか、毎日の全プラットフォーム同期結果を確認します。",
+    description: "単品の手動操作と Uber 基準の全店同期結果を確認します。販売状態の定時同期は行いません。",
     back: "販売状態へ戻る",
     refresh: "更新",
     empty: "この期間の在庫同期履歴はありません。",
@@ -307,7 +307,7 @@ export default function InventoryHistoryPage() {
           {error ? <div className="inline-alert" role="alert">{error}</div> : null}
           {!loading && !error && !reports.length ? <p className="empty-state" data-i18n-ignore>{labels.empty}</p> : null}
           {reports.map((report) => {
-            const stateLabel = labels[report.status];
+            const stateLabel = report.status==='awaiting_confirmation' ? (language==='ja'?'確認待ち（未適用）':language==='zh-Hant'?'等待確認（未套用）':'等待确认（未应用）') : labels[report.status];
             const expanded = expandedReports.has(report.id);
             return (
               <article className="store-inventory-history-row" key={report.id}>

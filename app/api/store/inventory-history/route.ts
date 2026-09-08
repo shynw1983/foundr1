@@ -137,7 +137,10 @@ export async function GET(request: Request) {
     const platformMap = new Map<string, { platform: string; total: number; succeeded: number; failed: number; timedOut: number; processing: number; queued: number }>();
     // Web reservation reads the Store state directly, so it is complete as
     // soon as the source-of-truth change or daily reconciliation is recorded.
-    platformMap.set("foundr1", { platform: "foundr1", total: 1, succeeded: 1, failed: 0, timedOut: 0, processing: 0, queued: 0 });
+    const waitingForUber = (run.details as Record<string, unknown>).authority === 'uber_eats'
+      && (run.details as Record<string, unknown>).osApplied !== true;
+    const readFailed = waitingForUber && run.commands.some(c => c.platform === 'uber_eats' && ['failed','timed_out'].includes(String(c.status)));
+    platformMap.set("foundr1", { platform: "foundr1", total: 1, succeeded: waitingForUber ? 0 : 1, failed: readFailed ? 1 : 0, timedOut: 0, processing: 0, queued: waitingForUber && !readFailed ? 1 : 0 });
     for (const command of run.commands) {
       const platform = String(command.platform);
       const current = platformMap.get(platform) ?? {
@@ -159,13 +162,15 @@ export async function GET(request: Request) {
     }
     const platforms = [...platformMap.values()];
     const details = run.details as Record<string, unknown>;
-    const status = details.phase === "failed_to_queue" || platforms.some((platform) => platform.failed || platform.timedOut)
+    const status = details.phase === 'awaiting_confirmation' ? 'awaiting_confirmation'
+      : details.phase === "failed_to_queue" || platforms.some((platform) => platform.failed || platform.timedOut)
       ? "failed"
       : platforms.some((platform) => platform.processing || platform.queued)
         ? "processing"
         : "succeeded";
     return {
       ...run,
+      details: {...details,snapshot:undefined},
       status,
       platforms,
       failedCommands: run.commands.filter((command) => command.status === "failed" || command.status === "timed_out"),

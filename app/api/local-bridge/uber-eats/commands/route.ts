@@ -1,4 +1,5 @@
 import { sql } from "../../../../../lib/db";
+import { applyUberAvailabilitySync } from "../../../../../lib/inventory-manual-sync";
 import { menuSyncIssue } from "../../../../../lib/menu-sync-status";
 import { mergePlatformSnapshotEntries } from "../../../../../lib/menu-platform-snapshot-merge";
 import { ingestUberMenuSource } from "../../../../../lib/uber-menu-source-sync";
@@ -42,122 +43,6 @@ async function authorize(request: Request) {
   };
 }
 
-async function applyInventoryAuditResult(storeId: string, result: Record<string, unknown>) {
-  const items = Array.isArray(result.items)
-    ? result.items.filter((item) => (
-      item && typeof item === "object"
-      && (item as Record<string, unknown>).found === true
-      && ["available", "sold_out"].includes(String((item as Record<string, unknown>).status ?? ""))
-    ))
-    : [];
-  if (!items.length) return { updatedCount: 0, missingCount: Number(result.targetCount ?? 0) };
-  const payload = JSON.stringify(items);
-  const optionRows = await sql`
-    with audited as (
-      select *
-      from jsonb_to_recordset(${payload}::jsonb) as value(
-        kind text,
-        "targetId" text,
-        "isAvailable" boolean,
-        found boolean,
-        status text
-      )
-      where kind = 'option' and found = true
-    )
-    insert into menu_option_store_settings (
-      brand_id, store_id, menu_option_id, is_available, stock_status, status_note, updated_at
-    )
-    select
-      menu_option_groups.brand_id,
-      ${storeId}::uuid,
-      menu_options.id,
-      audited."isAvailable" and not exists (
-        select 1 from menu_inventory_availability_blocks blocks
-        where blocks.store_id::text = ${storeId}
-          and blocks.target_kind = 'option'
-          and blocks.target_id = menu_options.id
-      ),
-      case when audited."isAvailable" and not exists (
-        select 1 from menu_inventory_availability_blocks blocks
-        where blocks.store_id::text = ${storeId}
-          and blocks.target_kind = 'option'
-          and blocks.target_id = menu_options.id
-      ) then 'available' else 'unavailable' end,
-      'Uber Eats 手動完全チェック',
-      now()
-    from audited
-    join menu_options on menu_options.id::text = audited."targetId"
-    join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
-    join store_brands
-      on store_brands.brand_id = menu_option_groups.brand_id
-      and store_brands.store_id::text = ${storeId}
-    on conflict (store_id, menu_option_id)
-    do update set
-      is_available = excluded.is_available,
-      stock_status = case
-        when excluded.is_available = false then 'unavailable'
-        when menu_option_store_settings.stock_status = 'low_stock' then 'low_stock'
-        else 'available'
-      end,
-      status_note = excluded.status_note,
-      updated_at = now()
-    returning id::text
-  `;
-  const itemRows = await sql`
-    with audited as (
-      select *
-      from jsonb_to_recordset(${payload}::jsonb) as value(
-        kind text,
-        "targetId" text,
-        "isAvailable" boolean,
-        found boolean,
-        status text
-      )
-      where kind = 'item' and found = true
-    )
-    insert into menu_store_settings (
-      brand_id, store_id, menu_catalog_item_id, is_available, stock_status, status_note, updated_at
-    )
-    select
-      menu_catalog_items.brand_id,
-      ${storeId}::uuid,
-      menu_catalog_items.id,
-      audited."isAvailable" and not exists (
-        select 1 from menu_inventory_availability_blocks blocks
-        where blocks.store_id::text = ${storeId}
-          and blocks.target_kind = 'item'
-          and blocks.target_id = menu_catalog_items.id
-      ),
-      case when audited."isAvailable" and not exists (
-        select 1 from menu_inventory_availability_blocks blocks
-        where blocks.store_id::text = ${storeId}
-          and blocks.target_kind = 'item'
-          and blocks.target_id = menu_catalog_items.id
-      ) then 'available' else 'unavailable' end,
-      'Uber Eats 手動完全チェック',
-      now()
-    from audited
-    join menu_catalog_items on menu_catalog_items.id::text = audited."targetId"
-    join store_brands
-      on store_brands.brand_id = menu_catalog_items.brand_id
-      and store_brands.store_id::text = ${storeId}
-    on conflict (store_id, menu_catalog_item_id)
-    do update set
-      is_available = excluded.is_available,
-      stock_status = case
-        when excluded.is_available = false then 'unavailable'
-        when menu_store_settings.stock_status = 'low_stock' then 'low_stock'
-        else 'available'
-      end,
-      status_note = excluded.status_note,
-      updated_at = now()
-    returning id::text
-  `;
-  return {
-    updatedCount: optionRows.length + itemRows.length,
-    missingCount: Math.max(0, Number(result.targetCount ?? items.length) - items.length)
-  };
-}
 
 async function updateMenuPublishBatch(batchId: string) {
   if (!batchId) return;
@@ -631,8 +516,8 @@ export async function POST(request: Request) {
   }
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const commandId = cleanText(body.commandId, 80);
-  const status = cleanText(body.status, 40);
-  const error = cleanText(body.error, 1000);
+  let status = cleanText(body.status, 40);
+  let error = cleanText(body.error, 1000);
   const result = body.result && typeof body.result === "object"
     ? body.result as Record<string, unknown>
     : {};
@@ -699,7 +584,17 @@ export async function POST(request: Request) {
 
   let auditSummary: { updatedCount: number; missingCount: number } | null = null;
   if (status === "succeeded" && String(commandRows[0].commandType) === "audit_inventory") {
-    auditSummary = await applyInventoryAuditResult(authorization.storeId, result);
+    const payload = commandRows[0].payload as Record<string,unknown>;
+    try {
+      if (!authorization.isDesktop || commandRows[0].platform !== 'uber_eats' || payload.availabilityAuthority !== 'uber_eats') {
+        throw new Error('旧形式の読取は無効です。Store から全店同期を実行してください。');
+      }
+      auditSummary = await applyUberAvailabilitySync(authorization.storeId, payload, result);
+      await publishPublicMenuUpdatedEvent(authorization.storeId).catch(()=>undefined);
+    } catch (failure) {
+      status = 'failed';
+      error = failure instanceof Error ? failure.message : 'uber_availability_sync_failed';
+    }
   }
   if (status === "succeeded" && String(commandRows[0].commandType) === "capture_competitor_menu_snapshot") {
     await applyCompetitorBridgeSnapshot(result);

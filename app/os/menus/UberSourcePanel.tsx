@@ -77,6 +77,7 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
       <div><strong>{t('メニュー同期センター')}</strong><span>{t('Uber → OS → Rocket Now・出前館')}</span></div>
       <button type="button" className="secondary-button compact-button" disabled={busy} onClick={()=>void load().catch(failure=>setError(failure.message))}>{t('状態を更新')}</button>
     </div>
+    <p>{language==='ja'?'メニュー更新で既存商品の売切を解除することはありません。販売状態は Store で操作します。':language==='zh-Hant'?'更新菜單不會恢復現有缺貨商品的銷售。銷售狀態請在 Store 操作。':'更新菜单不会恢复现有缺货商品的销售。销售状态请在 Store 操作。'} <a href="/store/menu">{language==='ja'?'Store の販売状態へ':language==='zh-Hant'?'前往 Store 銷售狀態':'前往 Store 销售状态'}</a></p>
     {source&&<>
       <div className={styles.overview} data-tone={problem?'warning':active?'working':'success'} role="status">
         <strong>{problem?t(problem.title):active?t('メニュー同期を実行中です'):source.revision?t('最新の同期結果を確認できます'):t('まだ同期していません')}</strong>

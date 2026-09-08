@@ -1,4 +1,5 @@
 "use client";
+import { WholeStoreAvailabilitySync } from "./WholeStoreAvailabilitySync";
 
 import { AlertTriangle, CheckCircle2, ChevronDown, History, RotateCcw, Search, SlidersHorizontal, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -701,6 +702,8 @@ export default function StoreMenuPage() {
             </button>
           </div>
         </div>
+
+        <WholeStoreAvailabilitySync storeId={selectedStoreId} language={language} disabled={Boolean(savingId)||loading} onApplied={()=>void load(selectedStoreId)} />
 
         <div className="store-menu-controls panel">
           <label>

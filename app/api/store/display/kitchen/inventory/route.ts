@@ -1,11 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { startUberAvailabilitySync, confirmUberAvailabilitySync } from "../../../../../../lib/inventory-manual-sync";
 import { requireOsSession } from "../../../../../../lib/api-auth";
 import { sql } from "../../../../../../lib/db";
 import {
   applyInventoryAvailability,
   loadInventoryAvailabilityTargets
 } from "../../../../../../lib/inventory-availability";
-import { publishBridgeCommandAvailable } from "../../../../../../lib/local-bridge-realtime";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../../lib/store-order-access";
 import {
   resolveUberInventoryTargets,
@@ -15,6 +14,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 type InventoryOptionRow = UberInventoryOptionRow & {
   statusNote: string;
@@ -93,7 +93,7 @@ async function loadInventoryAuditTargets(storeId: string) {
   `;
   return [
     ...itemRows.map((row) => ({
-      kind: "item",
+      kind: "item" as const,
       targetId: String(row.id),
       brandId: String(row.brandId),
       groupKey: "",
@@ -101,7 +101,7 @@ async function loadInventoryAuditTargets(storeId: string) {
       aliases: inventoryAliases(String(row.name), row.displayNames as Record<string, unknown> | null)
     })),
     ...optionRows.map((row) => ({
-      kind: "option",
+      kind: "option" as const,
       targetId: String(row.id),
       brandId: String(row.brandId),
       groupKey: String(row.groupKey),
@@ -298,51 +298,27 @@ export async function POST(request: Request) {
     ? text(body.overrideAvailability, 30) as "follow" | "available" | "unavailable"
     : "";
   const statusSource = body.source === "sales_status" ? "販売状態" : "厨房画面";
-  if (!storeId || !["preview", "apply", "audit"].includes(action)) {
+  if (!storeId || !["preview", "apply", "audit", "full_sync", "confirm_full_sync"].includes(action)) {
     return Response.json({ error: "食材と操作内容を確認してください。" }, { status: 400 });
   }
 
-  if (action === "audit") {
-    const activeRows = await sql`
-      select id::text, payload
-      from local_bridge_commands
-      where store_id::text = ${storeId}
-        and platform = 'uber_eats'
-        and command_type = 'audit_inventory'
-        and status in ('pending', 'processing')
-      order by created_at desc
-      limit 1
-    `;
-    if (activeRows[0]) {
-      const activePayload = activeRows[0].payload as { targets?: unknown[] } | null;
-      return Response.json({
-        ok: true,
-        commandId: String(activeRows[0].id),
-        targetCount: Array.isArray(activePayload?.targets) ? activePayload.targets.length : 0,
-        existing: true
-      });
+  if (action === "confirm_full_sync") {
+    try {
+      return Response.json({ok:true,...await confirmUberAvailabilitySync(storeId,text(body.runId,80))});
+    } catch(error) {
+      return Response.json({error:error instanceof Error?error.message:'同期できませんでした。'},{status:409});
     }
-    const targets = await loadInventoryAuditTargets(storeId);
-    if (!targets.length) {
-      return Response.json({ error: "チェック対象の Uber メニューがありません。" }, { status: 409 });
-    }
-    const commandId = randomUUID();
-    await sql`
-      insert into local_bridge_commands (
-        id, store_id, platform, command_type, idempotency_key, payload
-      )
-      values (
-        ${commandId},
-        ${storeId},
-        'uber_eats',
-        'audit_inventory',
-        ${`uber_eats:audit_inventory:${storeId}:${commandId}`},
-        ${JSON.stringify({ targets })}::jsonb
-      )
-    `;
-    await publishBridgeCommandAvailable(storeId).catch(() => undefined);
-    return Response.json({ ok: true, commandId, targetCount: targets.length, existing: false });
   }
+
+  if (action === "full_sync" || action === "audit") {
+    try {
+      const report = await startUberAvailabilitySync(storeId, await loadInventoryAuditTargets(storeId), session.id);
+      return Response.json({ok:true,...report});
+    } catch (error) {
+      return Response.json({error:error instanceof Error ? error.message : "同期を開始できませんでした。"},{status:409});
+    }
+  }
+
 
   if (!ingredientLabel) {
     return Response.json({ error: "食材を確認してください。" }, { status: 400 });
@@ -359,6 +335,7 @@ export async function POST(request: Request) {
   }
   if (action === "preview") return Response.json(resolved);
 
+  try {
   const applied = await applyInventoryAvailability({
     storeId,
     resolution: resolved,
@@ -385,4 +362,7 @@ export async function POST(request: Request) {
     isAvailable,
     ...resolved
   });
+  } catch (error) {
+    return Response.json({error:error instanceof Error?error.message:"販売状態を更新できませんでした。"},{status:409});
+  }
 }

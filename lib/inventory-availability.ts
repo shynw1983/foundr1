@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { assertNoWholeStoreSync, withInventoryOperationLock } from "./inventory-operation-lock";
 import { sql } from "./db";
 import {
   publishBridgeCommandAvailable,
@@ -100,7 +101,7 @@ export async function loadInventoryAvailabilityTargets(
   return { ...resolution, targets };
 }
 
-export async function applyInventoryAvailability(input: {
+async function applyInventoryAvailabilityUnlocked(input: {
   storeId: string;
   resolution: InventoryAvailabilityResolution;
   isAvailable: boolean;
@@ -119,6 +120,7 @@ export async function applyInventoryAvailability(input: {
   updatedBy: string | null;
 }) {
   const { storeId, resolution, isAvailable } = input;
+  await assertNoWholeStoreSync(storeId);
   const syncRunId = randomUUID();
   const syncSource = input.syncSource ?? (input.statusSource === "Siri" ? "siri" : "store");
   const feedbackLabel = input.feedbackLabel?.trim() || resolution.ingredientLabel;
@@ -559,4 +561,8 @@ export async function applyInventoryAvailability(input: {
         isAvailable: effectiveAvailability.get(`${target.kind}:${target.targetId}`) ?? isAvailable
       }))
   };
+}
+
+export async function applyInventoryAvailability(input: Parameters<typeof applyInventoryAvailabilityUnlocked>[0]) {
+  return withInventoryOperationLock(input.storeId, () => applyInventoryAvailabilityUnlocked(input));
 }

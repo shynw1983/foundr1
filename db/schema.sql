@@ -2417,6 +2417,12 @@ create table if not exists menu_inventory_availability_blocks (
   check (target_kind in ('item', 'option'))
 );
 
+create table if not exists menu_inventory_operation_locks (
+  store_id uuid primary key references stores(id) on delete cascade,
+  token uuid not null,
+  expires_at timestamptz not null
+);
+
 create table if not exists menu_inventory_sync_runs (
   id uuid primary key default gen_random_uuid(),
   store_id uuid not null references stores(id) on delete cascade,

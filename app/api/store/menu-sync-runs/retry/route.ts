@@ -50,6 +50,12 @@ export async function POST(request: Request) {
       and target.store_id::text = ${storeId}
       and target.command_type = 'set_inventory_availability'
       and target.status = 'failed'
+      and coalesce(target.payload->>'mappingBlocked','false') <> 'true'
+      and not exists (
+        select 1 from local_bridge_commands reading
+        where reading.store_id=target.store_id and reading.command_type='audit_inventory'
+          and reading.payload->>'availabilityAuthority'='uber_eats' and reading.status in ('pending','processing')
+      )
       and not exists (
         select 1
         from local_bridge_commands as newer

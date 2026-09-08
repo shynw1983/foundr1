@@ -441,3 +441,9 @@ test("converts an Uber menu snapshot into a read-only inventory audit", () => {
     }]
   });
 });
+
+test("unknown Uber availability must not default to available", () => {
+  const result=projectUberInventoryAudit({items:[{targetId:'unknown',observedKind:'item',metadata:{}}]},1);
+  assert.equal(result.items[0].found,false);
+  assert.equal(result.items[0].status,'unknown');
+});
