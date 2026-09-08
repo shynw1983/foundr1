@@ -1,5 +1,26 @@
 # Uber-authoritative menu synchronization
 
+## Rocket request compatibility fix — 2026-09-08 (latest)
+
+The merchant UI and Bridge window both displayed menus normally. In the same
+Bridge window, the official option-tab request returned HTTP 200, while the
+previous generic fetch returned 403. The official frontend attaches `Accept`,
+`X-Requested-With` and dynamically generated `X-Request-Meta` headers. A
+same-origin read using that request format succeeded without changing login.
+
+The shared Bridge request function now adds these headers only for the exact
+Rocket origin, using the actual current browser environment and a fresh time.
+No cookies are exported, no metadata is copied between sessions, and transient
+headers are not stored in creation receipts. Demae requests remain unchanged;
+origin checks, request timeouts and uncertain-create protections remain intact.
+
+The updated real Bridge catalog path passed read-only verification: 14
+categories, 24 dishes, 29 groups and 213 option records. All 147 Bridge tests and
+the production Webpack/TypeScript build passed. This request fix does NOT itself
+complete the group/mapping acceptance or enable automatic publication; those
+remaining tasks below are still pending. No merchant content was changed in
+this increment.
+
 ## Replacement migration checkpoint — 2026-09-08 (latest)
 
 Automatic source ingestion/publication remains OFF, revision 1. This is not

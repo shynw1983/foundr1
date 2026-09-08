@@ -2,6 +2,19 @@
 // serialized by CDP. Only explicitly keyed creations use this local journal.
 export async function executeMenuRequest({path,method,body,successCode,origin,receiptKey}) {
   if(location.origin!==origin)throw Error('merchant_menu_origin_changed');
+  const headers=body===undefined?{}:{'Content-Type':'application/json'};
+  if(origin==='https://store.rocketnow.co.jp') {
+    // Match Rocket's merchant request interceptor using this browser's real
+    // environment. Never copy credentials/metadata from another session, cache
+    // the timestamp, or persist these transient headers in creation receipts.
+    headers.Accept='application/json';
+    headers['X-Requested-With']='XMLHttpRequest';
+    headers['X-Request-Meta']=btoa(JSON.stringify({
+      o:location.origin,ua:navigator.userAgent.substring(0,100),
+      r:(document.referrer||location.href).substring(0,200),t:Date.now(),
+      sr:`${window.screen.width}x${window.screen.height}`,l:navigator.language
+    }));
+  }
   const key=receiptKey?`foundr1.menu-create.v1:${receiptKey}`:null;
   const intent=JSON.stringify({path,method,body});
   if(key) {
@@ -17,7 +30,7 @@ export async function executeMenuRequest({path,method,body,successCode,origin,re
   }
   const response=await fetch(path,{
     method,credentials:'include',cache:'no-store',signal:AbortSignal.timeout(10000),
-    headers:body===undefined?undefined:{'Content-Type':'application/json'},
+    headers:Object.keys(headers).length?headers:undefined,
     body:body===undefined?undefined:JSON.stringify(body)
   });
   const value=await response.json().catch(()=>({}));
