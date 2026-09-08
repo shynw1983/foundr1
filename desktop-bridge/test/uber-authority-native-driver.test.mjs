@@ -161,3 +161,21 @@ test('unchanged Demae staged options reuse the independently verified phase snap
  driver.contentSnapshot=[{kind:'option',id:'51',name:'same',price:170,staged:true,parentIds:['g']}];
  await driver.updateContent(target);
 });
+
+test('new Demae items are read by receipt ID and retain initial relationships without a full catalog scan',async()=>{
+ const target={kind:'item',sourceKey:'item:new',targetId:'new',name:'new',price:170,description:'',mappings:[{externalId:'itemList_141false',externalParentId:'draft:draft',created:true}]};
+ const transport={request:async path=>{
+  if(path.endsWith('/search/menu-pattern'))return {menuPatternList:[{chainId:1,menuPatternCode:'draft',shopCountPerMenuPattern:0,displayShopCount:0,linkedShopList:[]}],isContinueNextPage:false,totalCount:1};
+  if(path.endsWith('/item/41'))return {chainId:1,itemCode:'41',itemName:'new',itemDescription:'',sizeInfoList:[{sizeCode:'001',applyStartDate:'2020/01/01',applyEndDate:'9999/12/31',price:170,sizeOptionGroupLinkList:[]}]};
+  if(path.endsWith('/linked-category-list'))return [{categoryCode:'c',applyStartDate:'2020/01/01',applyEndDate:'9999/12/31'}];
+  if(path.endsWith('/menu-pattern-list'))return [{chainId:1,menuPatternCode:'draft'}];
+  if(path.includes('/category/c/'))return {chainId:1,categoryCode:'c'};
+  throw Error(`unexpected read:${path}`);
+ }};
+ const driver=new AuthorityNativeDriver(transport,{platformKey:'demae_can',merchantId:'1',menuPatternCode:'live',draftPatternCode:'draft',targets:[target]});
+ driver.contentSnapshot=[];driver.snapshot=async()=>{throw Error('full scan not needed');};
+ await driver.updateContent(target);
+ assert.deepEqual(driver.contentSnapshot[0].groupIds,[]);
+ assert.equal(driver.contentSnapshot[0].staged,true);
+ assert.equal(driver.contentSnapshot[0].price,170);
+});

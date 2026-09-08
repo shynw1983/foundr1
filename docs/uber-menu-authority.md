@@ -2,6 +2,21 @@
 
 ## Live acceptance in progress — 2026-09-08 (latest)
 
+- Server release `3240d84c` is deployed READY to production; the mapped-ID
+  uniqueness migration is applied. The desktop Bridge was restarted and
+  independently confirmed running as PID 59459 with no queued commands.
+  None of this enables full automatic publication: source flags remain off.
+- A real Demae main-item edit now succeeds: `00000003`, cold dry noodles,
+  ¥790, full projected description, unchanged stock/associations/image. The
+  missing `originalApplyStartDate`/`originalApplyEndDate` edit keys were the
+  cause of the rejected existing-size update. Native readback returns these
+  request identity fields as null; they are not persisted content fields.
+- Merchant requests are now paced, not unbounded parallel catalog requests.
+  No automatic write retries are introduced. Held records are read by saved
+  IDs, and shared private carrier assignments are checked once per snapshot.
+- Ordinary Chrome independently shows Rocket's menu, while the Bridge session
+  still cannot load the catalog after refresh. A fresh login in that dedicated
+  window was requested; no cookies were copied and no denial was bypassed.
 - OS bootstrap committed revision 1 with 277 source objects and five new
   unavailable options. `enabled=false`, `auto_publish=false` remain in force.
 - Owner approved excluding only the informational, zero-yen non-product card

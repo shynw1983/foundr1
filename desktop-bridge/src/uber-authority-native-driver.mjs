@@ -38,6 +38,13 @@ export class AuthorityNativeDriver {
     return ids.length===1&&rows.filter(row=>row.kind==='option_group'&&row.id===ids[0]).length===1?ids[0]:null;
   }
   async findMarker(marker,target) {
+    if(this.platform==='demae_can'&&target.kind==='item') {
+      // Demae creations live only in the private draft pattern. Recover them
+      // by durable receipt ID; a live marker is a collision, not an adoption.
+      const live=await this.client.catalog();
+      if(live.items.categoryList.some(category=>(category.itemList??[]).some(item=>item.itemName===marker)))throw Error('uber_authority_marker_already_published');
+      return [];
+    }
     if(this.platform==='demae_can'&&target.kind==='option') {
       // Unlinked creations are recovered from the durable receipt by ID.
       // A live marker is a collision, never permission to create a duplicate.
@@ -176,10 +183,12 @@ export class AuthorityNativeDriver {
       const liveGroupIds=remote.groups.map(row=>String(row.optionGroupCode));
       const knownGroupIds=this.payload.targets.filter(target=>target.kind==='option_group'&&!target.quarantined).flatMap(target=>[...target.mappings,this.payload.authorityState?.[target.sourceKey]].filter(mapping=>mapping?.externalId).map(mapping=>this.id('option_group',mapping.externalId)));
       const groups=await Promise.all([...new Set([...liveGroupIds,...knownGroupIds])].map(id=>c.group(id)));
+      const hiddenConsumers=[...new Map(groups.filter(group=>!liveGroupIds.includes(String(group.detail.optionGroupCode)))
+        .flatMap(group=>group.items).map(item=>[String(item.itemCode),item])).values()];
+      if(hiddenConsumers.length)await c.hiddenGroupItems(hiddenConsumers);
       for(const group of groups) {
         const id=String(group.detail.optionGroupCode);
         const staged=!liveGroupIds.includes(id);
-        if(staged)await c.hiddenGroupItems(group.items);
         const options=group.options.filter(row=>String(row.applyStartDate).replaceAll('/','-')<=c.today&&String(row.applyEndDate).replaceAll('/','-')>=c.today);
         rows.push({kind:'option_group',id,name:group.detail.optionGroupName,price:null,childIds:[...new Set(options.map(row=>String(row.optionCode)))],staged,hidden:group.items.every(item=>hidden('item',item.itemCode)),native:group});
         for(const option of options)rows.push({kind:'option',id:String(option.optionCode),name:option.optionName,price:Number(option.price),hidden:hidden('option',option.optionCode),parentIds:[id],native:option});
@@ -282,7 +291,15 @@ export class AuthorityNativeDriver {
   async updateContent(target) {
     // Newly journaled records did not exist in the preflight snapshot.
     let rows;
-    if(this.platform==='demae_can'&&target.kind==='option'&&target.mappings.some(mapping=>mapping.externalParentId?.startsWith('stage:'))
+    if(this.platform==='demae_can'&&target.kind==='item'&&target.mappings.some(mapping=>mapping.created)
+      &&this.ids(target).some(id=>!this.contentSnapshot.some(row=>row.kind==='item'&&row.id===id))) {
+      rows=await Promise.all(this.ids(target).map(async id=>{
+        const actual=await new DemaeDraftClient(this.client.transport,this.merchantId,this.payload.menuPatternCode).assertHiddenItem(this.payload.draftPatternCode,id);
+        const sizes=(actual.sizeInfoList??[]).filter(size=>String(size.applyStartDate).replaceAll('/','-')<=this.client.today&&String(size.applyEndDate).replaceAll('/','-')>=this.client.today);
+        if(sizes.length!==1)throw Error('demae_menu_ambiguous_active_size');
+        return {kind:'item',id,name:actual.itemName,price:Number(sizes[0].price),description:String(actual.itemDescription??'').replaceAll('<br>','\n'),staged:true,hidden:true,parentIds:[],groupIds:(sizes[0].sizeOptionGroupLinkList??[]).map(group=>String(group.optionGroupCode)),native:actual};
+      }));
+    }else if(this.platform==='demae_can'&&target.kind==='option'&&target.mappings.some(mapping=>mapping.externalParentId?.startsWith('stage:'))
       &&this.ids(target).some(id=>!this.contentSnapshot.some(row=>row.kind==='option'&&row.id===id))) {
       rows=await Promise.all(target.mappings.map(async mapping=>{
         const actual=await new DemaeStagedOption(this.client).read({optionCode:this.id('option',mapping.externalId),groupCode:mapping.externalParentId.slice(6),marker:target.marker});

@@ -20,11 +20,19 @@ export function demaeItemUpdate(detail,patch,today) {
   for(const key of ['chainId','itemCode','itemName','itemDescription','imageTrimmingRange','comboItemType','itemType','appealIconCode','sizeInfoList','categoryItemLinkList','itemImageFileName'])output[key]=detail[key];
   output.itemName=patch.name??detail.itemName;
   output.itemDescription=patch.description!==undefined?patch.description.replaceAll('\n','<br>'):detail.itemDescription;
-  output.sizeInfoList=sizes.map(size=>({...size,price:patch.price!==undefined && size===active[0]?yen(patch.price):size.price,
+  output.sizeInfoList=sizes.map(size=>({...size,
+    // The edit form's key identifies an existing period. GET returns these
+    // fields as null; echoing null makes the server treat it as a new period.
+    originalApplyStartDate:size.applyStartDate,originalApplyEndDate:size.applyEndDate,
+    price:patch.price!==undefined && size===active[0]?yen(patch.price):size.price,
     ...(patch.groupLinks!==undefined&&size===active[0]?{sizeOptionGroupLinkList:patch.groupLinks}:{})}));
   output.categoryItemLinkList=patch.categoryLinks??detail.categoryItemLinkList;
   output.itemImageEditType='NOT_EDIT';output.itemImage=null;
   return output;
+}
+
+function storedSizes(sizes) {
+  return sizes.map(({originalApplyStartDate,originalApplyEndDate,...size})=>size);
 }
 
 export class DemaeMenuClient {
@@ -131,7 +139,7 @@ export class DemaeMenuClient {
       || actual.itemName!==body.itemName || String(actual.itemDescription??'')!==String(body.itemDescription??'')
       || (patch.price!==undefined && (active.length!==1||Number(active[0].price)!==patch.price))
       || !sameMenuValue(actual.categoryItemLinkList,body.categoryItemLinkList)
-      || !sameMenuValue(actual.sizeInfoList,body.sizeInfoList)
+      || !sameMenuValue(storedSizes(actual.sizeInfoList),storedSizes(body.sizeInfoList))
       || actual.itemImageUri!==before.itemImageUri)throw new Error('demae_menu_item_verification_failed');
     const afterOccurrences=await this.itemOccurrences(id);
     if(patch.categoryLinks?.length===0) {

@@ -30,6 +30,7 @@ const demaeItem=()=>({chainId:1,itemCode:'a',itemName:'old',itemDescription:'des
 test('Demae updates only the current price period, preserving photos and links',()=>{
  const body=demaeItemUpdate(demaeItem(),{price:190},'2026-09-07');
  assert.deepEqual(body.sizeInfoList.map(row=>row.price),[80,190]);assert.equal(body.itemImageEditType,'NOT_EDIT');
+ assert.deepEqual(body.sizeInfoList.map(row=>[row.originalApplyStartDate,row.originalApplyEndDate]),[['2020/01/01','2025/12/31'],['2026/01/01','9999/12/31']]);
  assert.deepEqual(body.categoryItemLinkList,[{categoryCode:'c'}]);assert.equal('stockoutType' in body,false);
  const ambiguous=demaeItem();ambiguous.sizeInfoList.push({...ambiguous.sizeInfoList[1],sizeCode:'2'});
  assert.throws(()=>demaeItemUpdate(ambiguous,{price:190},'2026-09-07'),/ambiguous/);

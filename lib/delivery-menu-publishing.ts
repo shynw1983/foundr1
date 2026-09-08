@@ -206,7 +206,7 @@ export function projectDeliveryDescription(platformKey: DeliveryMenuPlatformKey,
   // Demae applies the same prohibited-character validator to descriptions,
   // with at most two consecutive line breaks. Keep every word and paragraph.
   if(platformKey!=="demae_can")return value;
-  return nativeDeliveryText(platformKey,value.replace(emojiPattern, "")).replace(/\n{3,}/gu,"\n\n");
+  return nativeDeliveryText(platformKey,value.replace(emojiPattern, "")).replaceAll("─", "-").replace(/\n{3,}/gu,"\n\n");
 }
 
 export function projectDeliveryName(

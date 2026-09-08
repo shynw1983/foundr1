@@ -17,8 +17,8 @@ test('Demae long option translations retain complete Japanese and Chinese within
  assert.equal(buildUberPublication({...input,platform:'demae_can',nodes:[option]}).targets[0].name,'おまかせ野菜3種盛り｜蔬菜随机三种拼盘');
 });
 test('Demae descriptions preserve words and paragraphs while adapting prohibited typography',()=>{
- const description="Hot (spicy)!\n\n\n１個  ﾁｰｽﾞ🔥";
- assert.equal(buildUberPublication({...input,platform:'demae_can',nodes:[{...node,description}]}).targets[0].description,"Hot （spicy）！\n\n1個 チーズ");
+ const description="Hot (spicy)!\n───\n\n\n１個  ﾁｰｽﾞ🔥";
+ assert.equal(buildUberPublication({...input,platform:'demae_can',nodes:[{...node,description}]}).targets[0].description,"Hot （spicy）！\n---\n\n1個 チーズ");
  assert.equal(buildUberPublication({...input,platform:'rocket_now',nodes:[{...node,description}]}).targets[0].description,description);
 });
 test('OS image ingestion is not turned into outbound image publishing',()=>{
