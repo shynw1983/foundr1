@@ -282,7 +282,8 @@ export class AuthorityNativeDriver {
   async updateContent(target) {
     // Newly journaled records did not exist in the preflight snapshot.
     let rows;
-    if(this.platform==='demae_can'&&target.kind==='option'&&target.mappings.some(mapping=>mapping.externalParentId?.startsWith('stage:'))) {
+    if(this.platform==='demae_can'&&target.kind==='option'&&target.mappings.some(mapping=>mapping.externalParentId?.startsWith('stage:'))
+      &&this.ids(target).some(id=>!this.contentSnapshot.some(row=>row.kind==='option'&&row.id===id))) {
       rows=await Promise.all(target.mappings.map(async mapping=>{
         const actual=await new DemaeStagedOption(this.client).read({optionCode:this.id('option',mapping.externalId),groupCode:mapping.externalParentId.slice(6),marker:target.marker});
         return {kind:'option',id:String(actual.option.optionCode),name:actual.option.optionName,price:Number(actual.option.price),staged:true,parentIds:[actual.groupCode]};
@@ -291,6 +292,10 @@ export class AuthorityNativeDriver {
     for(const id of this.ids(target)) {
       const before=rows.find(row=>row.kind===target.kind&&row.id===id);
       if(!before)throw Error('uber_authority_native_object_missing');
+      // Newly created items were not in preflight. Retain their independently
+      // read initial relationships for the later drift check.
+      if(target.kind==='item'&&target.mappings.some(mapping=>mapping.created)
+        &&!this.contentSnapshot.some(row=>row.kind==='item'&&row.id===id))this.contentSnapshot.push(structuredClone(before));
       const nameChanged=before.name!==target.name,priceChanged=target.price!==null&&before.price!==target.price;
       const descriptionChanged=target.kind==='item'&&before.description!==target.description;
       const quantityChanged=!this.quantityMatches(target,before);
@@ -308,9 +313,19 @@ export class AuthorityNativeDriver {
       for(const id of this.ids(target)) {
         const before=this.contentSnapshot.find(row=>row.kind==='item'&&row.id===id);
         const current=this.relationshipSnapshot.find(row=>row.kind==='item'&&row.id===id);
-        if(!before||!current||!equalIds(before.groupIds,current.groupIds)||!equalIds(before.parentIds,current.parentIds))throw Error('uber_authority_relationship_drift');
+        // Creating isolated option carriers intentionally adds groups to the
+        // existing hidden draft item. Admit only our identified additions;
+        // never accept removals, unknown groups or changes to a selling item.
+        const ownedDraftAdditions=before?.staged&&current?.staged
+          &&before.groupIds.every(groupId=>current.groupIds.includes(groupId))
+          &&current.groupIds.filter(groupId=>!before.groupIds.includes(groupId)).every(groupId=>
+            this.relationshipSnapshot.some(row=>row.staged&&(row.kind==='option_group'&&row.id===groupId
+              ||row.kind==='option'&&row.hidden&&row.parentIds.includes(groupId)))
+            &&this.managedGroup(groupId,this.relationshipSnapshot));
+        if(!before||!current||!equalIds(before.parentIds,current.parentIds)
+          ||!equalIds(before.groupIds,current.groupIds)&&!ownedDraftAdditions)throw Error('uber_authority_relationship_drift');
         if(equalIds(current.groupIds,this.groupIds(target)))continue;
-        if(current.groupIds.some(id=>!this.managedGroup(id,this.contentSnapshot)))throw Error('uber_authority_unowned_item_group');
+        if(current.groupIds.some(id=>!this.managedGroup(id,this.relationshipSnapshot)))throw Error('uber_authority_unowned_item_group');
         const links=[];
         for(const groupId of this.groupIds(target)) {
           const group=await this.client.group(groupId);

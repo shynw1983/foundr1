@@ -137,3 +137,27 @@ test('matching quantity limits cannot conceal a single-select native group',()=>
  assert.equal(driver.quantityMatches(target,{native:{minSelect:0,maxSelect:2,isMultiSelect:false}}),false);
  assert.equal(driver.quantityMatches(target,{native:{minSelect:0,maxSelect:2,isMultiSelect:true}}),true);
 });
+
+test('Demae permits only identified additions to a verified private draft carrier',async()=>{
+ for(const mode of ['owned','isolated-option','unknown','selling','removed']) {
+  const target={kind:'item',sourceKey:'item:i',targetId:'i',source:{groupIds:[]},mappings:[{externalId:'itemList_141false'}]};
+  const payload={platformKey:'demae_can',merchantId:'1',targets:[target,{kind:'option',mappings:[{externalId:'itemList_151true',externalParentId:'stage:g'}]}]};
+  const driver=new AuthorityNativeDriver({},payload);
+  driver.contentSnapshot=[{kind:'item',id:'41',staged:mode!=='selling',groupIds:mode==='removed'?['old']:[],parentIds:['draft']}];
+  driver.relationshipSnapshot=[{kind:'item',id:'41',staged:mode!=='selling',groupIds:['g'],parentIds:['draft']},
+   {kind:'option_group',id:'g',staged:true,childIds:['51']},
+   {kind:'option',id:'51',staged:true,hidden:true,parentIds:['g']}];
+  driver.groupIds=()=>['g'];
+  if(mode==='isolated-option')driver.relationshipSnapshot.splice(1,1);
+  if(mode==='unknown')driver.managedGroup=()=>false;
+  if(mode==='owned'||mode==='isolated-option')await driver.updateRelationships(target);
+  else await assert.rejects(()=>driver.updateRelationships(target),/relationship_drift/);
+ }
+});
+
+test('unchanged Demae staged options reuse the independently verified phase snapshot',async()=>{
+ const target={kind:'option',sourceKey:'option:o',targetId:'o',name:'same',price:170,mappings:[{externalId:'itemList_151true',externalParentId:'stage:g'}]};
+ const driver=new AuthorityNativeDriver({},{platformKey:'demae_can',merchantId:'1',targets:[target]});
+ driver.contentSnapshot=[{kind:'option',id:'51',name:'same',price:170,staged:true,parentIds:['g']}];
+ await driver.updateContent(target);
+});

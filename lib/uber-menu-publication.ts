@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { deliveryPlatformRules, projectDeliveryName } from './delivery-menu-publishing.ts';
+import { deliveryPlatformRules, projectDeliveryName, projectDeliveryDescription } from './delivery-menu-publishing.ts';
 import { authoritativeDeliveryPrice } from './uber-menu-authority.ts';
 
 export type UberPublicationNode = {
@@ -23,12 +23,13 @@ function publicationSource(value: unknown): unknown {
 function nativePublicationName(platform:'rocket_now'|'demae_can',node:UberPublicationNode) {
   const rule=deliveryPlatformRules[platform];
   const full=projectDeliveryName(platform,node.name,node.displayNames,undefined,rule,node.kind==='option'?'option':'item');
-  if(platform!=='demae_can'||node.kind!=='option_group'||full.length<=50)return full;
+  const limit=node.kind==='option_group'?50:255;
+  if(platform!=='demae_can'||full.length<=limit)return full;
   // The merchant group form limits names to 50 characters. Keep the complete
   // source Japanese name; omit optional appended translations before ever
   // truncating the source name. An overlong source itself stays an error.
   const bilingual=projectDeliveryName(platform,node.name,{zh:node.displayNames.zh},undefined,rule);
-  return bilingual.length<=50?bilingual:projectDeliveryName(platform,node.name,{},undefined,rule);
+  return bilingual.length<=limit?bilingual:projectDeliveryName(platform,node.name,{},undefined,rule);
 }
 
 export function buildUberPublication(input: {
@@ -47,7 +48,7 @@ export function buildUberPublication(input: {
     name:nativePublicationName(input.platform,node),
     price:['item','option'].includes(node.kind) && !node.archived
       ? authoritativeDeliveryPrice(input.platform,node.uberPrice as number,node.price as number) : null,
-    description:node.description,sortOrder:node.sortOrder,
+    description:projectDeliveryDescription(input.platform,node.description),sortOrder:node.sortOrder,
     archived:node.archived===true,source:publicationSource(node.payload) as Record<string,unknown>,
     quarantined:input.quarantinedSourceKeys?.includes(node.sourceKey)===true,
     mappings:input.mappings.filter(mapping=>mapping.kind===node.kind && mapping.targetId===node.targetId)

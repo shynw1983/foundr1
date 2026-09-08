@@ -1,10 +1,12 @@
 import { CdpPage } from './cdp-page.mjs';
 import { executeMenuRequest } from './merchant-menu-receipt.mjs';
+import {createMerchantMenuPacer} from './merchant-menu-pacer.mjs';
 
 // Requests remain inside the authenticated merchant browser. Never export its
 // cookies or replay requests against an unverified origin.
 export async function connectMerchantMenuClient(session, origin, successCode) {
   const page = await CdpPage.connect(await session.ensureRunning(), origin);
+  const paced=createMerchantMenuPacer();
   if (await page.evaluate('location.origin') !== origin) {
     page.close();
     throw new Error('merchant_menu_origin_mismatch');
@@ -20,7 +22,7 @@ export async function connectMerchantMenuClient(session, origin, successCode) {
       if(receiptKey && (method!=='POST'||!/^[A-Za-z0-9:_-]{1,160}$/.test(receiptKey)))throw Error('merchant_menu_receipt_key_invalid');
       // Writes are deliberately not retried here. Create retry safety belongs
       // to the persistent authority reservation/marker protocol.
-      return page.evaluate(`(${executeMenuRequest.toString()})(${JSON.stringify({path,method,body,successCode,origin,receiptKey})})`);
+      return paced(()=>page.evaluate(`(${executeMenuRequest.toString()})(${JSON.stringify({path,method,body,successCode,origin,receiptKey})})`));
     }
   };
 }

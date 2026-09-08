@@ -193,6 +193,22 @@ function uberAuthoritativeJapaneseName(
   return uberName ? (uberName.split(/[|｜]/u)[0]?.trim() || fallbackName) : fallbackName;
 }
 
+function nativeDeliveryText(platformKey: DeliveryMenuPlatformKey, value: string) {
+  return platformKey === "demae_can"
+    ? value.replace(/[Ａ-Ｚａ-ｚ０-９]/gu, char => char.normalize("NFKC"))
+      .replace(/[\uFF66-\uFF9F]+/gu, chars => chars.normalize("NFKC"))
+      .replace(/[!"#$&'~^@{}`;\[\]?_,()]/gu, char => String.fromCharCode(char.charCodeAt(0) + 0xFEE0))
+      .replace(/[ \u3000]{2,}/gu, " ")
+    : platformKey === "rocket_now" ? value.replaceAll("＆", "・").replaceAll("（", "(").replaceAll("）", ")").replace(/[？]/gu, "") : value;
+}
+
+export function projectDeliveryDescription(platformKey: DeliveryMenuPlatformKey, value: string) {
+  // Demae applies the same prohibited-character validator to descriptions,
+  // with at most two consecutive line breaks. Keep every word and paragraph.
+  if(platformKey!=="demae_can")return value;
+  return nativeDeliveryText(platformKey,value.replace(emojiPattern, "")).replace(/\n{3,}/gu,"\n\n");
+}
+
 export function projectDeliveryName(
   platformKey: DeliveryMenuPlatformKey,
   name: string,
@@ -203,12 +219,7 @@ export function projectDeliveryName(
 ) {
   // Demae's native option-name validator rejects ASCII parentheses, including
   // those in translated names. Preserve their meaning with full-width forms.
-  const nativeName = (value: string) => platformKey === "demae_can"
-    ? value.replace(/[！-～]/gu, char => /[Ａ-Ｚａ-ｚ０-９]/u.test(char) ? char.normalize("NFKC") : char)
-      .replace(/[\uFF66-\uFF9F]+/gu, chars => chars.normalize("NFKC"))
-      .replace(/[!"#$&'~^@{}`;\[\]?_,()]/gu, char => String.fromCharCode(char.charCodeAt(0) + 0xFEE0))
-      .replace(/[ \u3000]{2,}/gu, " ")
-    : platformKey === "rocket_now" ? value.replaceAll("＆", "・").replaceAll("（", "(").replaceAll("）", ")").replace(/[？]/gu, "") : value;
+  const nativeName = (value: string) => nativeDeliveryText(platformKey,value);
   const sourceName = String(setting?.nameOverride ?? "").trim() || name.trim();
   if (setting?.nameOverride && setting.placementConfig?.useExactNameOverride === true) {
     return nativeName(applyEmojiRule(sourceName, rule, setting));

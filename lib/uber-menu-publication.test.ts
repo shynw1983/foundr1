@@ -12,6 +12,15 @@ test('Demae group names keep the complete Japanese source within the native form
  assert.equal(result.targets[0].name,'追加調味料｜追加调味料');
  assert.equal(buildUberPublication({...input,platform:'demae_can',nodes:[{...group,name:'あ'.repeat(51)}]}).targets[0].name,'あ'.repeat(51));
 });
+test('Demae long option translations retain complete Japanese and Chinese within 255 characters',()=>{
+ const option={...node,kind:'option',name:'おまかせ野菜3種盛り',displayNames:{zh:'蔬菜随机三种拼盘',en:'Very long '.repeat(30)}};
+ assert.equal(buildUberPublication({...input,platform:'demae_can',nodes:[option]}).targets[0].name,'おまかせ野菜3種盛り｜蔬菜随机三种拼盘');
+});
+test('Demae descriptions preserve words and paragraphs while adapting prohibited typography',()=>{
+ const description="Hot (spicy)!\n\n\n１個  ﾁｰｽﾞ🔥";
+ assert.equal(buildUberPublication({...input,platform:'demae_can',nodes:[{...node,description}]}).targets[0].description,"Hot （spicy）！\n\n1個 チーズ");
+ assert.equal(buildUberPublication({...input,platform:'rocket_now',nodes:[{...node,description}]}).targets[0].description,description);
+});
 test('OS image ingestion is not turned into outbound image publishing',()=>{
  const source={...node,imageUrl:'https://uber.example/photo.jpg',payload:{id:'a',imageUrl:'photo',taxInfo:{tax:8},nested:[{thumbnailUrl:'image',id:'b'}]}};
  for(const platform of ['rocket_now','demae_can'] as const) {

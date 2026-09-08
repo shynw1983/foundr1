@@ -38,6 +38,8 @@ const payload=buildUberPublication({sourceId:source.id,storeId:config.storeId,br
 const attempts=await sql`select source_key as "sourceKey",status,external_id as "externalId",external_parent_id as "externalParentId" from menu_uber_creation_attempts where source_id=${source.id} and platform=${platform}`;
 payload.authorityState=Object.fromEntries(attempts.map(row=>[row.sourceKey,row]));
 const transport=await connectMerchantMenuClient(new BrowserSession(config,platform),platform==='rocket_now'?'https://store.rocketnow.co.jp':'https://partner.demae-can.com',platform==='rocket_now'?'SUCCESS':'MSA0000');
+const request=transport.request.bind(transport);let checked=0,lastReport=Date.now();
+transport.request=async(...args)=>{const result=await request(...args);checked++;if(Date.now()-lastReport>10000){console.log(JSON.stringify({phase:'native-requests-completed',count:checked}));lastReport=Date.now();}return result;};
 try {
  const driver=new AuthorityNativeDriver(transport,payload),preflight=await driver.preflight(payload);
  console.log(JSON.stringify({platform,revision:source.revision,targets:payload.targets.length,preflight}));
