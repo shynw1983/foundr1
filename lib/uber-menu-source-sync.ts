@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { uberMenuChanges } from './uber-menu-diff.ts';
 import { sql } from './db.ts';
 import { resolveUberOptionMove, missingUberSourceObjects } from './uber-menu-identity.ts';
 import { buildUberPublication, type UberPublicationMapping, type UberPublicationNode } from './uber-menu-publication.ts';
@@ -112,8 +113,18 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
   const independent = previous && Date.parse(catalog.capturedAt)-Date.parse(previous.capturedAt)>=60_000;
   const archived = missingObjects.filter(row => independent && oldMissing.includes(`object:${row.sourceKey}`));
   const pendingKeys = [...removals.pending,...objectMissingKeys];
-  const summary = {added:nodes.filter(row=>row.isNew).length,moved:nodes.filter(row=>row.kind==='option' && options.some(old=>old.id===row.targetId && old.parentId!==row.parentId)).length,observed:nodes.length,archived:archived.length,pendingRemoval:missingObjects.length,contentChanged:hash!==source.last_content_hash};
+  const changes=uberMenuChanges(previous,catalog);
+  const summary = {added:nodes.filter(row=>row.isNew).length,moved:nodes.filter(row=>row.kind==='option' && options.some(old=>old.id===row.targetId && old.parentId!==row.parentId)).length,observed:nodes.length,archived:archived.length,pendingRemoval:missingObjects.length,contentChanged:hash!==source.last_content_hash,changes,renamed:changes.filter(row=>row.kind==='renamed').length,repriced:changes.filter(row=>row.kind==='repriced').length,noChanges:false};
   if(input.dryRun) return {...summary, dryRun:true, additions:nodes.filter(row=>row.isNew).map(row=>({kind:row.kind,name:row.name,uberId:row.uberId})), prices:nodes.filter(row=>row.price!==null).map(row=>({kind:row.kind,name:row.name,uberPrice:row.uberPrice,osPrice:row.price,mode:row.priceMode})), nodes};
+  if(!input.verifyRollback&&!input.bootstrap&&!summary.contentChanged&&!summary.added&&!summary.moved&&!missingObjects.length) {
+    summary.noChanges=true;
+    await sql.transaction([
+      sql`select lock_menu_uber_revision(${source.id},${source.revision})`,
+      sql`update menu_uber_sources set last_catalog=${JSON.stringify(catalog)}::jsonb,missing_keys=${pendingKeys},last_checked_at=now(),last_error='',updated_at=now() where id=${source.id}`,
+      sql`insert into menu_uber_sync_runs(source_id,command_id,revision,content_hash,summary) values(${source.id},${input.commandId},${source.revision},${hash},${JSON.stringify(summary)}::jsonb)`
+    ]);
+    return summary;
+  }
   const statements = input.bootstrap?[sql`with locked as materialized(select id from menu_uber_sources where id=${source.id} and revision=0 and enabled=false and auto_publish=false for update) select 1/count(*)::int from locked`]:input.verifyRollback ? [sql`update menu_uber_sources set enabled=true where id=${source.id}`,sql`select lock_menu_uber_revision(${source.id},${source.revision})`] : [sql`select lock_menu_uber_revision(${source.id},${source.revision})`];
   for (const node of legacyMissing) statements.push(sql`insert into menu_uber_objects(source_id,source_key,kind,uber_id,parent_uber_id,target_id,price_mode) values(${source.id},${node.sourceKey},${node.kind},${node.uberId},${node.parentUberId},${node.targetId},'manual') on conflict do nothing`);
   // Every write and checkpoint shares one transaction. Failed imports cannot
@@ -197,7 +208,7 @@ export async function scheduleUberSourceScans(storeId?: string) {
   let queued=0;
   for(const source of rows) {
     const key=`uber-authority:${source.id}:${storeId?randomUUID():Math.floor(Date.now()/600000)}`;
-    const result=await sql`insert into local_bridge_commands(store_id,platform,command_type,idempotency_key,payload) select ${source.store_id},'uber_eats','capture_menu_snapshot',${key},${JSON.stringify({brandId:source.brand_id,sourceId:source.id,authoritativeSource:true,expectedUberStoreUuid:source.uber_store_uuid,ruleVersion:'uber-authority-v1',targets:[]})}::jsonb where not exists(select 1 from local_bridge_commands where store_id=${source.store_id} and payload->>'sourceId'=${source.id}::text and status in ('pending','processing')) on conflict(idempotency_key) do nothing returning id`;
+    const result=await sql`insert into local_bridge_commands(store_id,platform,command_type,idempotency_key,payload) select ${source.store_id},'uber_eats','capture_menu_snapshot',${key},${JSON.stringify({brandId:source.brand_id,sourceId:source.id,trigger:storeId?'manual':'scheduled',authoritativeSource:true,expectedUberStoreUuid:source.uber_store_uuid,ruleVersion:'uber-authority-v1',targets:[]})}::jsonb where not exists(select 1 from local_bridge_commands where store_id=${source.store_id} and payload->>'sourceId'=${source.id}::text and status in ('pending','processing')) on conflict(idempotency_key) do nothing returning id`;
     queued+=result.length;
   }
   return {queued};

@@ -1,8 +1,41 @@
 .panel {
   min-width: 0;
   overflow-wrap: anywhere;
-  background: var(--surface, white);
+  background: var(--panel);
+  color: var(--ink);
+  gap: 16px;
 }
+.panel summary {cursor:pointer;font-weight:500;padding:8px 0;}
+.panel button:focus-visible,.panel a:focus-visible,.panel summary:focus-visible {outline:2px solid var(--green);outline-offset:3px;}
+.panel code {display:block;white-space:pre-wrap;font-size:11px;max-height:160px;overflow:auto;}
+.overview {border-left:3px solid var(--green);background:var(--green-soft);padding:12px 14px;display:grid;gap:6px;}
+.overview[data-tone="warning"] {border-color:var(--amber);background:var(--amber-soft);}
+.overview strong {font-size:16px;font-weight:600;}
+.actions {display:flex;align-items:center;flex-wrap:wrap;gap:12px;}
+.actions span,.meta {font-size:12px!important;color:var(--muted);}
+.platformHead {display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;}
+.badge {border-radius:4px;padding:3px 7px;background:var(--bg);font-size:12px!important;}
+.jobs>li[data-state="succeeded"] .badge {background:var(--green-soft);color:var(--green);}
+.jobs>li[data-state="failed"] .badge {background:var(--red-soft);color:var(--red);}
+.jobs>li[data-state="processing"] .badge {background:var(--blue-soft);color:var(--blue);}
+.jobs a {font-size:12px;color:var(--blue);}
+.jobs button {width:100%;white-space:normal;height:auto;min-height:36px;}
+.steps {list-style:none;display:flex;flex-wrap:wrap;gap:6px;margin:4px 0;padding:0;}
+.steps li {font-size:11px;color:var(--muted);}
+.steps li[data-current="true"] {color:var(--green);font-weight:600;text-decoration:underline;text-underline-offset:4px;}
+.history {display:grid;gap:0;}
+.history>strong {font-size:15px;font-weight:600;margin-bottom:8px;}
+.run {border-top:1px solid var(--line);padding:6px 0;}
+.run summary>span,.run summary>small {display:block;}
+.run summary>small {color:var(--muted);font-weight:400;font-size:12px;margin:6px 0;}
+.runJobs {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:8px 0;}
+.runJobs>div {display:grid;gap:5px;font-size:13px;}
+.runJobs small {color:var(--muted);font-size:11px;}
+.changes {max-height:380px;overflow:auto;border-block:1px solid var(--line);}
+.changes>div {padding:10px 0;border-bottom:1px solid var(--line);display:grid;gap:4px;}
+.changes strong {font-size:13px;font-weight:500;}
+.changes>div>span,.changes small {font-size:11px;color:var(--muted);}
+.settings {display:grid;gap:12px;padding:10px 0;}
 
 .panel p {
   margin: 0;
@@ -35,7 +68,7 @@
   list-style: none;
   border-block: 1px solid var(--border, #e5e7eb);
 }
-.jobs li { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.jobs>li { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .jobs strong { font-size: 14px; font-weight: 600; }
 .jobs span { font-size: 13px; }
 .jobs small { font-size: 12px; color: var(--muted, #64748b); }
@@ -43,4 +76,7 @@
 @media (max-width: 600px) {
   .jobs { grid-template-columns: minmax(0, 1fr); }
   .fields { grid-template-columns: minmax(0, 1fr); }
+  .jobs>li+li {border-top:1px solid var(--line);padding-top:12px;}
+  .runJobs {grid-template-columns:minmax(0,1fr);}
+  .actions button {width:100%;}
 }

@@ -13,7 +13,7 @@ type OsTranslationContextValue = {
 
 const languageStorageKey = "foundr1-os-language";
 const languagePreferenceStorageKey = "foundr1-os-language-preference";
-const localeCacheVersion = "20260908-os-i18n-v51";
+const localeCacheVersion = "20260909-menu-sync-v52";
 const languageMeta: Record<OsLanguage, { htmlLang: string }> = {
   ja: { htmlLang: "ja" },
   "zh-Hans": { htmlLang: "zh-Hans" },

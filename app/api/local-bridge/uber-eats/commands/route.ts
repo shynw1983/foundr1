@@ -1,4 +1,5 @@
 import { sql } from "../../../../../lib/db";
+import { menuSyncIssue } from "../../../../../lib/menu-sync-status";
 import { mergePlatformSnapshotEntries } from "../../../../../lib/menu-platform-snapshot-merge";
 import { ingestUberMenuSource } from "../../../../../lib/uber-menu-source-sync";
 import { publishPublicMenuUpdatedEvent } from "../../../../../lib/order-realtime";
@@ -723,6 +724,8 @@ export async function POST(request: Request) {
     }
   }
 
+  const stopAuthorityRetry = (commandPayload.authoritativePublication===true||commandPayload.authoritativeSource===true)
+    && menuSyncIssue(error)?.kind!=='network';
   const rows = status === "succeeded" ? await sql`
     update local_bridge_commands
     set
@@ -744,19 +747,19 @@ export async function POST(request: Request) {
     update local_bridge_commands
     set
       status = case
-        when command_type in ('mark_order_ready', 'set_inventory_availability')
+        when ${stopAuthorityRetry} or command_type in ('mark_order_ready', 'set_inventory_availability')
           or (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3)
           or attempts >= 5 then 'failed'
         else 'pending'
       end,
-      available_at = now() + interval '15 seconds',
+      available_at = now() + (case when ${commandPayload.authoritativePublication===true||commandPayload.authoritativeSource===true} then least(120,15*power(2,greatest(0,attempts-1))) else 15 end) * interval '1 second',
       result = ${JSON.stringify(result)}::jsonb,
       last_error = ${error || "Bridge command failed."},
       claimed_by_device_id = null,
       claimed_at = null,
       claim_expires_at = null,
       completed_at = case
-        when command_type in ('mark_order_ready', 'set_inventory_availability')
+        when ${stopAuthorityRetry} or command_type in ('mark_order_ready', 'set_inventory_availability')
           or (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3)
           or attempts >= 5 then now()
         else null
