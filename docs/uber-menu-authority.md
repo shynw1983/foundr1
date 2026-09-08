@@ -456,7 +456,8 @@ publication look successful.
 3. A revision lock rejects concurrent or stale writers; command IDs make retries
    idempotent. Two complete observations at least 60 seconds apart are needed for
    retirement. Legacy mapped objects missing before first import are included.
-4. `/api/cron/uber-menu-sync` schedules enabled sources every ten minutes. It requires
+4. `/api/cron/uber-menu-sync` schedules enabled sources once daily at 12:00 Asia/Tokyo
+   (03:00 UTC, `0 3 * * *`). Manual scans remain available between scheduled runs. It requires
    `CRON_SECRET`. `/api/menus/uber-source` exposes status, explicit scans and OS base
    price modes for owner/manager sessions. The OS menu screen has a dedicated panel.
 5. Source ownership guards block the ordinary OS content-edit/publish path once

@@ -68,7 +68,7 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
       <p>{t('Rocket Now は Uber 実価格、出前館は OS 基準価格。新規作成は非公開。メニュー同期では販売を再開しません。')}</p>
       <p>{t('画像は読み取りのみです。画像の登録・変更・削除は各配達サービスの管理画面で行ってください。')}</p>
       <p>{t('最終読み取り')}：{source.last_checked_at?dateLabel(source.last_checked_at):t('未実行')} / {t('取込版')}：{source.revision}</p>
-      <p>{t('Uber は10分ごとに確認します。この画面の状態は5秒ごとに更新します。')}</p>
+      <p>{t('Uber は毎日12:00（日本時間）に自動確認します。随時、手動で読み取れます。この画面の状態は5秒ごとに更新します。')}</p>
       {source.last_error&&<p role="alert">{source.last_error}</p>}
       <button type="button" className="primary-button compact-button" disabled={busy||!source.enabled} onClick={()=>void submit('scan')}>{t('Uber から今すぐ読み取る')}</button>
       <ul className={styles.jobs} aria-live="polite">{['uber_eats','rocket_now','demae_can'].map(platform=>{
