@@ -1,5 +1,37 @@
 # Uber-authoritative menu synchronization
 
+## Production activation — 2026-09-08
+
+Runtime commit `e80c920b` is READY on `https://foundr1.vercel.app`; the public
+version endpoint independently confirmed it. Desktop Bridge was restarted while
+idle and is running as PID 83198. The Webpack production build, TypeScript check,
+171 Bridge/publication tests and 26 focused authority/identity/publication tests
+passed (the latter include overlapping publication tests, not 197 unique tests).
+
+`enabled=true` and `auto_publish=true` were activated after checking both saved
+revision-1 native verification snapshots and backing up the old flags/config in
+`menu_platform_snapshots`, rule `authority-activation-e80c920`. Cron checks every
+10 minutes; a source scan cannot overlap pending/processing source-owned jobs.
+
+The first real worker cycle imported Uber successfully as revision 2 with no
+new/moved objects. It archived the owner-approved obsolete extreme-wide noodle
+change record. Rocket's real publication command
+`4f5032c6-c6b6-4588-9174-6dcf2cd30010` succeeded with 278 observations, including
+the archived object and the rice cake's two physical occurrences. Demae command
+`e2a27a02-200d-4c03-ac92-0bc601e952cf` succeeded at 2026-09-08T10:53:49.307Z
+with 277 observations, including the archived object and the still-quarantined
+quail acknowledgement. Both production publications completed on attempt 1
+with no task error. This completes the first real Uber → OS → downstream cycle.
+
+The fresh Demae manual verification interruption below was caused by concurrent
+store inventory work navigating its browser. The production worker executes
+these operations serially. Do not run separate mutating acceptance scripts
+alongside active store inventory commands.
+
+Runtime log inspection found a Node dependency deprecation warning, not a menu
+sync failure. Log drain configuration was not inspected. Production command
+results and source state, rather than older notes below, determine live status.
+
 ## Lifecycle and native ordering fixes — 2026-09-08
 
 - The obsolete rice-cake mappings were backed up and removed after native
