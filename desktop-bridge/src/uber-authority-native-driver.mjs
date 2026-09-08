@@ -142,17 +142,26 @@ export class AuthorityNativeDriver {
     if(id)return {externalId:parentId?`sub_checkbox_${parentId}_${id}`:String(id),externalParentId:parentId};
     return undefined;
   }
+  rocketQuantityLimits(target) {
+    const count=this.children(target).length;
+    const sourceMax=target.source.max??-1;
+    // Native adaptation only caps the number of choices. It must not
+    // preserve an accidentally single-choice group or disabled quantities.
+    const max=this.payload.selectionPolicy==='preserve_native'&&sourceMax!==-1
+      ?Math.min(sourceMax,count):sourceMax;
+    return {min:target.source.min,max:count===0&&target.source.min===0?0:max,
+      isMultiSelect:count>0&&(sourceMax===-1||sourceMax>1)};
+  }
   quantityMatches(target,row) {
     if(target.kind!=='option_group'||target.source?.min===undefined)return true;
-    if(this.payload.selectionPolicy==='preserve_native')return true;
     if(this.platform==='demae_can')return this.payload.selectionPolicy==='preserve_native';
-    const max=target.source.max??-1;
+    const limits=this.rocketQuantityLimits(target),max=limits.max;
     // Rocket normalizes an empty optional group to 0/0. With no source
     // choices this is equivalent, but never accept it for a populated group.
     if(target.source.min===0&&this.children(target).length===0&&row.childIds?.length===0)
       return row.native?.minSelect===0&&row.native?.maxSelect===0&&row.native?.isMandatory===false;
     return row.native?.minSelect===target.source.min&&row.native?.maxSelect===max
-      &&row.native?.isMultiSelect===(max===-1||max>1);
+      &&row.native?.isMultiSelect===limits.isMultiSelect;
   }
   matches(target,rows,id) {
     const parent=this.payload.targets.find(row=>row.targetId===target.parentId);
@@ -429,8 +438,7 @@ export class AuthorityNativeDriver {
         const rows=await this.snapshot({itemDetails:false});
         const actual=rows.find(row=>row.kind==='option_group'&&row.id===id);
         if(!actual||!equalIds([...actual.childIds].sort(),[...expected].sort()))throw Error(`uber_authority_relationship_drift:${target.sourceKey}`);
-        const emptyOptional=expected.length===0&&target.source?.min===0;
-        const limits=this.payload.selectionPolicy!=='preserve_native'&&target.source?.min!==undefined?{min:target.source.min,max:emptyOptional?0:target.source.max??-1,isMultiSelect:!emptyOptional&&(target.source.max==null||target.source.max===-1||target.source.max>1)}:{};
+        const limits=target.source?.min!==undefined?this.rocketQuantityLimits(target):{};
         // Apply quantities after creating and moving all children. Empty
         // freshly-created native groups cannot retain a positive maximum.
         if(!equalIds(actual.childIds,expected)||!this.quantityMatches(target,actual))await this.client.updateGroup(id,{memberIds:expected,...limits});

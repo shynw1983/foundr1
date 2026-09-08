@@ -140,14 +140,23 @@ test('matching quantity limits cannot conceal a single-select native group',()=>
  assert.equal(driver.quantityMatches(target,{native:{minSelect:0,maxSelect:2,isMultiSelect:false}}),false);
  assert.equal(driver.quantityMatches(target,{native:{minSelect:0,maxSelect:2,isMultiSelect:true}}),true);
 });
-test('approved Rocket native quantity policy does not overwrite limits when sorting',async()=>{
+test('Rocket native adaptation repairs fixed-one quantities instead of skipping verification',async()=>{
  const {payload,driver,rows}=fixture();payload.selectionPolicy='preserve_native';
  const group=payload.targets[1];group.source={min:0,max:50};
  rows[1].native={minSelect:0,maxSelect:1,isMultiSelect:false};
- assert.equal(driver.quantityMatches(group,rows[1]),true);
- let writes=0;driver.client.updateGroup=async()=>writes++;
- await driver.updateRelationships(group);assert.equal(writes,0);
+ assert.equal(driver.quantityMatches(group,rows[1]),false);
+ let patch;driver.client.updateGroup=async(id,value)=>{patch=value;};
+ await driver.updateRelationships(group);assert.deepEqual(patch,{memberIds:['3'],min:0,max:1,isMultiSelect:true});
+ rows[1].native.isMultiSelect=true;assert.equal(driver.quantityMatches(group,rows[1]),true);
  payload.selectionPolicy='strict';assert.equal(driver.quantityMatches(group,rows[1]),false);
+});
+test('Rocket caps 50 to 13 available choices and still enables repeated quantities',()=>{
+ const {payload,driver}=fixture();payload.selectionPolicy='preserve_native';
+ driver.children=()=>Array.from({length:13},()=>({}));
+ const group={kind:'option_group',source:{min:0,max:50}};
+ assert.deepEqual(driver.rocketQuantityLimits(group),{min:0,max:13,isMultiSelect:true});
+ assert.equal(driver.quantityMatches(group,{native:{minSelect:0,maxSelect:1,isMultiSelect:false}}),false);
+ assert.equal(driver.quantityMatches(group,{native:{minSelect:0,maxSelect:13,isMultiSelect:true}}),true);
 });
 
 test('Demae permits only identified additions to a verified private draft carrier',async()=>{
