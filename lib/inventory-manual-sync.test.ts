@@ -7,7 +7,7 @@ import {validateUberAvailability} from './inventory-authority-policy.ts';
 
 const target={kind:'option',targetId:'00000000-0000-4000-8000-000000000001',brandId:'00000000-0000-4000-8000-000000000002',label:'配料',aliases:[],knownExternalIds:['uber-option']};
 const result={targetCount:1,items:[{kind:'option',targetId:target.targetId,found:true,isAvailable:false,status:'sold_out'}]};
-function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_confirmation',expired=false,changed=false}={}) {
+function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_confirmation',expired=false,changed=false,quarantined=false}={}) {
   const transactions:Array<Array<{text:string;values:unknown[]}>>=[];
   let wakes=0;
   let sequence=0;
@@ -19,6 +19,7 @@ function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_co
     if(text.includes('select id from local_bridge_commands'))rows=busy?[{id:'busy'}]:[];
     if(text.includes('select 1 from store_sales_sources'))rows=[{}];
     if(text.includes('select distinct source_platform'))rows=[{platform:'rocket_now'},{platform:'demae_can'}];
+    if(text.includes('jsonb_each(s.publish_config)') && quarantined)rows=[{platform:'demae_can',kind:target.kind,targetId:target.targetId}];
     return {text,values,then:(resolve:(v:unknown[])=>void)=>Promise.resolve(rows).then(resolve)};
   },{transaction:async(queries:Array<{text:string;values:unknown[]}>)=>{transactions.push(queries);return [];}});
   const mappings=new Map([['uber_eats:option:'+target.targetId,['uber-option']],['rocket_now:option:'+target.targetId,['rocket-option']],
@@ -35,6 +36,13 @@ function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_co
     {exports,require:(name:string)=>{if(!(name in modules))throw Error(name);return modules[name];}});
   return {exports,transactions,wakes:()=>wakes};
 }
+test('quarantined menu targets stay excluded from inventory publication',async()=>{
+  const h=harness({missingDemae:true,quarantined:true});
+  await h.exports.applyUberAvailabilitySync('store',{fullSyncRunId:'run',targets:[target]},result,true);
+  const commands=h.transactions[0].filter(q=>q.text.includes('insert into local_bridge_commands'));
+  assert.equal(commands.length,1);
+  assert.equal(commands[0].values[2],'rocket_now');
+});
 test('manual start queues only a fresh Uber read, never OS availability or destination writes',async()=>{
   const h=harness();await h.exports.startUberAvailabilitySync('store',[target],'operator');
   assert.equal(h.transactions.length,1);

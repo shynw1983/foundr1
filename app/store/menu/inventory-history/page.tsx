@@ -24,7 +24,7 @@ type InventoryReport = {
   source: string;
   actorName: string;
   createdAt: string;
-  status: "succeeded" | "processing" | "failed" | "awaiting_confirmation";
+  status: "succeeded" | "processing" | "failed" | "awaiting_confirmation" | "expired";
   details: Record<string, unknown>;
   platforms: PlatformReport[];
   failedCommands: Array<{
@@ -307,7 +307,7 @@ export default function InventoryHistoryPage() {
           {error ? <div className="inline-alert" role="alert">{error}</div> : null}
           {!loading && !error && !reports.length ? <p className="empty-state" data-i18n-ignore>{labels.empty}</p> : null}
           {reports.map((report) => {
-            const stateLabel = report.status==='awaiting_confirmation' ? (language==='ja'?'確認待ち（未適用）':language==='zh-Hant'?'等待確認（未套用）':'等待确认（未应用）') : labels[report.status];
+            const stateLabel = report.status==='expired' ? (language==='ja'?'期限切れ（未適用）':language==='zh-Hant'?'已過期（未套用）':'已过期（未应用）') : report.status==='awaiting_confirmation' ? (language==='ja'?'確認待ち（未適用）':language==='zh-Hant'?'等待確認（未套用）':'等待确认（未应用）') : labels[report.status];
             const expanded = expandedReports.has(report.id);
             return (
               <article className="store-inventory-history-row" key={report.id}>
@@ -323,10 +323,11 @@ export default function InventoryHistoryPage() {
                   {report.platforms.map((platform) => {
                     const failed = platform.failed + platform.timedOut;
                     const pending = platform.processing + platform.queued;
+                    const unapplied = platform.platform === 'foundr1' && ['expired','awaiting_confirmation'].includes(report.status);
                     return (
                       <span className={failed ? "is-failed" : pending ? "is-processing" : "is-succeeded"} key={platform.platform}>
                         <strong>{platformName(platform.platform, language)}</strong>
-                        <small>{failed ? `${labels.failureCount} ${failed}/${platform.total}` : pending ? `${labels.pendingCount} ${pending}/${platform.total}` : `${labels.successCount} ${platform.succeeded}/${platform.total}`}</small>
+                        <small>{unapplied ? (language==='ja'?'未適用':language==='zh-Hant'?'未套用':'未应用') : failed ? `${labels.failureCount} ${failed}/${platform.total}` : pending ? `${labels.pendingCount} ${pending}/${platform.total}` : `${labels.successCount} ${platform.succeeded}/${platform.total}`}</small>
                       </span>
                     );
                   })}

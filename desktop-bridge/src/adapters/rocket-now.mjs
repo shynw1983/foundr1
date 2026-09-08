@@ -436,6 +436,13 @@ export class RocketNowAdapter {
   }
 
   async locateTargets(targets) {
+    if (targets.some(t => t.kind === 'item') && targets.some(t => t.kind === 'option')) {
+      const rows = [];
+      // Rocket has separate pages for dishes and options. Never look up options
+      // on the dish page when a whole-store batch crosses the kind boundary.
+      for (const kind of ['item', 'option']) rows.push(...await this.locateTargets(targets.filter(t => t.kind === kind)));
+      return rows;
+    }
     const targetKind = targets.every((target) => target.kind === "option") ? "option" : "item";
     const page = await this.session.goto(this.inventoryUrl(targetKind));
     await selectInventoryTab(page, targetKind);
@@ -443,6 +450,15 @@ export class RocketNowAdapter {
   }
 
   async setInventory(payload, located) {
+    if (located.some(t => t.kind === 'item') && located.some(t => t.kind === 'option')) {
+      let changed = 0;
+      for (const kind of ['item', 'option']) {
+        const group = located.filter(t => t.kind === kind);
+        const result = await this.setInventory({...payload, targets: group}, group);
+        changed += result.changed ?? 0;
+      }
+      return {outcome: 'applied', changed, desiredHidden: payload.isAvailable !== true};
+    }
     const targetKind = located.every((item) => item.kind === "option") ? "option" : "item";
     const page = await this.session.goto(this.inventoryUrl(targetKind));
     await selectInventoryTab(page, targetKind);

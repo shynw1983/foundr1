@@ -84,13 +84,19 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
       from menu_platform_target_settings s join menu_external_platforms p on p.id=s.external_platform_id
       join store_brands b on b.brand_id=s.brand_id and b.store_id=${storeId}
       where s.is_enabled=false and (s.store_id is null or s.store_id=${storeId})`;
+    const authorityExclusions = await sql`select config.key as platform, o.kind, o.target_id::text as "targetId"
+      from menu_uber_sources s join menu_uber_objects o on o.source_id=s.id
+      cross join lateral jsonb_each(s.publish_config) config
+      where s.enabled=true and s.store_id=${storeId} and o.archived=false
+        and (coalesce(config.value->'quarantinedSourceKeys','[]'::jsonb) ? o.source_key
+          or coalesce(config.value->'excludedSourceKeys','[]'::jsonb) ? o.source_key)`;
     const enabled = await sql`select distinct source_platform as platform from store_sales_sources
       where store_id=${storeId} and is_enabled=true and source_platform in ('rocket_now','demae_can')`;
     const commands: Array<{id:string;platform:string;payload:Record<string,unknown>;error?:string}> = [];
     const excluded: Array<{platform:string;label:string;reason:string}> = [];
     for (const {platform} of enabled) {
       const platformTargets=audited.filter(t=>{
-        if(t.label.includes('こちら商品ではありません') || disabledRows.some(d=>d.platform===platform&&d.kind===t.kind&&d.targetId===t.targetId)) {
+        if(t.label.includes('こちら商品ではありません') || [...disabledRows, ...authorityExclusions].some(d=>d.platform===platform&&d.kind===t.kind&&d.targetId===t.targetId)) {
           excluded.push({platform:String(platform),label:t.label,reason:'excluded_from_platform'});return false;
         }
         return true;

@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { inventoryPreviewExpired } from "../../../../lib/inventory-preview";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const runtime = "nodejs";
@@ -162,7 +163,7 @@ export async function GET(request: Request) {
     }
     const platforms = [...platformMap.values()];
     const details = run.details as Record<string, unknown>;
-    const status = details.phase === 'awaiting_confirmation' ? 'awaiting_confirmation'
+    const status = details.phase === 'awaiting_confirmation' ? (inventoryPreviewExpired(String(details.previewAt ?? ''), Date.now()) ? 'expired' : 'awaiting_confirmation')
       : details.phase === "failed_to_queue" || platforms.some((platform) => platform.failed || platform.timedOut)
       ? "failed"
       : platforms.some((platform) => platform.processing || platform.queued)
