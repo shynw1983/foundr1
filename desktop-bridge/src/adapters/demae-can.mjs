@@ -342,7 +342,7 @@ export class DemaeCanAdapter {
         const releaseCache=new Map();
         for(const row of result.items.filter(r=>r.status==='staged')) {
           const scopes=payload.demaeStaging.filter(s=>s.targets.some(t=>t.kind===row.kind&&t.targetId===row.targetId));
-          try {if(scopes.length!==1)throw Error('上架先が特定できません');row.releasePlan=await planDemaeRelease(transport,scopes[0],row,releaseCache);}
+          try {if(scopes.length!==1)throw Error('公開先が特定できません');row.releasePlan=await planDemaeRelease(transport,scopes[0],row,releaseCache);}
           catch(error){row.releaseError=String(error.message);}
         }
       }

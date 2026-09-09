@@ -62,7 +62,7 @@ export async function releaseDemaeInventory(transport,payload,storeId,onProgress
   const scopes=(payload.demaeStaging??[]).filter(s=>s.storeId===storeId&&s.targets.some(t=>t.kind===target.kind&&t.targetId===target.targetId));
   if(scopes.length!==1)throw Error('demae_release_scope_mismatch');
   const scope=scopes[0],plan=await planDemaeRelease(transport,scope,target,cache);
-  if(JSON.stringify(plan)!==JSON.stringify(target.releasePlan))throw Error('上架先がプレビュー後に変わりました。再読み取りしてください');
+  if(JSON.stringify(plan)!==JSON.stringify(target.releasePlan))throw Error('公開先がプレビュー後に変わりました。再読み取りしてください');
   const client=new DemaeMenuClient(transport,scope.merchantId,scope.menuPatternCode,scope);
   const stock=await client.stockState(target.kind,plan.id);
   if(!stock.listed) {
@@ -88,7 +88,7 @@ export async function releaseDemaeInventory(transport,payload,storeId,onProgress
    for(const id of plan.groups) {const g=await client.group(id);groupLinks.push({chainId:Number(client.chainId),optionGroupCode:id,optionGroupName:g.detail.optionGroupName,dispOrder:groupLinks.length+1});}
    await client.updateItem(plan.id,{categoryLinks:[{categoryCode:plan.category}],groupLinks,allowCategoryMove:true,releaseAvailable:true});
   }
-  if(!(await client.stockState(plan.kind,plan.id)).listed)throw Error('新品の上架結果を確認できません。再読み取りしてください');
+  if(!(await client.stockState(plan.kind,plan.id)).listed)throw Error('新品の公開結果を確認できません。再読み取りしてください');
   completed++;await onProgress({phase:'applying',targetName:label,action:'release_verified',completed,total:tasks.length});
  }
  return tasks.length;
