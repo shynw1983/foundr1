@@ -6,6 +6,7 @@ import {publishNativeAuthority} from '../uber-authority-publisher.mjs';
 import {validateAuthorityCommand} from '../uber-authority-runner.mjs';
 import {connectMerchantMenuClient} from '../merchant-menu-client.mjs';
 import {auditDestination} from '../inventory-destination-audit.mjs';
+import {verifyDemaeInventoryStaging} from '../demae-inventory-staging.mjs';
 
 const STOCKOUT_URL = "https://partner.demae-can.com/merchant-admin/shop/stockout";
 const LOGIN_FAILURE_COOLDOWN_MS = 30 * 60 * 1000;
@@ -331,7 +332,15 @@ async function submitInventoryActionForm(page, formSelector) {
 }
 
 export class DemaeCanAdapter {
-  auditInventory(payload) { return auditDestination(this,payload,'demae_can'); }
+  async auditInventory(payload) {
+    const result=await auditDestination(this,payload,'demae_can');
+    if(payload.demaeStaging?.length&&result.items.some(row=>!row.found)) {
+      const transport=await connectMerchantMenuClient(this.session,'https://partner.demae-can.com','MSA0000');
+      try {await verifyDemaeInventoryStaging(transport,payload,result.items,this.session.config.storeId);}
+      finally {transport.close();}
+    }
+    return {...result,capturedAt:new Date().toISOString()};
+  }
   constructor(session, config = {}, credentialLoader = loadDemaeCredentials) {
     this.session = session;
     this.config = config;

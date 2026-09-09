@@ -86,6 +86,8 @@ export function WholeStoreAvailabilitySync({storeId,language,disabled,onApplied}
     <p>{label('全ブランドが対象です。読取のみでは販売状態は変わりません。プレビューは10分間有効です。','范围为本店全部品牌。只读取不会修改销售状态；预览有效期为 10 分钟。','範圍為本店全部品牌。只讀取不會修改銷售狀態；預覽有效期為 10 分鐘。')}</p>
     {report&&!report.details.osApplied&&!!report.reads?.length&&<InventoryReadProgress
       reads={report.reads} language={language} counts={report.details.comparison?.counts??{}}
+      confirmedByPlatform={Object.fromEntries((report.details.comparison?.platforms??[]).map(p=>[p,report.details.comparison?.rows.filter(r=>['available','sold_out'].includes(r.cells[p]?.state)).length??0]))}
+      stagedByPlatform={Object.fromEntries((report.details.comparison?.platforms??[]).map(p=>[p,report.details.comparison?.rows.filter(r=>r.cells[p]?.state==='staged').length??0]))}
       unknownByPlatform={Object.fromEntries((report.details.comparison?.platforms??[]).map(p=>[p,report.details.comparison?.rows.filter(r=>r.cells[p]?.state==='unknown').length??0]))}
       onRetry={id=>void retryRead(id)} disabled={disabled||busy||report.reads.some(r=>['queued','pending','processing'].includes(r.status))||Boolean(report.details.previewAt&&expired)}
     />}

@@ -16,3 +16,10 @@ test('quarantine is explicit and cannot be unhidden',()=>{
  const result=buildInventoryComparison({...details,comparisonExclusions:[{platform:'rocket_now',kind:'option',targetId:'1'}]},[]);
  assert.equal(result.rows[0].cells.rocket_now.state,'excluded');assert.deepEqual(result.rows[0].changes,[]);
 });
+test('only freshly verified Demae drafts are nonblocking and never a stock difference',()=>{
+ const draft={...command,platform:'demae_can',result:{items:[{kind:'option',targetId:'1',found:true,isAvailable:null,status:'staged',stagingVerified:true}]}};
+ const d={...details,comparisonPlatforms:['demae_can']};
+ const result=buildInventoryComparison(d,[draft]);
+ assert.equal(result.ready,true);assert.equal(result.unknown,0);assert.equal(result.rows[0].cells.demae_can.state,'staged');assert.deepEqual(result.rows[0].changes,[]);
+ for(const bad of [{...draft,status:'failed'},{...draft,result:{items:[{...draft.result.items[0],stagingVerified:false}]}},{...draft,result:{items:[...draft.result.items,...draft.result.items]}}])assert.equal(buildInventoryComparison(d,[bad]).ready,false);
+});

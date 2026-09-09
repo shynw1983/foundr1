@@ -1,5 +1,18 @@
 import { sql } from "./db";
 
+// Hints identify what to re-read, not proof of current publication state.
+export async function loadDemaeStagingHints(storeId:string) {
+  const rows=await sql`select distinct on (payload->>'sourceId') payload,result from local_bridge_commands where store_id=${storeId} and platform='demae_can' and status='succeeded' and payload->>'authoritativePublication'='true' order by payload->>'sourceId',created_at desc`;
+  return rows.map(row=>{
+    const p=row.payload as Record<string,unknown>;
+    const observations=(row.result?.observations??[]) as Array<Record<string,unknown>>;
+    const targets=(p.targets??[]) as Array<Record<string,unknown>>;
+    return {storeId,merchantId:p.merchantId,menuPatternCode:p.menuPatternCode,draftPatternCode:p.draftPatternCode,draftCarrierItemCode:p.draftCarrierItemCode,
+      targets:targets.filter(t=>!t.archived&&!t.quarantined&&['item','option'].includes(String(t.kind))&&observations.some(o=>o.sourceKey===t.sourceKey&&o.exists===true&&o.hidden===true&&o.placement==='staged'))
+        .map(t=>({kind:t.kind,targetId:t.targetId,marker:t.marker,mappings:t.mappings}))};
+  });
+}
+
 type InventoryMappingTarget = {
   kind: "item" | "option";
   targetId: string;

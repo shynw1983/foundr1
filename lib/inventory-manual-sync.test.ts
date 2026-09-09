@@ -8,7 +8,7 @@ import {buildInventoryComparison} from './inventory-comparison.ts';
 
 const target={kind:'option',targetId:'00000000-0000-4000-8000-000000000001',brandId:'00000000-0000-4000-8000-000000000002',label:'配料',aliases:[],knownExternalIds:['uber-option']};
 const result={targetCount:1,items:[{kind:'option',targetId:target.targetId,found:true,isAvailable:false,status:'sold_out'}]};
-function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_confirmation',expired=false,changed=false,quarantined=false}={}) {
+function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_confirmation',expired=false,changed=false,quarantined=false,staged=false}={}) {
   const transactions:Array<Array<{text:string;values:unknown[]}>>=[];
   let wakes=0;
   let sequence=0;
@@ -18,6 +18,7 @@ function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_co
     if(text.includes('select details'))rows=[{details:{osApplied:applied,targetCount:1,phase,comparisonVersion:1,comparisonPlatforms:['rocket_now','demae_can'],comparisonExclusions:quarantined?[{platform:'demae_can',kind:target.kind,targetId:target.targetId}]:[],preview:[{...target,isAvailable:false,wasAvailable:true}],previewAt:new Date(Date.now()-(expired?660000:0)).toISOString()}}];
     if(text.includes("payload->>'comparisonAudit'='true'"))rows=['rocket_now','demae_can'].map(platform=>({platform,status:'succeeded',payload:{comparisonAudit:true,targets:platform==='demae_can'&&missingDemae?[]:[{...target,knownExternalIds:[platform==='rocket_now'?'rocket-option':'demae-option']}]},result:{items:[{kind:target.kind,targetId:target.targetId,found:true,isAvailable:true,status:'available'}]}}));
     if(text.includes('select 1 where exists'))rows=changed?[{}]:[];
+    if(staged&&text.includes("payload->>'comparisonAudit'='true'"))for(const row of rows as any[])if(row.platform==='demae_can')row.result.items=[{kind:target.kind,targetId:target.targetId,found:true,isAvailable:null,status:'staged',stagingVerified:true}];
     if(text.includes('select id from local_bridge_commands'))rows=busy?[{id:'busy'}]:[];
     if(text.includes('select 1 from store_sales_sources'))rows=[{}];
     if(text.includes('select distinct source_platform'))rows=[{platform:'rocket_now'},{platform:'demae_can'}];
@@ -28,7 +29,7 @@ function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_co
     ...(!missingDemae?[['demae_can:option:'+target.targetId,['demae-option']] as [string,string[]]]:[])]);
   const modules:Record<string,unknown>={
     'node:crypto':{randomUUID:()=>`uuid-${++sequence}`},'./db':{sql},
-    './inventory-platform-object-mappings':{loadInventoryPlatformExternalIdMap:async()=>mappings,inventoryPlatformExternalIds:(map:Map<string,string[]>,platform:string,t:typeof target)=>map.get(`${platform}:${t.kind}:${t.targetId}`)??[]},
+    './inventory-platform-object-mappings':{loadDemaeStagingHints:async()=>[],loadInventoryPlatformExternalIdMap:async()=>mappings,inventoryPlatformExternalIds:(map:Map<string,string[]>,platform:string,t:typeof target)=>map.get(`${platform}:${t.kind}:${t.targetId}`)??[]},
     './inventory-operation-lock':{withInventoryOperationLock:async(_store:string,fn:()=>Promise<unknown>)=>fn(),assertNoWholeStoreSync:async()=>{}},
     './inventory-authority-policy':{validateUberAvailability},
     './inventory-comparison':{buildInventoryComparison},
@@ -71,6 +72,14 @@ test('complete read atomically commits OS, permanent downstream commands and rec
 test('unknown destination state blocks confirmation before any writes',async()=>{
   const h=harness({missingDemae:true});await assert.rejects(h.exports.applyUberAvailabilitySync('store',{fullSyncRunId:'run',targets:[target]},result,true));
   assert.equal(h.transactions.length,0);
+});
+test('verified draft is skipped while OS and another platform differences are applied',async()=>{
+ const h=harness({staged:true});
+ await h.exports.applyUberAvailabilitySync('store',{fullSyncRunId:'run',targets:[target]},result,true);
+ const commands=h.transactions[0].filter(q=>q.text.includes('insert into local_bridge_commands'));
+ assert.equal(commands.length,1);assert.equal(commands[0].values[2],'rocket_now');
+ assert.ok(h.transactions[0].some(q=>q.text.includes('insert into menu_option_store_settings')));
+ assert.ok(JSON.stringify(h.transactions).includes('verified_unpublished_draft'));
 });
 
 test('successful Uber read waits for human confirmation without OS writes or destination commands',async()=>{

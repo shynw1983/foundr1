@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "./db";
-import { inventoryPlatformExternalIds, loadInventoryPlatformExternalIdMap } from "./inventory-platform-object-mappings";
+import { inventoryPlatformExternalIds, loadInventoryPlatformExternalIdMap,loadDemaeStagingHints } from "./inventory-platform-object-mappings";
 import { assertNoWholeStoreSync, withInventoryOperationLock } from "./inventory-operation-lock";
 import { validateUberAvailability, type AuditTarget } from "./inventory-authority-policy";
 import { publishBridgeCommandAvailable } from "./local-bridge-realtime";
@@ -38,6 +38,7 @@ export async function startUberAvailabilitySync(storeId: string, targets: Omit<A
     const comparisonPlatforms=destinations.map(p=>String(p.platform));
     const comparisonExcluded=comparisonPlatforms.flatMap(platform=>auditTargets.filter(t=>t.label.includes('こちら商品ではありません')||policy.some(p=>p.platform===platform&&p.kind===t.kind&&p.targetId===t.targetId)).map(t=>({platform,kind:t.kind,targetId:t.targetId})));
     const destinationCommands=comparisonPlatforms.map(platform=>({platform,targets:auditTargets.filter(t=>!comparisonExcluded.some(e=>e.platform===platform&&e.kind===t.kind&&e.targetId===t.targetId)).map(t=>({...t,knownExternalIds:inventoryPlatformExternalIds(mappings,platform,t)})).filter(t=>t.knownExternalIds.length)}));
+    const demaeStaging=comparisonPlatforms.includes('demae_can')?await loadDemaeStagingHints(storeId):[];
     await sql.transaction([
       sql`insert into menu_inventory_sync_runs (id,store_id,run_type,action,item_label,inventory_key,source,requested_by,details)
         values (${runId},${storeId},'full_sync','full_sync','Uber 基準の全店手動同期',${`full-sync:${runId}`},'store',${requestedBy},
@@ -46,7 +47,7 @@ export async function startUberAvailabilitySync(storeId: string, targets: Omit<A
         values (${commandId},${storeId},'uber_eats','audit_inventory',${`uber-full-sync:${runId}`},
           ${JSON.stringify({availabilityAuthority:'uber_eats',fullSyncRunId:runId,targets:auditTargets})}::jsonb)`,
       ...destinationCommands.map(c=>sql`insert into local_bridge_commands (id,store_id,platform,command_type,idempotency_key,payload)
-        values (${randomUUID()},${storeId},${c.platform},'audit_inventory',${`comparison:${runId}:${c.platform}`},${JSON.stringify({availabilityAuthority:'uber_eats',comparisonAudit:true,fullSyncRunId:runId,targets:c.targets})}::jsonb)`)
+        values (${randomUUID()},${storeId},${c.platform},'audit_inventory',${`comparison:${runId}:${c.platform}`},${JSON.stringify({availabilityAuthority:'uber_eats',comparisonAudit:true,fullSyncRunId:runId,targets:c.targets,...(c.platform==='demae_can'?{demaeStaging}:{})})}::jsonb)`)
     ]);
     await publishBridgeCommandAvailable(storeId).catch(() => undefined);
     return {runId,commandId,targetCount:auditTargets.length,excluded};
@@ -118,6 +119,9 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
     for (const {platform} of enabled) {
       if(!comparison.platforms.includes(String(platform)))throw new Error('連携設定が読取後に変更されました。再読み取りしてください。');
       const platformTargets=audited.filter(t=>{
+        if(comparison.rows.some(r=>r.kind===t.kind&&r.targetId===t.targetId&&r.cells[String(platform)]?.state==='staged')) {
+          excluded.push({platform:String(platform),label:t.label,reason:'verified_unpublished_draft'});return false;
+        }
         if(t.label.includes('こちら商品ではありません') || [...disabledRows, ...authorityExclusions].some(d=>d.platform===platform&&d.kind===t.kind&&d.targetId===t.targetId)) {
           excluded.push({platform:String(platform),label:t.label,reason:'excluded_from_platform'});return false;
         }

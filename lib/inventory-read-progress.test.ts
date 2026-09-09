@@ -13,7 +13,7 @@ test('read progress distinguishes waiting, active, success with differences, and
   const reads=['queued','processing','succeeded','failed'].map((status,i)=>({id:String(i),platform:i===2?'rocket_now':'uber_eats',status,count:238,error:'401'}));
   for(const language of ['ja','zh-Hans','zh-Hant']) {
     const html=renderToStaticMarkup(createElement(exports.InventoryReadProgress,{reads,language,counts:{rocket_now:8},unknownByPlatform:{rocket_now:2},onRetry:()=>{},disabled:true}));
-    for(const text of ['is-neutral','is-info','is-success','is-error','is-warning','1/4','238','disabled=""'])assert.ok(html.includes(text),text);
+    for(const text of ['is-neutral','is-info','is-success','is-error','is-warning','1/4','236','disabled=""'])assert.ok(html.includes(text),text);
     if(language==='zh-Hans')for(const text of ['等待中','读取中','读取完成','读取失败','项差异','项无法判断','请检查平台登录和授权','重新读取该平台'])assert.ok(html.includes(text),text);
   }
 });

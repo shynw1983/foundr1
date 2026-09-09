@@ -1,4 +1,4 @@
-export type ComparisonCell = {state:'available'|'sold_out'|'unknown'|'excluded';reason?:string;readAt?:string};
+export type ComparisonCell = {state:'available'|'sold_out'|'unknown'|'excluded'|'staged';reason?:string;readAt?:string};
 export type ComparisonRow = {kind:string;targetId:string;label:string;isAvailable:boolean;cells:Record<string,ComparisonCell>;changes:string[]};
 export type ComparisonCommand = {platform:string;status:string;payload?:Record<string,unknown>;result?:Record<string,unknown>;updatedAt?:string};
 export function buildInventoryComparison(details:Record<string,unknown>,commands:ComparisonCommand[]) {
@@ -14,6 +14,9 @@ export function buildInventoryComparison(details:Record<string,unknown>,commands
    const expected=targets.some(x=>x.kind===t.kind&&x.targetId===t.targetId);
    const matches=((command?.result?.items??[]) as Array<Record<string,unknown>>).filter(x=>x.kind===t.kind&&x.targetId===t.targetId);
    const row=matches[0];
+   if(platform==='demae_can'&&expected&&command?.status==='succeeded'&&matches.length===1&&row.found===true&&row.status==='staged'&&row.isAvailable===null&&row.stagingVerified===true) {
+    cells[platform]={state:'staged',reason:'verified_unpublished_draft',readAt:command.updatedAt};continue;
+   }
    const known=expected&&command?.status==='succeeded'&&matches.length===1&&row.found===true&&typeof row.isAvailable==='boolean'&&row.status===(row.isAvailable?'available':'sold_out');
    cells[platform]=known?{state:row.isAvailable?'available':'sold_out',readAt:command?.updatedAt}:{state:'unknown',reason:!expected?'mapping_missing':command?.status==='succeeded'?'not_found':['queued','pending','processing'].includes(command?.status??'')?'reading':'read_failed',readAt:command?.updatedAt};
   }
