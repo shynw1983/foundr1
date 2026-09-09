@@ -32,41 +32,52 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
     throw error;
   }
   const active=payload.targets.filter(target=>!target.archived&&!target.quarantined);
+  let completed=0;
+  await reportProgress({phase:'content',completed,total:active.length});
   await driver.beginPhase?.('content');
   // Categories/groups must exist before creating products/options. Native
   // drivers may stage all children with a group creation, journaled separately.
   for(const kind of ['category','option_group','option','item']) {
     for(const target of active.filter(target=>target.kind===kind)) {
+      await reportProgress({phase:'content',sourceKey:target.sourceKey,targetName:target.name,completed,total:active.length});
       if(!target.mappings.length)await ensureUberAuthorityObject(target,payload,driver,reportProgress);
-      await reportProgress({phase:'content',sourceKey:target.sourceKey});
+      await reportProgress({phase:'content',sourceKey:target.sourceKey,targetName:target.name,completed,total:active.length});
       try {await driver.updateContent(target,payload);}
       catch(error) {throw new Error(`uber_authority_content_failed:${target.sourceKey}:${target.name}:${error.message}`,{cause:error});}
+      await reportProgress({phase:'content',completed:++completed,total:active.length});
     }
   }
   // Remove retired choices before validating the remaining group membership.
   // Content updates never restore stock; removals cannot expose a new choice.
   for(const target of payload.targets.filter(target=>target.archived&&!target.quarantined&&['option','item'].includes(target.kind))) {
-    await reportProgress({phase:'retiring',sourceKey:target.sourceKey});
+    await reportProgress({phase:'retiring',sourceKey:target.sourceKey,targetName:target.name});
     await driver.retire(target,payload);
   }
   // Relationship changes come last, after children are persisted and hidden.
+  const relationshipTotal=active.filter(target=>['option_group','item','category'].includes(target.kind)).length;
+  completed=0;
+  await reportProgress({phase:'relationships',completed,total:relationshipTotal});
   await driver.beginPhase?.('relationships',reportProgress);
   for(const kind of ['option_group','item','category']) {
     if(kind==='category')await driver.beginPhase?.('categories');
     for(const target of active.filter(target=>target.kind===kind)) {
-      await reportProgress({phase:'relationships',sourceKey:target.sourceKey});
+      await reportProgress({phase:'relationships',sourceKey:target.sourceKey,targetName:target.name,completed,total:relationshipTotal});
       await driver.updateRelationships(target,payload);
+      await reportProgress({phase:'relationships',completed:++completed,total:relationshipTotal});
     }
   }
   for(const kind of ['option_group','category'])for(const target of payload.targets.filter(target=>target.archived&&!target.quarantined&&target.kind===kind)) {
-    await reportProgress({phase:'retiring',sourceKey:target.sourceKey});
+    await reportProgress({phase:'retiring',sourceKey:target.sourceKey,targetName:target.name});
     await driver.retire(target,payload);
   }
-  await reportProgress({phase:'verifying'});
+  completed=0;
+  const verifyTotal=payload.targets.filter(target=>!target.quarantined).length;
+  await reportProgress({phase:'verifying',completed,total:verifyTotal});
   await driver.beginPhase?.('verifying');
   const observations=[];
   for(const target of payload.targets) {
     if(target.quarantined){observations.push({sourceKey:target.sourceKey,quarantined:true});continue;}
+    await reportProgress({phase:'verifying',sourceKey:target.sourceKey,targetName:target.name,completed,total:verifyTotal});
     const rows=await driver.observe(target,payload);
     if(!Array.isArray(rows)||!rows.length)throw Error(`uber_authority_observation_missing:${target.sourceKey}`);
     for(const row of rows) {
@@ -83,6 +94,7 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
     }
     for(const mapping of target.mappings)if(!rows.some(row=>row.externalId===mapping.externalId))throw Error(`uber_authority_occurrence_unverified:${target.sourceKey}`);
     observations.push(...rows);
+    await reportProgress({phase:'verifying',completed:++completed,total:verifyTotal});
   }
   return {outcome:'applied',observations,imagePolicy:'read_only'};
 }

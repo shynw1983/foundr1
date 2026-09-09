@@ -6,8 +6,9 @@ import styles from './UberSourcePanel.module.css';
 import {canRetryMenuJob,menuSyncIssue} from '../../../lib/menu-sync-status';
 import type {MenuChange} from '../../../lib/uber-menu-diff';
 import {meaningfulMenuChanges,menuChangeValue} from '../../../lib/menu-change-display';
+import {MenuJobProgress,type MenuProgress} from './MenuJobProgress';
 
-type Job={id:string;platform:string;status:string;updated_at:string;last_error:string;revision:string|null;phase:string|null;attempts:number;available_at:string;progress?:{completed?:number;total?:number};retries?:Array<{at:string;error:string;attempts:number}>};
+type Job={id:string;platform:string;status:string;updated_at:string;last_error:string;revision:string|null;phase:string|null;attempts:number;available_at:string;progress?:MenuProgress;retries?:Array<{at:string;error:string;attempts:number}>};
 
 type SourceData={
   source:null|{enabled:boolean;auto_publish:boolean;revision:number;last_checked_at:string|null;last_error:string};
@@ -99,7 +100,7 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
         return <li key={platform} data-state={job?.status}><div className={styles.platformHead}><strong>{platformNames[platform]}</strong><span className={styles.badge}>{job?jobLabel(job):t('未実行')}</span></div>
           {job&&<><small>{job.revision&&<>{t('取込版')} {job.revision} · </>}{dateLabel(job.updated_at)}</small>
             {job.status==='processing'&&<ol className={styles.steps}>{['接続確認','差分確認','書き込み','回読確認'].map((step,index)=><li key={step} data-current={index===(['locating','capturing'].includes(job.phase??'')?0:job.phase==='preflight'?1:job.phase==='verifying'?3:2)}>{t(step)}</li>)}</ol>}
-            {typeof job.progress?.completed==='number'&&typeof job.progress?.total==='number'&&<span>{t('処理済み')} {job.progress.completed} / {job.progress.total}</span>}
+            {job.status==='processing'&&<MenuJobProgress progress={job.progress} updatedAt={job.updated_at} language={language}/>}
             {job.status==='pending'&&job.attempts>0&&<small>{t('次の再試行')}：{dateLabel(job.available_at)} · {job.attempts} / 3</small>}
             {issue&&<><div className={styles.failure}><strong>{label('失敗理由','失败原因','失敗原因')}</strong><p>{t(issue.title)}</p><strong>{label('次の対応','下一步','下一步')}</strong><p>{t(issue.action)}</p></div><details><summary>{label('技術情報（調査用）','技术信息（排查用）','技術資訊（排查用）')}</summary><code>{job.last_error}</code></details></>}
             {job.status==='failed'&&platform!=='uber_eats'&&issue?.retry!==false&&retryButton(job)}

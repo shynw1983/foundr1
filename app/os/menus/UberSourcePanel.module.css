@@ -75,6 +75,11 @@
 .failure { background: var(--red-soft); color: var(--red); padding: 10px; border-radius: 6px; overflow-wrap: anywhere; }
 .failure p { margin: 4px 0 10px; color: inherit; font-size: 13px; line-height: 1.65; }
 .failure p:last-child { margin-bottom: 0; }
+.liveProgress {display:grid;gap:7px;border-left:3px solid var(--green);padding:10px;background:var(--green-soft);min-width:0;}
+.liveProgress[data-warning="true"] {border-color:var(--amber);background:var(--amber-soft);}
+.liveProgress progress {width:100%;height:8px;accent-color:var(--green);}
+.liveProgress ol {padding-left:18px;margin:0;max-height:220px;overflow:auto;font-size:12px;}
+.liveProgress li {margin-bottom:8px;overflow-wrap:anywhere;}
 
 @media (max-width: 600px) {
   .jobs { grid-template-columns: minmax(0, 1fr); }

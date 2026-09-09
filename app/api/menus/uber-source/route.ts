@@ -12,6 +12,14 @@ export async function GET(request: Request) {
   const runs = sources.length ? await sql`select r.id::text,r.revision,r.summary,r.created_at,coalesce(c.payload->>'trigger','unknown') as trigger from menu_uber_sync_runs r left join local_bridge_commands c on c.id=r.command_id where r.source_id=${sources[0].id} order by r.created_at desc limit 20` : [];
   const jobHistory = sources.length ? await sql`select id::text,platform,status,created_at,updated_at,last_error,attempts,available_at,payload->>'revision' as revision,result->'progress'->>'phase' as phase,result->'progress' as progress,payload->'manualRetryHistory' as retries from local_bridge_commands where store_id=${sources[0].store_id} and payload->>'sourceId'=${sources[0].id}::text and (payload->>'authoritativePublication'='true' or payload->>'authoritativeSource'='true') order by created_at desc limit 80` : [];
   const jobs=jobHistory.filter((row,index)=>jobHistory.findIndex(other=>other.platform===row.platform)===index);
+  // Resolve only the current target name, never return the full command payload.
+  for(const job of jobs.filter(row=>row.status==='processing')) {
+    const progress=(job.progress??{}) as Record<string,unknown>;
+    if(!progress.targetName) {
+      const names=await sql`select target->>'name' as name from local_bridge_commands c cross join lateral jsonb_array_elements(coalesce(c.payload->'targets','[]'::jsonb)) target where c.id::text=${job.id} and c.store_id=${sources[0].store_id} and target->>'sourceKey'=coalesce(c.result->'progress'->>'sourceKey',c.result->'progress'->'authorityOperation'->>'sourceKey') limit 1`;
+      job.progress={...progress,targetName:names[0]?.name??''};
+    }
+  }
   const successes=sources.length?await sql`select distinct on(platform) platform,payload->>'revision' as revision,completed_at from local_bridge_commands where store_id=${sources[0].store_id} and payload->>'sourceId'=${sources[0].id}::text and status='succeeded' order by platform,created_at desc`:[];
   const devices=sources.length?await sql`select platform,max(last_seen_at) as last_seen_at from local_bridge_devices where store_id=${sources[0].store_id} and is_enabled=true group by platform`:[];
   const prices = sources.length ? await sql`select o.target_id::text as id,o.kind,o.price_mode as mode,o.last_uber_price::float as "uberPrice",coalesce(i.name,p.name) as name,case when o.kind='item' then i.base_price else p.price_delta end::float as price from menu_uber_objects o left join menu_catalog_items i on o.kind='item' and i.id=o.target_id left join menu_options p on o.kind='option' and p.id=o.target_id where o.source_id=${sources[0].id} and o.kind in ('item','option') and not o.archived order by o.kind,name` : [];

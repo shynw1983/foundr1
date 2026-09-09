@@ -2,6 +2,7 @@ import { CdpPage } from './cdp-page.mjs';
 import { executeMenuRequest } from './merchant-menu-receipt.mjs';
 import {createMerchantMenuPacer} from './merchant-menu-pacer.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
+import {menuRequestAction} from './menu-progress.mjs';
 
 export async function retryTransientMenuRead(method,operation,wait=delay) {
   for(let attempt=0;;attempt++) {
@@ -17,7 +18,7 @@ export async function retryTransientMenuRead(method,operation,wait=delay) {
 
 // Requests remain inside the authenticated merchant browser. Never export its
 // cookies or replay requests against an unverified origin.
-export async function connectMerchantMenuClient(session, origin, successCode) {
+export async function connectMerchantMenuClient(session, origin, successCode, onProgress=async()=>{}) {
   const page = await CdpPage.connect(await session.ensureRunning(), origin);
   const paced=createMerchantMenuPacer();
   if (await page.evaluate('location.origin') !== origin) {
@@ -35,10 +36,17 @@ export async function connectMerchantMenuClient(session, origin, successCode) {
       if(receiptKey && (method!=='POST'||!/^[A-Za-z0-9:_-]{1,160}$/.test(receiptKey)))throw Error('merchant_menu_receipt_key_invalid');
       // Writes are deliberately not retried here. Create retry safety belongs
       // to the persistent authority reservation/marker protocol.
-      return retryTransientMenuRead(method,()=>paced(async()=>{
+      const action=menuRequestAction(path,method);
+      let attempt=0;
+      const result=await retryTransientMenuRead(method,async()=>{
+        await onProgress({action,state:attempt++?'retrying':'waiting',retry:attempt-1});
+        return paced(async()=>{
         try {return await page.evaluate(`(${executeMenuRequest.toString()})(${JSON.stringify({path,method,body,successCode,origin,receiptKey})})`);}
         catch(error) {throw new Error(`merchant_menu_operation_failed:${method}:${path}:${error.message}`,{cause:error});}
-      }));
+        });
+      });
+      await onProgress({action,state:'received'});
+      return result;
     }
   };
 }

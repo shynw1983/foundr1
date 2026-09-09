@@ -22,6 +22,13 @@ test('content then relationships then independent observations execute in one ru
  const result=await runUberAuthorityPublication(payload(),driver,async()=>{});
  assert.deepEqual(events,['content','relationships','read']);assert.equal(result.observations[0].price,227);
 });
+test('reports current target before work and counts only completed objects per stage',async()=>{
+ const {driver}=fixture(),rows=[];
+ driver.updateContent=async t=>{assert.equal(rows.at(-1).targetName,t.name);assert.equal(rows.at(-1).completed,0);};
+ driver.observe=async t=>[{sourceKey:t.sourceKey,externalId:'1',name:t.name,price:t.price,structureVerified:true}];
+ await runUberAuthorityPublication(payload(),driver,async row=>rows.push(row));
+ for(const phase of ['content','relationships','verifying'])assert.ok(rows.some(r=>r.phase===phase&&r.completed===1&&r.total===1));
+});
 test('a successful merchant response without actual changed values is rejected',async()=>{
  const {driver}=fixture();driver.updateContent=async()=>{};
  await assert.rejects(()=>runUberAuthorityPublication(payload(),driver,async()=>{}),/content_unverified/);

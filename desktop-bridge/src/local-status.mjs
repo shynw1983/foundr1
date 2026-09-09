@@ -39,7 +39,11 @@ export async function createLocalStatus(config, directory = statusDirectory) {
     progress(command,progress) {
       // Explicit allowlist: no command payload, credentials, customer data or raw errors.
       state.current={id:command.id,platform:command.platform,type:command.type,phase:String(progress.phase??'executing'),
-        attempt:Number(progress.attempt)||null,updatedAt:Date.now(),startedAt:state.current?.startedAt??Date.now()};
+        attempt:Number(progress.attempt)||null,updatedAt:Date.now(),startedAt:state.current?.id===command.id?state.current.startedAt:Date.now(),
+        targetName:String(progress.targetName??'').slice(0,300),action:String(progress.action??'').slice(0,40),
+        requestState:String(progress.requestState??'').slice(0,40),
+        completed:Number.isFinite(progress.completed)?progress.completed:null,total:Number.isFinite(progress.total)?progress.total:null,
+        requestsCompleted:Number(progress.requestsCompleted)||0,lastResponseAt:Number(progress.lastResponseAt)||0,retry:Number(progress.retry)||0};
       return save();
     },
     finish(command,error) {

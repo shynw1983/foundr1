@@ -56,9 +56,15 @@ final class BridgeMenu: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         if let task = state["current"] as? [String:Any] {
             line(menu, "当前：\(names[task["platform"] as? String ?? ""] ?? "平台") · \(taskName(task["type"]))")
-            let phases = ["starting":"开始处理", "locating":"查找商品", "applying":"写入并核对", "auditing":"读取销售状态", "capturing":"读取菜单", "retrying":"重试中"]
+            let phases = ["starting":"开始处理", "locating":"查找商品", "applying":"写入并核对", "auditing":"读取销售状态", "capturing":"读取菜单", "retrying":"重试中", "preflight":"检查菜单", "content":"更新菜单内容", "creating":"创建非公开商品", "relationships":"关联分类与选项", "verifying":"回读验证", "retiring":"处理停用项目"]
             let phase = task["phase"] as? String ?? ""
             line(menu, "\(phases[phase] ?? "执行中") · 已运行 \(Int(age(task["startedAt"]))) 秒")
+            if let name = task["targetName"] as? String, !name.isEmpty { line(menu, "当前对象：\(name)") }
+            let actions = ["read_menu":"读取菜单列表", "read_options":"读取选项组和选项", "read_availability":"核对销售状态（不修改）", "save":"保存菜单"]
+            if let action = task["action"] as? String, let title = actions[action] { line(menu, title) }
+            if let completed = task["completed"] as? Int, let total = task["total"] as? Int, total > 0 { line(menu, "本阶段完成：\(completed) / \(total)") }
+            if let last = task["lastResponseAt"] as? Double, last > 0 { line(menu, "最近成功响应：\(Int(age(last))) 秒前") }
+            if task["requestState"] as? String == "retrying" { line(menu, "正在重试读取 · \(task["retry"] as? Int ?? 0) / 2") }
             line(menu, "任务：\(task["id"] as? String ?? "—")")
             if age(task["updatedAt"]) > 120 { line(menu, "较长时间未更新进度，请查看任务详情") }
         } else { line(menu, "当前：\(state["activity"] as? String ?? "未知")") }
