@@ -1,4 +1,5 @@
 import {DemaeMenuClient} from './demae-menu-client.mjs';
+import {isDeepStrictEqual} from 'node:util';
 import {authorityPhysicalId} from './uber-authority-parents.mjs';
 import {verifyDemaeInventoryStaging} from './demae-inventory-staging.mjs';
 
@@ -62,7 +63,9 @@ export async function releaseDemaeInventory(transport,payload,storeId,onProgress
   const scopes=(payload.demaeStaging??[]).filter(s=>s.storeId===storeId&&s.targets.some(t=>t.kind===target.kind&&t.targetId===target.targetId));
   if(scopes.length!==1)throw Error('demae_release_scope_mismatch');
   const scope=scopes[0],plan=await planDemaeRelease(transport,scope,target,cache);
-  if(JSON.stringify(plan)!==JSON.stringify(target.releasePlan))throw Error('公開先がプレビュー後に変わりました。再読み取りしてください');
+  // JSONB may reorder object keys. Keep array order and ID types strict:
+  // actual destination/size/group changes must still block writes.
+  if(!isDeepStrictEqual(plan,target.releasePlan))throw Error('公開先がプレビュー後に変わりました。再読み取りしてください');
   const client=new DemaeMenuClient(transport,scope.merchantId,scope.menuPatternCode,scope);
   const stock=await client.stockState(target.kind,plan.id);
   if(!stock.listed) {

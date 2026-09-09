@@ -11,6 +11,23 @@ function setup(t) {
  t.mock.method(DemaeMenuClient.prototype,'stockCatalog',async()=>({itemList:[],optionList:[]}));
  t.mock.method(DemaeMenuClient.prototype,'stockState',async()=>({listed:true}));
 }
+// Simulate JSONB reordering object keys at every depth without changing values.
+const persisted=value=>Array.isArray(value)?value.map(persisted):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).reverse().map(([k,v])=>[k,persisted(v)])):value;
+test('JSONB object key order does not invalidate an option release plan',async t=>{
+ setup(t);
+ const s={...scope,graph:[scope.graph[0],{...scope.graph[1],sourceKey:'option_group:uber-group'},{kind:'item',targetId:'i',source:{groupIds:['uber-group']},mappings:[{externalId:'i'}]}]};
+ t.mock.method(DemaeMenuClient.prototype,'item',async()=>({sizeInfoList:[{sizeCode:'s',applyStartDate:'2020/01/01',applyEndDate:'9999/12/31'}]}));
+ const target={kind:'option',targetId:'o'},plan=await planDemaeRelease({},s,target);
+ assert.equal(plan.links.length,1);
+ assert.notEqual(JSON.stringify(plan),JSON.stringify(persisted(plan)));
+ const writes=t.mock.method(DemaeMenuClient.prototype,'updateGroup',async()=>{throw Error('already linked');});
+ const payload={isAvailable:true,availabilityAuthority:'uber_eats',fullSyncRunId:'r',syncSource:'store',demaeStaging:[s],targets:[{...target,releasePlan:persisted(plan)}]};
+ assert.equal(await releaseDemaeInventory({},payload,'s'),1);
+ for(const changed of [{...plan,id:'other'},{...plan,targetId:'other'},{...plan,groups:['other']},{...plan,links:[{itemCode:'i',sizeCode:'other'}]},{...plan,links:[]},{...plan,id:1}]) {
+  await assert.rejects(()=>releaseDemaeInventory({},{...payload,targets:[{...target,releasePlan:persisted(changed)}]},'s'),/プレビュー後/);
+ }
+ assert.equal(writes.mock.callCount(),0);
+});
 test('release rejects nonmanual and unavailable payloads before native requests',async()=>{
  for(const p of [{},{isAvailable:false,availabilityAuthority:'uber_eats',fullSyncRunId:'r',syncSource:'store'}])await assert.rejects(()=>releaseDemaeInventory({},p,'s'),/manual_confirmation/);
 });
@@ -18,7 +35,7 @@ test('mapped live option parent yields an explicit plan; retry of completed link
  setup(t);const target={kind:'option',targetId:'o'};
  const plan=await planDemaeRelease({},scope,target);assert.deepEqual(plan.groups,['g']);
  const writes=t.mock.method(DemaeMenuClient.prototype,'updateGroup',async()=>{throw Error('should not write');});
- assert.equal(await releaseDemaeInventory({},{isAvailable:true,availabilityAuthority:'uber_eats',fullSyncRunId:'r',syncSource:'store',demaeStaging:[scope],targets:[{...target,releasePlan:plan}]},'s'),1);
+ assert.equal(await releaseDemaeInventory({},{isAvailable:true,availabilityAuthority:'uber_eats',fullSyncRunId:'r',syncSource:'store',demaeStaging:[scope],targets:[{...target,releasePlan:persisted(plan)}]},'s'),1);
  assert.equal(writes.mock.callCount(),0);
 });
 test('missing or hidden parent blocks planning',async t=>{
@@ -37,7 +54,7 @@ test('verified draft option is attached using only explicit available IDs',async
  const target={kind:'option',targetId:'o',knownExternalIds:['itemList_100001true']};
  const s={...scope,targets:[{...target,marker:'FS0123456789abcd',mappings:[{externalId:target.knownExternalIds[0],externalParentId:'stage:carrier'}]}]};
  const plan=await planDemaeRelease({},s,target);
- await releaseDemaeInventory({},{isAvailable:true,availabilityAuthority:'uber_eats',fullSyncRunId:'r',syncSource:'store',demaeStaging:[s],targets:[{...target,releasePlan:plan}]},'s');
+ await releaseDemaeInventory({},{isAvailable:true,availabilityAuthority:'uber_eats',fullSyncRunId:'r',syncSource:'store',demaeStaging:[s],targets:[{...target,releasePlan:persisted(plan)}]},'s');
  assert.equal(write.mock.callCount(),1);
 });
 test('an unpublished group can be linked only to mapped live Uber consumers',async t=>{
@@ -59,7 +76,7 @@ test('draft item release uses the mapped category, never the whole draft menu',a
  t.mock.method(DemaeMenuClient.prototype,'stockState',async()=>({listed}));
  const write=t.mock.method(DemaeMenuClient.prototype,'updateItem',async(id,patch)=>{assert.equal(id,'00002');assert.deepEqual(patch.categoryLinks,[{categoryCode:'cat'}]);assert.equal(patch.releaseAvailable,true);listed=true;});
  const plan=await planDemaeRelease({},s,target);
- await releaseDemaeInventory({},{isAvailable:true,availabilityAuthority:'uber_eats',fullSyncRunId:'r',syncSource:'store',demaeStaging:[s],targets:[{...target,releasePlan:plan}]},'s');
+ await releaseDemaeInventory({},{isAvailable:true,availabilityAuthority:'uber_eats',fullSyncRunId:'r',syncSource:'store',demaeStaging:[s],targets:[{...target,releasePlan:persisted(plan)}]},'s');
  assert.equal(write.mock.callCount(),1);
  await assert.rejects(()=>planDemaeRelease({},{...s,draftCarrierItemCode:'00002'},target),/下書き保管用/);
 });
