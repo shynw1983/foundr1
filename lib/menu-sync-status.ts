@@ -1,6 +1,12 @@
 export function menuSyncIssue(error = '',language='ja') {
   const label=(ja:string,cn:string,tw=cn)=>language==='ja'?ja:language==='zh-Hant'?tw:cn;
   if (!error) return null;
+  if(error.startsWith('demae_menu_item_retirement_failed:')) {
+    let name='';
+    try {name=String(JSON.parse(error.match(/^demae_menu_item_retirement_failed:(\{.*\}):merchant_menu_operation_failed:/)?.[1]??'{}').name??'');} catch {}
+    return {kind:'content',title:label('旧商品の非公開分類への移動に失敗しました','旧商品移入非公开分类失败','舊商品移入非公開分類失敗'),action:label(`対象：${name||'技術情報の商品 ID を確認してください'}。営業メニューから外すための保存が拒否されました。保存結果を確認してから再試行してください。`,`对象：${name||'请查看技术信息中的商品 ID'}。从营业菜单移出的保存请求被拒绝，请核对保存结果后重试。`,`對象：${name||'請查看技術資訊中的商品 ID'}。從營業菜單移出的儲存請求被拒絕，請核對結果後重試。`),retry:true};
+  }
+  if(error.includes('MWA0012'))return {kind:'content',title:label('出前館が保存内容の入力チェックで拒否しました','出前馆拒绝保存：输入校验未通过','出前館拒絕儲存：輸入驗證未通過'),action:label('送信項目・分類の関連付けを確認する必要があります。ログインエラーではありません。','需要检查提交字段及分类关联，不是登录错误。','需要檢查提交欄位及分類關聯，不是登入錯誤。'),retry:false};
   if(error.includes('rocket_menu_group_quantity_invalid'))return {kind:'content',title:label('Rocket Now のグループ数量設定を送信できません','火箭分组的可选数量设置无法提交','火箭分組的可選數量設定無法提交'),action:label('最小・最大選択数が送信条件に合っていません。連携側の数量変換を確認する必要があります。この記録には対象グループが保存されていないため、Uber の設定を推測で変更しないでください。','最少／最多可选数量不符合提交条件，需要检查同步程序的数量转换。这条旧记录没有保存具体分组，请勿猜测并修改 Uber 设置。','最少／最多可選數量不符合提交條件，需要檢查同步程式的數量轉換。這條舊記錄沒有保存具體分組，請勿猜測並修改 Uber 設定。'),retry:false};
   if(/401|MWA0007/.test(error))return {kind:'login',title:label('メニュー管理 API の認証が拒否されました','菜单管理接口拒绝了登录认证','菜單管理介面拒絕了登入認證'),action:label('メニュー一覧の取得で停止しました。Bridge 専用画面のログイン・メニュー管理権限を確認してください。在庫の読み取り成功とは別の確認です。','任务在读取菜单列表时停止。请检查 Bridge 专用窗口的登录和菜单管理权限；库存读取成功不代表菜单接口认证成功。','工作在讀取菜單列表時停止。請檢查 Bridge 專用視窗的登入和菜單管理權限；庫存讀取成功不代表菜單介面認證成功。'),retry:true};
   if (/401|MWA0007|login|unauthori[sz]ed|session.*expir/i.test(error)) return {kind:'login',title:'ログインの確認が必要です',action:'Bridge の専用画面でログインしてから再試行してください。',retry:true};

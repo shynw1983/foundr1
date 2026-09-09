@@ -226,8 +226,35 @@ export class DemaeMenuClient {
     return actual;
   }
   async retireItem(id) {
-    const actual=await this.updateItem(id,{categoryLinks:[]});
-    if(actual.categoryItemLinkList?.length)throw new Error('demae_menu_item_retirement_failed');
+    // The native form requires at least one category. Retire into the
+    // independently verified, unassigned draft pattern, never an empty list.
+    await this.assertScope();
+    if(!this.draftPatternCode)throw Error('demae_menu_hidden_item_scope_missing');
+    const draft=new DemaeDraftClient(this.transport,this.chainId,this.pattern);
+    await draft.assertHiddenPattern(this.draftPatternCode);
+    const hidden=await this.transport.request(`${this.base}/menu-pattern/${code(this.draftPatternCode)}/item-list`);
+    const categories=(hidden?.categoryList??[]).filter(row=>/^未公開 FS[0-9a-f]{14}$/.test(row.categoryName));
+    if(categories.length!==1)throw Error('demae_menu_draft_category_ambiguous');
+    draft.assertCategoryLinks(await draft.category(categories[0]),this.draftPatternCode);
+    const before=await this.item(id);
+    if(String(before.chainId)!==this.chainId||String(before.itemCode)!==String(id))throw Error('demae_menu_identity_mismatch');
+    const links=before.categoryItemLinkList;
+    if(!Array.isArray(links))throw Error('demae_menu_item_links_incomplete');
+    if(links.length!==1||String(links[0].categoryCode)!==String(categories[0].categoryCode)) {
+      const body=demaeItemUpdate(before,{categoryLinks:[{categoryCode:categories[0].categoryCode}]},this.today);
+      // Match native edit-form defaults; GET represents empty strings as null.
+      body.itemDescription??='';
+      for(const size of body.sizeInfoList) {
+        size.linkageItemCode??='';size.linkageItemName??='';size.sizeName??='';
+      }
+      await draft.assertHiddenPattern(this.draftPatternCode);
+      try {await this.transport.request(`${this.base}/item/${code(id)}`,'PUT',body);}
+      catch(error) {throw new Error(`demae_menu_item_retirement_failed:${JSON.stringify({id,name:before.itemName,step:'move_to_hidden_category'})}:${error.message}`,{cause:error});}
+    }
+    const actual=await draft.assertHiddenItem(this.draftPatternCode,id);
+    const sizes=rows=>storedSizes(rows).map(row=>({...row,sizeName:row.sizeName??'',linkageItemCode:row.linkageItemCode??'',linkageItemName:row.linkageItemName??''}));
+    if(actual.itemName!==before.itemName||String(actual.itemDescription??'')!==String(before.itemDescription??'')
+      ||!sameMenuValue(sizes(actual.sizeInfoList),sizes(before.sizeInfoList))||!sameDemaeImage(before,actual))throw Error('demae_menu_item_retirement_content_changed');
     const {items}=await this.catalog();
     if(items.categoryList.some(category=>category.itemList?.some(item=>String(item.itemCode)===String(id))))throw new Error('demae_menu_item_still_linked');
     return actual;

@@ -23,6 +23,12 @@ test('specific menu failures explain cause without blaming Uber settings',()=>{
  assert.match(rocket!.title,/可选数量/);assert.match(rocket!.action,/没有保存具体分组/);
  assert.match(menuSyncIssue('401:MWA0007','zh-Hans')!.action,/库存读取成功不代表/);
 });
+test('retirement errors identify the product despite a nested empty API error body',()=>{
+ const error='demae_menu_item_retirement_failed:'+JSON.stringify({id:'00000006',name:'旧汤底',step:'move_to_hidden_category'})+':merchant_menu_operation_failed:PUT:/item/00000006:Error: merchant_menu_request_failed:400:MWA0012::{}';
+ assert.match(menuSyncIssue(error,'zh-Hans')!.action,/旧汤底/);
+ assert.match(menuSyncIssue(error,'ja')!.title,/非公開分類/);
+ assert.match(menuSyncIssue('merchant_menu_request_failed:400:MWA0012::{}','zh-Hans')!.title,/输入校验/);
+});
 test('no changes produce an empty item diff',()=>assert.deepEqual(uberMenuChanges(catalog(),catalog()),[]));
 test('rename is counted once and does not imply a membership change',()=>{
  const next=catalog();next.entities[0].name='New tofu';
