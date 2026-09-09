@@ -23,3 +23,10 @@ test('only freshly verified Demae drafts are nonblocking and never a stock diffe
  assert.equal(result.ready,true);assert.equal(result.unknown,0);assert.equal(result.rows[0].cells.demae_can.state,'staged');assert.deepEqual(result.rows[0].changes,[]);
  for(const bad of [{...draft,status:'failed'},{...draft,result:{items:[{...draft.result.items[0],stagingVerified:false}]}},{...draft,result:{items:[...draft.result.items,...draft.result.items]}}])assert.equal(buildInventoryComparison(d,[bad]).ready,false);
 });
+test('only Uber-available verified release plans become new-product changes',()=>{
+ const draft={...command,platform:'demae_can',result:{items:[{kind:'option',targetId:'1',found:true,isAvailable:null,status:'staged',stagingVerified:true,releasePlan:{kind:'option'}}]}};
+ for(const isAvailable of [true,false]) {
+  const result=buildInventoryComparison({...details,comparisonPlatforms:['demae_can'],preview:[{...target,isAvailable,wasAvailable:isAvailable}]},[draft]);
+  assert.equal(result.counts.demae_can,isAvailable?1:0);assert.equal(result.ready,true);
+ }
+});

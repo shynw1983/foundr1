@@ -101,6 +101,10 @@ async function executeInventoryCommand(command) {
         attempt,
         maxAttempts
       });
+      if(targets.some(t=>t.releasePlan)) {
+        if(platform!=='demae_can')throw Error('unsupported_inventory_release');
+        await adapter.releaseInventory(payload,progress=>reportProgress(command,progress));
+      }
       const located = await adapter.locateTargets(targets);
       const ambiguous = located.filter((item) => item.matches.length > 1);
       const verified = located.filter((item) => item.matches.length === 1);

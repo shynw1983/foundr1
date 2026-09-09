@@ -3,11 +3,13 @@ import { sql } from "./db";
 // Hints identify what to re-read, not proof of current publication state.
 export async function loadDemaeStagingHints(storeId:string) {
   const rows=await sql`select distinct on (payload->>'sourceId') payload,result from local_bridge_commands where store_id=${storeId} and platform='demae_can' and status='succeeded' and payload->>'authoritativePublication'='true' order by payload->>'sourceId',created_at desc`;
+  const current=await sql`select m.brand_id::text as "brandId",m.target_type as kind,m.target_id::text as "targetId",m.external_id as "externalId",m.external_parent_id as "externalParentId" from menu_platform_object_mappings m join menu_external_platforms p on p.id=m.external_platform_id join store_brands b on b.brand_id=m.brand_id and b.store_id=${storeId} where p.platform_key='demae_can' and (m.store_id is null or m.store_id=${storeId})`;
   return rows.map(row=>{
     const p=row.payload as Record<string,unknown>;
     const observations=(row.result?.observations??[]) as Array<Record<string,unknown>>;
-    const targets=(p.targets??[]) as Array<Record<string,unknown>>;
+    const targets:Array<Record<string,unknown>>=((p.targets??[]) as Array<Record<string,unknown>>).map(t=>({...t,mappings:current.filter(m=>m.brandId===p.brandId&&m.kind===t.kind&&m.targetId===t.targetId).flatMap(m=>String(m.externalId).split(',').filter(Boolean).map(externalId=>({externalId,externalParentId:m.externalParentId})))}));
     return {storeId,merchantId:p.merchantId,menuPatternCode:p.menuPatternCode,draftPatternCode:p.draftPatternCode,draftCarrierItemCode:p.draftCarrierItemCode,
+      graph:targets.filter(t=>!t.archived&&!t.quarantined).map(t=>({kind:t.kind,targetId:t.targetId,parentId:t.parentId,sourceKey:t.sourceKey,source:t.source,mappings:t.mappings})),
       targets:targets.filter(t=>!t.archived&&!t.quarantined&&['item','option'].includes(String(t.kind))&&observations.some(o=>o.sourceKey===t.sourceKey&&o.exists===true&&o.hidden===true&&o.placement==='staged'))
         .map(t=>({kind:t.kind,targetId:t.targetId,marker:t.marker,mappings:t.mappings}))};
   });

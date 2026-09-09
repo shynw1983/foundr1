@@ -126,8 +126,8 @@ export class DemaeMenuClient {
       .sort((a,b)=>String(a.categoryCode).localeCompare(String(b.categoryCode)));
   }
   async updateItem(id,patch) {
-    // Reject before any write: attaching a draft could expose it. The future
-    // publication planner must verify a permanent hold before linking.
+    // Ordinary menu updates cannot expose drafts. Only Store's explicit
+    // available-release planner may link a verified draft to a live category.
     if(patch.categoryLinks!==undefined && (!Array.isArray(patch.categoryLinks)||patch.categoryLinks.length>1||patch.categoryLinks.length&&patch.allowCategoryMove!==true))throw new Error('demae_menu_category_link_publication_not_supported');
     if(patch.retireGroupId!==undefined&&(patch.groupLinks!==undefined||!String(patch.retireGroupId)))throw Error('demae_menu_group_retirement_invalid');
     await this.assertScope();
@@ -137,7 +137,7 @@ export class DemaeMenuClient {
     if(String(before.itemCode)!==String(id)||String(before.chainId)!==this.chainId)throw new Error('demae_menu_identity_mismatch');
     if(patch.categoryLinks?.length) {
       const {items}=await this.catalog();
-      if(!occurrences.length||!items.categoryList.some(row=>String(row.categoryCode)===String(patch.categoryLinks[0].categoryCode)))throw Error('demae_menu_draft_requires_release');
+      if(!occurrences.length&&patch.releaseAvailable!==true||!items.categoryList.some(row=>String(row.categoryCode)===String(patch.categoryLinks[0].categoryCode)))throw Error('demae_menu_draft_requires_release');
     }
     if(patch.groupLinks!==undefined) {
       if(!Array.isArray(patch.groupLinks)||new Set(patch.groupLinks.map(row=>row.optionGroupCode)).size!==patch.groupLinks.length)throw Error('demae_menu_group_links_invalid');
@@ -168,7 +168,7 @@ export class DemaeMenuClient {
       if(afterOccurrences.length)throw new Error('demae_menu_item_still_linked');
     } else if(patch.categoryLinks?.length) {
       if(afterOccurrences.length!==1||String(afterOccurrences[0].categoryCode)!==String(patch.categoryLinks[0].categoryCode))throw Error('demae_menu_category_move_unverified');
-      if(!sameMenuValue(stock,await this.stockState('item',id)))throw Error('demae_menu_availability_changed');
+      if(patch.releaseAvailable!==true&&!sameMenuValue(stock,await this.stockState('item',id)))throw Error('demae_menu_availability_changed');
     } else if(!sameMenuValue(occurrences,afterOccurrences))throw new Error('demae_menu_availability_changed');
     if(patch.categoryLinks===undefined && !sameMenuValue(stock,await this.stockState('item',id)))throw new Error('demae_menu_availability_changed');
     return actual;
@@ -302,9 +302,15 @@ export class DemaeMenuClient {
     const currentIds=[...new Set(before.options.map(row=>String(row.optionCode)))];
     const ids=patch.optionCodes??currentIds;
     if(!Array.isArray(ids)||ids.length!==new Set(ids.map(String)).size)throw Error('demae_menu_group_members_invalid');
+    if(patch.releaseItemLinks) {
+      const prior=before.items.flatMap(item=>item.sizeList.map(size=>({itemCode:item.itemCode,sizeCode:size.sizeCode})));
+      if(!Array.isArray(patch.releaseItemLinks)||!patch.releaseAvailableOptionIds?.length
+        ||prior.some(p=>!patch.releaseItemLinks.some(l=>l.itemCode===p.itemCode&&l.sizeCode===p.sizeCode))
+        ||before.options.some(o=>!patch.releaseAvailableOptionIds.includes(String(o.optionCode))&&!stock.optionList.some(s=>String(s.optionCode)===String(o.optionCode))))throw Error('demae_release_group_contains_unapproved_options');
+    }
     // Adding an unlisted option to a live group would make it orderable before
     // stockout could be applied. Stage new membership on unlinked groups only.
-    if(before.items.length&&ids.some(id=>!currentIds.includes(String(id))&&!stock.optionList.some(row=>String(row.chainId)===this.chainId&&String(row.optionCode)===String(id)&&Array.isArray(row.linkedShopList)&&row.linkedShopList.length)))throw Error('demae_menu_new_group_member_requires_staging');
+    if(before.items.length&&ids.some(id=>!currentIds.includes(String(id))&&!patch.releaseAvailableOptionIds?.includes(String(id))&&!stock.optionList.some(row=>String(row.chainId)===this.chainId&&String(row.optionCode)===String(id)&&Array.isArray(row.linkedShopList)&&row.linkedShopList.length)))throw Error('demae_menu_new_group_member_requires_staging');
     const body={
       chainId:Number(this.chainId),optionGroupCode:String(id),
       optionGroupName:patch.name??before.detail.optionGroupName,
@@ -313,7 +319,7 @@ export class DemaeMenuClient {
       optionButtonType:before.detail.optionButtonType,
       // Detail endpoint returns empty arrays even for linked groups; always
       // reconstruct the actual associations from independent relationship reads.
-      sizeOptionGroupLinkList:before.items.flatMap(item=>item.sizeList.map(size=>({itemCode:item.itemCode,sizeCode:size.sizeCode}))),
+      sizeOptionGroupLinkList:patch.releaseItemLinks??before.items.flatMap(item=>item.sizeList.map(size=>({itemCode:item.itemCode,sizeCode:size.sizeCode}))),
       optionGroupItemLinkList:ids.map((id,index)=>({optionCode:decodeURIComponent(code(id)),dispOrder:index+1}))
     };
     await this.transport.request(`${this.base}/option-group/${code(id)}`,'PUT',body);
@@ -321,7 +327,7 @@ export class DemaeMenuClient {
     if(actual.detail.optionGroupName!==body.optionGroupName
       ||String(actual.detail.optionGroupDescription??'')!==String(body.optionGroupDescription??'')
       ||actual.detail.adminOptionGroupName!==body.adminOptionGroupName||actual.detail.optionButtonType!==body.optionButtonType
-      ||!sameMenuValue(actual.items,before.items)
+      ||(patch.releaseItemLinks?!sameMenuValue(actual.items.flatMap(item=>item.sizeList.map(size=>({itemCode:item.itemCode,sizeCode:size.sizeCode}))).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),[...patch.releaseItemLinks].sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))):!sameMenuValue(actual.items,before.items))
       ||!sameMenuValue([...new Set(actual.options.map(row=>String(row.optionCode)))],ids.map(String)))throw Error('demae_menu_group_verification_failed');
     for(const prior of before.options.filter(row=>ids.map(String).includes(String(row.optionCode)))) {
       const after=actual.options.find(row=>String(row.optionCode)===String(prior.optionCode)&&row.applyStartDate===prior.applyStartDate&&row.applyEndDate===prior.applyEndDate);

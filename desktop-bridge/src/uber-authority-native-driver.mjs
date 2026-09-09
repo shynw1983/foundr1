@@ -239,6 +239,9 @@ export class AuthorityNativeDriver {
           const parent=mapping.externalParentId;
           if(!parent?.startsWith('stage:')||parent==='stage:__creating__'||seen.has(mapping.externalId))continue;
           seen.add(mapping.externalId);
+          // A Store-confirmed release retains its creation identity. Fresh live
+          // membership, not the historical carrier pointer, defines placement.
+          if(rows.some(row=>row.kind==='option'&&row.id===this.id('option',mapping.externalId)&&row.parentIds.some(id=>liveGroupIds.includes(id))))continue;
           stagedIdentities.push({optionCode:this.id('option',mapping.externalId),groupCode:parent.slice(6),marker:target.marker});
         }
       }

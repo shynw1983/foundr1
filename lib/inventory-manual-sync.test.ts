@@ -8,7 +8,7 @@ import {buildInventoryComparison} from './inventory-comparison.ts';
 
 const target={kind:'option',targetId:'00000000-0000-4000-8000-000000000001',brandId:'00000000-0000-4000-8000-000000000002',label:'配料',aliases:[],knownExternalIds:['uber-option']};
 const result={targetCount:1,items:[{kind:'option',targetId:target.targetId,found:true,isAvailable:false,status:'sold_out'}]};
-function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_confirmation',expired=false,changed=false,quarantined=false,staged=false}={}) {
+function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_confirmation',expired=false,changed=false,quarantined=false,staged=false,release=false}={}) {
   const transactions:Array<Array<{text:string;values:unknown[]}>>=[];
   let wakes=0;
   let sequence=0;
@@ -19,6 +19,8 @@ function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_co
     if(text.includes("payload->>'comparisonAudit'='true'"))rows=['rocket_now','demae_can'].map(platform=>({platform,status:'succeeded',payload:{comparisonAudit:true,targets:platform==='demae_can'&&missingDemae?[]:[{...target,knownExternalIds:[platform==='rocket_now'?'rocket-option':'demae-option']}]},result:{items:[{kind:target.kind,targetId:target.targetId,found:true,isAvailable:true,status:'available'}]}}));
     if(text.includes('select 1 where exists'))rows=changed?[{}]:[];
     if(staged&&text.includes("payload->>'comparisonAudit'='true'"))for(const row of rows as any[])if(row.platform==='demae_can')row.result.items=[{kind:target.kind,targetId:target.targetId,found:true,isAvailable:null,status:'staged',stagingVerified:true}];
+    if(release&&text.includes('select details'))(rows[0] as any).details.preview[0].isAvailable=true;
+    if(release&&text.includes("payload->>'comparisonAudit'='true'"))for(const row of rows as any[])if(row.platform==='demae_can'){row.result.items[0].releasePlan={kind:'option',id:'draft',groups:['g']};row.payload.demaeStaging=[{storeId:'store'}];}
     if(text.includes('select id from local_bridge_commands'))rows=busy?[{id:'busy'}]:[];
     if(text.includes('select 1 from store_sales_sources'))rows=[{}];
     if(text.includes('select distinct source_platform'))rows=[{platform:'rocket_now'},{platform:'demae_can'}];
@@ -80,6 +82,14 @@ test('verified draft is skipped while OS and another platform differences are ap
  assert.equal(commands.length,1);assert.equal(commands[0].values[2],'rocket_now');
  assert.ok(h.transactions[0].some(q=>q.text.includes('insert into menu_option_store_settings')));
  assert.ok(JSON.stringify(h.transactions).includes('verified_unpublished_draft'));
+});
+test('manual confirmation queues the exact verified release plan only for Uber available',async()=>{
+ const h=harness({staged:true,release:true});
+ await h.exports.applyUberAvailabilitySync('store',{fullSyncRunId:'run',targets:[target]},{...result,items:[{...result.items[0],isAvailable:true,status:'available'}]},true);
+ const commands=h.transactions[0].filter(q=>q.text.includes('insert into local_bridge_commands'));
+ assert.equal(commands.length,1);assert.equal(commands[0].values[2],'demae_can');
+ const payload=JSON.parse(commands[0].values[4] as string);
+ assert.equal(payload.isAvailable,true);assert.equal(payload.targets[0].releasePlan.id,'draft');assert.equal(payload.demaeStaging[0].storeId,'store');
 });
 
 test('successful Uber read waits for human confirmation without OS writes or destination commands',async()=>{

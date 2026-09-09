@@ -54,7 +54,7 @@ export function WholeStoreAvailabilitySync({storeId,language,disabled,onApplied}
     if(inventoryPreviewExpired(report?.details.previewAt,Date.now())) {
       setError(label('プレビューの有効期限が切れました。Uber を再読み取りしてください。','预览已过期，请重新读取 Uber。','預覽已過期，請重新讀取 Uber。'));return;
     }
-    if(!report||!window.confirm(label('表示した Uber の状態で OS と連携先を上書きします。個別設定を解除し、売切商品を販売再開する場合があります。実行しますか？','将按显示的 Uber 状态覆盖 OS 和关联平台，清除单独设置，可能恢复缺货商品的销售。确认执行？','將按顯示的 Uber 狀態覆蓋 OS 和關聯平台，清除單獨設定，可能恢復缺貨商品的銷售。確認執行？')))return;
+    if(!report||!window.confirm(label('表示した Uber の状態で OS と連携先を上書きします。個別設定を解除し、売切商品を販売再開し、表示された新品を公開する場合があります。実行しますか？','将按显示的 Uber 状态覆盖 OS 和关联平台，清除单独设置，可能恢复缺货商品的销售，并上架预览中列出的新品。确认执行？','將按顯示的 Uber 狀態覆蓋 OS 和關聯平台，清除單獨設定，可能恢復缺貨商品的銷售，並上架預覽中列出的新品。確認執行？')))return;
     setBusy(true);setError('');
     try {
       const response=await fetch('/api/store/display/kitchen/inventory',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'confirm_full_sync',runId:report.id,storeId})});

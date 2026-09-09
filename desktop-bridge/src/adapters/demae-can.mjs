@@ -7,6 +7,7 @@ import {validateAuthorityCommand} from '../uber-authority-runner.mjs';
 import {connectMerchantMenuClient} from '../merchant-menu-client.mjs';
 import {auditDestination} from '../inventory-destination-audit.mjs';
 import {verifyDemaeInventoryStaging} from '../demae-inventory-staging.mjs';
+import {planDemaeRelease,releaseDemaeInventory} from '../demae-inventory-release.mjs';
 
 const STOCKOUT_URL = "https://partner.demae-can.com/merchant-admin/shop/stockout";
 const LOGIN_FAILURE_COOLDOWN_MS = 30 * 60 * 1000;
@@ -336,10 +337,23 @@ export class DemaeCanAdapter {
     const result=await auditDestination(this,payload,'demae_can');
     if(payload.demaeStaging?.length&&result.items.some(row=>!row.found)) {
       const transport=await connectMerchantMenuClient(this.session,'https://partner.demae-can.com','MSA0000');
-      try {await verifyDemaeInventoryStaging(transport,payload,result.items,this.session.config.storeId);}
+      try {
+        await verifyDemaeInventoryStaging(transport,payload,result.items,this.session.config.storeId);
+        const releaseCache=new Map();
+        for(const row of result.items.filter(r=>r.status==='staged')) {
+          const scopes=payload.demaeStaging.filter(s=>s.targets.some(t=>t.kind===row.kind&&t.targetId===row.targetId));
+          try {if(scopes.length!==1)throw Error('上架先が特定できません');row.releasePlan=await planDemaeRelease(transport,scopes[0],row,releaseCache);}
+          catch(error){row.releaseError=String(error.message);}
+        }
+      }
       finally {transport.close();}
     }
     return {...result,capturedAt:new Date().toISOString()};
+  }
+  async releaseInventory(payload,onProgress) {
+    const transport=await connectMerchantMenuClient(this.session,'https://partner.demae-can.com','MSA0000');
+    try{return await releaseDemaeInventory(transport,payload,this.session.config.storeId,onProgress);}
+    finally{transport.close();}
   }
   constructor(session, config = {}, credentialLoader = loadDemaeCredentials) {
     this.session = session;

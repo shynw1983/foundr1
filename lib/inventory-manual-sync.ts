@@ -99,6 +99,8 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
       union all select 1 from menu_inventory_sync_runs where store_id=${storeId} and id<>${runId} and created_at>${previewAt}::timestamptz
       union all select 1 from local_bridge_commands where store_id=${storeId} and status in ('pending','processing')
         and command_type in ('set_inventory_availability','audit_inventory','publish_menu_changes','capture_menu_snapshot')
+      union all select 1 from local_bridge_commands where store_id=${storeId} and created_at>${previewAt}::timestamptz
+        and command_type in ('publish_menu_changes','capture_menu_snapshot')
     )`;
     if(changed.length) throw new Error('読取後に販売状態が変更されたか、別の同期が実行中です。完了後に Uber を再読み取りしてください。');
     const mappings = await loadInventoryPlatformExternalIdMap(storeId, audited);
@@ -119,7 +121,7 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
     for (const {platform} of enabled) {
       if(!comparison.platforms.includes(String(platform)))throw new Error('連携設定が読取後に変更されました。再読み取りしてください。');
       const platformTargets=audited.filter(t=>{
-        if(comparison.rows.some(r=>r.kind===t.kind&&r.targetId===t.targetId&&r.cells[String(platform)]?.state==='staged')) {
+        if(comparison.rows.some(r=>r.kind===t.kind&&r.targetId===t.targetId&&r.cells[String(platform)]?.state==='staged'&&(!t.isAvailable||!r.cells[String(platform)].releaseReady))) {
           excluded.push({platform:String(platform),label:t.label,reason:'verified_unpublished_draft'});return false;
         }
         if(t.label.includes('こちら商品ではありません') || [...disabledRows, ...authorityExclusions].some(d=>d.platform===platform&&d.kind===t.kind&&d.targetId===t.targetId)) {
@@ -144,7 +146,9 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
       for (const isAvailable of [false,true]) {
         const targets = platformTargets.filter(t => t.isAvailable === isAvailable && comparison.rows.some(r=>r.kind===t.kind&&r.targetId===t.targetId&&r.changes.includes(String(platform)))).flatMap(t => {
           const ids = inventoryPlatformExternalIds(mappings,String(platform),t);
-          return [{...t,knownExternalIds:ids}];
+          const read=(comparisonCommands.find(c=>c.platform===platform)?.result?.items??[]) as Array<Record<string,unknown>>;
+          const observed=read.find(r=>r.kind===t.kind&&r.targetId===t.targetId);
+          return [{...t,knownExternalIds:ids,...(observed?.status==='staged'&&isAvailable?{releasePlan:observed.releasePlan}:{})}];
         });
         for (let offset=0;offset<targets.length;offset+=20) {
           commands.push({id:randomUUID(),platform:String(platform),payload:{
@@ -154,7 +158,8 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
             isAvailable,soldOutMode:'indefinite',
             verifyAvailability:true,
             operation:platform==='rocket_now'?(isAvailable?'unhide':'hide'):(isAvailable?'available':'stockout'),
-            targets:targets.slice(offset,offset+20)
+            targets:targets.slice(offset,offset+20),
+            ...(platform==='demae_can'?{demaeStaging:comparisonCommands.find(c=>c.platform===platform)?.payload?.demaeStaging??[]}:{})
           }});
         }
       }
