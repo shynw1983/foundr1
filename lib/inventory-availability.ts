@@ -98,9 +98,9 @@ export async function loadInventoryAvailabilityTargets(
 
   if (!resolution.targets.length) return resolution;
   resolution.inventoryKey=`${targetKind}:${resolution.targets[0].targetId}`;
+  const dependentItems = await loadLinkedMenuTargets({ storeId, brandId, sourceTargets: resolution.targets });
+  resolution.inventoryKey = dependentItems[0]?.sharedInventoryKey ?? resolution.inventoryKey;
   resolution.targets=resolution.targets.map(target=>({...target,inventoryKey:resolution.inventoryKey}));
-  const dependentItems = (await loadLinkedMenuTargets({ storeId, brandId, sourceTargets: resolution.targets }))
-    .map((target) => ({ ...target, linkedByDependency: true }));
   const targets = Array.from(new Map([
     ...dependentItems,
     ...resolution.targets

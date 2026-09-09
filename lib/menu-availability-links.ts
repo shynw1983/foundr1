@@ -6,6 +6,7 @@ import type {
 } from "./uber-inventory-targets";
 import {
   resolveLinkedTargetKeys,
+  resolveSharedInventoryKeys,
   type MenuAvailabilityLink,
   type MenuAvailabilityTargetKey
 } from "./menu-availability-link-graph";
@@ -21,7 +22,7 @@ export async function loadLinkedMenuTargets(input: {
   storeId: string;
   brandId: string;
   sourceTargets: Array<{ kind: "item" | "option"; targetId: string; brandId: string }>;
-}): Promise<Array<UberInventoryItemTarget | UberInventoryTarget>> {
+}): Promise<Array<(UberInventoryItemTarget | UberInventoryTarget) & { linkedByDependency: boolean; sharedInventoryKey: string }>> {
   const brandId = input.brandId || input.sourceTargets[0]?.brandId || "";
   if (!brandId) return [];
   const links = await sql`
@@ -38,6 +39,7 @@ export async function loadLinkedMenuTargets(input: {
     `${target.kind}:${target.targetId}` as MenuAvailabilityTargetKey
   ));
   const linkedKeys = resolveLinkedTargetKeys(links, sourceKeys);
+  const sharedKeys = resolveSharedInventoryKeys(links, sourceKeys);
   const itemIds = linkedKeys.filter((key) => key.startsWith("item:")).map((key) => key.slice(5));
   const optionIds = linkedKeys.filter((key) => key.startsWith("option:")).map((key) => key.slice(7));
 
@@ -107,5 +109,10 @@ export async function loadLinkedMenuTargets(input: {
     aliases: aliases(row),
     isAvailable: row.isAvailable
   }));
-  return [...itemTargets, ...optionTargets];
+  return [...itemTargets, ...optionTargets].map((target) => ({
+    ...target,
+    // Bidirectional peers represent the same stock, not a recipe dependency.
+    linkedByDependency: !sharedKeys.includes(`${target.kind}:${target.targetId}`),
+    sharedInventoryKey: sharedKeys[0]
+  }));
 }

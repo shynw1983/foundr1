@@ -8,6 +8,16 @@ export type MenuAvailabilityLink = {
   isBidirectional: boolean;
 };
 
+export function resolveSharedInventoryKeys(
+  links: MenuAvailabilityLink[],
+  sourceKeys: MenuAvailabilityTargetKey[]
+) {
+  return [...new Set([
+    ...sourceKeys,
+    ...resolveLinkedTargetKeys(links.filter((link) => link.isBidirectional), sourceKeys)
+  ])].sort();
+}
+
 export function resolveLinkedTargetKeys(
   links: MenuAvailabilityLink[],
   sourceKeys: MenuAvailabilityTargetKey[]
