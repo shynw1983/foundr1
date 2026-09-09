@@ -45231,6 +45231,21 @@ a:focus-visible {
 .inventory-read-detail details { width: 100%; }
 .inventory-read-detail .inventory-read-error { color: var(--red); }
 .inventory-read-spinner { display: inline-block; animation: inventory-read-spin 1.4s linear infinite; }
+.inventory-calibration-panel .inventory-sync-state { background: transparent; padding: 5px 0; }
+.inventory-sync-state > span { display: flex; }
+.inventory-read-note { font-size: 12px; color: var(--muted); }
+.inventory-read-note.is-warning { color: var(--amber); }
+.inventory-calibration-panel .inventory-read-summary { color: var(--muted); font-size: 13px; }
+.inventory-sync-rules { margin-top: 16px; color: var(--muted); font-size: 13px; }
+.inventory-sync-rules summary { cursor: pointer; font-weight: 500; }
+.inventory-calibration-panel a.secondary-button { display: inline-flex; text-decoration: none; color: var(--text); margin-top: 12px; }
+.inventory-comparison-preview { margin-block: 20px; }
+.inventory-comparison-preview h4 { margin-bottom: 8px; font-weight: 600; }
+.inventory-comparison-preview > p { font-size: 13px; color: var(--muted); }
+.inventory-change-label { display: block; color: var(--green); font-size: 13px; font-weight: 500; }
+.inventory-calibration-panel .inventory-comparison-cell.has-change { border-inline-start: 0; background: var(--green-soft); border-radius: 8px; padding: 8px; }
+.inventory-calibration-panel .inventory-comparison-cell .inventory-state-tag { background: transparent; padding: 3px 0; }
+.inventory-calibration-panel summary:focus-visible, .inventory-calibration-panel a:focus-visible { outline: 2px solid var(--green); outline-offset: 4px; }
 .inventory-comparison-cell > .inventory-state-tag { margin-block: 3px; }
 @keyframes inventory-read-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .inventory-read-spinner { animation: none; } }

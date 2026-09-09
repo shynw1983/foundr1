@@ -73,17 +73,16 @@ export function WholeStoreAvailabilitySync({storeId,language,disabled,onApplied}
     finally{setBusy(false);}
   }
   return <details className="panel inventory-calibration-panel" data-i18n-ignore>
-    <summary>{label('その他の操作 · Uber 基準で全店の販売状態を揃える','更多操作 · 按 Uber 校准全店销售状态','更多操作 · 按 Uber 校準全店銷售狀態')}</summary>
+    <summary>{label('販売状態をまとめて同期','批量同步销售状态','批次同步銷售狀態')}</summary>
     <div className="store-menu-head">
       <div>
         <h3>{label('Uber 基準で販売状態を揃える','按 Uber 校准销售状态','按 Uber 校準銷售狀態')}</h3>
-        <p>{label('単品操作は Store 基準。全店同期は Uber 読取 → OS → 連携先。販売状態の定時同期は行いません。','单品操作以 Store 为准。整店同步：读取 Uber → OS → 关联平台。不再定时同步销售状态。','單品操作以 Store 為準。整店同步：讀取 Uber → OS → 關聯平台。不再定時同步銷售狀態。')}</p>
+        <p>{label('Uber に合わせて、必要な変更だけ同期します。','以 Uber 为准，只同步需要变更的商品。','以 Uber 為準，只同步需要變更的商品。')}</p>
       </div>
-      <button type="button" className="primary-button" disabled={disabled||busy||!storeId||report?.status==='processing'||report?.details.comparison?.pending} onClick={()=>void start()}>
-        {busy?label('送信中…','正在提交…'):report?.status==='processing'?label('読取／同期中…','读取／同步中…','讀取／同步中…'):label('全プラットフォームを読み取り、比較','读取所有平台，预览差异','讀取所有平台，預覽差異')}
+      <button type="button" className={report?.status==='awaiting_confirmation'&&!expired?'secondary-button':'primary-button'} disabled={disabled||busy||!storeId||report?.status==='processing'||report?.details.comparison?.pending} onClick={()=>void start()}>
+        {busy?label('送信中…','正在提交…'):report?.status==='processing'?label('読取／同期中…','读取／同步中…','讀取／同步中…'):label('状態を読み取る','读取状态','讀取狀態')}
       </button>
     </div>
-    <p>{label('全ブランドが対象です。読取のみでは販売状態は変わりません。プレビューは10分間有効です。','范围为本店全部品牌。只读取不会修改销售状态；预览有效期为 10 分钟。','範圍為本店全部品牌。只讀取不會修改銷售狀態；預覽有效期為 10 分鐘。')}</p>
     {report&&!report.details.osApplied&&!!report.reads?.length&&<InventoryReadProgress
       reads={report.reads} language={language} counts={report.details.comparison?.counts??{}}
       confirmedByPlatform={Object.fromEntries((report.details.comparison?.platforms??[]).map(p=>[p,report.details.comparison?.rows.filter(r=>['available','sold_out'].includes(r.cells[p]?.state)).length??0]))}
@@ -93,16 +92,19 @@ export function WholeStoreAvailabilitySync({storeId,language,disabled,onApplied}
     />}
     {report&&['awaiting_confirmation','expired'].includes(report.status)&&<div>
       {report.details.comparison?<InventoryComparisonPreview key={report.id} comparison={report.details.comparison} language={language}/>:<p>{label('旧プレビューです。全プラットフォームを再読み取りしてください。','旧预览不包含其他平台状态，请重新读取所有平台。','舊預覽不包含其他平台狀態，請重新讀取所有平台。')}</p>}
-      <button className="primary-button" type="button" disabled={busy||disabled||expired||!report.details.comparison?.ready||report.reads?.some(r=>['queued','pending','processing'].includes(r.status))} onClick={()=>void confirm()}>{label('確認して同期（販売状態を変更）','确认同步（修改销售状态）','確認同步（修改銷售狀態）')} · {Object.entries(report.details.comparison?.counts??{}).map(([p,n])=>`${({foundr1:'OS',rocket_now:'Rocket Now',demae_can:'出前館'} as Record<string,string>)[p]} ${n}`).join(' / ')}</button>
+      <button className="primary-button" type="button" disabled={busy||disabled||expired||!report.details.comparison?.ready||report.reads?.some(r=>['queued','pending','processing'].includes(r.status))} onClick={()=>void confirm()}>{label('確認して同期','确认同步','確認同步')}</button>
       {expired&&<p>{label('期限切れ · 再読み取りしてください。','预览已过期，请重新读取。','預覽已過期，請重新讀取。')}</p>}
     </div>}
     {report&&<div role="status" aria-live="polite">
       {!['awaiting_confirmation','expired'].includes(report.status)&&(!report.reads?.length||report.details.osApplied)&&<p className={`inventory-state-tag is-${report.status==='failed'?'error':report.status==='succeeded'?'success':'info'}`}>{report.status==='failed'?label('同期が停止しました。履歴で原因を確認してください。','同步已停止，请在履历中查看原因。','同步已停止，請在履歷中查看原因。'):report.status==='succeeded'?label('全店同期完了','整店同步完成'):report.details.osApplied?label('OS 反映済み · 他社へ配信中','OS 已更新 · 正在发布到其他平台','OS 已更新 · 正在發佈到其他平台'):label('読取の準備中 · まだ変更していません','正在准备读取 · 尚未修改状态','正在準備讀取 · 尚未修改狀態')}</p>}
       {report.details.osApplied&&report.platforms.length>0&&<div className="inventory-state-tags">{report.platforms.map(p=><span key={p.platform} className={`inventory-state-tag is-${p.failed||p.timedOut?'error':p.succeeded===p.total?'success':'info'}`}>{p.failed||p.timedOut?'!':p.succeeded===p.total?'✓':'◌'} {({foundr1:'OS',uber_eats:'Uber',rocket_now:'Rocket Now',demae_can:'出前館'} as Record<string,string>)[p.platform]??p.platform}: {p.succeeded}/{p.total}</span>)}</div>}
       {!!report.details.excluded?.length&&<details><summary>{label('Uber 未対応・変更しない商品','未关联 Uber、不改动的商品','未關聯 Uber、不變更的商品')} ({report.details.excluded.length})</summary><p>{report.details.excluded.map(t=>t.label).join('、')}</p></details>}
-      <a href="/store/menu/inventory-history">{label('同期履歴・エラー詳細・失敗分の再試行','同步履历、错误详情与失败项重试','同步履歷、錯誤詳情與失敗項重試')}</a>
+      <a className="secondary-button" href="/store/menu/inventory-history">{label('履歴・失敗した項目を確認','查看记录与失败项','查看紀錄與失敗項')}</a>
     </div>}
     {error&&<p role="alert" className="is-error">{error}</p>}
-    <p><a href="/os/menus">{label('メニュー内容・価格・同期履歴は OS へ','菜单内容、价格与同步履历：前往 OS','菜單內容、價格與同步履歷：前往 OS')}</a></p>
+    <details className="inventory-sync-rules"><summary>{label('同期ルール・その他','同步规则与更多','同步規則與更多')}</summary>
+      <p>{label('単品操作は Store、まとめて同期は Uber が基準です。本店の全ブランドが対象です。確認するまで変更しません。プレビューは10分間有効です。販売状態の定時同期はありません。','单品操作以 Store 为准，批量同步以 Uber 为准。范围为本店全部品牌，确认后才修改。预览有效期 10 分钟，不定时同步销售状态。','單品操作以 Store 為準，批次同步以 Uber 為準。範圍為本店全部品牌，確認後才修改。預覽有效期 10 分鐘，不定時同步銷售狀態。')}</p>
+      <a className="secondary-button" href="/os/menus">{label('メニュー管理','菜单管理','菜單管理')}</a>
+    </details>
   </details>;
 }

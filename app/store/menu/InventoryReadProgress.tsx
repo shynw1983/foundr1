@@ -1,4 +1,5 @@
 "use client";
+import {CheckCircle2, Clock3, LoaderCircle, XCircle} from "lucide-react";
 
 export type InventoryRead = {id:string;platform:string;status:string;error:string;count:number};
 export function InventoryReadProgress({reads,language,counts,unknownByPlatform,stagedByPlatform={},confirmedByPlatform={},onRetry,disabled}:{reads:InventoryRead[];language:string;counts:Record<string,number>;unknownByPlatform:Record<string,number>;stagedByPlatform?:Record<string,number>;confirmedByPlatform?:Record<string,number>;onRetry:(id:string)=>void;disabled:boolean}) {
@@ -14,9 +15,9 @@ export function InventoryReadProgress({reads,language,counts,unknownByPlatform,s
       const state=failed?label('読取失敗','读取失败','讀取失敗'):done?label('読取完了','读取完成','讀取完成'):active?label('読取中','读取中','讀取中'):label('待機中','等待中');
       return <li key={r.id} className="inventory-read-row">
         <span className="inventory-read-platform">{names[r.platform]??r.platform}</span>
-        <span className={`inventory-state-tag is-${tone}`}><span aria-hidden="true" className={active?'inventory-read-spinner':''}>{failed?'!':done?'✓':active?'◌':'◷'}</span>{state}</span>
+        <span className={`inventory-state-tag inventory-sync-state is-${tone}`}><span aria-hidden="true">{failed?<XCircle size={16}/>:done?<CheckCircle2 size={16}/>:active?<LoaderCircle size={16} className="inventory-read-spinner"/>:<Clock3 size={16}/>}</span>{state}</span>
         <div className="inventory-read-detail">
-          {done?<><span>{confirmedByPlatform[r.platform]??Math.max(0,r.count-(stagedByPlatform[r.platform]??0)-(unknownByPlatform[r.platform]??0))} {label('件の販売状態を確認','项销售状态已确认','項銷售狀態已確認')}</span>{(stagedByPlatform[r.platform]??0)>0&&<span className="inventory-state-tag is-neutral">{stagedByPlatform[r.platform]} {label('件は同期済み・未公開','项已同步・未上架','項已同步・未上架')}</span>}{(counts[r.platform]??0)>0&&<span className="inventory-state-tag is-warning">≠ {counts[r.platform]} {label('件の差分','项差异','項差異')}</span>}{(unknownByPlatform[r.platform]??0)>0&&<span className="inventory-state-tag is-warning">? {unknownByPlatform[r.platform]} {label('件の状態不明','项无法判断','項無法判斷')}</span>}</>:failed?<><span className="inventory-read-error">{failure(r.error)}</span><details><summary>{label('エラー詳細','错误详情','錯誤詳情')}</summary><p>{r.error}</p></details></>:<span>{active?label('販売状態を読み取っています…','正在读取销售状态…','正在讀取銷售狀態…'):label('Bridge の順番待ちです','等待 Bridge 读取','等待 Bridge 讀取')}</span>}
+          {done?<><span>{confirmedByPlatform[r.platform]??Math.max(0,r.count-(stagedByPlatform[r.platform]??0)-(unknownByPlatform[r.platform]??0))} {label('件の販売状態を確認','项销售状态已确认','項銷售狀態已確認')}</span>{(stagedByPlatform[r.platform]??0)>0&&<span className="inventory-read-note">{stagedByPlatform[r.platform]} {label('件は同期済み・未公開','项已同步・未上架','項已同步・未上架')}</span>}{(counts[r.platform]??0)>0&&<span className="inventory-read-note is-warning">≠ {counts[r.platform]} {label('件の差分','项差异','項差異')}</span>}{(unknownByPlatform[r.platform]??0)>0&&<span className="inventory-read-note is-warning">? {unknownByPlatform[r.platform]} {label('件の状態不明','项无法判断','項無法判斷')}</span>}</>:failed?<><span className="inventory-read-error">{failure(r.error)}</span><details><summary>{label('エラー詳細','错误详情','錯誤詳情')}</summary><p>{r.error}</p></details></>:<span>{active?label('販売状態を読み取っています…','正在读取销售状态…','正在讀取銷售狀態…'):label('順番に読み取ります','稍后读取','稍後讀取')}</span>}
         </div>
         {failed&&<button className="secondary-button" type="button" disabled={disabled} onClick={()=>onRetry(r.id)}>{label('このプラットフォームを再読み取り','重新读取该平台','重新讀取該平台')}</button>}
       </li>;
