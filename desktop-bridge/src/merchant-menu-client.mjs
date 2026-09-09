@@ -1,6 +1,19 @@
 import { CdpPage } from './cdp-page.mjs';
 import { executeMenuRequest } from './merchant-menu-receipt.mjs';
 import {createMerchantMenuPacer} from './merchant-menu-pacer.mjs';
+import {setTimeout as delay} from 'node:timers/promises';
+
+export async function retryTransientMenuRead(method,operation,wait=delay) {
+  for(let attempt=0;;attempt++) {
+    try{return await operation();}
+    catch(error) {
+      // Only repeat read-only requests, never authentication/input failures
+      // or writes whose acknowledgement could have been lost.
+      if(method!=='GET'||attempt>=2||!/Failed to fetch|Runtime\.evaluate timeout|AbortError|TimeoutError|timed out|network error/i.test(error.message))throw error;
+      await wait(500*(attempt+1));
+    }
+  }
+}
 
 // Requests remain inside the authenticated merchant browser. Never export its
 // cookies or replay requests against an unverified origin.
@@ -22,10 +35,10 @@ export async function connectMerchantMenuClient(session, origin, successCode) {
       if(receiptKey && (method!=='POST'||!/^[A-Za-z0-9:_-]{1,160}$/.test(receiptKey)))throw Error('merchant_menu_receipt_key_invalid');
       // Writes are deliberately not retried here. Create retry safety belongs
       // to the persistent authority reservation/marker protocol.
-      return paced(async()=>{
+      return retryTransientMenuRead(method,()=>paced(async()=>{
         try {return await page.evaluate(`(${executeMenuRequest.toString()})(${JSON.stringify({path,method,body,successCode,origin,receiptKey})})`);}
         catch(error) {throw new Error(`merchant_menu_operation_failed:${method}:${path}:${error.message}`,{cause:error});}
-      });
+      }));
     }
   };
 }

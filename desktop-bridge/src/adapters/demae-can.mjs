@@ -4,6 +4,7 @@ import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 import { loadDemaeCredentials } from "../demae-credentials.mjs";
 import {publishNativeAuthority} from '../uber-authority-publisher.mjs';
 import {validateAuthorityCommand} from '../uber-authority-runner.mjs';
+import {connectMerchantMenuClient} from '../merchant-menu-client.mjs';
 import {auditDestination} from '../inventory-destination-audit.mjs';
 
 const STOCKOUT_URL = "https://partner.demae-can.com/merchant-admin/shop/stockout";
@@ -653,10 +654,24 @@ export class DemaeCanAdapter {
     };
   }
 
+  async verifyMenuAuthentication() {
+    const transport=await connectMerchantMenuClient(this.session,'https://partner.demae-can.com','MSA0000');
+    try {await transport.request('/merchant-admin/api/v1/product/search/chain-menu-pattern');}
+    finally {transport.close();}
+  }
+
   async publishMenuChanges(payload, reportProgress = async () => undefined) {
     if(payload.authoritativePublication===true) {
       validateAuthorityCommand(payload,'demae_can',this.config.chainId??payload.merchantId);
       if(payload.storeId!==this.session.config?.storeId)throw Error('uber_authority_store_scope_mismatch');
+      try {
+        await this.verifyMenuAuthentication();
+        return publishNativeAuthority(this.session,'demae_can',payload,reportProgress,this.config.chainId);
+      } catch(error) {
+        // A working API session needs no page reload. Recover only explicit
+        // authentication failures, never an ambiguous write or network error.
+        if(!/merchant_menu_request_failed:401:/.test(error.message))throw error;
+      }
       // goto reuses an already-open page. Reload first so an expired session
       // cannot masquerade as a logged-in stockout screen with stale DOM.
       // Reuse normal Keychain login/manual-verification handling before any

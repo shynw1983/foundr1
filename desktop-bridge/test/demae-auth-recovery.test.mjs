@@ -15,6 +15,7 @@ test('menu publication refreshes stale authentication and stops before writes wh
   events.push('ready');
  }};
  const adapter=new DemaeCanAdapter({config:{storeId:'store'},goto:async()=>{events.push('goto');return page;}},{chainId:'1'});
+ adapter.verifyMenuAuthentication=async()=>{throw Error('merchant_menu_request_failed:401:MWA0007');};
  adapter.ensureAuthenticated=async()=>{events.push('auth');throw Error('demae_can_login_required');};
  const payload={authoritativePublication:true,platformKey:'demae_can',merchantId:'1',sourceId:'source',storeId:'store',revision:11,newItemsHidden:true,imagePolicy:'read_only',targets:[{kind:'option_group',sourceKey:'option_group:g',targetId:'g',mappings:[],marker:'FS0123456789abcd'}]};
  await assert.rejects(()=>adapter.publishMenuChanges(payload),/login_required/);
@@ -24,6 +25,9 @@ test('menu publication refreshes stale authentication and stops before writes wh
  assert.deepEqual(events,['goto','reload','idle','ready','auth']);
  events.length=0;payload.storeId='foreign';
  await assert.rejects(()=>adapter.publishMenuChanges(payload),/store_scope_mismatch/);
+ assert.deepEqual(events,[]);
+ payload.storeId='store';adapter.verifyMenuAuthentication=async()=>{throw Error('Failed to fetch');};
+ await assert.rejects(()=>adapter.publishMenuChanges(payload),/Failed to fetch/);
  assert.deepEqual(events,[]);
 });
 
