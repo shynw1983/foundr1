@@ -13,5 +13,11 @@ test('unknown, ambiguous or unsafe draft aborts before writes',async()=>{
 });
 test('live targets need no release and nonmanual actions cannot release',async()=>{
  assert.deepEqual((await prepareDemaeSingleRelease({auditInventory:async()=>({items:[{...target,found:true,status:'available',isAvailable:true}]})},payload)).targets,[target]);
- for(const p of [{...payload,isAvailable:false},{...payload,syncSource:'scheduled'},{...payload,syncRunId:''}])await assert.rejects(()=>prepareDemaeSingleRelease({},p));
+ for(const p of [{...payload,isAvailable:null},{...payload,syncSource:'scheduled'},{...payload,syncRunId:''}])await assert.rejects(()=>prepareDemaeSingleRelease({},p));
+});
+test('stockout of verified hidden draft is a no-op; unverified draft fails',async()=>{
+ const down={...payload,isAvailable:false};
+ const auditInventory=async()=>({items:[{...target,found:true,status:'staged',stagingVerified:true}]});
+ assert.deepEqual((await prepareDemaeSingleRelease({auditInventory},down)).targets,[]);
+ await assert.rejects(()=>prepareDemaeSingleRelease({auditInventory:async()=>({items:[{...target,found:true,status:'staged'}]})},down));
 });

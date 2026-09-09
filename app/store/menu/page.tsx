@@ -414,6 +414,7 @@ export default function StoreMenuPage() {
   }, [selectedCategory, showOptionCategory]);
 
   async function applyDeliveryAvailability(input: {
+    targetId: string;
     brandId: string;
     ingredientLabel: string;
     feedbackLabel: string;
@@ -474,6 +475,7 @@ export default function StoreMenuPage() {
         const platformStates = Object.fromEntries(deliveryPlatforms.map((platform) => [platform, isAvailable])) as Partial<Record<Exclude<PlatformKey, "foundr1">, boolean>>;
         const result = await applyDeliveryAvailability({
           brandId: item.brandId,
+          targetId: item.id,
           ingredientLabel: item.name,
           feedbackLabel: itemName(item, language),
           targetKind: "item",
@@ -540,6 +542,7 @@ export default function StoreMenuPage() {
         const platformStates = Object.fromEntries(deliveryPlatforms.map((platform) => [platform, isAvailable])) as Partial<Record<Exclude<PlatformKey, "foundr1">, boolean>>;
         const result = await applyDeliveryAvailability({
           brandId: option.brandId,
+          targetId: option.id,
           ingredientLabel: option.name,
           feedbackLabel: localizedMenuName(option.name, option.displayNames, language),
           targetKind: "option",
@@ -638,6 +641,7 @@ export default function StoreMenuPage() {
       const desiredAvailable = effectiveAvailability(target.stockStatus, availability);
       const result = await applyDeliveryAvailability({
         brandId: target.brandId,
+        targetId: target.id,
         ingredientLabel: target.name,
         feedbackLabel: targetKind === "item"
           ? itemName(target as StoreMenuItem, language)

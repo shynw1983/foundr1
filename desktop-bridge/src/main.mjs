@@ -85,6 +85,7 @@ async function executeInventoryCommand(command) {
   if (!adapter) throw new Error(`No enabled adapter for ${platform}`);
   let payload = command.payload && typeof command.payload === "object" ? command.payload : {};
   let targets = Array.isArray(payload.targets) ? payload.targets : [];
+  if(!targets.length||targets.some(t=>!t.targetId||!t.knownExternalIds?.length))throw Error('商品の対応IDが未確認です。メニュー連携を確認してください。');
   const manualRetry = Boolean(payload.manualRetryAt);
   if(platform==='demae_can'&&manualRetry&&payload.isAvailable===true&&!payload.fullSyncRunId&&payload.manualItemRelease!==true) {
     throw Error('古い商品対応の履歴は再実行できません。販売状態画面から商品を選び直して販売再開してください。');
@@ -108,6 +109,7 @@ async function executeInventoryCommand(command) {
       if(platform==='demae_can'&&payload.manualItemRelease===true) {
         payload=await prepareDemaeSingleRelease(adapter,payload);
         targets=payload.targets;
+        if(!targets.length&&payload.isAvailable===false)return {changed:0,outcome:'already_hidden',matchedTargetCount:command.payload.targets.length,missingTargetCount:0,missingTargets:[]};
       }
       if(targets.some(t=>t.releasePlan)) {
         if(platform!=='demae_can')throw Error('unsupported_inventory_release');
@@ -117,7 +119,7 @@ async function executeInventoryCommand(command) {
       const ambiguous = located.filter((item) => item.matches.length > 1);
       const verified = located.filter((item) => item.matches.length === 1);
       const missing = located.filter((item) => item.matches.length === 0);
-      if (ambiguous.length || !verified.length) {
+      if (ambiguous.length || missing.length || !verified.length) {
         const problems = [];
         if (ambiguous.length) {
           problems.push(`Multiple target matches: ${ambiguous.map((item) => `${item.label}=${item.matches.length}`).join(", ")}`);

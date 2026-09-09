@@ -324,7 +324,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "食材を確認してください。" }, { status: 400 });
   }
 
-  const resolved = await loadInventoryAvailabilityTargets(storeId, brandId, ingredientLabel, targetKind);
+  const selectedTargetId = text(body.targetId,80);
+  if(body.source === "sales_status" && !selectedTargetId)return Response.json({error:"画面を更新して商品を選び直してください。"},{status:409});
+  const resolved = await loadInventoryAvailabilityTargets(storeId, brandId, ingredientLabel, targetKind, selectedTargetId);
   if (!resolved.targets.length) {
     return Response.json({
       error: targetKind === "item"

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import {selectInventoryIdentity} from './inventory-target-identity';
 import { assertNoWholeStoreSync, withInventoryOperationLock } from "./inventory-operation-lock";
 import { sql } from "./db";
 import {
@@ -40,7 +41,8 @@ export async function loadInventoryAvailabilityTargets(
   storeId: string,
   brandId: string,
   ingredientLabel: string,
-  targetKind: "item" | "option"
+  targetKind: "item" | "option",
+  targetId = ""
 ): Promise<InventoryAvailabilityResolution> {
   let resolution: InventoryAvailabilityResolution;
   if (targetKind === "item") {
@@ -64,7 +66,8 @@ export async function loadInventoryAvailabilityTargets(
         and (${brandId} = '' or menu_catalog_items.brand_id::text = ${brandId})
       order by menu_catalog_items.sort_order
     `;
-    resolution = resolveUberInventoryItemTarget(ingredientLabel, rows as UberInventoryItemRow[]);
+    const selected=selectInventoryIdentity(rows as UberInventoryItemRow[],ingredientLabel,targetId);
+    resolution = selected?resolveUberInventoryItemTarget(selected.name,[selected]):{inventoryKey:'',ingredientLabel,targets:[]};
   } else {
     const rows = await sql`
       select
@@ -89,10 +92,13 @@ export async function loadInventoryAvailabilityTargets(
         and (${brandId} = '' or menu_option_groups.brand_id::text = ${brandId})
       order by menu_option_groups.sort_order, menu_options.sort_order
     `;
-    resolution = resolveUberInventoryTargets(ingredientLabel, rows as UberInventoryOptionRow[]);
+    const selected=selectInventoryIdentity(rows as UberInventoryOptionRow[],ingredientLabel,targetId);
+    resolution = selected?resolveUberInventoryTargets(selected.name,[selected]):{inventoryKey:'',ingredientLabel,targets:[]};
   }
 
   if (!resolution.targets.length) return resolution;
+  resolution.inventoryKey=`${targetKind}:${resolution.targets[0].targetId}`;
+  resolution.targets=resolution.targets.map(target=>({...target,inventoryKey:resolution.inventoryKey}));
   const dependentItems = (await loadLinkedMenuTargets({ storeId, brandId, sourceTargets: resolution.targets }))
     .map((target) => ({ ...target, linkedByDependency: true }));
   const targets = Array.from(new Map([
@@ -462,7 +468,7 @@ async function applyInventoryAvailabilityUnlocked(input: {
         knownExternalIds: inventoryPlatformExternalIds(externalIdMappings, platform, target)
       }));
       const commandTargets = platform === "rocket_now" || platform === "demae_can"
-        ? Array.from(new Map(serializedTargets.map((target) => [target.label.trim(), target])).values())
+        ? Array.from(new Map(serializedTargets.map((target) => [`${target.kind}:${target.targetId}`, target])).values())
         : serializedTargets;
       const idempotencyKey = `${platform}:set_inventory:${storeId}:${resolution.inventoryKey}:${operation}:${groupKey}:${platformCommandId}`;
       const payload = JSON.stringify({
@@ -477,7 +483,7 @@ async function applyInventoryAvailabilityUnlocked(input: {
         operation,
         soldOutMode: "indefinite",
         targets: commandTargets,
-        ...(platform === "demae_can" && syncSource === "store" && desiredAvailable && commandTargets.length
+        ...(platform === "demae_can" && syncSource === "store" && commandTargets.length
           ? { manualItemRelease: true, verifyAvailability: true, demaeStaging: await loadDemaeStagingHints(storeId) }
           : {})
       });
