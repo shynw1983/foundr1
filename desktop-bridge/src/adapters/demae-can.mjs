@@ -655,7 +655,7 @@ export class DemaeCanAdapter {
 
   async publishMenuChanges(payload, reportProgress = async () => undefined) {
     if(payload.authoritativePublication===true) {
-      validateAuthorityCommand(payload,'demae_can',this.config.chainId);
+      validateAuthorityCommand(payload,'demae_can',this.config.chainId??payload.merchantId);
       if(payload.storeId!==this.session.config?.storeId)throw Error('uber_authority_store_scope_mismatch');
       // goto reuses an already-open page. Reload first so an expired session
       // cannot masquerade as a logged-in stockout screen with stale DOM.
@@ -664,6 +664,11 @@ export class DemaeCanAdapter {
       const page=await this.session.goto(STOCKOUT_URL);
       await page.reload({waitUntil:'domcontentloaded',timeout:30000});
       await page.waitForNetworkIdle({idleTime:500,timeout:8000}).catch(()=>undefined);
+      // The SPA can be network-idle while its authenticated route is still
+      // rendering. Wait for a recognizable screen, not just an idle socket.
+      await page.waitForFunction(()=>/品切れ終売設定|CAPTCHA|画像認証|認証コード/u.test(document.body?.innerText??'')
+        ||(/\/merchant-admin\/login(?:[/?#]|$)/u.test(location.href)&&!!document.querySelector('input[type="password"]')),{timeout:15000})
+        .catch(()=>{throw Error('demae_can_page_unavailable');});
       await this.ensureAuthenticated(page);
       return publishNativeAuthority(this.session,'demae_can',payload,reportProgress,this.config.chainId);
     }
