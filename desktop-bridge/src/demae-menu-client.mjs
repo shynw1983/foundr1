@@ -212,13 +212,23 @@ export class DemaeMenuClient {
     for(const key of ['chainId','categoryCode','applyStartDate','applyEndDate','categoryName','adminCategoryName','type','categoryType','businessType','isSideOrderCategory','categoryDescription'])body[key]=detail[key];
     body.categoryName=patch.name??detail.categoryName;
     if(patch.retire&&ids.length)throw Error('demae_menu_category_still_populated');
-    body.menuPatternCategoryLinkList=patch.retire?[]:links.map(row=>({menuPatternCode:row.menuPatternCode}));
+    if(patch.retire) {
+      if(!this.draftPatternCode)throw Error('demae_menu_hidden_item_scope_missing');
+      await new DemaeDraftClient(this.transport,this.chainId,this.pattern).assertHiddenPattern(this.draftPatternCode);
+      if(detail.categoryItemLinkList?.length)throw Error('demae_menu_category_still_populated');
+    }
+    // Native category validation requires a menu pattern, even when retired.
+    body.menuPatternCategoryLinkList=patch.retire?[{menuPatternCode:this.draftPatternCode}]:links.map(row=>({menuPatternCode:row.menuPatternCode}));
     body.categoryItemLinkList=ids.map((id,index)=>({itemCode:id,dispOrder:index+1}));
     await this.transport.request(path,'PUT',body);
     const actual=(await this.catalog()).items.categoryList.find(row=>String(row.categoryCode)===String(id));
     if(patch.retire) {
       const remaining=await this.transport.request(`${this.base}/category/${code(id)}/menu-pattern-list`);
-      if(actual||!Array.isArray(remaining)||remaining.length)throw Error('demae_menu_category_retirement_unverified');
+      if(actual||!Array.isArray(remaining)||remaining.length!==1||String(remaining[0].chainId)!==this.chainId||remaining[0].menuPatternCode!==this.draftPatternCode)throw Error('demae_menu_category_retirement_unverified');
+      await new DemaeDraftClient(this.transport,this.chainId,this.pattern).assertHiddenPattern(this.draftPatternCode);
+      const saved=await this.transport.request(path);
+      for(const key of ['categoryName','adminCategoryName','applyStartDate','applyEndDate','type','categoryType','businessType','isSideOrderCategory','categoryDescription'])if(!sameMenuValue(saved[key],detail[key]))throw Error('demae_menu_category_retirement_content_changed');
+      if(saved.categoryItemLinkList?.length)throw Error('demae_menu_category_still_populated');
       return;
     }
     if(!actual||actual.categoryName!==body.categoryName||!sameMenuValue(actual.itemList.map(item=>item.itemCode),ids)
