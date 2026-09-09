@@ -90,6 +90,7 @@ export async function GET(request: Request) {
       commands.id::text as "commandId",
       commands.platform,
       commands.status as "commandStatus",
+      commands.command_type as "commandType",
       commands.last_error as "lastError",
       commands.attempts,
       commands.payload as "commandPayload",
@@ -122,6 +123,7 @@ export async function GET(request: Request) {
         id: String(row.commandId),
         platform: String(row.platform),
         status: normalizedCommandStatus(String(row.commandStatus), String(row.lastError)),
+        commandType: String(row.commandType),
         error: String(row.lastError),
         attempts: Number(row.attempts ?? 0),
         payload: row.commandPayload,
@@ -178,6 +180,10 @@ export async function GET(request: Request) {
       details: {...details,snapshot:undefined,comparison},
       status,
       platforms,
+      reads: run.commands.filter(c => c.commandType === 'audit_inventory').map(c => ({
+        id:c.id, platform:c.platform, status:c.status, error:c.error,
+        count: Array.isArray((c.result as Record<string,unknown> | null)?.items) ? ((c.result as Record<string,unknown>).items as unknown[]).length : 0
+      })),
       failedCommands: run.commands.filter((command) => command.status === "failed" || command.status === "timed_out").map(({payload,result,...command})=>command),
       commands: undefined
     };

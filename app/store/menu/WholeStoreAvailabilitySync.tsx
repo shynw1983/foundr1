@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { inventoryPreviewExpired } from "../../../lib/inventory-preview";
 import {InventoryComparisonPreview,type InventoryComparison} from './InventoryComparisonPreview';
+import {InventoryReadProgress,type InventoryRead} from './InventoryReadProgress';
 
-type Report = { id:string; status:string; details:{comparison?:InventoryComparison;authority?:string;osApplied?:boolean;targetCount?:number;previewAt?:string;preview?:Array<{label:string;isAvailable:boolean;wasAvailable:boolean|null}>;excluded?:Array<{label:string}>}; platforms:Array<{platform:string;succeeded:number;total:number;failed:number;timedOut:number}> };
+type Report = { id:string; status:string; reads?:InventoryRead[]; details:{comparison?:InventoryComparison;authority?:string;osApplied?:boolean;targetCount?:number;previewAt?:string;preview?:Array<{label:string;isAvailable:boolean;wasAvailable:boolean|null}>;excluded?:Array<{label:string}>}; platforms:Array<{platform:string;succeeded:number;total:number;failed:number;timedOut:number}> };
 export function WholeStoreAvailabilitySync({storeId,language,disabled,onApplied}:{storeId:string;language:string;disabled:boolean;onApplied:()=>void}) {
   const zh=language==='zh-Hans', hant=language==='zh-Hant';
   const label=(ja:string,cn:string,tw=cn)=>zh?cn:hant?tw:ja;
@@ -62,6 +63,15 @@ export function WholeStoreAvailabilitySync({storeId,language,disabled,onApplied}
     }catch(e){setError(e instanceof Error?e.message:label('同期できませんでした。','同步失败。','同步失敗。'));}
     finally{setBusy(false);}
   }
+  async function retryRead(commandId:string) {
+    setBusy(true);setError('');
+    try {
+      const response=await fetch('/api/store/menu-sync-runs/retry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'retry_read',storeId,commandId})});
+      if(!response.ok)throw new Error(label('再読み取りできません。他の処理の完了後、全プラットフォームを読み直してください。','暂时无法重读，请等待其他任务完成后重新读取所有平台。','暫時無法重讀，請等待其他工作完成後重新讀取所有平台。'));
+      setReport(current=>current?{...current,reads:current.reads?.map(r=>r.id===commandId?{...r,status:'queued',error:''}:r)}:current);
+    } catch(e){setError(e instanceof Error?e.message:String(e));}
+    finally{setBusy(false);}
+  }
   return <details className="panel inventory-calibration-panel" data-i18n-ignore>
     <summary>{label('その他の操作 · Uber 基準で全店の販売状態を揃える','更多操作 · 按 Uber 校准全店销售状态','更多操作 · 按 Uber 校準全店銷售狀態')}</summary>
     <div className="store-menu-head">
@@ -74,14 +84,19 @@ export function WholeStoreAvailabilitySync({storeId,language,disabled,onApplied}
       </button>
     </div>
     <p>{label('全ブランドが対象です。読取のみでは販売状態は変わりません。プレビューは10分間有効です。','范围为本店全部品牌。只读取不会修改销售状态；预览有效期为 10 分钟。','範圍為本店全部品牌。只讀取不會修改銷售狀態；預覽有效期為 10 分鐘。')}</p>
+    {report&&!report.details.osApplied&&!!report.reads?.length&&<InventoryReadProgress
+      reads={report.reads} language={language} counts={report.details.comparison?.counts??{}}
+      unknownByPlatform={Object.fromEntries((report.details.comparison?.platforms??[]).map(p=>[p,report.details.comparison?.rows.filter(r=>r.cells[p]?.state==='unknown').length??0]))}
+      onRetry={id=>void retryRead(id)} disabled={disabled||busy||report.reads.some(r=>['queued','pending','processing'].includes(r.status))||Boolean(report.details.previewAt&&expired)}
+    />}
     {report&&['awaiting_confirmation','expired'].includes(report.status)&&<div>
       {report.details.comparison?<InventoryComparisonPreview key={report.id} comparison={report.details.comparison} language={language}/>:<p>{label('旧プレビューです。全プラットフォームを再読み取りしてください。','旧预览不包含其他平台状态，请重新读取所有平台。','舊預覽不包含其他平台狀態，請重新讀取所有平台。')}</p>}
-      <button className="primary-button" type="button" disabled={busy||disabled||expired||!report.details.comparison?.ready} onClick={()=>void confirm()}>{label('確認して実行','确认执行','確認執行')} · {Object.entries(report.details.comparison?.counts??{}).map(([p,n])=>`${({foundr1:'OS',rocket_now:'Rocket Now',demae_can:'出前館'} as Record<string,string>)[p]} ${n}`).join(' / ')}</button>
+      <button className="primary-button" type="button" disabled={busy||disabled||expired||!report.details.comparison?.ready||report.reads?.some(r=>['queued','pending','processing'].includes(r.status))} onClick={()=>void confirm()}>{label('確認して同期（販売状態を変更）','确认同步（修改销售状态）','確認同步（修改銷售狀態）')} · {Object.entries(report.details.comparison?.counts??{}).map(([p,n])=>`${({foundr1:'OS',rocket_now:'Rocket Now',demae_can:'出前館'} as Record<string,string>)[p]} ${n}`).join(' / ')}</button>
       {expired&&<p>{label('期限切れ · 再読み取りしてください。','预览已过期，请重新读取。','預覽已過期，請重新讀取。')}</p>}
     </div>}
     {report&&<div role="status" aria-live="polite">
-      {!['awaiting_confirmation','expired'].includes(report.status)&&<p>{report.status==='failed'?label('同期が停止しました。履歴で原因を確認してください。','同步已停止，请在履历中查看原因。','同步已停止，請在履歷中查看原因。'):report.status==='succeeded'?label('全店同期完了','整店同步完成'):report.details.osApplied?label('OS 反映済み · 他社へ配信中','OS 已更新 · 正在发布到其他平台','OS 已更新 · 正在發佈到其他平台'):label('Uber 読取待ち／読取中 · OS はまだ変更していません','等待／正在读取 Uber · 尚未修改 OS','等待／正在讀取 Uber · 尚未修改 OS')}</p>}
-      {report.platforms.length>0&&<p>{report.platforms.map(p=>`${({foundr1:'OS',uber_eats:'Uber',rocket_now:'Rocket Now',demae_can:'出前館'} as Record<string,string>)[p.platform]??p.platform}: ${p.succeeded}/${p.total}`).join(' · ')}</p>}
+      {!['awaiting_confirmation','expired'].includes(report.status)&&(!report.reads?.length||report.details.osApplied)&&<p className={`inventory-state-tag is-${report.status==='failed'?'error':report.status==='succeeded'?'success':'info'}`}>{report.status==='failed'?label('同期が停止しました。履歴で原因を確認してください。','同步已停止，请在履历中查看原因。','同步已停止，請在履歷中查看原因。'):report.status==='succeeded'?label('全店同期完了','整店同步完成'):report.details.osApplied?label('OS 反映済み · 他社へ配信中','OS 已更新 · 正在发布到其他平台','OS 已更新 · 正在發佈到其他平台'):label('読取の準備中 · まだ変更していません','正在准备读取 · 尚未修改状态','正在準備讀取 · 尚未修改狀態')}</p>}
+      {report.details.osApplied&&report.platforms.length>0&&<div className="inventory-state-tags">{report.platforms.map(p=><span key={p.platform} className={`inventory-state-tag is-${p.failed||p.timedOut?'error':p.succeeded===p.total?'success':'info'}`}>{p.failed||p.timedOut?'!':p.succeeded===p.total?'✓':'◌'} {({foundr1:'OS',uber_eats:'Uber',rocket_now:'Rocket Now',demae_can:'出前館'} as Record<string,string>)[p.platform]??p.platform}: {p.succeeded}/{p.total}</span>)}</div>}
       {!!report.details.excluded?.length&&<details><summary>{label('Uber 未対応・変更しない商品','未关联 Uber、不改动的商品','未關聯 Uber、不變更的商品')} ({report.details.excluded.length})</summary><p>{report.details.excluded.map(t=>t.label).join('、')}</p></details>}
       <a href="/store/menu/inventory-history">{label('同期履歴・エラー詳細・失敗分の再試行','同步履历、错误详情与失败项重试','同步履歷、錯誤詳情與失敗項重試')}</a>
     </div>}

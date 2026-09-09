@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
+import { withInventoryOperationLock } from "../../../../../lib/inventory-operation-lock";
 import {
   publishBridgeCommandAvailable,
   publishBridgeCommandUpdated
@@ -24,6 +25,33 @@ export async function POST(request: Request) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
   if (!commandId) return Response.json({ error: "Command ID is required." }, { status: 400 });
+
+  // Read retries cannot change availability or revive an applied/stale preview.
+  if (body.action === 'retry_read') {
+    try {
+      const rows = await withInventoryOperationLock(storeId, () => sql`
+        update local_bridge_commands c set status='pending', attempts=0, available_at=now(),
+          claimed_by_device_id=null, claimed_at=null, claim_expires_at=null, completed_at=null,
+          result='{}'::jsonb, last_error='', updated_at=now()
+        from menu_inventory_sync_runs r
+        where c.id::text=${commandId} and c.store_id::text=${storeId}
+          and c.command_type='audit_inventory' and c.status='failed'
+          and c.payload->>'availabilityAuthority'='uber_eats'
+          and r.id::text=c.payload->>'fullSyncRunId' and r.store_id=c.store_id
+          and r.details->>'comparisonVersion'='1' and coalesce(r.details->>'osApplied','false')<>'true'
+          and (r.details->>'previewAt' is null or (r.details->>'previewAt')::timestamptz > now()-interval '10 minutes')
+          and not exists (select 1 from menu_inventory_sync_runs newer where newer.store_id=r.store_id and newer.created_at>r.created_at)
+          and not exists (select 1 from local_bridge_commands busy where busy.store_id=c.store_id
+            and busy.status in ('pending','processing') and busy.command_type in ('audit_inventory','set_inventory_availability','publish_menu_changes','capture_menu_snapshot'))
+        returning c.id::text
+      `);
+      if (!rows.length) return Response.json({error:'再読み取りできません。他の処理の完了後、全プラットフォームを読み直してください。'},{status:409});
+      await publishBridgeCommandAvailable(storeId).catch(()=>undefined);
+      return Response.json({ok:true});
+    } catch {
+      return Response.json({error:'処理中です。完了後に再読み取りしてください。'},{status:409});
+    }
+  }
 
   const progress = {
     progress: {

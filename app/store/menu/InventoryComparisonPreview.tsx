@@ -14,7 +14,7 @@ export function InventoryComparisonPreview({comparison,language}:{comparison:Inv
  const rows=comparison.rows.filter(r=>filter==='unknown'?unknown(r):filter==='excluded'?excluded(r):filter==='differences'?r.changes.length>0:r.changes.includes(filter));
  const render=(data:ComparisonRow[])=><div className="inventory-comparison-list">{data.map(r=><article key={`${r.kind}:${r.targetId}`} className="inventory-comparison-row">
   <div className="inventory-comparison-name">{r.label}<small>{r.kind==='option'?label('オプション','选项','選項'):label('商品','商品')}</small></div>
-  {columns.map(p=><div key={p} className={r.changes.includes(p)?'inventory-comparison-cell has-change':'inventory-comparison-cell'}><small>{names[p]}{p==='uber_eats'?label('（基準）','（基准）','（基準）'):''}</small><span>{cellLabel(r.cells[p])}</span>{r.changes.includes(p)&&<span> → {r.isAvailable?label('販売再開','恢复销售','恢復銷售'):label('無期限の売切','永久缺货','永久缺貨')}</span>}<small>{r.cells[p].readAt?new Date(r.cells[p].readAt!).toLocaleTimeString(language,{timeZone:'Asia/Tokyo'}):'—'}</small></div>)}
+  {columns.map(p=><div key={p} className={r.changes.includes(p)?'inventory-comparison-cell has-change':'inventory-comparison-cell'}><small>{names[p]}{p==='uber_eats'?label('（基準）','（基准）','（基準）'):''}</small><span className={`inventory-state-tag is-${r.cells[p].state==='available'?'success':r.cells[p].state==='sold_out'?'error':r.cells[p].state==='excluded'?'neutral':r.cells[p].reason==='reading'?'info':'warning'}`}>{r.cells[p].state==='available'?'✓':r.cells[p].state==='sold_out'?'−':r.cells[p].reason==='reading'?'◌':r.cells[p].state==='excluded'?'—':'?'} {cellLabel(r.cells[p])}</span>{r.changes.includes(p)&&<span className="inventory-state-tag is-warning"> → {r.isAvailable?label('販売再開','恢复销售','恢復銷售'):label('無期限の売切','永久缺货','永久缺貨')}</span>}<small>{r.cells[p].readAt?new Date(r.cells[p].readAt!).toLocaleTimeString(language,{timeZone:'Asia/Tokyo'}):'—'}</small></div>)}
  </article>)}</div>;
  return <div>
   <h4>{label('全プラットフォームの比較','全平台状态对照','全平台狀態對照')}</h4>
@@ -26,8 +26,8 @@ export function InventoryComparisonPreview({comparison,language}:{comparison:Inv
    <option value="unknown">{label('不明・読取失敗','未知／读取失败','未知／讀取失敗')} · {comparison.unknown}</option>
    <option value="excluded">{label('対象外・隔離','隔离／不参与同步','隔離／不參與同步')} · {comparison.rows.filter(excluded).length}</option>
   </select></label>
-  {comparison.pending&&<p role="status">{label('他社の状態を読み取っています。まだ変更していません。','正在读取其他平台，尚未修改任何状态。','正在讀取其他平台，尚未修改任何狀態。')}</p>}
-  {comparison.unknown>0&&<p role="alert">{label('不明な状態があります。実行前に対応関係・接続を確認し、再読み取りしてください。','存在未知状态，执行前请检查对应关系或平台连接，并重新读取。','存在未知狀態，執行前請檢查對應關係或平台連線，並重新讀取。')}</p>}
+  {comparison.pending&&<p role="status" className="inventory-state-tag is-info">◌ {label('他社の状態を読み取っています。まだ変更していません。','正在读取其他平台，尚未修改任何状态。','正在讀取其他平台，尚未修改任何狀態。')}</p>}
+  {!comparison.pending&&comparison.unknown>0&&<p role="alert" className="inventory-state-tag is-warning">? {label('不明な状態があります。実行前に対応関係・接続を確認し、再読み取りしてください。','存在未知状态，执行前请检查对应关系或平台连接，并重新读取。','存在未知狀態，執行前請檢查對應關係或平台連線，並重新讀取。')}</p>}
   {rows.length?render(rows):<p>{label('この条件に該当する項目はありません。','没有符合此筛选条件的项目。','沒有符合此篩選條件的項目。')}</p>}
   <details><summary>{label('全対象プラットフォームで一致','所有参与平台均一致','所有參與平台均一致')} · {unchanged.length}</summary>{render(unchanged)}</details>
  </div>;
