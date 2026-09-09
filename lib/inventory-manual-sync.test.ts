@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import ts from 'typescript';
 import {validateUberAvailability} from './inventory-authority-policy.ts';
+import {buildInventoryComparison} from './inventory-comparison.ts';
 
 const target={kind:'option',targetId:'00000000-0000-4000-8000-000000000001',brandId:'00000000-0000-4000-8000-000000000002',label:'配料',aliases:[],knownExternalIds:['uber-option']};
 const result={targetCount:1,items:[{kind:'option',targetId:target.targetId,found:true,isAvailable:false,status:'sold_out'}]};
@@ -14,7 +15,8 @@ function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_co
   const sql=Object.assign((parts:TemplateStringsArray,...values:unknown[])=>{
     const text=parts.join('?');
     let rows:unknown[]=[];
-    if(text.includes('select details'))rows=[{details:{osApplied:applied,targetCount:1,phase,previewAt:new Date(Date.now()-(expired?660000:0)).toISOString()}}];
+    if(text.includes('select details'))rows=[{details:{osApplied:applied,targetCount:1,phase,comparisonVersion:1,comparisonPlatforms:['rocket_now','demae_can'],comparisonExclusions:quarantined?[{platform:'demae_can',kind:target.kind,targetId:target.targetId}]:[],preview:[{...target,isAvailable:false,wasAvailable:true}],previewAt:new Date(Date.now()-(expired?660000:0)).toISOString()}}];
+    if(text.includes("payload->>'comparisonAudit'='true'"))rows=['rocket_now','demae_can'].map(platform=>({platform,status:'succeeded',payload:{comparisonAudit:true,targets:platform==='demae_can'&&missingDemae?[]:[{...target,knownExternalIds:[platform==='rocket_now'?'rocket-option':'demae-option']}]},result:{items:[{kind:target.kind,targetId:target.targetId,found:true,isAvailable:true,status:'available'}]}}));
     if(text.includes('select 1 where exists'))rows=changed?[{}]:[];
     if(text.includes('select id from local_bridge_commands'))rows=busy?[{id:'busy'}]:[];
     if(text.includes('select 1 from store_sales_sources'))rows=[{}];
@@ -29,6 +31,7 @@ function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_co
     './inventory-platform-object-mappings':{loadInventoryPlatformExternalIdMap:async()=>mappings,inventoryPlatformExternalIds:(map:Map<string,string[]>,platform:string,t:typeof target)=>map.get(`${platform}:${t.kind}:${t.targetId}`)??[]},
     './inventory-operation-lock':{withInventoryOperationLock:async(_store:string,fn:()=>Promise<unknown>)=>fn(),assertNoWholeStoreSync:async()=>{}},
     './inventory-authority-policy':{validateUberAvailability},
+    './inventory-comparison':{buildInventoryComparison},
     './local-bridge-realtime':{publishBridgeCommandAvailable:async()=>{wakes++;}}
   };
   const exports:Record<string,(...args:unknown[])=>Promise<unknown>>={};
@@ -43,10 +46,10 @@ test('quarantined menu targets stay excluded from inventory publication',async()
   assert.equal(commands.length,1);
   assert.equal(commands[0].values[2],'rocket_now');
 });
-test('manual start queues only a fresh Uber read, never OS availability or destination writes',async()=>{
+test('manual start queues fresh platform reads, never availability writes',async()=>{
   const h=harness();await h.exports.startUberAvailabilitySync('store',[target],'operator');
   assert.equal(h.transactions.length,1);
-  assert.equal(h.transactions[0].length,2);
+  assert.equal(h.transactions[0].length,4);
   assert.match(h.transactions[0][1].text,/'audit_inventory'/);
   assert.ok(!h.transactions[0].some(q=>q.text.includes('menu_option_store_settings')));
 });
@@ -65,12 +68,9 @@ test('complete read atomically commits OS, permanent downstream commands and rec
   for(const q of commands){const payload=JSON.parse(q.values[4] as string);assert.equal(payload.soldOutMode,'indefinite');assert.equal(payload.isAvailable,false);}
   assert.equal(h.wakes(),1);
 });
-test('missing destination mapping records failure without writing that platform; other destinations proceed',async()=>{
-  const h=harness({missingDemae:true});await h.exports.applyUberAvailabilitySync('store',{fullSyncRunId:'run',targets:[target]},result,true);
-  const commands=h.transactions[0].filter(q=>q.text.includes('insert into local_bridge_commands'));
-  const failed=commands.find(q=>q.values[2]==='demae_can')!;
-  assert.equal(failed.values[5],'failed');assert.equal(JSON.parse(failed.values[4] as string).mappingBlocked,true);
-  assert.equal(commands.find(q=>q.values[2]==='rocket_now')!.values[5],'pending');
+test('unknown destination state blocks confirmation before any writes',async()=>{
+  const h=harness({missingDemae:true});await assert.rejects(h.exports.applyUberAvailabilitySync('store',{fullSyncRunId:'run',targets:[target]},result,true));
+  assert.equal(h.transactions.length,0);
 });
 
 test('successful Uber read waits for human confirmation without OS writes or destination commands',async()=>{

@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { loginState, normalizeText, pageSummary, platformUiChanged, targetNameTiers } from "./common.mjs";
 import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 import {publishNativeAuthority} from '../uber-authority-publisher.mjs';
+import {auditDestination} from '../inventory-destination-audit.mjs';
 
 const OOS_URL = "https://store.rocketnow.co.jp/merchant/management/oos";
 const INVENTORY_ROW_SELECTOR = ".nested-checkbox-list__sub_title";
@@ -420,6 +421,7 @@ export function uniqueLocatedRows(items) {
 }
 
 export class RocketNowAdapter {
+  auditInventory(payload) { return auditDestination(this,payload,'rocket_now'); }
   constructor(session, config = {}) {
     this.session = session;
     this.config = config;

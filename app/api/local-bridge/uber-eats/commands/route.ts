@@ -586,10 +586,10 @@ export async function POST(request: Request) {
   if (status === "succeeded" && String(commandRows[0].commandType) === "audit_inventory") {
     const payload = commandRows[0].payload as Record<string,unknown>;
     try {
-      if (!authorization.isDesktop || commandRows[0].platform !== 'uber_eats' || payload.availabilityAuthority !== 'uber_eats') {
+      if (!authorization.isDesktop || payload.availabilityAuthority !== 'uber_eats' || (commandRows[0].platform !== 'uber_eats' && payload.comparisonAudit !== true)) {
         throw new Error('旧形式の読取は無効です。Store から全店同期を実行してください。');
       }
-      auditSummary = await applyUberAvailabilitySync(authorization.storeId, payload, result);
+      if (commandRows[0].platform === 'uber_eats') auditSummary = await applyUberAvailabilitySync(authorization.storeId, payload, result);
       await publishPublicMenuUpdatedEvent(authorization.storeId).catch(()=>undefined);
     } catch (failure) {
       status = 'failed';

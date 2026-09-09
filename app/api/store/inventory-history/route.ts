@@ -1,6 +1,7 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { inventoryPreviewExpired } from "../../../../lib/inventory-preview";
+import {buildInventoryComparison, type ComparisonCommand} from '../../../../lib/inventory-comparison';
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const runtime = "nodejs";
@@ -123,6 +124,8 @@ export async function GET(request: Request) {
         status: normalizedCommandStatus(String(row.commandStatus), String(row.lastError)),
         error: String(row.lastError),
         attempts: Number(row.attempts ?? 0),
+        payload: row.commandPayload,
+        result: row.commandResult,
         failedItems: failedItemLabels(String(row.lastError), row.commandResult),
         failedTargets: failedTargets(String(row.lastError), row.commandResult, row.commandPayload),
         desiredAvailable: row.commandPayload && typeof row.commandPayload === "object"
@@ -163,6 +166,7 @@ export async function GET(request: Request) {
     }
     const platforms = [...platformMap.values()];
     const details = run.details as Record<string, unknown>;
+    const comparison = details.comparisonVersion===1 ? buildInventoryComparison(details,run.commands as ComparisonCommand[]) : null;
     const status = details.phase === 'awaiting_confirmation' ? (inventoryPreviewExpired(String(details.previewAt ?? ''), Date.now()) ? 'expired' : 'awaiting_confirmation')
       : details.phase === "failed_to_queue" || platforms.some((platform) => platform.failed || platform.timedOut)
       ? "failed"
@@ -171,10 +175,10 @@ export async function GET(request: Request) {
         : "succeeded";
     return {
       ...run,
-      details: {...details,snapshot:undefined},
+      details: {...details,snapshot:undefined,comparison},
       status,
       platforms,
-      failedCommands: run.commands.filter((command) => command.status === "failed" || command.status === "timed_out"),
+      failedCommands: run.commands.filter((command) => command.status === "failed" || command.status === "timed_out").map(({payload,result,...command})=>command),
       commands: undefined
     };
   });

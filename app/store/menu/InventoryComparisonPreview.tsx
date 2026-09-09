@@ -1,0 +1,34 @@
+"use client";
+import {useState} from 'react';
+import type {buildInventoryComparison, ComparisonCell, ComparisonRow} from '../../../lib/inventory-comparison';
+export type InventoryComparison=ReturnType<typeof buildInventoryComparison>;
+export function InventoryComparisonPreview({comparison,language}:{comparison:InventoryComparison;language:string}) {
+ const [filter,setFilter]=useState('differences');
+ const label=(ja:string,cn:string,tw=cn)=>language==='ja'?ja:language==='zh-Hant'?tw:cn;
+ const names:Record<string,string>={uber_eats:'Uber',foundr1:'OS',rocket_now:'Rocket Now',demae_can:'出前館'};
+ const cellLabel=(cell:ComparisonCell)=>cell.state==='excluded'?label('対象外','不参与同步','不參與同步'):cell.state==='unknown'?({mapping_missing:label('対応未登録','缺少对应关系','缺少對應關係'),read_failed:label('読取失敗','读取失败','讀取失敗'),reading:label('読取中','读取中','讀取中'),not_found:label('状態不明','状态未知','狀態未知')}[cell.reason??'']??label('不明','未知')):cell.state==='available'?label('販売中','可售'):label('売切','缺货','缺貨');
+ const unknown=(r:ComparisonRow)=>Object.values(r.cells).some(c=>c.state==='unknown');
+ const excluded=(r:ComparisonRow)=>Object.values(r.cells).some(c=>c.state==='excluded');
+ const columns=['uber_eats','foundr1',...comparison.platforms];
+ const unchanged=comparison.rows.filter(r=>!r.changes.length&&!unknown(r)&&!excluded(r));
+ const rows=comparison.rows.filter(r=>filter==='unknown'?unknown(r):filter==='excluded'?excluded(r):filter==='differences'?r.changes.length>0:r.changes.includes(filter));
+ const render=(data:ComparisonRow[])=><div className="inventory-comparison-list">{data.map(r=><article key={`${r.kind}:${r.targetId}`} className="inventory-comparison-row">
+  <div className="inventory-comparison-name">{r.label}<small>{r.kind==='option'?label('オプション','选项','選項'):label('商品','商品')}</small></div>
+  {columns.map(p=><div key={p} className={r.changes.includes(p)?'inventory-comparison-cell has-change':'inventory-comparison-cell'}><small>{names[p]}{p==='uber_eats'?label('（基準）','（基准）','（基準）'):''}</small><span>{cellLabel(r.cells[p])}</span>{r.changes.includes(p)&&<span> → {r.isAvailable?label('販売再開','恢复销售','恢復銷售'):label('無期限の売切','永久缺货','永久缺貨')}</span>}<small>{r.cells[p].readAt?new Date(r.cells[p].readAt!).toLocaleTimeString(language,{timeZone:'Asia/Tokyo'}):'—'}</small></div>)}
+ </article>)}</div>;
+ return <div>
+  <h4>{label('全プラットフォームの比較','全平台状态对照','全平台狀態對照')}</h4>
+  <p>{label('Uber を基準に差分のみ変更します。各欄は読取時点の状態です。','以 Uber 为基准，仅修改差异项。各栏显示读取时的状态。','以 Uber 為基準，僅修改差異項。各欄顯示讀取時的狀態。')}</p>
+  <p>{Object.entries(comparison.counts).map(([p,n])=>`${names[p]}: ${n}`).join(' · ')} {label('件を変更予定','项待修改','項待修改')}</p>
+  <label>{label('表示','显示','顯示')} <select value={filter} onChange={e=>setFilter(e.target.value)}>
+   <option value="differences">{label('差分のみ','只看差异','只看差異')}</option>
+   {['foundr1',...comparison.platforms].map(p=><option key={p} value={p}>{names[p]} · {comparison.counts[p]}</option>)}
+   <option value="unknown">{label('不明・読取失敗','未知／读取失败','未知／讀取失敗')} · {comparison.unknown}</option>
+   <option value="excluded">{label('対象外・隔離','隔离／不参与同步','隔離／不參與同步')} · {comparison.rows.filter(excluded).length}</option>
+  </select></label>
+  {comparison.pending&&<p role="status">{label('他社の状態を読み取っています。まだ変更していません。','正在读取其他平台，尚未修改任何状态。','正在讀取其他平台，尚未修改任何狀態。')}</p>}
+  {comparison.unknown>0&&<p role="alert">{label('不明な状態があります。実行前に対応関係・接続を確認し、再読み取りしてください。','存在未知状态，执行前请检查对应关系或平台连接，并重新读取。','存在未知狀態，執行前請檢查對應關係或平台連線，並重新讀取。')}</p>}
+  {rows.length?render(rows):<p>{label('この条件に該当する項目はありません。','没有符合此筛选条件的项目。','沒有符合此篩選條件的項目。')}</p>}
+  <details><summary>{label('全対象プラットフォームで一致','所有参与平台均一致','所有參與平台均一致')} · {unchanged.length}</summary>{render(unchanged)}</details>
+ </div>;
+}

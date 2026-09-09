@@ -3,6 +3,7 @@ import {selectDemaeSalesMenu} from '../demae-menu-scope.mjs';
 import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 import { loadDemaeCredentials } from "../demae-credentials.mjs";
 import {publishNativeAuthority} from '../uber-authority-publisher.mjs';
+import {auditDestination} from '../inventory-destination-audit.mjs';
 
 const STOCKOUT_URL = "https://partner.demae-can.com/merchant-admin/shop/stockout";
 const LOGIN_FAILURE_COOLDOWN_MS = 30 * 60 * 1000;
@@ -328,6 +329,7 @@ async function submitInventoryActionForm(page, formSelector) {
 }
 
 export class DemaeCanAdapter {
+  auditInventory(payload) { return auditDestination(this,payload,'demae_can'); }
   constructor(session, config = {}, credentialLoader = loadDemaeCredentials) {
     this.session = session;
     this.config = config;

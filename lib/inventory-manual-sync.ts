@@ -4,6 +4,17 @@ import { inventoryPlatformExternalIds, loadInventoryPlatformExternalIdMap } from
 import { assertNoWholeStoreSync, withInventoryOperationLock } from "./inventory-operation-lock";
 import { validateUberAvailability, type AuditTarget } from "./inventory-authority-policy";
 import { publishBridgeCommandAvailable } from "./local-bridge-realtime";
+import {buildInventoryComparison, type ComparisonCommand} from './inventory-comparison';
+
+async function comparisonExclusions(storeId:string) {
+ return sql`select p.platform_key as platform,s.target_type as kind,s.target_id::text as "targetId"
+ from menu_platform_target_settings s join menu_external_platforms p on p.id=s.external_platform_id
+ join store_brands b on b.brand_id=s.brand_id and b.store_id=${storeId}
+ where s.is_enabled=false and (s.store_id is null or s.store_id=${storeId})
+ union select config.key,o.kind,o.target_id::text from menu_uber_sources s join menu_uber_objects o on o.source_id=s.id
+ cross join lateral jsonb_each(s.publish_config) config where s.enabled=true and s.store_id=${storeId} and o.archived=false
+ and (coalesce(config.value->'quarantinedSourceKeys','[]'::jsonb) ? o.source_key or coalesce(config.value->'excludedSourceKeys','[]'::jsonb) ? o.source_key)`;
+}
 
 export async function startUberAvailabilitySync(storeId: string, targets: Omit<AuditTarget, "knownExternalIds">[], requestedBy: string) {
   return withInventoryOperationLock(storeId, async () => {
@@ -22,13 +33,20 @@ export async function startUberAvailabilitySync(storeId: string, targets: Omit<A
     if (!auditTargets.length) throw new Error("Uber と対応する商品がありません。OS で先にメニューを読み取ってください。");
     const runId = randomUUID();
     const commandId = randomUUID();
+    const destinations=await sql`select distinct source_platform as platform from store_sales_sources where store_id=${storeId} and is_enabled=true and source_platform in ('rocket_now','demae_can')`;
+    const policy=await comparisonExclusions(storeId);
+    const comparisonPlatforms=destinations.map(p=>String(p.platform));
+    const comparisonExcluded=comparisonPlatforms.flatMap(platform=>auditTargets.filter(t=>t.label.includes('こちら商品ではありません')||policy.some(p=>p.platform===platform&&p.kind===t.kind&&p.targetId===t.targetId)).map(t=>({platform,kind:t.kind,targetId:t.targetId})));
+    const destinationCommands=comparisonPlatforms.map(platform=>({platform,targets:auditTargets.filter(t=>!comparisonExcluded.some(e=>e.platform===platform&&e.kind===t.kind&&e.targetId===t.targetId)).map(t=>({...t,knownExternalIds:inventoryPlatformExternalIds(mappings,platform,t)})).filter(t=>t.knownExternalIds.length)}));
     await sql.transaction([
       sql`insert into menu_inventory_sync_runs (id,store_id,run_type,action,item_label,inventory_key,source,requested_by,details)
         values (${runId},${storeId},'full_sync','full_sync','Uber 基準の全店手動同期',${`full-sync:${runId}`},'store',${requestedBy},
-          ${JSON.stringify({authority:'uber_eats',phase:'reading_uber',targetCount:auditTargets.length,excluded})}::jsonb)`,
+          ${JSON.stringify({authority:'uber_eats',phase:'reading_uber',targetCount:auditTargets.length,excluded,comparisonVersion:1,comparisonPlatforms,comparisonExclusions:comparisonExcluded})}::jsonb)`,
       sql`insert into local_bridge_commands (id,store_id,platform,command_type,idempotency_key,payload)
         values (${commandId},${storeId},'uber_eats','audit_inventory',${`uber-full-sync:${runId}`},
-          ${JSON.stringify({availabilityAuthority:'uber_eats',fullSyncRunId:runId,targets:auditTargets})}::jsonb)`
+          ${JSON.stringify({availabilityAuthority:'uber_eats',fullSyncRunId:runId,targets:auditTargets})}::jsonb)`,
+      ...destinationCommands.map(c=>sql`insert into local_bridge_commands (id,store_id,platform,command_type,idempotency_key,payload)
+        values (${randomUUID()},${storeId},${c.platform},'audit_inventory',${`comparison:${runId}:${c.platform}`},${JSON.stringify({availabilityAuthority:'uber_eats',comparisonAudit:true,fullSyncRunId:runId,targets:c.targets})}::jsonb)`)
     ]);
     await publishBridgeCommandAvailable(storeId).catch(() => undefined);
     return {runId,commandId,targetCount:auditTargets.length,excluded};
@@ -67,6 +85,9 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
       return {updatedCount:0,missingCount:0};
     }
     const previewAt=String(runs[0].details?.previewAt??'');
+    const comparisonCommands=await sql`select platform,status,payload,result,updated_at::text as "updatedAt" from local_bridge_commands where store_id=${storeId} and payload->>'fullSyncRunId'=${runId} and payload->>'comparisonAudit'='true'`;
+    const comparison=buildInventoryComparison(runs[0].details,comparisonCommands as ComparisonCommand[]);
+    if(!comparison.ready)throw new Error('各プラットフォームの状態が未確認です。全プラットフォームを再読み取りしてください。');
     if(runs[0].details?.phase!=='awaiting_confirmation'||!previewAt||Date.now()-Date.parse(previewAt)>10*60*1000)
       throw new Error('プレビューの有効期限（10分）が切れました。Uber を再読み取りしてください。');
     const changed=await sql`select 1 where exists (
@@ -95,6 +116,7 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
     const commands: Array<{id:string;platform:string;payload:Record<string,unknown>;error?:string}> = [];
     const excluded: Array<{platform:string;label:string;reason:string}> = [];
     for (const {platform} of enabled) {
+      if(!comparison.platforms.includes(String(platform)))throw new Error('連携設定が読取後に変更されました。再読み取りしてください。');
       const platformTargets=audited.filter(t=>{
         if(t.label.includes('こちら商品ではありません') || [...disabledRows, ...authorityExclusions].some(d=>d.platform===platform&&d.kind===t.kind&&d.targetId===t.targetId)) {
           excluded.push({platform:String(platform),label:t.label,reason:'excluded_from_platform'});return false;
@@ -102,6 +124,13 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
         return true;
       });
       const missing=platformTargets.filter(t=>!inventoryPlatformExternalIds(mappings,String(platform),t).length);
+      const observedTargets=(comparisonCommands.find(c=>c.platform===platform)?.payload?.targets??[]) as AuditTarget[];
+      for(const target of platformTargets) {
+        const observed=observedTargets.find(t=>t.kind===target.kind&&t.targetId===target.targetId);
+        const ids=inventoryPlatformExternalIds(mappings,String(platform),target);
+        if(!observed||JSON.stringify([...observed.knownExternalIds].sort())!==JSON.stringify([...ids].sort()))
+          throw new Error('商品対応が読取後に変更されました。再読み取りしてください。');
+      }
       if(missing.length) {
         commands.push({id:randomUUID(),platform:String(platform),error:`商品対応が未登録です。メニュー連携を修正して全店同期を再実行してください: ${missing.map(t=>t.label).join('、')}`,
           payload:{availabilityAuthority:'uber_eats',fullSyncRunId:runId,syncSource:'store',mappingBlocked:true,
@@ -109,7 +138,7 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
         continue;
       }
       for (const isAvailable of [false,true]) {
-        const targets = platformTargets.filter(t => t.isAvailable === isAvailable).flatMap(t => {
+        const targets = platformTargets.filter(t => t.isAvailable === isAvailable && comparison.rows.some(r=>r.kind===t.kind&&r.targetId===t.targetId&&r.changes.includes(String(platform)))).flatMap(t => {
           const ids = inventoryPlatformExternalIds(mappings,String(platform),t);
           return [{...t,knownExternalIds:ids}];
         });
@@ -119,6 +148,7 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
             inventoryKey:`full-sync:${runId}:${platform}:${isAvailable}:${offset}`,
             ingredientLabel:'Uber 基準の全店手動同期',feedbackLabel:'Uber 基準の全店手動同期',
             isAvailable,soldOutMode:'indefinite',
+            verifyAvailability:true,
             operation:platform==='rocket_now'?(isAvailable?'unhide':'hide'):(isAvailable?'available':'stockout'),
             targets:targets.slice(offset,offset+20)
           }});
@@ -126,7 +156,8 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
       }
     }
     // Missing destination mappings must be made visible; never guess a name and unhide a staging object.
-    const data = JSON.stringify(audited);
+    const osChanges=audited.filter(t=>comparison.rows.some(r=>r.kind===t.kind&&r.targetId===t.targetId&&r.changes.includes('foundr1')));
+    const data = JSON.stringify(osChanges);
     await sql.transaction([
       sql`delete from menu_inventory_availability_blocks b using jsonb_to_recordset(${data}::jsonb) as t(kind text,"targetId" uuid)
         where b.store_id=${storeId} and b.target_kind=t.kind and b.target_id=t."targetId"`,
@@ -151,6 +182,6 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
         where id=${runId} and store_id=${storeId}`
     ]);
     await publishBridgeCommandAvailable(storeId).catch(() => undefined);
-    return {updatedCount:audited.length,missingCount:0};
+    return {updatedCount:osChanges.length,missingCount:0};
   });
 }

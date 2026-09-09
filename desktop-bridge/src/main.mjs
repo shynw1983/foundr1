@@ -123,6 +123,10 @@ async function executeInventoryCommand(command) {
       const result = await adapter.setInventory(payload, verified);
       const partialError = partialInventoryTargetError(missing.map((item) => item.label), verified.length);
       if (partialError) throw new Error(partialError);
+      if (payload.verifyAvailability===true) {
+        const audit=await adapter.auditInventory(payload);
+        if(audit.items.length!==targets.length||audit.items.some(row=>row.found!==true||row.isAvailable!==payload.isAvailable)) throw Error('inventory_readback_mismatch');
+      }
       if (platform === "demae_can") {
         demaeCanConsecutiveTimeouts = 0;
         demaeCanCircuitOpenUntil = 0;
