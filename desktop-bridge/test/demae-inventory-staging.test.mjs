@@ -28,3 +28,13 @@ test('mapping drift and missing request never inherit old publication proof',asy
 test('wrong store fails closed',async t=>{
  const f=fixture(t);await assert.rejects(()=>verifyDemaeInventoryStaging({},f.payload,f.items,'other'),/scope_mismatch/);
 });
+test('visible cached row must still exist in the native menu inventory',async t=>{
+ const f=fixture(t);
+ f.items=[{kind:'option',targetId:'option',found:true,status:'available',isAvailable:true}];
+ f.scope.graph=[{kind:'option',targetId:'option'}];
+ f.scope.targets=[];
+ t.mock.method(DemaeMenuClient.prototype,'stockCatalog',async()=>({itemList:[],optionList:[]}));
+ await verifyDemaeInventoryStaging({},f.payload,f.items,'s');
+ assert.equal(f.items[0].found,false);
+ assert.equal(f.items[0].reason,'native_menu_identity_missing');
+});

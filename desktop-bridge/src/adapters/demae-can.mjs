@@ -335,7 +335,7 @@ async function submitInventoryActionForm(page, formSelector) {
 export class DemaeCanAdapter {
   async auditInventory(payload) {
     const result=await auditDestination(this,payload,'demae_can');
-    if(payload.demaeStaging?.length&&result.items.some(row=>!row.found)) {
+    if(payload.demaeStaging?.length) {
       const transport=await connectMerchantMenuClient(this.session,'https://partner.demae-can.com','MSA0000');
       try {
         await verifyDemaeInventoryStaging(transport,payload,result.items,this.session.config.storeId);

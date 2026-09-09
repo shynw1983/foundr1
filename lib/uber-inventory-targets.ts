@@ -51,7 +51,10 @@ function normalize(value: unknown) {
   return String(value ?? "")
     .normalize("NFKC")
     .toLowerCase()
-    .replace(/【[^】]*】|\[[^\]]*\]|（[^）]*）|\([^)]*\)/g, "")
+    .replace(/【[^】]*】|\[[^\]]*\]/g, "")
+    // Parentheses can identify a different ingredient (細 / 極太). Only
+    // discard preparation notes, never the ingredient's distinguishing text.
+    .replace(/\([^)]*(?:水につける|水に浸す|解凍|戻す)[^)]*\)/g, "")
     .replace(/に?(?:変更|変更)|追加|冷凍|乾燥/g, "")
     .replace(/(?:約)?\d+(?:\.\d+)?\s*(?:g|kg|個|枚|本|袋|パック|杯|人前|ヶ|个|张|根|包|份)/g, "")
     .replace(/[\s\u3000・·|｜()[\]（）「」『』【】"'’“”.,。、:：;；!！?？\-_/\\🔥⚡️🏮🤲❗✨👈🤫🥜]/g, "")

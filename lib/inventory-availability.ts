@@ -17,6 +17,7 @@ import {
 import { projectInventoryTargetsForPlatform } from "./inventory-platform-targets";
 import {
   inventoryPlatformExternalIds,
+  loadDemaeStagingHints,
   loadInventoryPlatformExternalIdMap
 } from "./inventory-platform-object-mappings";
 import { loadLinkedMenuTargets } from "./menu-availability-links";
@@ -475,7 +476,10 @@ async function applyInventoryAvailabilityUnlocked(input: {
         isAvailable: desiredAvailable,
         operation,
         soldOutMode: "indefinite",
-        targets: commandTargets
+        targets: commandTargets,
+        ...(platform === "demae_can" && syncSource === "store" && desiredAvailable && commandTargets.length
+          ? { manualItemRelease: true, verifyAvailability: true, demaeStaging: await loadDemaeStagingHints(storeId) }
+          : {})
       });
       if (!commandTargets.length) {
         await sql`

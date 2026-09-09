@@ -16,6 +16,17 @@ function row(input: Partial<UberInventoryOptionRow> & Pick<UberInventoryOptionRo
   };
 }
 
+test("keeps thin and extra-wide hot-pot noodles separate", () => {
+  const rows = [
+    row({id:"thin",groupKey:"noodles",optionKey:"thin-hot-pot",name:"火鍋春雨（細）50g",displayNames:{zh:"火锅粉（细）"}}),
+    row({id:"thin-replace",groupKey:"noodle-replacement",optionKey:"replace-thin-hot-pot",name:"火鍋春雨50g（細）に変更"}),
+    row({id:"wide",groupKey:"noodles",optionKey:"wide-hot-pot",name:"火鍋春雨（極太）50g",displayNames:{zh:"火锅粉（极宽）"}}),
+    row({id:"wide-replace",groupKey:"noodle-replacement",optionKey:"replace-wide-hot-pot",name:"火鍋春雨（極太）50gに変更"})
+  ];
+  for(const label of ["火鍋春雨（細）50g","火锅粉（细）"])assert.deepEqual(resolveUberInventoryTargets(label,rows).targets.map(t=>t.targetId),["thin","thin-replace"]);
+  for(const label of ["火鍋春雨（極太）50g","火锅粉（极宽）"])assert.deepEqual(resolveUberInventoryTargets(label,rows).targets.map(t=>t.targetId),["wide","wide-replace"]);
+});
+
 test("groups normal and replacement noodles as one physical inventory item", () => {
   const result = resolveUberInventoryTargets("・麺：牛筋麺 50g（4時間水につける）", [
     row({ id: "normal", groupKey: "noodles", optionKey: "beef-noodle", name: "【もちもちつるん】牛筋麺" }),

@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import {prepareDemaeSingleRelease} from './demae-single-release.mjs';
 
 import { BridgeApiClient } from "./api-client.mjs";
 import { createAdapter } from "./adapters/index.mjs";
@@ -82,9 +83,12 @@ async function executeInventoryCommand(command) {
   const platform = String(command.platform);
   const adapter = adapters.get(platform);
   if (!adapter) throw new Error(`No enabled adapter for ${platform}`);
-  const payload = command.payload && typeof command.payload === "object" ? command.payload : {};
-  const targets = Array.isArray(payload.targets) ? payload.targets : [];
+  let payload = command.payload && typeof command.payload === "object" ? command.payload : {};
+  let targets = Array.isArray(payload.targets) ? payload.targets : [];
   const manualRetry = Boolean(payload.manualRetryAt);
+  if(platform==='demae_can'&&manualRetry&&payload.isAvailable===true&&!payload.fullSyncRunId&&payload.manualItemRelease!==true) {
+    throw Error('古い商品対応の履歴は再実行できません。販売状態画面から商品を選び直して販売再開してください。');
+  }
   if (platform === "demae_can" && manualRetry) {
     demaeCanConsecutiveTimeouts = 0;
     demaeCanCircuitOpenUntil = 0;
@@ -101,6 +105,10 @@ async function executeInventoryCommand(command) {
         attempt,
         maxAttempts
       });
+      if(platform==='demae_can'&&payload.manualItemRelease===true) {
+        payload=await prepareDemaeSingleRelease(adapter,payload);
+        targets=payload.targets;
+      }
       if(targets.some(t=>t.releasePlan)) {
         if(platform!=='demae_can')throw Error('unsupported_inventory_release');
         await adapter.releaseInventory(payload,progress=>reportProgress(command,progress));

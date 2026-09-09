@@ -55,7 +55,9 @@ export async function planDemaeRelease(transport,scope,target,cache=new Map()) {
 }
 
 export async function releaseDemaeInventory(transport,payload,storeId,onProgress=async()=>{}) {
- if(payload.availabilityAuthority!=='uber_eats'||payload.isAvailable!==true||!payload.fullSyncRunId||payload.syncSource!=='store')throw Error('demae_release_requires_manual_confirmation');
+ const whole=payload.availabilityAuthority==='uber_eats'&&payload.fullSyncRunId;
+ const single=payload.manualItemRelease===true&&payload.syncRunId&&!payload.fullSyncRunId;
+ if(!(whole||single)||payload.isAvailable!==true||payload.syncSource!=='store')throw Error('demae_release_requires_manual_confirmation');
  const tasks=[],cache=new Map();
  for(const target of payload.targets??[]) {
   if(!target.releasePlan)continue;

@@ -9,6 +9,17 @@ export async function verifyDemaeInventoryStaging(transport,payload,items,storeI
  for(const scope of payload.demaeStaging??[]) {
   if(scope.storeId!==storeId)throw Error('demae_inventory_staging_scope_mismatch');
   const client=new DemaeMenuClient(transport,scope.merchantId,scope.menuPatternCode,scope);
+  // A visible inventory row is not enough: confirm its physical identity with
+  // the same native client used by menu publication (not cached DOM alone).
+  const nativeStock=await client.stockCatalog();
+  for(const row of items.filter(row=>row.found&&(scope.graph??[]).some(n=>n.kind===row.kind&&n.targetId===row.targetId))) {
+   const target=payload.targets.find(t=>t.kind===row.kind&&t.targetId===row.targetId);
+   const ids=(target?.knownExternalIds??[]).flatMap(id=>String(id).split(',')).map(id=>authorityPhysicalId('demae_can',row.kind,id,String(scope.merchantId)));
+   const native=row.kind==='item'?nativeStock.itemList:nativeStock.optionList;
+   if(!ids.length||ids.some(id=>native.filter(n=>String(n.chainId)===String(scope.merchantId)&&String(n[row.kind==='item'?'itemCode':'optionCode'])===id).length!==1)) {
+    Object.assign(row,{found:false,status:'unknown',isAvailable:null,reason:'native_menu_identity_missing'});
+   }
+  }
   const candidates=items.filter(row=>!row.found).flatMap(row=>{
    const hint=scope.targets.find(t=>t.kind===row.kind&&t.targetId===row.targetId);
    const requested=payload.targets.find(t=>t.kind===row.kind&&t.targetId===row.targetId);
