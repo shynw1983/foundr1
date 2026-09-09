@@ -155,6 +155,15 @@ export class AuthorityNativeDriver {
   quantityMatches(target,row) {
     if(target.kind!=='option_group'||target.source?.min===undefined)return true;
     if(this.platform==='demae_can')return this.payload.selectionPolicy==='preserve_native';
+    // An unused empty Uber placeholder can still carry a required minimum.
+    // Rocket stores these as 0/0. Preserve only verified, unlinked placeholders;
+    // never relax a required group used by an item or containing real choices.
+    if(this.payload.selectionPolicy==='preserve_native'&&this.children(target).length===0
+      &&row.childIds?.length===0&&row.native?.mappingDishCount===0
+      &&!(row.native?.mappingDishes??[]).length
+      &&!this.payload.targets.some(item=>item.kind==='item'&&!item.archived&&!item.quarantined
+        &&(item.source?.groupIds??[]).includes(target.source.id)))
+      return row.native?.minSelect===0&&row.native?.maxSelect===0&&row.native?.isMandatory===false;
     const limits=this.rocketQuantityLimits(target),max=limits.max;
     // Rocket normalizes an empty optional group to 0/0. With no source
     // choices this is equivalent, but never accept it for a populated group.

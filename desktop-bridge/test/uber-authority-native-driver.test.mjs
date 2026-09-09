@@ -196,6 +196,23 @@ test('Rocket empty optional group normalization cannot hide a populated-group mi
  assert.equal(driver.quantityMatches(target,row),false);
 });
 
+test('Rocket preserves only unused empty required placeholders under native adaptation',async()=>{
+ const target={kind:'option_group',targetId:'g',source:{id:'g',min:1,max:1},mappings:[{externalId:'2'}]};
+ const payload={platformKey:'rocket_now',merchantId:'1',selectionPolicy:'preserve_native',targets:[target]};
+ const driver=new AuthorityNativeDriver({},payload);
+ const row={kind:'option_group',id:'2',childIds:[],native:{minSelect:0,maxSelect:0,isMandatory:false,mappingDishCount:0,mappingDishes:null}};
+ driver.snapshot=async()=>[row];driver.client.updateGroup=async()=>{throw Error('empty placeholder must not be written');};
+ assert.equal(driver.quantityMatches(target,row),true);
+ await driver.updateRelationships(target);
+ payload.selectionPolicy='strict';assert.equal(driver.quantityMatches(target,row),false);
+ payload.selectionPolicy='preserve_native';row.native.mappingDishCount=1;
+ assert.equal(driver.quantityMatches(target,row),false);row.native.mappingDishCount=0;
+ payload.targets.push({kind:'item',source:{groupIds:['g']}});
+ assert.equal(driver.quantityMatches(target,row),false);payload.targets.pop();
+ payload.targets.push({kind:'option',targetId:'o',parentId:'g'});
+ assert.equal(driver.quantityMatches(target,row),false);
+});
+
 test('unchanged Demae staged options reuse the independently verified phase snapshot',async()=>{
  const target={kind:'option',sourceKey:'option:o',targetId:'o',name:'same',price:170,mappings:[{externalId:'itemList_151true',externalParentId:'stage:g'}]};
  const driver=new AuthorityNativeDriver({},{platformKey:'demae_can',merchantId:'1',targets:[target]});

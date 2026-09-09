@@ -18,7 +18,7 @@ export function rocketGroupUpdate(group,patch={}) {
   const min=patch.min??group.minSelect,max=patch.max??group.maxSelect;
   const prior=group.optionItems??[];
   const emptyZero=prior.length===0&&min===0&&max===0;
-  if(!Number.isSafeInteger(min)||min<0||!Number.isSafeInteger(max)||(!emptyZero&&max!==-1&&max<Math.max(1,min)))throw Error('rocket_menu_group_quantity_invalid');
+  if(!Number.isSafeInteger(min)||min<0||!Number.isSafeInteger(max)||(!emptyZero&&max!==-1&&max<Math.max(1,min)))throw Error(`rocket_menu_group_quantity_invalid:${JSON.stringify({groupId:group.optionId,name:group.optionName,min,max,choices:prior.length})}`);
   const ids=patch.memberIds??prior.map(row=>String(row.optionItemId));
   if(!Array.isArray(ids)||new Set(ids.map(String)).size!==ids.length||ids.length!==prior.length
     ||ids.some(id=>!prior.some(row=>String(row.optionItemId)===String(id))))throw Error('rocket_menu_group_members_require_migration');

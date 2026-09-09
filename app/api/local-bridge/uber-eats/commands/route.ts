@@ -316,7 +316,12 @@ export async function GET(request: Request) {
         or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
       )
       and status in ('pending', 'processing')
-      and created_at < now() - interval '2 hours'
+      -- A validated manual menu retry reuses its receipt-bearing command ID.
+      -- Start its bounded execution window again without changing created_at
+      -- (which is also used for revision ordering and history).
+      and greatest(created_at,case when payload->>'authoritativePublication'='true'
+        then (payload->'manualRetryHistory'->-1->>'at')::timestamptz
+        else null end) < now() - interval '2 hours'
   `;
 
   await sql`

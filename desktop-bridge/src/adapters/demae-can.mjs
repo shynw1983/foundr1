@@ -3,6 +3,7 @@ import {selectDemaeSalesMenu} from '../demae-menu-scope.mjs';
 import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 import { loadDemaeCredentials } from "../demae-credentials.mjs";
 import {publishNativeAuthority} from '../uber-authority-publisher.mjs';
+import {validateAuthorityCommand} from '../uber-authority-runner.mjs';
 import {auditDestination} from '../inventory-destination-audit.mjs';
 
 const STOCKOUT_URL = "https://partner.demae-can.com/merchant-admin/shop/stockout";
@@ -653,7 +654,19 @@ export class DemaeCanAdapter {
   }
 
   async publishMenuChanges(payload, reportProgress = async () => undefined) {
-    if(payload.authoritativePublication===true)return publishNativeAuthority(this.session,'demae_can',payload,reportProgress,this.config.chainId);
+    if(payload.authoritativePublication===true) {
+      validateAuthorityCommand(payload,'demae_can',this.config.chainId);
+      if(payload.storeId!==this.session.config?.storeId)throw Error('uber_authority_store_scope_mismatch');
+      // goto reuses an already-open page. Reload first so an expired session
+      // cannot masquerade as a logged-in stockout screen with stale DOM.
+      // Reuse normal Keychain login/manual-verification handling before any
+      // menu writes; never replay a partially executed publication on a 401.
+      const page=await this.session.goto(STOCKOUT_URL);
+      await page.reload({waitUntil:'domcontentloaded',timeout:30000});
+      await page.waitForNetworkIdle({idleTime:500,timeout:8000}).catch(()=>undefined);
+      await this.ensureAuthenticated(page);
+      return publishNativeAuthority(this.session,'demae_can',payload,reportProgress,this.config.chainId);
+    }
     const changes = Array.isArray(payload.changes) ? payload.changes : [];
     const availabilityChanges = changes.filter((change) => change.kind === "disable"
       || (change.kind === "update" && change.currentState?.isActive === false && change.projectedState?.isActive === true));

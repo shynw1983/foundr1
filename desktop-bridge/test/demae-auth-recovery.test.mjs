@@ -3,6 +3,19 @@ import test from "node:test";
 
 import { DemaeCanAdapter, fillInput } from "../src/adapters/demae-can.mjs";
 
+test('menu publication refreshes stale authentication and stops before writes when login fails',async()=>{
+ const events=[];
+ const page={reload:async()=>events.push('reload'),waitForNetworkIdle:async()=>events.push('idle')};
+ const adapter=new DemaeCanAdapter({config:{storeId:'store'},goto:async()=>{events.push('goto');return page;}},{chainId:'1'});
+ adapter.ensureAuthenticated=async()=>{events.push('auth');throw Error('demae_can_login_required');};
+ const payload={authoritativePublication:true,platformKey:'demae_can',merchantId:'1',sourceId:'source',storeId:'store',revision:11,newItemsHidden:true,imagePolicy:'read_only',targets:[{kind:'option_group',sourceKey:'option_group:g',targetId:'g',mappings:[],marker:'FS0123456789abcd'}]};
+ await assert.rejects(()=>adapter.publishMenuChanges(payload),/login_required/);
+ assert.deepEqual(events,['goto','reload','idle','auth']);
+ events.length=0;payload.storeId='foreign';
+ await assert.rejects(()=>adapter.publishMenuChanges(payload),/store_scope_mismatch/);
+ assert.deepEqual(events,[]);
+});
+
 test("fills Demae login inputs without ElementHandle click or type calls", async () => {
   let disposed = false;
   let evaluatedWith = null;
