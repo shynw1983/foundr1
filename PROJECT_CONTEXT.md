@@ -1,6 +1,6 @@
 # PROJECT_CONTEXT
 
-本文档根据当前仓库中的 `README.md`、`AGENTS.md`、`docs/`、`package.json`、`db/schema.sql`、`app/` 路由、`lib/` 工具模块、`public/locales/os/` 翻译资源整理。没有从外部系统确认生产数据状态；凡无法从代码直接确认的事项标记为「未确认」。
+本文档是项目背景索引，不另设代理执行规则；执行规则见 `AGENTS.md`。原始内容根据仓库中的 `README.md`、`AGENTS.md`、`docs/`、`package.json`、`db/schema.sql`、`app/` 路由、`lib/` 工具模块、`public/locales/os/` 翻译资源整理。没有从外部系统确认生产数据状态；凡无法从代码直接确认的事项标记为「未确认」。
 
 ## 项目背景
 
@@ -43,7 +43,7 @@ Foundr1 OS 负责共享菜单/目录、门店营业状态、公开 checkout API�
 - Icons：`lucide-react`。
 - Auth：
   - OS 员工登录使用自有 session cookie：`foundr1_os_session`，逻辑在 `lib/auth.ts`。
-  - 会员端 `/member` 依赖 Clerk；README 标注 Clerk 只用于顾客身份，Foundr1 OS 员工登录仍使用自有 session。
+  - 会员端 `/member` 使用 Neon 支持的自有邮箱/密码认证，session 逻辑在 `lib/member-auth.ts`，参见 `docs/member-auth.md`；Clerk 不属于当前认证运行时。
 - Notifications：站内通知表为 `os_notifications`，Lark 集成在 `lib/lark.ts`，Web Push 相关逻辑在 `lib/web-push.ts`。
 - Realtime：Pusher/Pusher JS 依赖存在，并有订单实时配置/鉴权 API。
 - Email：Resend 依赖和 `lib/email.ts`。
@@ -113,8 +113,8 @@ Foundr1 OS 负责共享菜单/目录、门店营业状态、公开 checkout API�
 
 ### 公开/会员/品牌接口
 
-- `/member`：顾客会员页，展示会员资料、积分、优惠券、stamp card，并使用 Clerk 登录。
-- `/api/public/menus`、`/api/public/menus/nanacha-compatible`、`/api/public/menus/maamaa-compatible`：品牌网站读取菜单数据。
+- `/member`：顾客会员页，展示会员资料、积分、优惠券、stamp card，使用自有会员认证。
+- `/api/public/menus?brand=...`：品牌网站标准菜单入口，使用 `displayNames`。新接入不使用 `*-compatible` 接口，参见 `docs/customer-menu-i18n.md`。
 - `/api/public/orders/nanacha/checkout`、`/api/public/orders/maamaa/checkout`：品牌网站 checkout 入口。
 - `/api/webhooks/square`、`/api/webhooks/komoju`：支付回调。
 
@@ -129,7 +129,7 @@ Foundr1 OS 负责共享菜单/目录、门店营业状态、公开 checkout API�
 - UI 翻译资源存在于 `public/locales/os/zh-Hans.json`、`zh-Hant.json`、`zh.json`；新增可见文案需要补翻译。
 - 菜单导入脚本 `scripts/import-brand-menus.mjs` 已存在，用于从关联品牌网站导入菜单。
 - Vercel Blob、Lark、Web Push、Resend、Pusher 等集成入口/依赖已存在，但运行时配置状态未确认。
-- `.next.broken-build-cache/`、`app/store/kitchen/`、`app/store/pickup-display/`、`fonts/OFL.txt` 当前显示为未跟踪文件；是否应纳入版本控制未确认。
+- 工作区的未提交/未跟踪状态以每次任务的 `git status --short` 为准，不在背景文档中保存瞬时状态。
 
 未确认：
 
@@ -151,4 +151,4 @@ Foundr1 OS 负责共享菜单/目录、门店营业状态、公开 checkout API�
 - 完善经营分析：销售、人件费、原価、経費、月次損益的口径和可视化。
 - 明确会员/积分/优惠券与 POS、Web checkout 的结算闭环。
 - 为重要流程补充端到端验证：品牌网站 checkout、POS checkout、厨房显示、レシート、会员积分、销售汇总。
-- 清理或确认未跟踪文件是否应提交：`.next.broken-build-cache/` 应通常不提交；`app/store/kitchen/`、`app/store/pickup-display/` 是否为新业务代码需由维护者确认。
+- 提交范围按当前任务和实时 Git 差异确定，生成缓存不纳入提交。

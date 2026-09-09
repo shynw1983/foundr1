@@ -1,8 +1,8 @@
-# FOUNDR1 Ops
+# Foundr1 OS
 
-FOUNDR1 Ops is a Next.js back-office app for store ordering, purchasing, supplier management, receipt review, product master data, field notes, and product cost comparison.
+Foundr1 OS is a Next.js backoffice and store operations platform for restaurant operators, with management under `/os` and staff operations under `/store`.
 
-The long-term product direction is a brand/store operations platform, not only a purchasing tool. Procurement remains the current core module under `/ops`, while future store execution systems such as electronic procedures, checklists, training, inventory, audits, and analytics should be designed as related business modules that share employees, stores, brands, permissions, and product master data.
+Procurement, electronic procedures, Timecard, POS, checklists, training, inventory, audits, and analytics are parallel product modules sharing employees, stores, brands, permissions, and product master data. Implementation maturity varies by module; see `docs/operations-platform-roadmap.md`. Agent execution and validation rules are maintained in `AGENTS.md`.
 
 The current product language separates two ideas clearly:
 
@@ -60,15 +60,16 @@ The current role names are stored on `employees.role`.
 
 - `owner`: full administration, deletion rights for history/report records, staff and master data management.
 - `manager`: broad operational management.
-- `buyer`: purchasing workflow user.
 - `store_owner`: franchise or store owner. Can participate in store operations and view product master with restricted editing depending on screen rules.
+- `store_manager`: store management within assigned scope.
 - `staff`: store-side request and confirmation user.
+- `store_terminal`: scoped store device account.
 
 Access is also controlled by `employee_scopes`, especially store scopes. Menus should be shown according to the logged-in user's permissions instead of showing inactive links.
 
 ## Notifications
 
-The app has in-app notifications in `ops_notifications`.
+The app has in-app notifications in `os_notifications`.
 
 Notifications are currently used for:
 

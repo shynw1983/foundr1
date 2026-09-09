@@ -1,6 +1,18 @@
 # AGENTS.md
 
-This file is the working guide for coding agents and future maintainers of Foundr1 OS.
+This file is the canonical project instruction entry point for coding agents and future maintainers of Foundr1 OS. `AI_RULES.md` is a navigation aid; `README.md`, `PROJECT_CONTEXT.md`, `DATABASE.md`, and `docs/` provide supporting context rather than separate agent execution policies. Read relevant domain documentation when needed; do not load every document for every task. Keep domain requirements intact and resolve stale factual descriptions against current code. Report material contradictions instead of silently changing business policy.
+
+## Working Approach and Authorization
+
+- Carry the user's intended outcome through implementation and appropriate verification. Prioritize correctness, completeness, and maintainability; avoid redundant work without sacrificing necessary investigation or testing.
+- Start with relevant code and follow its actual dependencies. Expand the investigation when evidence points to shared APIs, data, styles, translations, or another module. Do not require a fixed repository-wide reading checklist for a small change.
+- Use judgment for routine implementation choices. Refactoring within the task is allowed when it addresses the root cause or materially improves the solution; explain substantial changes and verify affected behavior. Avoid unrelated cleanup, broad formatting, or speculative redesign.
+- Preserve user changes. Inspect existing modifications and merge carefully where the task overlaps; leave unrelated work alone.
+- Existing user authorization persists across turns. Do not request repeated confirmation for already-authorized work. Local code, schema drafts, tests, and documentation changes may proceed within the requested scope, including payment and permission fixes.
+- For schema, authentication, permissions, payments, or cross-module flows, briefly explain the affected data flow and meaningful risks while continuing authorized work. This progress update is not an approval gate.
+- Before applying changes to a real database or performing an external action, establish the target environment and authorization for that action. Ask only if authorization is missing for destructive changes, live financial actions, publishing/deployment, or other consequential external effects. Preparing a patch is distinct from applying it to live data. Complete independent preparation and validation before requesting any necessary approval.
+- Distinguish verified facts, assumptions, and unverified behavior. Investigate resolvable uncertainty; ask only when missing business intent or access prevents a sound decision.
+- Task-relevant dependency, configuration, and tooling fixes are allowed when justified; do not bypass security controls or conceal missing access.
 
 ## Project
 
@@ -62,91 +74,24 @@ npm run db:check
 npm run db:push
 ```
 
-Before finishing code changes, run:
+## Validation and Command Execution
 
-```bash
-npm run build
-git diff --check
-```
+Choose validation according to the change:
 
-Schema changes are made in `db/schema.sql` and applied with:
+- Documentation-only changes: inspect the diff, check references and consistency, and run `git diff --check`. No application build is required.
+- Application code, UI, dependencies, or build configuration changes: run relevant focused checks and one successful `npm run build` for the final code state, plus `git diff --check`. A build does not replace behavior testing.
+- Visible UI changes: inspect the affected flow in a browser at mobile and desktop sizes, including tablet/half-width where layout is affected.
+- Orders, POS, checkout, kitchen, permissions, and loyalty changes: verify the affected flow across API, persistence, and downstream output, including failure or access-denied cases where relevant. Use an appropriate test environment for actions with side effects.
+- Database changes: maintain `db/schema.sql`, inspect affected readers/writers and data preservation, and run `npm run db:check` against the established environment when available. This checks the connected database; it does not prove an unapplied schema patch is correct. Apply with `npm run db:push` only within authorization for that database and change, then verify the result.
+- Report checks actually run and any unavailable or unverified portions. Do not claim completion of tests that were blocked.
 
-```bash
-npm run db:push
-```
+Use bounded command waits and an overall timeout appropriate to the operation. After roughly 30 seconds without output, inspect available logs and process activity; silence alone does not mean a command is frozen. Keep the user informed during long-running work. A healthy build may continue beyond 60 seconds with monitoring.
 
-## Build & Execution Rules
+If there is evidence of a hang or the operation exceeds its reasonable timeout, stop the affected process, diagnose, and retry only after addressing the cause. Inspect TypeScript errors (`npx tsc --noEmit`), configuration, build logs, and relevant server code as appropriate. Type checking may require generated Next.js types. Do not repeatedly start builds or dev servers without new evidence.
 
-Never wait indefinitely for commands.
+The current `npm run lint` script points to `next lint`, which is unavailable in the installed Next.js CLI. Until a supported linter is configured, do not use it as a required diagnostic or report lint as passed.
 
-If a command produces no output for 30 seconds:
-
-1. Stop waiting.
-2. Diagnose the cause.
-3. Do not remain blocked.
-
-Never wait more than 60 seconds without taking action.
-
-For Next.js projects, do not repeatedly run:
-
-- `npm run build`
-- `next build`
-- `npm run dev`
-
-Use diagnostics first:
-
-- `npm run lint`
-- `npx tsc --noEmit`
-
-Only run a full build when necessary.
-
-If a Next.js build appears frozen:
-
-1. Stop the process.
-2. Check TypeScript errors.
-3. Check ESLint errors.
-4. Check Next.js configuration.
-5. Check Server Components and fetch calls.
-6. Clear cache before retrying.
-
-Cache clear commands:
-
-```bash
-rm -rf .next
-rm -rf node_modules/.cache
-```
-
-Do not enter build loops.
-
-Bad:
-
-```text
-build -> wait -> build -> wait -> build
-```
-
-Good:
-
-```text
-build -> diagnose -> fix -> build
-```
-
-Minimize token and time consumption.
-
-Avoid:
-
-- repeated full builds
-- repeated project-wide scans
-- repeated reading of unchanged files
-
-Read only files relevant to the current task. Make focused edits.
-
-When a command appears stuck, explain:
-
-- probable cause
-- diagnostic steps
-- next action
-
-Do not simply continue waiting. Waiting is not debugging. If there is no output for 30 seconds, investigate instead of waiting.
+Clear generated caches only when evidence suggests cache corruption, after stopping processes that use them. Do not clear caches on every failure. Once checks pass, repeat them only for new changes or unresolved concerns.
 
 ## Important Product Language
 
@@ -303,7 +248,7 @@ When editing UI:
 - For analytics/dashboard metric cards, use a stable vertical layout: label on top, value in the middle, note on the bottom. Do not use horizontal card layouts for KPI cards, because values and notes must not overlap or force awkward wrapping in half-width and mobile windows.
 - Keep spacing between dashboard modules consistent in both directions. Reuse one page-level gap for vertical module spacing and matching grid gaps for cards/charts, instead of mixing unrelated margins.
 - In management analytics, keep `原価` separate from monthly `経費`. Procurement/order data feeds product costs such as food, packaging, and consumables. Monthly expenses should be grouped into fixed costs (`固定費`: rent, equipment leases), variable costs (`変動費`: utilities and communication fees), and miscellaneous costs (`雑費`: garbage handling and other store expenses).
-- Use normal button heights for mobile action rows.
+- Use normal button heights for mobile action rows. Prefer existing button styles and `lucide-react` for new icons.
 - Sidebar/mobile menu must be scrollable when content is long.
 - Product cards and comparison history must wrap before tablet widths overflow.
 - The OS navigation/sidebar must always keep language switching available near the top of the navigation, including collapsed desktop sidebars and mobile navigation. In collapsed desktop sidebars, show only a globe icon for language switching; when the sidebar is expanded, show the full language selector/name.
@@ -339,10 +284,11 @@ Prefer clean schema and clean UI language over backwards-compatible clutter.
 
 The main branch is used for the current working product.
 
-Typical finish flow:
+After the required validation, review `git diff --check` and `git status --short`. Commit or push when the user requests it or has already authorized it in the session; do not ask again for the same authorized action. Otherwise leave the reviewed changes in the working tree. Stage only task-related files or hunks, preserving unrelated work.
+
+When commit and push are authorized, the typical flow is:
 
 ```bash
-npm run build
 git diff --check
 git status --short
 git add <changed files>
@@ -350,4 +296,4 @@ git commit -m "<clear message>"
 git push origin main
 ```
 
-Never revert user changes unless explicitly asked.
+Never revert user changes unless explicitly asked. Generated caches such as `.next` and `.next.broken-build-cache` should not be committed; ignore unrelated cache files without asking the user to classify them.
