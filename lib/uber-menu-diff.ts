@@ -1,4 +1,5 @@
 import {type UberSourceCatalog,uberContextPrice} from './uber-menu-authority.ts';
+import {canonicalMenuValue} from './menu-change-display.ts';
 export type MenuChange={kind:string;name:string;field:string;before:string;after:string;sourceKey:string};
 export function uberMenuChanges(before:UberSourceCatalog|null,after:UberSourceCatalog):MenuChange[] {
   const flatten=(catalog:UberSourceCatalog|null)=>{
@@ -6,7 +7,7 @@ export function uberMenuChanges(before:UberSourceCatalog|null,after:UberSourceCa
     if(!catalog)return rows;
     const names=new Map(catalog.entities.map(e=>[e.id,e.name]));
     for(const c of catalog.categories)rows.set(`category:${c.id}`,{name:c.name,groups:c.itemIds.map(id=>names.get(id)??id).join(' / '),groupIds:JSON.stringify(c.itemIds)});
-    for(const g of catalog.groups)rows.set(`option_group:${g.id}`,{name:g.name,groups:g.optionIds.map(id=>names.get(id)??id).join(' / '),groupIds:JSON.stringify(g.optionIds),quantity:JSON.stringify([g.min,g.max,g.quantityInfo??null])});
+    for(const g of catalog.groups)rows.set(`option_group:${g.id}`,{name:g.name,groups:g.optionIds.map(id=>names.get(id)??id).join(' / '),groupIds:JSON.stringify(g.optionIds),quantity:canonicalMenuValue([g.min,g.max,g.quantityInfo??null])});
     for(const e of catalog.entities) {
       const parents=catalog.groups.filter(g=>g.optionIds.includes(e.id));
       const memberships=parents.length?parents:catalog.categories.filter(c=>c.itemIds.includes(e.id));

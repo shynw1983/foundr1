@@ -5,6 +5,7 @@ import {useOsTranslation} from '../components/OsTranslationProvider';
 import styles from './UberSourcePanel.module.css';
 import {canRetryMenuJob,menuSyncIssue} from '../../../lib/menu-sync-status';
 import type {MenuChange} from '../../../lib/uber-menu-diff';
+import {meaningfulMenuChanges,menuChangeValue} from '../../../lib/menu-change-display';
 
 type Job={id:string;platform:string;status:string;updated_at:string;last_error:string;revision:string|null;phase:string|null;attempts:number;available_at:string;progress?:{completed?:number;total?:number};retries?:Array<{at:string;error:string;attempts:number}>};
 
@@ -24,6 +25,7 @@ const platformUrls:Record<string,string>={uber_eats:'https://merchants.ubereats.
 
 export function UberSourcePanel({brandId}:{brandId:string}) {
   const {t,language}=useOsTranslation();
+  const label=(ja:string,cn:string,tw=cn)=>language==='ja'?ja:language==='zh-Hant'?tw:cn;
   const dateLabel=(value:string)=>new Date(value).toLocaleString(language,{timeZone:'Asia/Tokyo'});
   const [data,setData]=useState<SourceData|null>(null);
   const [error,setError]=useState('');
@@ -70,7 +72,7 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
   const active=data?.jobs.some(job=>['pending','processing'].includes(job.status));
   const failed=data?.jobs.filter(job=>job.status==='failed')??[];
   const jobLabel=(job:Job)=>t(job.status==='processing'&&job.phase?phaseNames[job.phase]??statusNames.processing:job.status==='pending'&&job.attempts>0?'自動再試行を待機中':statusNames[job.status]??job.status);
-  const problem=menuSyncIssue(failed[0]?.last_error||source?.last_error);
+  const problem=menuSyncIssue(failed[0]?.last_error||source?.last_error,language);
   const retryButton=(job:Job)=>canRetryMenuJob(job,data?.jobs.find(row=>row.platform===job.platform)?.id,source?.revision??0)?<button type="button" className="secondary-button compact-button" disabled={busy||active||!source?.enabled} onClick={()=>void submit('retry',job.id)}>{t('接続・保存結果を確認して再試行')}</button>:null;
   return <section id="uber-menu-sync" className={`menu-publish-preview ${styles.panel}`} data-i18n-ignore aria-label={t('メニュー同期センター')}>
     <div className="menu-publish-preview-head">
@@ -80,8 +82,8 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
     <p>{language==='ja'?'メニュー更新で既存商品の売切を解除することはありません。販売状態は Store で操作します。':language==='zh-Hant'?'更新菜單不會恢復現有缺貨商品的銷售。銷售狀態請在 Store 操作。':'更新菜单不会恢复现有缺货商品的销售。销售状态请在 Store 操作。'} <a href="/store/menu">{language==='ja'?'Store の販売状態へ':language==='zh-Hant'?'前往 Store 銷售狀態':'前往 Store 销售状态'}</a></p>
     {source&&<>
       <div className={styles.overview} data-tone={problem?'warning':active?'working':'success'} role="status">
-        <strong>{problem?t(problem.title):active?t('メニュー同期を実行中です'):source.revision?t('最新の同期結果を確認できます'):t('まだ同期していません')}</strong>
-        <p>{problem?t(problem.action):t('各プラットフォームの結果は下に表示します。成功済みの同期を再実行する必要はありません。')}</p>
+        <strong>{failed.length?label(`${failed.length} プラットフォームへの反映が未完了です`,`${failed.length} 个平台的菜单尚未同步完成`,`${failed.length} 個平台的菜單尚未同步完成`):problem?t(problem.title):active?t('メニュー同期を実行中です'):source.revision?t('最新の同期結果を確認できます'):t('まだ同期していません')}</strong>
+        <p>{failed.length?label('Uber の読み取り成功と他社への反映成功は別です。下の各平台に原因と次の操作を表示しています。','Uber 读取成功不代表其他平台已同步。请看下方每个平台的失败原因和处理方式。','Uber 讀取成功不代表其他平台已同步。請看下方每個平台的失敗原因和處理方式。'):problem?t(problem.action):t('各プラットフォームの結果は下に表示します。成功済みの同期を再実行する必要はありません。')}</p>
         {failed.length>0&&<p>{t('対応が必要')}：{failed.map(job=>platformNames[job.platform]).join('・')}</p>}
       </div>
       <div className={styles.actions}>
@@ -91,7 +93,7 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
       <p className={styles.meta}>{t('次回確認')}：{source.enabled?dateLabel(data!.nextCheck):t('無効')} · {t('最終読み取り')}：{source.last_checked_at?dateLabel(source.last_checked_at):t('未実行')}</p>
       <ul className={styles.jobs} aria-live="polite">{['uber_eats','rocket_now','demae_can'].map(platform=>{
         const job=data?.jobs.find(row=>row.platform===platform);
-        const issue=menuSyncIssue(job?.last_error),success=data?.successes.find(row=>row.platform===platform);
+        const issue=menuSyncIssue(job?.last_error,language),success=data?.successes.find(row=>row.platform===platform);
         const device=data?.devices.filter(row=>row.platform===platform||row.platform==='desktop').sort((a,b)=>Date.parse(b.last_seen_at??'')-Date.parse(a.last_seen_at??''))[0];
         const offline=!device?.last_seen_at||Date.now()-Date.parse(device.last_seen_at)>120000;
         return <li key={platform} data-state={job?.status}><div className={styles.platformHead}><strong>{platformNames[platform]}</strong><span className={styles.badge}>{job?jobLabel(job):t('未実行')}</span></div>
@@ -99,7 +101,7 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
             {job.status==='processing'&&<ol className={styles.steps}>{['接続確認','差分確認','書き込み','回読確認'].map((step,index)=><li key={step} data-current={index===(['locating','capturing'].includes(job.phase??'')?0:job.phase==='preflight'?1:job.phase==='verifying'?3:2)}>{t(step)}</li>)}</ol>}
             {typeof job.progress?.completed==='number'&&typeof job.progress?.total==='number'&&<span>{t('処理済み')} {job.progress.completed} / {job.progress.total}</span>}
             {job.status==='pending'&&job.attempts>0&&<small>{t('次の再試行')}：{dateLabel(job.available_at)} · {job.attempts} / 3</small>}
-            {issue&&<><p>{t(issue.title)}</p><p className={styles.meta}>{t(issue.action)}</p><details><summary>{t('診断詳細')}</summary><code>{job.last_error}</code></details></>}
+            {issue&&<><div className={styles.failure}><strong>{label('失敗理由','失败原因','失敗原因')}</strong><p>{t(issue.title)}</p><strong>{label('次の対応','下一步','下一步')}</strong><p>{t(issue.action)}</p></div><details><summary>{label('技術情報（調査用）','技术信息（排查用）','技術資訊（排查用）')}</summary><code>{job.last_error}</code></details></>}
             {job.status==='failed'&&platform!=='uber_eats'&&issue?.retry!==false&&retryButton(job)}
           </>}
           <small>{t('最終成功')}：{success?`${success.revision?`${t('取込版')} ${success.revision} · `:''}${dateLabel(success.completed_at)}`:t('未実行')}</small>
@@ -112,7 +114,8 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
         {data?.runs.length?data.runs.slice(0,showAll?20:5).map(run=><details key={run.id} className={styles.run}><summary><span>{dateLabel(run.created_at)} · {t('取込版')} {run.revision} · {t(run.trigger==='manual'?'手動':run.trigger==='scheduled'?'自動':'過去の記録')}</span><small>{run.summary.noChanges?t('確認済み・変更なし（配信なし）'):`${t('新規')} ${run.summary.added} · ${t('名称変更')} ${run.summary.renamed??'—'} · ${t('価格変更')} ${run.summary.repriced??'—'} · ${t('移動')} ${run.summary.moved??'—'} · ${t('削除')} ${run.summary.archived}`}</small></summary>
           {!run.summary.noChanges&&<div className={styles.runJobs}>{data.jobHistory.filter(job=>job.revision===String(run.revision)).map(job=><div key={job.id}><span>{platformNames[job.platform]}：{jobLabel(job)}</span>{job.last_error&&<p>{t(menuSyncIssue(job.last_error)!.title)}</p>}{job.retries?.map((retry,index)=><small key={`${retry.at}-${index}`}>{dateLabel(retry.at)} · {t('手動再試行')} · {t(menuSyncIssue(retry.error)?.title??'同期を完了できませんでした')}</small>)}{job.status==='failed'&&data.jobs.some(row=>row.id===job.id)&&menuSyncIssue(job.last_error)?.retry!==false&&retryButton(job)}</div>)}</div>}
           {run.summary.pendingRemoval>0&&<p>{t('削除候補（再確認待ち）')}：{run.summary.pendingRemoval}</p>}
-          {run.summary.changes?.length?<div className={styles.changes}>{run.summary.changes.map((change,index)=><div key={`${change.sourceKey}-${index}`}><strong>{change.name}</strong><span>{t(change.field)}</span><p><span>{change.before||'—'}</span> → <span>{change.after||'—'}</span></p>{change.kind==='added'&&<small>{t('新規商品は非公開')}</small>}</div>)}</div>:<p>{t(run.summary.noChanges?'メニューに変更はありません。':'この履歴には詳細な差分が保存されていません。')}</p>}
+          {meaningfulMenuChanges(run.summary.changes).length?<div className={styles.changes}>{meaningfulMenuChanges(run.summary.changes).map((change,index)=><div key={`${change.sourceKey}-${index}`}><strong>{change.name}</strong><span>{t(change.field)}</span><p><span>{label('変更前','修改前','修改前')}：{menuChangeValue(change,change.before,language)}</span><br/><span>{label('変更後','修改后','修改後')}：{menuChangeValue(change,change.after,language)}</span></p>{change.field==='数量ルール'&&<details><summary>{label('詳細ルール（技術情報）','完整规则（技术信息）','完整規則（技術資訊）')}</summary><code>{change.before} → {change.after}</code></details>}{change.kind==='added'&&<small>{t('新規商品は非公開')}</small>}</div>)}</div>:<p>{run.summary.changes?.length?label('設定値は同じです。データ内の項目順だけの違いは変更として表示しません。','设置值没有变化，已隐藏仅字段排列顺序不同的记录。','設定值沒有變化，已隱藏僅欄位排列順序不同的記錄。'):t(run.summary.noChanges?'メニューに変更はありません。':'この履歴には詳細な差分が保存されていません。')}</p>}
+          {run.summary.noChanges&&<p className={styles.meta}>{label('今回の確認では再配信していません。過去の配信失敗が解消したことを意味しません。','这次检查未重新发布菜单，不代表之前的同步失败已解决。','這次檢查未重新發佈菜單，不代表之前的同步失敗已解決。')}</p>}
         </details>):<p>{t('未実行')}</p>}
         {(data?.runs.length??0)>5&&<button type="button" className="secondary-button compact-button" onClick={()=>setShowAll(!showAll)}>{t(showAll?'最近5件に戻す':'過去の履歴を表示')}</button>}
       </div>
