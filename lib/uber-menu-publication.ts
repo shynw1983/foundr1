@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { deliveryPlatformRules, projectDeliveryName, projectDeliveryDescription } from './delivery-menu-publishing.ts';
 import { authoritativeDeliveryPrice } from './uber-menu-authority.ts';
+import {resolveUberOptionPlacement} from './uber-option-placement.ts';
 
 export type UberPublicationNode = {
   sourceKey: string; kind: string; targetId: string; parentId: string | null;
@@ -62,6 +63,9 @@ export function buildUberPublication(input: {
   // Explicit, persisted owner decisions only; never infer exclusions from price.
   // Retain the source in OS while omitting it from downstream relationships.
   const excluded=new Set(input.excludedSourceKeys??[]);
+  const placements=resolveUberOptionPlacement(input.nodes.filter(n=>!excluded.has(n.sourceKey)
+    &&!input.quarantinedSourceKeys?.includes(n.sourceKey)),input.mappings);
+  for(const alias of placements)excluded.add(alias.sourceKey);
   const targets=input.nodes.filter(node=>!excluded.has(node.sourceKey)).map(node=>({
     sourceKey:node.sourceKey,kind:node.kind,targetId:node.targetId,parentId:node.parentId,
     marker:`FS${createHash('sha256').update(`${input.sourceId}:${input.platform==='demae_can'&&input.creationIdentities?creationSourceKey(node,input.mappings,input.creationIdentities):node.sourceKey}`).digest('hex').slice(0,14)}`,

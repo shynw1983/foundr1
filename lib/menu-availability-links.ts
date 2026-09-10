@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import {loadUberOptionPlacements} from './uber-option-placement-store';
 import type {
   UberInventoryItemTarget,
   UberInventoryOptionRow,
@@ -35,6 +36,9 @@ export async function loadLinkedMenuTargets(input: {
     from menu_availability_links
     where brand_id::text = ${brandId}
   ` as MenuAvailabilityLink[];
+  const placements=await loadUberOptionPlacements(input.storeId,brandId);
+  for(const peer of placements)links.push({sourceKind:'option',sourceId:peer.targetId,
+    dependentKind:'option',dependentId:peer.primaryTargetId,isBidirectional:true});
   const sourceKeys = input.sourceTargets.map((target) => (
     `${target.kind}:${target.targetId}` as MenuAvailabilityTargetKey
   ));

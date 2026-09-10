@@ -1,5 +1,31 @@
 # Uber-authoritative menu synchronization
 
+## New-arrival presentation policy — 2026-09-11
+
+`新登場トッピング` is an optional Uber presentation membership. Within one
+source, repeated **exact Uber option IDs** use the non-promotion group downstream.
+Promotion-only options still publish normally. Different IDs are never merged
+by name. With multiple regular groups, exactly one already-mapped regular
+occurrence is required; otherwise publication stops for an explicit decision.
+An already-mapped secondary occurrence also stops before changes: this policy
+does not authorize deleting, detaching, hiding or repurposing existing objects.
+
+`resolveUberOptionPlacement` is shared by publication and inventory. OS retains
+all Uber memberships. Single-option stock actions link the exact-ID presentation
+peers bidirectionally and send downstream commands only for the primary; full
+inventory comparisons explicitly exclude secondary downstream memberships while
+still reading/updating their Uber and OS status. This does not add permanent
+name-derived inventory links or alter stock as part of menu synchronization.
+
+Preflight permits a same-name new option only when the existing native record
+has one exact mapped owner with a different Uber ID in another verified group.
+Unknown candidates, same-group collisions and ambiguous ownership still block.
+New records retain the existing hidden-create policy; no old record is adopted
+by name. These are local implementation rules, not a production rollout record.
+Previously queued publication payloads retain their original graph; obtain a new
+publication payload to apply the presentation filtering rather than silently
+rewriting a receipt-bearing command during retry.
+
 ## Production activation — 2026-09-08
 
 Runtime commit `e80c920b` is READY on `https://foundr1.vercel.app`; the public

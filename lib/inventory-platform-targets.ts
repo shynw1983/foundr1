@@ -29,5 +29,9 @@ export function projectInventoryTargetsForPlatform(
   externalIdMappings?: Map<string, string[]>
 ) {
   const excluded = EXCLUDED_LABELS[platform];
-  return targets.filter((target) => Boolean(externalIdMappings?.get(`${platform}:${target.kind}:${target.targetId}`)?.length) || !excluded.has(target.label.trim()));
+  return targets.filter((target) => {
+    const key=`${platform}:${target.kind}:${target.targetId}`;
+    if(externalIdMappings?.has(key)&&externalIdMappings.get(key)?.length===0)return false;
+    return Boolean(externalIdMappings?.get(key)?.length) || !excluded.has(target.label.trim());
+  });
 }

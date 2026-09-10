@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import {UBER_PLACEMENT_RULE_VERSION} from './uber-option-placement.ts';
 import { uberMenuChanges } from './uber-menu-diff.ts';
 import { sql } from './db.ts';
 import { resolveUberOptionMove, missingUberSourceObjects } from './uber-menu-identity.ts';
@@ -114,9 +115,13 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
   const archived = missingObjects.filter(row => independent && oldMissing.includes(`object:${row.sourceKey}`));
   const pendingKeys = [...removals.pending,...objectMissingKeys];
   const changes=uberMenuChanges(previous,catalog);
+  const lastPolicy=await sql`select summary->>'placementRuleVersion' as version from menu_uber_sync_runs
+    where source_id=${source.id} order by created_at desc limit 1`;
+  const placementPolicyChanged=lastPolicy[0]?.version!==UBER_PLACEMENT_RULE_VERSION;
   const summary = {added:nodes.filter(row=>row.isNew).length,moved:nodes.filter(row=>row.kind==='option' && options.some(old=>old.id===row.targetId && old.parentId!==row.parentId)).length,observed:nodes.length,archived:archived.length,pendingRemoval:missingObjects.length,contentChanged:hash!==source.last_content_hash,changes,renamed:changes.filter(row=>row.kind==='renamed').length,repriced:changes.filter(row=>row.kind==='repriced').length,noChanges:false};
+  Object.assign(summary,{placementRuleVersion:UBER_PLACEMENT_RULE_VERSION,placementPolicyChanged});
   if(input.dryRun) return {...summary, dryRun:true, additions:nodes.filter(row=>row.isNew).map(row=>({kind:row.kind,name:row.name,uberId:row.uberId})), prices:nodes.filter(row=>row.price!==null).map(row=>({kind:row.kind,name:row.name,uberPrice:row.uberPrice,osPrice:row.price,mode:row.priceMode})), nodes};
-  if(!input.verifyRollback&&!input.bootstrap&&!summary.contentChanged&&!summary.added&&!summary.moved&&!missingObjects.length) {
+  if(!input.verifyRollback&&!input.bootstrap&&!placementPolicyChanged&&!summary.contentChanged&&!summary.added&&!summary.moved&&!missingObjects.length) {
     summary.noChanges=true;
     await sql.transaction([
       sql`select lock_menu_uber_revision(${source.id},${source.revision})`,

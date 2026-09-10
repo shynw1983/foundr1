@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import {loadUberOptionPlacements} from './uber-option-placement-store';
 
 // Hints identify what to re-read, not proof of current publication state.
 export async function loadDemaeStagingHints(storeId:string) {
@@ -65,6 +66,10 @@ export async function loadInventoryPlatformExternalIdMap(
   for (const row of rows) {
     const key = `${String(row.platform)}:${String(row.kind)}:${String(row.targetId)}`;
     result.set(key, Array.from(new Set([...(result.get(key) ?? []), String(row.externalId)])));
+  }
+  // Explicit empty entries mean presentation-only, not a missing mapping.
+  for(const alias of await loadUberOptionPlacements(storeId)) {
+    result.set(`${alias.platform}:option:${alias.targetId}`,[]);
   }
   return result;
 }

@@ -5,15 +5,17 @@ import { assertNoWholeStoreSync, withInventoryOperationLock } from "./inventory-
 import { validateUberAvailability, type AuditTarget } from "./inventory-authority-policy";
 import { publishBridgeCommandAvailable } from "./local-bridge-realtime";
 import {buildInventoryComparison, type ComparisonCommand} from './inventory-comparison';
+import {loadUberOptionPlacements} from './uber-option-placement-store';
 
 async function comparisonExclusions(storeId:string) {
- return sql`select p.platform_key as platform,s.target_type as kind,s.target_id::text as "targetId"
+ const rows=await sql`select p.platform_key as platform,s.target_type as kind,s.target_id::text as "targetId"
  from menu_platform_target_settings s join menu_external_platforms p on p.id=s.external_platform_id
  join store_brands b on b.brand_id=s.brand_id and b.store_id=${storeId}
  where s.is_enabled=false and (s.store_id is null or s.store_id=${storeId})
  union select config.key,o.kind,o.target_id::text from menu_uber_sources s join menu_uber_objects o on o.source_id=s.id
  cross join lateral jsonb_each(s.publish_config) config where s.enabled=true and s.store_id=${storeId} and o.archived=false
  and (coalesce(config.value->'quarantinedSourceKeys','[]'::jsonb) ? o.source_key or coalesce(config.value->'excludedSourceKeys','[]'::jsonb) ? o.source_key)`;
+ return [...rows,...(await loadUberOptionPlacements(storeId)).map(a=>({platform:a.platform,kind:'option',targetId:a.targetId}))];
 }
 
 export async function startUberAvailabilitySync(storeId: string, targets: Omit<AuditTarget, "knownExternalIds">[], requestedBy: string) {
@@ -108,12 +110,7 @@ export async function applyUberAvailabilitySync(storeId: string, payload: Record
       from menu_platform_target_settings s join menu_external_platforms p on p.id=s.external_platform_id
       join store_brands b on b.brand_id=s.brand_id and b.store_id=${storeId}
       where s.is_enabled=false and (s.store_id is null or s.store_id=${storeId})`;
-    const authorityExclusions = await sql`select config.key as platform, o.kind, o.target_id::text as "targetId"
-      from menu_uber_sources s join menu_uber_objects o on o.source_id=s.id
-      cross join lateral jsonb_each(s.publish_config) config
-      where s.enabled=true and s.store_id=${storeId} and o.archived=false
-        and (coalesce(config.value->'quarantinedSourceKeys','[]'::jsonb) ? o.source_key
-          or coalesce(config.value->'excludedSourceKeys','[]'::jsonb) ? o.source_key)`;
+    const authorityExclusions = await comparisonExclusions(storeId);
     const enabled = await sql`select distinct source_platform as platform from store_sales_sources
       where store_id=${storeId} and is_enabled=true and source_platform in ('rocket_now','demae_can')`;
     const commands: Array<{id:string;platform:string;payload:Record<string,unknown>;error?:string}> = [];

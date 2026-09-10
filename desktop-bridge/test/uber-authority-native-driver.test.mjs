@@ -18,6 +18,17 @@ function fixture() {
  };
  return {payload,driver,rows,writes};
 }
+test('same-name options in another group are safe only with a distinct exact mapped owner',()=>{
+ const {payload,driver,rows}=fixture();
+ const owner=payload.targets[2];owner.sourceKey='option:g:old';
+ const target={...owner,targetId:'new',parentId:'other',sourceKey:'option:other:new',mappings:[]};
+ assert.equal(driver.isIdentifiedOtherGroupOption(rows[2],target),true);
+ for(const patch of [{parentId:'g'},{sourceKey:'option:other:old'},{sourceKey:'option:broken'}])
+  assert.equal(driver.isIdentifiedOtherGroupOption(rows[2],{...target,...patch}),false);
+ assert.equal(driver.isIdentifiedOtherGroupOption({...rows[2],parentIds:['unknown']},target),false);
+ owner.quarantined=true;assert.equal(driver.isIdentifiedOtherGroupOption(rows[2],target),false);
+ owner.quarantined=false;owner.mappings=[];assert.equal(driver.isIdentifiedOtherGroupOption(rows[2],target),false);
+});
 test('mapped native graph runs end-to-end and reports separately read prices',async()=>{
  const {payload,driver,writes}=fixture();
  const result=await runUberAuthorityPublication(payload,driver,async()=>{});

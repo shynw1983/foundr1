@@ -17,6 +17,18 @@ export class AuthorityNativeDriver {
   }
   id(kind,value){return authorityPhysicalId(this.platform,kind,value,this.merchantId);}
   ids(target){return target.mappings.map(row=>this.id(target.kind,row.externalId));}
+  isIdentifiedOtherGroupOption(row,target) {
+    if(target.kind!=='option'||!target.parentId)return false;
+    const identity=t=>/^option:[^:]+:[^:]+$/.test(t.sourceKey??'')?t.sourceKey.split(':')[2]:null;
+    if(!identity(target))return false;
+    const owners=this.payload.targets.filter(t=>t.kind==='option'&&this.ids(t).includes(row.id));
+    if(owners.length!==1)return false;
+    const owner=owners[0];
+    if(owner.archived||owner.quarantined||!owner.parentId||owner.parentId===target.parentId
+      ||!identity(owner)||identity(owner)===identity(target))return false;
+    const group=this.payload.targets.find(t=>t.kind==='option_group'&&t.targetId===owner.parentId&&!t.archived&&!t.quarantined);
+    return Boolean(group&&row.parentIds?.length&&row.parentIds.every(id=>this.ids(group).includes(id)));
+  }
   groupIds(target){
     const ids=(target.source?.groupIds??[]).flatMap(id=>this.ids(this.payload.targets.find(row=>row.sourceKey===`option_group:${id}`)??{kind:'option_group',mappings:[]}));
     const row=(this.relationshipSnapshot??this.contentSnapshot??[]).find(row=>row.kind==='item'&&this.ids(target).includes(row.id));
@@ -361,7 +373,7 @@ export class AuthorityNativeDriver {
         const rocketCreate=this.platform==='rocket_now'&&(['category','option_group'].includes(target.kind)||parent&&parent.mappings.length<=1);
         const demaeOptionCreate=this.platform==='demae_can'&&(target.kind==='category'||target.kind==='option'&&parent||['item','option_group'].includes(target.kind)&&payload.draftPatternCode);
         if(!rocketCreate&&!demaeOptionCreate&&!this.hiddenOptionParent(target,rows))issues.push({sourceKey:target.sourceKey,code:'creation_requires_verified_staging'});
-        else if(rows.some(row=>row.kind===target.kind&&row.name===target.name))issues.push({sourceKey:target.sourceKey,code:'existing_unmapped_candidate'});
+        else if(rows.some(row=>row.kind===target.kind&&row.name===target.name&&!this.isIdentifiedOtherGroupOption(row,target)))issues.push({sourceKey:target.sourceKey,code:'existing_unmapped_candidate'});
         continue;
       }
       issues.push(...this.structureIssues(target,rows,{preflight:true}));
