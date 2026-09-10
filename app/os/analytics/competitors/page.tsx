@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftRight, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Layers3, PackageSearch, Plus, Radar, RefreshCw, Search, ShieldCheck, Store, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Layers3, PackageSearch, Plus, Radar, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Store, Trash2, X } from "lucide-react";
 import type { CSSProperties, FormEvent } from "react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { ActionNotice, useActionNotice } from "../../components/ActionNotice";
@@ -215,6 +215,8 @@ function changeLabel(change: Change) {
 
 type ChangeDirection = "appeared" | "disappeared" | "changed" | "temporary" | "information";
 type ChangeCategory = "promotion" | "price" | "product" | "options" | "rating" | "display";
+type ChangeLevel = "store" | "product" | "options";
+type TimelineRange = "today" | "24h" | "7d" | "30d" | "all";
 
 const categoryMeta: Record<ChangeCategory, { symbol: string; label: string }> = {
   promotion: { symbol: "%", label: "割引" },
@@ -232,6 +234,35 @@ function changeCategory(change: Change): ChangeCategory {
   if (["store_rating_changed", "store_review_count_changed"].includes(change.changeType)) return "rating";
   if (["new_product", "removed", "returned", "renamed"].includes(change.changeType)) return "product";
   return "display";
+}
+
+function changeLevel(change: Change): ChangeLevel {
+  if (["store_rating_changed", "store_review_count_changed", "store_promotion_changed"].includes(change.changeType)) return "store";
+  if (change.changeType === "options_changed") return "options";
+  return "product";
+}
+
+function competitorBrandName(name: string) {
+  if (name.includes("にゃんこ麻辣湯")) return "にゃんこ麻辣湯";
+  if (name.includes("楊国福")) return "楊国福マーラータン";
+  if (name.includes("辛川")) return "辛川麻辣烫";
+  return name.split(/[-–—｜|]/)[0].trim() || name;
+}
+
+function timelineStart(range: TimelineRange) {
+  const now = new Date();
+  if (range === "all") return null;
+  if (range === "today") {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return new Date(`${values.year}-${values.month}-${values.day}T00:00:00+09:00`);
+  }
+  const duration = range === "24h" ? 1 : range === "7d" ? 7 : 30;
+  return new Date(now.getTime() - duration * 24 * 60 * 60 * 1000);
+}
+
+function timelineItemCategory(change: Change) {
+  return change.currentValue.category || change.previousValue.category || "";
 }
 
 function hasPromotion(value: ChangeValue) {
@@ -514,7 +545,15 @@ export default function CompetitorMenuMonitorPage() {
   const [productCategory, setProductCategory] = useState("all");
   const [expandedItemId, setExpandedItemId] = useState("");
   const [selectedOwnItemId, setSelectedOwnItemId] = useState("");
-  const [timelineFilter, setTimelineFilter] = useState<"all" | "important" | ChangeCategory>("all");
+  const [timelineBrand, setTimelineBrand] = useState("all");
+  const [timelineRange, setTimelineRange] = useState<TimelineRange>("7d");
+  const [timelineCategory, setTimelineCategory] = useState<"all" | ChangeCategory>("all");
+  const [timelineImportance, setTimelineImportance] = useState<"all" | "important" | "temporary">("all");
+  const [timelineDirection, setTimelineDirection] = useState<"all" | ChangeDirection>("all");
+  const [timelineLevel, setTimelineLevel] = useState<"all" | ChangeLevel>("all");
+  const [timelineItemCategoryFilter, setTimelineItemCategoryFilter] = useState("all");
+  const [timelineQuery, setTimelineQuery] = useState("");
+  const [showAdvancedTimelineFilters, setShowAdvancedTimelineFilters] = useState(false);
   const { notice, showNotice, clearNotice } = useActionNotice();
 
   async function loadData() {
@@ -528,14 +567,35 @@ export default function CompetitorMenuMonitorPage() {
     void loadData().catch((error) => showNotice(error instanceof Error ? error.message : "読取に失敗しました。", "info")).finally(() => setIsLoading(false));
   }, []);
 
-  const visibleChanges = useMemo(() => selectedSourceId === "all"
-    ? data.changes
-    : data.changes.filter((change) => change.sourceId === selectedSourceId), [data.changes, selectedSourceId]);
-  const filteredTimelineChanges = useMemo(() => visibleChanges.filter((change) => {
-    if (timelineFilter === "all") return true;
-    if (timelineFilter === "important") return change.currentValue.optionChangeDetails?.priority !== "low";
-    return changeCategory(change) === timelineFilter;
-  }), [timelineFilter, visibleChanges]);
+  const timelineBrands = useMemo(() => [...new Set(data.sources.map((source) => competitorBrandName(source.competitorName)))].sort((a, b) => a.localeCompare(b, "ja")), [data.sources]);
+  const timelineSources = useMemo(() => timelineBrand === "all"
+    ? data.sources
+    : data.sources.filter((source) => competitorBrandName(source.competitorName) === timelineBrand), [data.sources, timelineBrand]);
+  const visibleChanges = useMemo(() => data.changes.filter((change) => {
+    if (timelineBrand !== "all" && competitorBrandName(change.competitorName) !== timelineBrand) return false;
+    return selectedSourceId === "all" || change.sourceId === selectedSourceId;
+  }), [data.changes, selectedSourceId, timelineBrand]);
+  const timelineItemCategories = useMemo(() => [...new Set(visibleChanges.map(timelineItemCategory).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja")), [visibleChanges]);
+  const filteredTimelineChanges = useMemo(() => {
+    const from = timelineStart(timelineRange);
+    const query = timelineQuery.trim().toLocaleLowerCase("ja-JP");
+    return visibleChanges.filter((change) => {
+      if (from && new Date(change.detectedAt) < from) return false;
+      if (timelineCategory !== "all" && changeCategory(change) !== timelineCategory) return false;
+      const direction = changeDirection(change);
+      if (timelineImportance === "important" && (change.currentValue.optionChangeDetails?.priority === "low" || direction === "temporary")) return false;
+      if (timelineImportance === "temporary" && direction !== "temporary") return false;
+      if (timelineDirection !== "all" && direction !== timelineDirection) return false;
+      if (timelineLevel !== "all" && changeLevel(change) !== timelineLevel) return false;
+      if (timelineItemCategoryFilter !== "all" && timelineItemCategory(change) !== timelineItemCategoryFilter) return false;
+      if (query) {
+        const optionDetails = change.currentValue.optionChangeDetails;
+        const searchable = [change.competitorName, change.title, change.summary, timelineItemCategory(change), ...(optionDetails?.added ?? []), ...(optionDetails?.hidden ?? []), ...(optionDetails?.returned ?? []), ...(optionDetails?.priceChanged ?? []), ...(optionDetails?.availabilityChanged ?? [])].join(" ").toLocaleLowerCase("ja-JP");
+        if (!searchable.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [timelineCategory, timelineDirection, timelineImportance, timelineItemCategoryFilter, timelineLevel, timelineQuery, timelineRange, visibleChanges]);
   const timelineGroups = useMemo(() => {
     const groups = new Map<string, { sourceId: string; competitorName: string; detectedAt: string; changes: Change[] }>();
     for (const change of filteredTimelineChanges) {
@@ -599,9 +659,33 @@ export default function CompetitorMenuMonitorPage() {
     if (price === null) return 0;
     return Math.max(0, Math.min(100, ((price - priceRange.min) / (priceRange.max - priceRange.min)) * 100));
   }
-  const reportHref = selectedSourceId === "all"
-    ? "/api/competitor-menus/report"
-    : `/api/competitor-menus/report?sourceId=${encodeURIComponent(selectedSourceId)}`;
+  const reportHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (timelineBrand !== "all") params.set("brand", timelineBrand);
+    if (selectedSourceId !== "all") params.set("sourceId", selectedSourceId);
+    params.set("range", timelineRange);
+    if (timelineCategory !== "all") params.set("category", timelineCategory);
+    if (timelineImportance !== "all") params.set("importance", timelineImportance);
+    if (timelineDirection !== "all") params.set("direction", timelineDirection);
+    if (timelineLevel !== "all") params.set("level", timelineLevel);
+    if (timelineItemCategoryFilter !== "all") params.set("itemCategory", timelineItemCategoryFilter);
+    if (timelineQuery.trim()) params.set("q", timelineQuery.trim());
+    return `/api/competitor-menus/report?${params.toString()}`;
+  }, [selectedSourceId, timelineBrand, timelineCategory, timelineDirection, timelineImportance, timelineItemCategoryFilter, timelineLevel, timelineQuery, timelineRange]);
+
+  const activeTimelineFilterCount = [timelineBrand, selectedSourceId, timelineRange === "7d" ? "all" : timelineRange, timelineCategory, timelineImportance, timelineDirection, timelineLevel, timelineItemCategoryFilter, timelineQuery.trim() || "all"].filter((value) => value !== "all").length;
+
+  function clearTimelineFilters() {
+    setTimelineBrand("all");
+    setSelectedSourceId("all");
+    setTimelineRange("7d");
+    setTimelineCategory("all");
+    setTimelineImportance("all");
+    setTimelineDirection("all");
+    setTimelineLevel("all");
+    setTimelineItemCategoryFilter("all");
+    setTimelineQuery("");
+  }
 
   async function createSource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -732,11 +816,11 @@ export default function CompetitorMenuMonitorPage() {
                   <button className={activeView === "compare" ? styles.activeTab : ""} type="button" role="tab" aria-selected={activeView === "compare"} onClick={() => setActiveView("compare")}><ArrowLeftRight size={13} />同平台比較</button>
                   <button className={activeView === "timeline" ? styles.activeTab : ""} type="button" role="tab" aria-selected={activeView === "timeline"} onClick={() => setActiveView("timeline")}>変更履歴</button>
                 </div>
-                <select value={selectedSourceId} onChange={(event) => { setSelectedSourceId(event.target.value); setProductCategory("all"); setExpandedItemId(""); }} aria-label="監視先で絞り込み">
+                {activeView !== "timeline" ? <select value={selectedSourceId} onChange={(event) => { setSelectedSourceId(event.target.value); setProductCategory("all"); setExpandedItemId(""); }} aria-label="監視先で絞り込み">
                   <option value="all">すべての競合店</option>
                   {data.sources.map((source) => <option value={source.id} key={source.id}>{source.competitorName}</option>)}
-                </select>
-                {activeView === "timeline" ? <a className="secondary-button" href={reportHref}><Download size={15} />30日分CSV</a> : null}
+                </select> : null}
+                {activeView === "timeline" ? <a className="secondary-button" href={reportHref}><Download size={15} />絞り込みCSV</a> : null}
               </div>
             </div>
             {activeView === "products" ? (
@@ -872,23 +956,30 @@ export default function CompetitorMenuMonitorPage() {
             ) : (
               <div className={styles.timelineWorkspace}>
                 <div className={styles.timelineTools}>
-                  <div className={styles.timelineFilters} role="group" aria-label="変更種類で絞り込み">
-                    {([
-                      ["all", "すべて"], ["important", "重要のみ"], ["promotion", "割引"], ["price", "価格"],
-                      ["product", "商品"], ["options", "選択肢"], ["rating", "評価"], ["display", "表示"]
-                    ] as const).map(([value, label]) => <button className={timelineFilter === value ? styles.activeTimelineFilter : ""} type="button" key={value} onClick={() => setTimelineFilter(value)}>{label}</button>)}
+                  <div className={styles.timelinePrimaryFilters}>
+                    <label><span>ブランド</span><select value={timelineBrand} onChange={(event) => { setTimelineBrand(event.target.value); setSelectedSourceId("all"); }}><option value="all">すべて</option>{timelineBrands.map((brand) => <option value={brand} key={brand}>{brand}</option>)}</select></label>
+                    <label><span>店舗</span><select value={selectedSourceId} onChange={(event) => setSelectedSourceId(event.target.value)}><option value="all">すべて</option>{timelineSources.map((source) => <option value={source.id} key={source.id}>{source.competitorName}</option>)}</select></label>
+                    <label><span>期間</span><select value={timelineRange} onChange={(event) => setTimelineRange(event.target.value as TimelineRange)}><option value="today">今日</option><option value="24h">直近24時間</option><option value="7d">7日間</option><option value="30d">30日間</option><option value="all">全期間</option></select></label>
+                    <label><span>変更種類</span><select value={timelineCategory} onChange={(event) => setTimelineCategory(event.target.value as "all" | ChangeCategory)}><option value="all">すべて</option>{Object.entries(categoryMeta).map(([value, meta]) => <option value={value} key={value}>{meta.label}</option>)}</select></label>
+                    <label><span>重要度</span><select value={timelineImportance} onChange={(event) => setTimelineImportance(event.target.value as "all" | "important" | "temporary")}><option value="all">すべて</option><option value="important">重要のみ</option><option value="temporary">一時変化のみ</option></select></label>
+                    <label className={styles.timelineSearch}><span>検索</span><span className={styles.timelineSearchInput}><Search size={14} /><input value={timelineQuery} onChange={(event) => setTimelineQuery(event.target.value)} placeholder="商品・選択肢・活動" /></span></label>
                   </div>
-                  <div className={styles.timelineLegend} aria-label="色の意味">
-                    <span className={styles.direction_appeared}>出現・開始</span>
-                    <span className={styles.direction_disappeared}>消失・終了</span>
-                    <span className={styles.direction_changed}>変更</span>
-                    <span className={styles.direction_temporary}>一時変化</span>
+                  <div className={styles.timelineFilterActions}>
+                    <button className={showAdvancedTimelineFilters ? styles.activeAdvancedButton : ""} type="button" onClick={() => setShowAdvancedTimelineFilters((value) => !value)} aria-expanded={showAdvancedTimelineFilters}><SlidersHorizontal size={14} />詳細条件{activeTimelineFilterCount ? <b>{activeTimelineFilterCount}</b> : null}</button>
+                    <span>{filteredTimelineChanges.length}件</span>
+                    {activeTimelineFilterCount ? <button type="button" onClick={clearTimelineFilters}><X size={13} />すべて解除</button> : null}
                   </div>
+                  {showAdvancedTimelineFilters ? <div className={styles.timelineAdvancedFilters}>
+                    <label><span>変化の動き</span><select value={timelineDirection} onChange={(event) => setTimelineDirection(event.target.value as "all" | ChangeDirection)}><option value="all">すべて</option>{Object.entries(directionLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+                    <label><span>対象</span><select value={timelineLevel} onChange={(event) => setTimelineLevel(event.target.value as "all" | ChangeLevel)}><option value="all">すべて</option><option value="store">店舗</option><option value="product">主商品</option><option value="options">選択肢</option></select></label>
+                    <label><span>商品分類</span><select value={timelineItemCategoryFilter} onChange={(event) => setTimelineItemCategoryFilter(event.target.value)}><option value="all">すべて</option>{timelineItemCategories.map((category) => <option value={category} key={category}>{category}</option>)}</select></label>
+                    <div className={styles.timelineLegend} aria-label="色の意味"><span className={styles.direction_appeared}>出現・開始</span><span className={styles.direction_disappeared}>消失・終了</span><span className={styles.direction_changed}>変更</span><span className={styles.direction_temporary}>一時変化</span></div>
+                  </div> : null}
                 </div>
-                {!visibleChanges.length ? (
+                {!data.changes.length ? (
                   <div className="competitor-monitor-empty is-compact"><strong>まだ変更はありません</strong><span>初回読取で基準を作成した後、新商品・価格・割引・商品選択内容などの変更をここに記録します。</span></div>
                 ) : !timelineGroups.length ? (
-                  <div className="competitor-monitor-empty is-compact"><strong>条件に合う変更はありません</strong><span>変更種類の絞り込みを変更してください。</span></div>
+                  <div className="competitor-monitor-empty is-compact"><strong>条件に合う変更はありません</strong><span>ブランド、店舗、期間、変更種類などの条件を変更してください。</span></div>
                 ) : <div className={styles.timelineGroups}>
                   {timelineGroups.map((group) => {
                     const sourceIndex = Math.max(0, data.sources.findIndex((source) => source.id === group.sourceId));

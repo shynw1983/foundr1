@@ -78,6 +78,59 @@ function objectValue(record: unknown) {
   return record && typeof record === "object" ? record as Record<string, unknown> : {};
 }
 
+function competitorBrandName(name: string) {
+  if (name.includes("にゃんこ麻辣湯")) return "にゃんこ麻辣湯";
+  if (name.includes("楊国福")) return "楊国福マーラータン";
+  if (name.includes("辛川")) return "辛川麻辣烫";
+  return name.split(/[-–—｜|]/)[0].trim() || name;
+}
+
+function reportCategory(changeType: string) {
+  if (["store_promotion_changed", "item_promotion_changed"].includes(changeType)) return "promotion";
+  if (changeType === "price_changed") return "price";
+  if (changeType === "options_changed") return "options";
+  if (["store_rating_changed", "store_review_count_changed"].includes(changeType)) return "rating";
+  if (["new_product", "removed", "returned", "renamed"].includes(changeType)) return "product";
+  return "display";
+}
+
+function reportLevel(changeType: string) {
+  if (["store_rating_changed", "store_review_count_changed", "store_promotion_changed"].includes(changeType)) return "store";
+  return changeType === "options_changed" ? "options" : "product";
+}
+
+function reportHasPromotion(record: unknown) {
+  const data = objectValue(record);
+  return Object.keys(objectValue(data.promotionDetails)).length > 0 || objectValue(data.promotions).active === true;
+}
+
+function reportDirection(row: Record<string, unknown>) {
+  const type = String(row.changeType);
+  const previous = objectValue(row.previousValue);
+  const current = objectValue(row.currentValue);
+  if (["new_product", "returned"].includes(type)) return "appeared";
+  if (type === "removed") return "disappeared";
+  if (["item_promotion_changed", "store_promotion_changed"].includes(type)) {
+    if (!reportHasPromotion(previous) && reportHasPromotion(current)) return "appeared";
+    if (reportHasPromotion(previous) && !reportHasPromotion(current)) return "disappeared";
+  }
+  if (type === "availability_changed") return current.isAvailable === false ? "temporary" : "appeared";
+  if (type === "options_changed" && objectValue(current.optionChangeDetails).priority === "low") return "temporary";
+  if (["store_rating_changed", "store_review_count_changed"].includes(type)) return "information";
+  return "changed";
+}
+
+function reportRangeStart(range: string, now: Date) {
+  if (range === "all") return new Date(0);
+  if (range === "today") {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return new Date(`${values.year}-${values.month}-${values.day}T00:00:00+09:00`);
+  }
+  const days = range === "24h" ? 1 : range === "7d" ? 7 : 30;
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+}
+
 function reportChangeRows(rows: Record<string, unknown>[]) {
   const corrected = rows.flatMap((row) => {
     const current = objectValue(row.currentValue);
@@ -144,7 +197,8 @@ export async function GET(request: Request) {
   const sourceId = String(params.get("sourceId") ?? "").trim();
   if (sourceId && !uuidPattern.test(sourceId)) return Response.json({ error: "監視先が見つかりません。" }, { status: 404 });
   const now = new Date();
-  const defaultFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const range = String(params.get("range") ?? "30d");
+  const defaultFrom = reportRangeStart(range, now);
   const from = dateParam(params.get("from"), defaultFrom);
   const toStart = dateParam(params.get("to"), now);
   const to = new Date(toStart.getTime() + 24 * 60 * 60 * 1000);
@@ -173,7 +227,34 @@ export async function GET(request: Request) {
     "商品URL", "メニューURL"
   ];
   const lines = [headers.map(csvCell).join(",")];
-  for (const row of reportChangeRows(rows as Record<string, unknown>[])) {
+  const brand = String(params.get("brand") ?? "").trim();
+  const category = String(params.get("category") ?? "").trim();
+  const importance = String(params.get("importance") ?? "").trim();
+  const direction = String(params.get("direction") ?? "").trim();
+  const level = String(params.get("level") ?? "").trim();
+  const itemCategory = String(params.get("itemCategory") ?? "").trim();
+  const query = String(params.get("q") ?? "").trim().toLocaleLowerCase("ja-JP");
+  const filteredRows = reportChangeRows(rows as Record<string, unknown>[]).filter((row) => {
+    const type = String(row.changeType);
+    const current = objectValue(row.currentValue);
+    const previous = objectValue(row.previousValue);
+    const rowDirection = reportDirection(row);
+    if (brand && competitorBrandName(String(row.competitorName)) !== brand) return false;
+    if (category && reportCategory(type) !== category) return false;
+    if (importance === "important" && (objectValue(current.optionChangeDetails).priority === "low" || rowDirection === "temporary")) return false;
+    if (importance === "temporary" && rowDirection !== "temporary") return false;
+    if (direction && rowDirection !== direction) return false;
+    if (level && reportLevel(type) !== level) return false;
+    const rowItemCategory = String(current.category || previous.category || "");
+    if (itemCategory && rowItemCategory !== itemCategory) return false;
+    if (query) {
+      const details = objectValue(current.optionChangeDetails);
+      const searchable = [row.competitorName, row.title, row.summary, rowItemCategory, ...["added", "hidden", "returned", "priceChanged", "availabilityChanged"].flatMap((key) => Array.isArray(details[key]) ? details[key] as unknown[] : [])].join(" ").toLocaleLowerCase("ja-JP");
+      if (!searchable.includes(query)) return false;
+    }
+    return true;
+  });
+  for (const row of filteredRows) {
     const previous = row.previousValue;
     const current = row.currentValue;
     lines.push([
