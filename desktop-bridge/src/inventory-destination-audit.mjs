@@ -9,7 +9,7 @@ export async function auditDestination(adapter, payload, platform) {
   for(let i=0;i<targets.length;i++) {
    const target=targets[i], row=located[i];
    const matches=row?.matches?.length===1?(row.matches[0].rowMatches??row.matches):[];
-   const states=matches.map(m=>platform==='rocket_now'?m.hidden:m.unavailable);
+   const states=matches.map(m=>m.unavailable);
    const known=row?.kind===kind&&row?.label===target.label&&states.length>0&&states.every(s=>typeof s==='boolean'&&s===states[0]);
    items.push({kind,targetId:target.targetId,found:known,isAvailable:known?!states[0]:null,status:known?(states[0]?'sold_out':'available'):'unknown'});
   }

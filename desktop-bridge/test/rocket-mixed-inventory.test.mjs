@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RocketNowAdapter} from '../src/adapters/rocket-now.mjs';
+import {RocketNowAdapter,rocketNeedsInventoryChange} from '../src/adapters/rocket-now.mjs';
+
+test('today sold out must be restored and is not a permanent hide',()=>{
+ assert.equal(rocketNeedsInventoryChange({hidden:false,unavailable:true},true),true);
+ assert.equal(rocketNeedsInventoryChange({hidden:false,unavailable:true},false),true);
+ assert.equal(rocketNeedsInventoryChange({hidden:true,unavailable:true},false),false);
+ assert.equal(rocketNeedsInventoryChange({hidden:true,unavailable:true},true),true);
+ assert.equal(rocketNeedsInventoryChange({hidden:false,unavailable:false},true),false);
+});
 
 test('mixed inventory lookup visits both kinds, retaining stable IDs', async () => {
   const targets = [{kind:'item', knownExternalIds:['dish']}, {kind:'option', knownExternalIds:['option']}];

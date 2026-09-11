@@ -7,6 +7,12 @@ import {auditDestination} from '../inventory-destination-audit.mjs';
 
 const OOS_URL = "https://store.rocketnow.co.jp/merchant/management/oos";
 const INVENTORY_ROW_SELECTOR = ".nested-checkbox-list__sub_title";
+const SOLD_OUT_PATTERN = '売り切れ';
+
+export function rocketNeedsInventoryChange(match,isAvailable) {
+  // A timed hold is not a permanent hide; restoring either must clear it.
+  return isAvailable ? match.unavailable !== false : match.hidden !== true;
+}
 
 export function rocketInventoryNameVariants(value) {
   const normalized = normalizeText(value);
@@ -114,7 +120,7 @@ export async function readRocketInventoryRows(page, targets) {
     const projected = withPlatformTargetAliases("rocket_now", target);
     return { kind: projected.kind, label: projected.label, knownExternalIds: rocketInventoryExternalIds(projected), knownPhysicalIds:rocketInventoryPhysicalIds(projected), ...targetNameTiers(projected) };
   });
-  return page.evaluate((items) => {
+  return page.evaluate(({items,soldOutPattern}) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const nameVariants = (value) => {
       const normalized = normalize(value);
@@ -159,11 +165,14 @@ export async function readRocketInventoryRows(page, targets) {
       const fallbackRows = exactRows.length || !allowNameFallback ? [] : findRows(item.fallbackNames);
       const aliasRows = exactRows.length || fallbackRows.length || !allowNameFallback ? [] : findRows(item.aliasNames);
       const rows = exactRows.length ? exactRows : fallbackRows.length ? fallbackRows : aliasRows;
-      const matches = rows.map((row) => ({
+      const matches = rows.map((row) => {
+        const statusText=String(row.textContent??'').replace(row.querySelector('.nested-checkbox-list__sub_title')?.textContent??'','');
+        return ({
         text: normalize(row.textContent),
         checkboxId: row.querySelector('input[type="checkbox"],input[type="checkBox"]')?.id ?? "",
-        hidden: normalize(row.textContent).includes("非表示")
-      }));
+        hidden: normalize(statusText).includes("非表示"),
+        unavailable: normalize(statusText).includes("非表示") || new RegExp(soldOutPattern,'iu').test(statusText)
+      });});
       return {
         kind: item.kind,
         label: item.label,
@@ -177,11 +186,12 @@ export async function readRocketInventoryRows(page, targets) {
         matches: matches.length ? [{
           ...matches[0],
           rowMatches: matches,
-          hidden: matches.every((match) => match.hidden)
+          hidden: matches.every((match) => match.hidden),
+          unavailable: matches.every((match) => match.unavailable)
         }] : []
       };
     });
-  }, requested);
+  }, {items:requested,soldOutPattern:SOLD_OUT_PATTERN});
 }
 
 async function readAllRows(page, targets, targetKind) {
@@ -356,7 +366,7 @@ function mergeCatalogEntries(inventoryEntries, catalog, targetKind) {
 }
 
 async function waitForRows(page, items, hidden, targetKind) {
-  const verify = async () => page.waitForFunction(({ requested, expectedHidden }) => {
+  const verify = async () => page.waitForFunction(({ requested, expectedHidden, soldOutPattern }) => {
     const normalize = (value) => String(value ?? "").normalize("NFKC").replace(/【[^】]*】|\[[^\]]*\]/g, " ").replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "").replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
     const nameVariants = (value) => {
       const normalized = normalize(value);
@@ -391,10 +401,13 @@ async function waitForRows(page, items, hidden, targetKind) {
         ? matchingTitles.map(rowFor).filter(Boolean)
         : checkboxRows.filter((row) => rowParts(row).some((part) => wanted.has(part)));
       return matching.length > 0 && matching.every((row) => {
-        return Boolean(row) && normalize(row.textContent).includes("非表示") === expectedHidden;
+        const statusText=String(row.textContent??'').replace(row.querySelector('.nested-checkbox-list__sub_title')?.textContent??'','');
+        const hidden=normalize(statusText).includes("非表示");
+        const soldOut=new RegExp(soldOutPattern,'iu').test(statusText);
+        return Boolean(row) && (expectedHidden?hidden:!hidden&&!soldOut);
       });
     });
-  }, { timeout: 15000 }, { requested: items, expectedHidden: hidden });
+  }, { timeout: 15000 }, { requested: items, expectedHidden: hidden, soldOutPattern:SOLD_OUT_PATTERN });
 
   try {
     await verify();
@@ -476,7 +489,7 @@ export class RocketNowAdapter {
     })));
     const changing = fresh.flatMap((item) => {
       const rowMatches = (item.matches[0]?.rowMatches ?? item.matches)
-        .filter((match) => match.hidden !== desiredHidden);
+        .filter((match) => rocketNeedsInventoryChange(match,!desiredHidden));
       return rowMatches.length ? [{
         ...item,
         matches: [{ ...rowMatches[0], rowMatches }]

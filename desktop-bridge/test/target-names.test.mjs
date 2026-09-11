@@ -92,6 +92,18 @@ test("Rocket stock read finds moved records by native id and refuses a same-name
   assert.deepEqual(deleted.matches,[]);
 });
 
+test('Rocket distinguishes today sold out from hidden and ignores status words in product names',async()=>{
+ const label='売り切れ 非表示という名前の商品';
+ for(const [status,hidden,unavailable] of [['',false,false],['売り切れ（翌日06:00まで）',false,true],['非表示',true,true]]) {
+  const checkbox={id:'sub_checkbox_20_50',closest:()=>row};
+  const title={textContent:label,closest:()=>row};
+  const row={textContent:status+'\n'+label,innerText:status+'\n'+label,querySelector:s=>s==='.nested-checkbox-list__sub_title'?title:checkbox,getClientRects:()=>[{}]};
+  const page={evaluate:(fn,args)=>{const prior=globalThis.document;globalThis.document={getElementById:()=>checkbox,querySelectorAll:s=>s==='.nested-checkbox-list__sub_title'?[title]:[checkbox]};try{return fn(args);}finally{if(prior===undefined)delete globalThis.document;else globalThis.document=prior;}}};
+  const [result]=await readRocketInventoryRows(page,[{kind:'item',label,knownExternalIds:[checkbox.id]}]);
+  assert.equal(result.matches[0].hidden,hidden);assert.equal(result.matches[0].unavailable,unavailable);
+ }
+});
+
 test('Demae inventory uses every saved physical ID and never substitutes a same-name option for a draft',async()=>{
  const label='チーズトッポギ';
  const checkbox={id:'itemList_41064900000183true',closest:()=>row};
