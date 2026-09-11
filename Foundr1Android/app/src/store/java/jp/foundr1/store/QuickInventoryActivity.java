@@ -51,6 +51,7 @@ public class QuickInventoryActivity extends Activity {
     private static final String UI_PREFERENCES = "quick_inventory_ui";
 
     static final class InventoryItem {
+        final String targetId;
         final String key;
         final String label;
         final String actionLabel;
@@ -65,6 +66,7 @@ public class QuickInventoryActivity extends Activity {
         final String searchText;
 
         InventoryItem(
+            String targetId,
             String key,
             String label,
             String actionLabel,
@@ -78,6 +80,7 @@ public class QuickInventoryActivity extends Activity {
             boolean available,
             String searchText
         ) {
+            this.targetId = targetId;
             this.key = key;
             this.label = label;
             this.actionLabel = actionLabel;
@@ -366,6 +369,8 @@ public class QuickInventoryActivity extends Activity {
         for (int index = 0; index < rows.length(); index += 1) {
             JSONObject row = rows.optJSONObject(index);
             if (row == null) continue;
+            String targetId = row.optString("targetId");
+            if (!InventoryTargetIdentity.valid(targetId)) continue;
             String actionLabel = row.optString("ingredientLabel", "").trim();
             if (actionLabel.isEmpty()) continue;
             JSONObject displayNames = row.optJSONObject("displayNames");
@@ -396,8 +401,9 @@ public class QuickInventoryActivity extends Activity {
                     search.append(' ').append(groupNames.optString(groupIndex));
                 }
             }
-            String key = brandId + ":" + kind + ":" + row.optString("inventoryKey");
+            String key = brandId + ":" + kind + ":" + targetId;
             allItems.add(new InventoryItem(
+                targetId,
                 key,
                 label,
                 actionLabel,

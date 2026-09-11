@@ -24,14 +24,8 @@ final class InventoryApiClient {
     private InventoryApiClient() {}
 
     static JSONObject loadAll(String storeId) throws Exception {
-        String storeQuery = storeId == null || storeId.trim().isEmpty()
-            ? ""
-            : "&storeId=" + URLEncoder.encode(storeId.trim(), "UTF-8");
-        JSONObject inventory = request("GET", INVENTORY_URL + "?scope=all" + storeQuery, null);
-        if ("all".equals(inventory.optString("scope"))) return inventory;
-        // During a staged rollout the installed APK can be newer than the web API.
-        // The existing menu-settings endpoint already exposes the complete catalog,
-        // so never mistake the legacy sold-out-only response for the all-item list.
+        // Use the same ID-addressed catalog as the Store sales-status page.
+        // Kitchen inventory rows can aggregate several options by ingredient.
         return normalizeMenuSettings(loadConfiguration(storeId));
     }
 
@@ -43,6 +37,9 @@ final class InventoryApiClient {
     }
 
     static JSONObject apply(QuickInventoryActivity.InventoryItem item, boolean available) throws Exception {
+        if (!InventoryTargetIdentity.valid(item.targetId)) {
+            throw new IllegalArgumentException("商品IDを取得できませんでした。再読み込みしてください。 / 无法获取商品 ID，请重新加载。");
+        }
         JSONObject body = new JSONObject();
         body.put("action", "apply");
         body.put("storeId", item.storeId);
@@ -50,6 +47,7 @@ final class InventoryApiClient {
         body.put("ingredientLabel", item.actionLabel);
         body.put("feedbackLabel", item.label);
         body.put("targetKind", item.kind);
+        body.put("targetId", item.targetId);
         body.put("isAvailable", available);
         body.put("stockStatus", available ? "available" : "unavailable");
         body.put("source", "sales_status");
@@ -68,7 +66,14 @@ final class InventoryApiClient {
             .getString(cacheKey(storeId), "");
         if (value == null || value.isEmpty()) return null;
         try {
-            return new JSONObject(value);
+            JSONObject cached = new JSONObject(value);
+            JSONArray items = cached.optJSONArray("items");
+            if (items == null) return null;
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.optJSONObject(i);
+                if (item == null || !InventoryTargetIdentity.valid(item.optString("targetId"))) return null;
+            }
+            return cached;
         } catch (Exception ignored) {
             return null;
         }
@@ -117,8 +122,9 @@ final class InventoryApiClient {
             if (row == null) continue;
             String id = row.optString("id");
             String name = row.optString("name").trim();
-            if (id.isEmpty() || name.isEmpty()) continue;
+            if (!InventoryTargetIdentity.valid(id) || name.isEmpty()) continue;
             JSONObject item = new JSONObject();
+            item.put("targetId", id);
             item.put("inventoryKey", kind + ":" + id);
             item.put("ingredientLabel", name);
             item.put("targetKind", kind);
