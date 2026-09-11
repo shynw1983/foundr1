@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {AuthorityNativeDriver} from '../src/uber-authority-native-driver.mjs';
 import {runUberAuthorityPublication} from '../src/uber-authority-runner.mjs';
+import {ensureUberAuthorityObject} from '../src/uber-authority-create.mjs';
 
 function fixture() {
  const node=(kind,id,parentId,source={})=>({kind,sourceKey:`${kind}:${id}`,targetId:id,parentId,source,name:`new-${id}`,price:['item','option'].includes(kind)?227:null,description:'',sortOrder:0,marker:'FS0123456789abcd',mappings:[{externalId:{c:'1',g:'2',o:'3',i:'4'}[id]}]});
@@ -35,6 +36,38 @@ test('mapped native graph runs end-to-end and reports separately read prices',as
  assert.equal(result.observations.length,4);assert.equal(writes.length,4);
  assert.equal(result.observations.find(row=>row.sourceKey==='option:o').hidden,true);
  assert.equal(result.observations.find(row=>row.sourceKey==='item:i').price,227);
+});
+
+test('creation uses the same exact-owner exception as preflight without changing the other option',async()=>{
+ const {payload,driver,rows}=fixture();
+ const owner=payload.targets[2];owner.sourceKey='option:g:old';rows[2].name=owner.name;
+ const group={...payload.targets[1],targetId:'other',sourceKey:'option_group:other',mappings:[{externalId:'6'}]};
+ const target={...owner,targetId:'new',parentId:'other',sourceKey:'option:other:new',mappings:[],marker:'FSnewoption'};
+ payload.targets.push(group,target);rows.push({kind:'option_group',id:'6',name:group.name,childIds:[],hidden:true});
+ assert.ok(!(await driver.preflight(payload)).issues.some(issue=>issue.sourceKey===target.sourceKey));
+ const original=structuredClone(rows[2]);let creates=0;
+ driver.client.createHiddenOption=async({marker,price,groupId})=>{
+  creates++;assert.equal(groupId,'6');rows.push({kind:'option',id:'7',name:marker,price,parentIds:['6'],hidden:true});return {optionItemId:7};
+ };
+ const phases=[];
+ await ensureUberAuthorityObject(target,payload,driver,async p=>phases.push(p.phase));
+ assert.equal(creates,1);assert.deepEqual(rows[2],original);
+ assert.deepEqual(phases,['creating','received','identified']);
+ await ensureUberAuthorityObject(target,payload,driver,async()=>{});assert.equal(creates,1);
+});
+
+test('pre-write collisions are rejected safely, but merchant errors remain uncertain',async()=>{
+ for(const collision of [true,false]) {
+  const {payload,driver,rows}=fixture();const target=payload.targets[2];target.mappings=[];
+  rows[2].name=collision?target.name:'unrelated';
+  let creates=0;driver.client.createHiddenOption=async()=>{creates++;throw Error('network timeout');};
+  const phases=[];
+  await assert.rejects(()=>ensureUberAuthorityObject(target,payload,driver,async p=>phases.push(p.phase)),collision?/creation_existing_candidate/:/network timeout/);
+  assert.equal(creates,collision?0:1);assert.deepEqual(phases,collision?['creating','rejected']:['creating']);
+ }
+ const {driver,payload,rows}=fixture();const target=payload.targets[2];rows[2].name=target.marker;
+ assert.equal(driver.hasCreationCollision(rows,target),true);
+ assert.equal(driver.isDefiniteRejection(Error('uber_authority_creation_existing_candidate')),false);
 });
 test('a missing child or unmapped legacy member blocks the entire batch before writes',async()=>{
  for(const missing of [true,false]) {

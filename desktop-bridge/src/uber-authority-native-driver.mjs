@@ -17,6 +17,15 @@ export class AuthorityNativeDriver {
   }
   id(kind,value){return authorityPhysicalId(this.platform,kind,value,this.merchantId);}
   ids(target){return target.mappings.map(row=>this.id(target.kind,row.externalId));}
+  hasCreationCollision(rows,target,{includeMarker=true}={}) {
+    return rows.some(row=>row.kind===target.kind&&((includeMarker&&row.name===target.marker)
+      ||(row.name===target.name&&!this.isIdentifiedOtherGroupOption(row,target))));
+  }
+  isDefiniteRejection(error) {
+    // Only our own pre-write guard carries this flag. Network errors and
+    // missing receipts must never authorize another creation attempt.
+    return error?.authorityCreationNotAttempted===true;
+  }
   isIdentifiedOtherGroupOption(row,target) {
     if(target.kind!=='option'||!target.parentId)return false;
     const identity=t=>/^option:[^:]+:[^:]+$/.test(t.sourceKey??'')?t.sourceKey.split(':')[2]:null;
@@ -132,7 +141,7 @@ export class AuthorityNativeDriver {
     }
     const rows=await this.snapshot({itemDetails:target.kind==='item'});
     if(this.platform!=='rocket_now')throw Error('uber_authority_creation_requires_verified_staging');
-    if(rows.some(row=>row.kind===target.kind&&[target.name,target.marker].includes(row.name)))throw Error('uber_authority_creation_existing_candidate');
+    if(this.hasCreationCollision(rows,target))throw Object.assign(Error('uber_authority_creation_existing_candidate'),{authorityCreationNotAttempted:true});
     let receipt,parentId='',id;
     if(target.kind==='category') {receipt=await this.client.createCategory(target.marker);id=receipt?.menuId;}
     else if(target.kind==='option_group') {receipt=await this.client.createGroup(target.marker);id=receipt?.optionId;}
@@ -373,7 +382,9 @@ export class AuthorityNativeDriver {
         const rocketCreate=this.platform==='rocket_now'&&(['category','option_group'].includes(target.kind)||parent&&parent.mappings.length<=1);
         const demaeOptionCreate=this.platform==='demae_can'&&(target.kind==='category'||target.kind==='option'&&parent||['item','option_group'].includes(target.kind)&&payload.draftPatternCode);
         if(!rocketCreate&&!demaeOptionCreate&&!this.hiddenOptionParent(target,rows))issues.push({sourceKey:target.sourceKey,code:'creation_requires_verified_staging'});
-        else if(rows.some(row=>row.kind===target.kind&&row.name===target.name&&!this.isIdentifiedOtherGroupOption(row,target)))issues.push({sourceKey:target.sourceKey,code:'existing_unmapped_candidate'});
+        // Markers are recovered by the receipt protocol after preflight;
+        // immediately before a new write they must still block duplicates.
+        else if(this.hasCreationCollision(rows,target,{includeMarker:false}))issues.push({sourceKey:target.sourceKey,code:'existing_unmapped_candidate'});
         continue;
       }
       issues.push(...this.structureIssues(target,rows,{preflight:true}));
