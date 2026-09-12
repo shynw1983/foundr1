@@ -165,3 +165,11 @@ Avoid these patterns:
 - Returning different menu structures per language.
 - Preserving old compatibility endpoints for new projects when the system is not live yet.
 - Sending only human-readable summary text to Foundr1 OS instead of structured item and option IDs.
+
+## Category metadata and food products
+
+`menu_categories` owns `display_names`, `note_display_names`, and `product_type` (`drink`, `food`, or `other`). The public API exposes these as `displayNames`, `noteDisplayNames`, and `productType`. Category translations follow the same requested-language → English → Japanese fallback as item fields.
+
+Use `food` for food products, including malatang and future food categories. This is separate from the catalog structure (`item_kind`). A food item uses its explicitly linked, item-specific, or category-scoped customization groups, including an empty group list; it must never inherit global drink size/sweetness/ice controls. Unconfigured prices remain null and appear as preparation pending on the brand website. Checkout rejects them. Food customizations remain structured groups and do not become drink temperature/sweetness fields.
+
+The September 2026 nanacha repair is reviewable with `node scripts/review-nanacha-menu.mjs`. Its default mode only creates an HTML preview. After explicit approval of the displayed draft and target database, `--apply --database-host=<verified host>` applies the additive category columns and scoped data corrections in one transaction. Source-value checks roll back the transaction if any reviewed row has changed. Deploy the dependent OS API only after this migration.

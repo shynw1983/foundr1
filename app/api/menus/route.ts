@@ -186,6 +186,9 @@ async function readMenuAdminData(selectedStoreId = "") {
         coalesce(store_id::text, '') as "storeId",
         coalesce(external_id, '') as "externalId",
         name,
+        coalesce(display_names, '{}'::jsonb) as "displayNames",
+        coalesce(note_display_names, '{}'::jsonb) as "noteDisplayNames",
+        product_type as "productType",
         coalesce(note, '') as note,
         is_tapioca_free as "isTapiocaFree",
         has_whip_by_default as "hasWhipByDefault",
@@ -1031,6 +1034,10 @@ async function upsertCategory(body: Record<string, unknown>, employeeId: string)
   const brandId = cleanOptionalId(body.brandId);
   const storeId = cleanOptionalId(body.storeId);
   const name = String(body.name ?? "").trim();
+  const productType = String(body.productType ?? "other");
+  if (!["food", "drink", "other"].includes(productType)) throw new Error("商品区分を選択してください。");
+  const displayNames = normalizeDisplayNames(body.displayNames);
+  const noteDisplayNames = Object.fromEntries(customerDisplayLanguages.map((language) => [language, String(parseJsonObject(body.noteDisplayNames)[language] ?? "").trim().slice(0, 2000)]).filter(([, value]) => value));
   if (!brandId || !name) throw new Error("ブランドと分類名を入力してください。");
 
   const sortOrder = Math.round(parseOptionalNumber(body.sortOrder) ?? 100);
@@ -1068,6 +1075,9 @@ async function upsertCategory(body: Record<string, unknown>, employeeId: string)
           store_id = ${storeId},
           external_id = ${externalId},
           name = ${name},
+          display_names = ${JSON.stringify(displayNames)}::jsonb,
+          note_display_names = ${JSON.stringify(noteDisplayNames)}::jsonb,
+          product_type = ${productType},
           note = ${String(body.note ?? "").trim()},
           is_tapioca_free = ${body.isTapiocaFree === true},
           has_whip_by_default = ${body.hasWhipByDefault === true},
@@ -1082,6 +1092,9 @@ async function upsertCategory(body: Record<string, unknown>, employeeId: string)
           store_id,
           external_id,
           name,
+          display_names,
+          note_display_names,
+          product_type,
           note,
           is_tapioca_free,
           has_whip_by_default,
@@ -1093,6 +1106,9 @@ async function upsertCategory(body: Record<string, unknown>, employeeId: string)
           ${storeId},
           ${externalId},
           ${name},
+          ${JSON.stringify(displayNames)}::jsonb,
+          ${JSON.stringify(noteDisplayNames)}::jsonb,
+          ${productType},
           ${String(body.note ?? "").trim()},
           ${body.isTapiocaFree === true},
           ${body.hasWhipByDefault === true},

@@ -1,0 +1,5021 @@
+{
+  "brandId": "29463e58-877b-4dba-8c4f-64fa525c1488",
+  "brandName": "nanacha",
+  "createdAt": "2026-09-12",
+  "status": "review-required",
+  "summary": "Category food; complete menu name, category, option and promotional translations; correct milk naming; remove stale ice restriction copy. Prices, availability and option rules remain unchanged.",
+  "changes": [
+    {
+      "type": "categories",
+      "id": "24c0c79e-fd03-43a7-a878-d12da2b9ee80",
+      "label": "【おいしいタピオカ】当店名物",
+      "before": {
+        "product_type": "other",
+        "display_names": {}
+      },
+      "after": {
+        "product_type": "drink",
+        "display_names": {
+          "en": "Signature tapioca drinks",
+          "zh": "招牌珍珠饮品",
+          "zh-Hant": "招牌珍珠飲品",
+          "ko": "시그니처 타피오카 음료",
+          "vi": "Đồ uống trân châu đặc trưng",
+          "ne": "विशेष टापिओका पेय"
+        }
+      }
+    },
+    {
+      "type": "categories",
+      "id": "8f0ec8e9-9fce-4015-84d0-437955d6d87b",
+      "label": "職人仕立てのクラフトミルク",
+      "before": {
+        "product_type": "other",
+        "display_names": {},
+        "note_display_names": {}
+      },
+      "after": {
+        "product_type": "drink",
+        "display_names": {
+          "en": "Craft milk drinks",
+          "zh": "手作牛奶饮品",
+          "zh-Hant": "手作鮮奶飲品",
+          "ko": "수제 밀크 음료",
+          "vi": "Sữa thủ công",
+          "ne": "हस्तनिर्मित दूधका पेय"
+        },
+        "note_display_names": {
+          "en": "Classic drinks combining brown sugar tapioca and rich milk. Try our brown sugar tapioca milk for your first visit.",
+          "zh": "黑糖珍珠与醇厚牛奶的经典组合。初次到店推荐黑糖珍珠牛奶。",
+          "zh-Hant": "黑糖珍珠與醇厚鮮奶的經典組合。初次到店推薦黑糖珍珠鮮奶。",
+          "ko": "흑당 타피오카와 우유의 진한 맛을 즐기는 기본 메뉴입니다. 처음이라면 흑당 타피오카 밀크를 추천합니다.",
+          "vi": "Kết hợp kinh điển giữa trân châu đường đen và sữa béo ngậy. Lần đầu ghé quán, hãy thử sữa trân châu đường đen.",
+          "ne": "ब्राउन सुगर टापिओका र गाढा दूधको लोकप्रिय संयोजन। पहिलो पटक आउँदा ब्राउन सुगर टापिओका मिल्क रोज्नुहोस्।"
+        }
+      }
+    },
+    {
+      "type": "categories",
+      "id": "8615adfa-f7b1-4041-873b-db556db86375",
+      "label": "個性がきらめくオリジナルフラッペ",
+      "before": {
+        "product_type": "other",
+        "display_names": {},
+        "note_display_names": {}
+      },
+      "after": {
+        "product_type": "drink",
+        "display_names": {
+          "en": "Original frappes",
+          "zh": "特色冰沙",
+          "zh-Hant": "特色冰沙",
+          "ko": "오리지널 프라페",
+          "vi": "Frappe đặc trưng",
+          "ne": "विशेष फ्रापे"
+        },
+        "note_display_names": {
+          "en": "Cool, rich tapioca drinks with a dessert-like taste. Choose Oreo, matcha, black sesame or banana for a sweet treat.",
+          "zh": "冰凉浓郁、宛如甜点的珍珠饮品。喜欢甜蜜滋味的您可选择奥利奥、抹茶、黑芝麻或香蕉口味。",
+          "zh-Hant": "冰涼濃郁、宛如甜點的珍珠飲品。喜歡甜蜜滋味的您可選擇 Oreo、抹茶、黑芝麻或香蕉口味。",
+          "ko": "디저트처럼 시원하고 진한 타피오카 음료입니다. 오레오, 말차, 흑임자, 바나나 등 달콤한 맛을 즐겨 보세요.",
+          "vi": "Đồ uống trân châu mát lạnh, đậm đà như món tráng miệng. Thử vị Oreo, matcha, mè đen hoặc chuối nếu thích ngọt.",
+          "ne": "डेजर्टजस्तै चिसो र गाढा टापिओका पेय। मिठो स्वादका लागि Oreo, माचा, कालो तिल वा केरा छान्नुहोस्।"
+        }
+      }
+    },
+    {
+      "type": "categories",
+      "id": "fde008d6-512a-481b-b3ec-ce2200cf4979",
+      "label": "特別仕立ての自家製チーズティー",
+      "before": {
+        "product_type": "other",
+        "display_names": {},
+        "note_display_names": {}
+      },
+      "after": {
+        "product_type": "drink",
+        "display_names": {
+          "en": "House-made cheese tea",
+          "zh": "自制奶盖茶",
+          "zh-Hant": "自製奶蓋茶",
+          "ko": "수제 치즈 티",
+          "vi": "Trà kem phô mai tự làm",
+          "ne": "घरमै बनाइएको चीज चिया"
+        },
+        "note_display_names": {
+          "en": "Fresh-brewed tea topped with our special cheese foam, with a satisfying flavor even at lower sweetness.",
+          "zh": "店内现萃茶搭配特制奶酪奶盖，减少甜度也能享受浓郁滋味。",
+          "zh-Hant": "店內現萃茶搭配特製起司奶蓋，減少甜度也能享受濃郁滋味。",
+          "ko": "매장에서 우린 차와 특제 치즈 폼의 조합입니다. 덜 달게 해도 풍부한 맛을 즐길 수 있습니다.",
+          "vi": "Trà pha tại cửa hàng cùng kem phô mai đặc biệt, đậm đà ngay cả khi chọn ít ngọt.",
+          "ne": "पसलमै बनाइएको चियामाथि विशेष चीज फोम। कम गुलियोमा पनि सन्तोषजनक स्वाद।"
+        }
+      }
+    },
+    {
+      "type": "categories",
+      "id": "e6301819-98c9-4e9b-bfe2-a7bc889161e6",
+      "label": "店内抽出のタピオカティー",
+      "before": {
+        "product_type": "other",
+        "display_names": {},
+        "note_display_names": {}
+      },
+      "after": {
+        "product_type": "drink",
+        "display_names": {
+          "en": "Fresh-brewed tapioca tea",
+          "zh": "现萃珍珠茶",
+          "zh-Hant": "現萃珍珠茶",
+          "ko": "매장에서 우린 타피오카 티",
+          "vi": "Trà trân châu pha tại cửa hàng",
+          "ne": "पसलमै बनाइएको टापिओका चिया"
+        },
+        "note_display_names": {
+          "en": "Tapioca drinks highlighting the aromas of Assam, jasmine, green tea, hojicha and Yame matcha.",
+          "zh": "以阿萨姆红茶、茉莉茶、绿茶、焙茶和八女抹茶等茶香为主角的珍珠饮品。",
+          "zh-Hant": "以阿薩姆紅茶、茉莉茶、綠茶、焙茶和八女抹茶等茶香為主角的珍珠飲品。",
+          "ko": "아삼 홍차, 자스민차, 녹차, 호지차, 야메 말차 등 차의 향이 돋보이는 타피오카 메뉴입니다.",
+          "vi": "Đồ uống trân châu tôn hương trà Assam, trà lài, trà xanh, hojicha và matcha Yame.",
+          "ne": "असम, चमेली, हरियो चिया, होजिचा र यामे माचाको सुगन्धलाई मुख्य बनाइएका टापिओका पेय।"
+        }
+      }
+    },
+    {
+      "type": "categories",
+      "id": "8696f8af-1e20-4564-b464-f61c8804955e",
+      "label": "完熟果実のスムージー",
+      "before": {
+        "product_type": "other",
+        "display_names": {},
+        "note_display_names": {}
+      },
+      "after": {
+        "product_type": "drink",
+        "display_names": {
+          "en": "Ripe fruit smoothies",
+          "zh": "熟果思慕雪",
+          "zh-Hant": "熟果思慕雪",
+          "ko": "완숙 과일 스무디",
+          "vi": "Sinh tố trái cây chín",
+          "ne": "पाकेका फलफूलको स्मूदी"
+        },
+        "note_display_names": {
+          "en": "These items do not contain tapioca pearls by default. Customize them with the available options.",
+          "zh": "此系列默认不含珍珠，可选择商品提供的选项进行定制。",
+          "zh-Hant": "此系列預設不含珍珠，可選擇商品提供的選項調整。",
+          "ko": "이 상품에는 기본으로 타피오카가 들어 있지 않습니다. 제공되는 옵션으로 취향에 맞게 선택할 수 있습니다.",
+          "vi": "Các món này mặc định không có trân châu. Bạn có thể tùy chỉnh bằng các tùy chọn có sẵn.",
+          "ne": "यी वस्तुमा सामान्यतया टापिओका हुँदैन। उपलब्ध विकल्पबाट आफ्नो रोजाइअनुसार छान्न सकिन्छ।"
+        }
+      }
+    },
+    {
+      "type": "categories",
+      "id": "f08e27f1-1821-4d48-abee-60ade84a4442",
+      "label": "香り豊かなスペシャルドリンク",
+      "before": {
+        "product_type": "other",
+        "display_names": {},
+        "note_display_names": {}
+      },
+      "after": {
+        "product_type": "drink",
+        "display_names": {
+          "en": "Aromatic special drinks",
+          "zh": "香醇特调饮品",
+          "zh-Hant": "香醇特調飲品",
+          "ko": "향긋한 스페셜 음료",
+          "vi": "Đồ uống đặc biệt thơm ngon",
+          "ne": "सुगन्धित विशेष पेय"
+        },
+        "note_display_names": {
+          "en": "These items do not contain tapioca pearls by default. Customize them with the available options.",
+          "zh": "此系列默认不含珍珠，可选择商品提供的选项进行定制。",
+          "zh-Hant": "此系列預設不含珍珠，可選擇商品提供的選項調整。",
+          "ko": "이 상품에는 기본으로 타피오카가 들어 있지 않습니다. 제공되는 옵션으로 취향에 맞게 선택할 수 있습니다.",
+          "vi": "Các món này mặc định không có trân châu. Bạn có thể tùy chỉnh bằng các tùy chọn có sẵn.",
+          "ne": "यी वस्तुमा सामान्यतया टापिओका हुँदैन। उपलब्ध विकल्पबाट आफ्नो रोजाइअनुसार छान्न सकिन्छ।"
+        }
+      }
+    },
+    {
+      "type": "categories",
+      "id": "2e845102-293c-4676-8724-0c475a87c807",
+      "label": "オリジナルティーエード",
+      "before": {
+        "product_type": "other",
+        "display_names": {}
+      },
+      "after": {
+        "product_type": "drink",
+        "display_names": {
+          "en": "Original tea ades",
+          "zh": "特色果味茶",
+          "zh-Hant": "特色果味茶",
+          "ko": "오리지널 티 에이드",
+          "vi": "Trà trái cây đặc trưng",
+          "ne": "विशेष टी एड"
+        }
+      }
+    },
+    {
+      "type": "categories",
+      "id": "9274b020-447d-4fa7-8339-b03d983acc70",
+      "label": "【名門農園品】特選ラテ",
+      "before": {
+        "product_type": "other",
+        "display_names": {}
+      },
+      "after": {
+        "product_type": "drink",
+        "display_names": {
+          "en": "Selected estate lattes",
+          "zh": "精选茶园拿铁",
+          "zh-Hant": "精選茶園拿鐵",
+          "ko": "엄선한 농원 라테",
+          "vi": "Latte từ nông trại tuyển chọn",
+          "ne": "चयनित बगानका लाटे"
+        }
+      }
+    },
+    {
+      "type": "categories",
+      "id": "f924df4c-ca91-4178-8652-2695e3ffd6b4",
+      "label": "フード",
+      "before": {
+        "name": "カップマーラータン",
+        "external_id": "",
+        "product_type": "other",
+        "display_names": {}
+      },
+      "after": {
+        "name": "フード",
+        "external_id": "food",
+        "product_type": "food",
+        "display_names": {
+          "en": "Food",
+          "zh": "食品",
+          "zh-Hant": "餐點",
+          "ko": "푸드",
+          "vi": "Đồ ăn",
+          "ne": "खाना"
+        }
+      }
+    },
+    {
+      "type": "categories",
+      "id": "f8cf66fa-8444-47d7-afb7-a5664fe96342",
+      "label": "期間限定品",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Limited-time specials",
+          "zh": "期间限定",
+          "zh-Hant": "期間限定",
+          "ko": "기간 한정",
+          "vi": "Ưu đãi theo mùa",
+          "ne": "सीमित अवधिका विशेष वस्तु"
+        }
+      }
+    },
+    {
+      "type": "categories",
+      "id": "91d6b11e-00ce-4da4-b342-cb609313e770",
+      "label": "タピオカコーヒー",
+      "before": {
+        "product_type": "other",
+        "display_names": {},
+        "note_display_names": {}
+      },
+      "after": {
+        "product_type": "drink",
+        "display_names": {
+          "en": "Tapioca coffee",
+          "zh": "珍珠咖啡",
+          "zh-Hant": "珍珠咖啡",
+          "ko": "타피오카 커피",
+          "vi": "Cà phê trân châu",
+          "ne": "टापिओका कफी"
+        },
+        "note_display_names": {
+          "en": "Aromatic coffee with chewy tapioca pearls, a good choice for those who prefer less-sweet drinks.",
+          "zh": "香醇咖啡搭配软糯珍珠，也适合不喜欢太甜饮品的您。",
+          "zh-Hant": "香醇咖啡搭配軟Q珍珠，也適合不喜歡太甜飲品的您。",
+          "ko": "향긋한 커피와 쫀득한 타피오카의 조합으로, 단 음료를 좋아하지 않는 분도 고르기 좋습니다.",
+          "vi": "Cà phê thơm cùng trân châu dẻo dai, phù hợp cả với người không thích đồ uống quá ngọt.",
+          "ne": "सुगन्धित कफी र चपाउन मिल्ने टापिओका, कम गुलियो पेय मन पराउनेका लागि पनि राम्रो रोजाइ।"
+        }
+      }
+    },
+    {
+      "type": "categories",
+      "id": "fef6beaa-6774-4ee1-a420-3c4ea92e817c",
+      "label": "Tea & Coffee",
+      "before": {
+        "product_type": "other",
+        "display_names": {},
+        "note_display_names": {}
+      },
+      "after": {
+        "product_type": "drink",
+        "display_names": {
+          "en": "Tea & Coffee",
+          "zh": "茶与咖啡",
+          "zh-Hant": "茶與咖啡",
+          "ko": "차와 커피",
+          "vi": "Trà & Cà phê",
+          "ne": "चिया र कफी"
+        },
+        "note_display_names": {
+          "en": "These items do not contain tapioca pearls by default. Customize them with the available options.",
+          "zh": "此系列默认不含珍珠，可选择商品提供的选项进行定制。",
+          "zh-Hant": "此系列預設不含珍珠，可選擇商品提供的選項調整。",
+          "ko": "이 상품에는 기본으로 타피오카가 들어 있지 않습니다. 제공되는 옵션으로 취향에 맞게 선택할 수 있습니다.",
+          "vi": "Các món này mặc định không có trân châu. Bạn có thể tùy chỉnh bằng các tùy chọn có sẵn.",
+          "ne": "यी वस्तुमा सामान्यतया टापिओका हुँदैन। उपलब्ध विकल्पबाट आफ्नो रोजाइअनुसार छान्न सकिन्छ।"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "e04cad40-c81a-4643-abcc-62a80d9da173",
+      "label": "黒糖タピオカ練乳いちごミルク",
+      "before": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Strawberry Milk with Condensed Milk",
+          "ko": "흑설탕 타피오카 연유 딸기 밀크",
+          "ne": "ब्राउन सुगर ट्यापिओका कन्डेन्स्ड मिल्क स्ट्रबेरी मिल्क",
+          "vi": "Sua dau tay sua dac tran chau duong den",
+          "zh": "黑糖珍珠炼乳草莓奶茶",
+          "zh-Hant": "黑糖珍珠炼乳草莓奶茶"
+        },
+        "description": "​すべてを忘れて、心から満たされる究極の一杯。\n\n​日々の忙しさやプレッシャーと戦うお客様へ贈る、プライベートで身近にあるラグジュアリー。\n\n​苺を丸ごと贅沢に削り出し、阿蘇のコク深い牛乳と、選び抜かれた「国産100%の上質な純練乳」だけを惜しみなく重ね合わせました。\n\n​安価なシロップやコンデンスミルクは一切不使用。\n\nひんやりと解けるフレッシュな苺の甘酸っぱさと、純練乳の上品で濃密なコクが美しく調和します。\n\n宮古島の豊かな自然が育んだ高級塩「雪塩」をさりげなく効かせることで、日々の戦いで疲れ果てた身体に自然のミネラルを補給してほしいという料理長の優しさで、苺の甘みとミルクのコクの輪郭を極限まで引き立てました。\n\n\n​「つらい日も疲れてやる気がどうしても起きないときも、これを口にするときだけは、すべてを忘れて生き生きできる。」\n\n今日という日を頑張った自分へ送る、ご褒美ドリンクです。",
+        "description_display_names": {
+          "en": "Special strawberry milk blended with domestic condensed milk for a rich taste.",
+          "ko": "특제 딸기 밀크에 국내산 연유를 더한 진한 맛.",
+          "ne": "विशेष स्ट्रबेरी मिल्कमा जापानी कन्डेन्स्ड मिल्क मिसाएर बनेको गाढा स्वाद।",
+          "vi": "Vị đậm đà từ sữa dâu đặc biệt pha cùng sữa đặc Nhật.",
+          "zh": "特制草莓牛奶搭配国产炼乳，口感浓郁。",
+          "zh-Hant": "特製草莓牛奶搭配國產炼乳，口感濃郁。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Strawberry Milk with Condensed Milk",
+          "ko": "흑설탕 타피오카 연유 딸기 밀크",
+          "ne": "ब्राउन सुगर ट्यापिओका कन्डेन्स्ड मिल्क स्ट्रबेरी मिल्क",
+          "vi": "Sữa dâu tây sữa đặc trân châu đường đen",
+          "zh": "黑糖珍珠炼乳草莓牛奶",
+          "zh-Hant": "黑糖珍珠煉乳草莓牛奶"
+        },
+        "description": "苺の甘酸っぱさに、阿蘇の牛乳と国産練乳のコクを重ねました。隠し味の雪塩が、苺の甘みとミルクの風味を引き立てます。",
+        "description_display_names": {
+          "en": "Special strawberry milk blended with domestic condensed milk for a rich taste.",
+          "ko": "특제 딸기 밀크에 국내산 연유를 더한 진한 맛.",
+          "ne": "विशेष स्ट्रबेरी मिल्कमा जापानी कन्डेन्स्ड मिल्क मिसाएर बनेको गाढा स्वाद।",
+          "vi": "Vị đậm đà từ sữa dâu đặc biệt pha cùng sữa đặc Nhật.",
+          "zh": "特制草莓牛奶搭配国产炼乳，口感浓郁。",
+          "zh-Hant": "特製草莓牛奶搭配國產煉乳，口感濃郁。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "A daily treat for yourself",
+          "zh": "每日犒赏自己",
+          "zh-Hant": "每日犒賞自己",
+          "ko": "매일 나를 위한 선물",
+          "vi": "Tự thưởng mỗi ngày",
+          "ne": "हरेक दिन आफ्नै लागि उपहार"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "61abb7c6-9799-4b7e-bc8c-854a3745802d",
+      "label": "アッサム紅茶",
+      "before": {
+        "display_names": {
+          "en": "Assam Black Tea",
+          "ko": "아삼 홍차",
+          "ne": "आसाम ब्ल्याक टी",
+          "vi": "Tra den Assam",
+          "zh": "阿萨姆红茶",
+          "zh-Hant": "阿萨姆紅茶"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Assam Black Tea",
+          "ko": "아삼 홍차",
+          "ne": "आसाम ब्ल्याक टी",
+          "vi": "Trà đen Assam",
+          "zh": "阿萨姆红茶",
+          "zh-Hant": "阿薩姆紅茶"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "64f6cfbe-dbde-4900-86ca-2d3e7245b17e",
+      "label": "チョコミントタピオカフラッペ",
+      "before": {
+        "display_names": {
+          "en": "Chocolate Mint Tapioca Frappe",
+          "ko": "초코 민트 타피오카 프라페",
+          "ne": "चकलेट मिन्ट ट्यापिओका फ्राप्पे",
+          "vi": "Frappe tran chau socola bac ha",
+          "zh": "薄荷巧克力珍珠冰沙",
+          "zh-Hant": "薄荷巧克力珍珠冰沙"
+        },
+        "description_display_names": {
+          "en": "Refreshing dark chocolate and mint. Try upgrading to our premium version.",
+          "ko": "다크 초콜릿과 민트의 상쾌한 조합, 프리미엄 버전도 추천합니다.",
+          "ne": "डार्क चकलेट र मिन्टको ताजगीपूर्ण स्वाद। प्रिमियम संस्करणमा अपग्रेड गर्न पनि सिफारिस गरिन्छ।",
+          "vi": "Sảng khoái với sô-cô-la đen và bạc hà. Có thể nâng cấp lên bản premium.",
+          "zh": "黑巧克力配薄荷清新，推荐升级为尊享版。",
+          "zh-Hant": "黑巧克力與薄荷的清爽口感，也推薦升級為 Premium 版本。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Chocolate Mint Tapioca Frappe",
+          "ko": "초코 민트 타피오카 프라페",
+          "ne": "चकलेट मिन्ट ट्यापिओका फ्राप्पे",
+          "vi": "Frappe trân châu sô-cô-la bạc hà",
+          "zh": "薄荷巧克力珍珠冰沙",
+          "zh-Hant": "薄荷巧克力珍珠冰沙"
+        },
+        "description_display_names": {
+          "en": "Refreshing dark chocolate and mint. Try upgrading to our premium version.",
+          "ko": "다크 초콜릿과 민트의 상쾌한 조합, 프리미엄 버전도 추천합니다.",
+          "ne": "डार्क चकलेट र मिन्टको ताजगीपूर्ण स्वाद। प्रिमियम संस्करणमा अपग्रेड गर्न पनि सिफारिस गरिन्छ।",
+          "vi": "Sảng khoái với sô-cô-la đen và bạc hà. Có thể nâng cấp lên bản premium.",
+          "zh": "黑巧克力配薄荷清新，推荐升级为尊享版。",
+          "zh-Hant": "黑巧克力配薄荷清新，推薦升級為尊享版。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Refreshing mint aroma",
+          "zh": "清新薄荷香",
+          "zh-Hant": "清新薄荷香",
+          "ko": "상쾌한 민트 향",
+          "vi": "Hương bạc hà tươi mát",
+          "ne": "ताजा पुदिनाको सुगन्ध"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "6cf045c1-f013-4ad1-a24f-8315e57e1a59",
+      "label": "キャラメルタピオカフラッペ",
+      "before": {
+        "display_names": {
+          "en": "Caramel Tapioca Frappe",
+          "ko": "카라멜 타피오카 프라페",
+          "ne": "क्यारामेल ट्यापिओका फ्राप्पे",
+          "vi": "Frappe tran chau caramel",
+          "zh": "焦糖珍珠冰沙",
+          "zh-Hant": "焦糖珍珠冰沙"
+        },
+        "description_display_names": {
+          "en": "Rich caramel latte with premium espresso, caramel sauce, and select milk.",
+          "ko": "고급 에스프레소, 캐러멜 소스, 엄선한 우유가 만나 깊고 풍부한 맛.",
+          "ne": "उच्च गुणस्तरको एस्प्रेसो, कारमेल सस र छनोट गरिएको दूधको गहिरो स्वाद।",
+          "vi": "Hương vị đậm đà từ espresso chất lượng, sốt caramel và sữa tuyển chọn.",
+          "zh": "优质浓缩咖啡搭配焦糖酱及精选牛奶，浓郁滋味。",
+          "zh-Hant": "優質濃缩咖啡搭配焦糖酱及精選牛奶，濃郁滋味。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Caramel Tapioca Frappe",
+          "ko": "카라멜 타피오카 프라페",
+          "ne": "क्यारामेल ट्यापिओका फ्राप्पे",
+          "vi": "Frappe trân châu caramel",
+          "zh": "焦糖珍珠冰沙",
+          "zh-Hant": "焦糖珍珠冰沙"
+        },
+        "description_display_names": {
+          "en": "Rich caramel latte with premium espresso, caramel sauce, and select milk.",
+          "ko": "고급 에스프레소, 캐러멜 소스, 엄선한 우유가 만나 깊고 풍부한 맛.",
+          "ne": "उच्च गुणस्तरको एस्प्रेसो, कारमेल सस र छनोट गरिएको दूधको गहिरो स्वाद।",
+          "vi": "Hương vị đậm đà từ espresso chất lượng, sốt caramel và sữa tuyển chọn.",
+          "zh": "优质浓缩咖啡搭配焦糖酱及精选牛奶，浓郁滋味。",
+          "zh-Hant": "優質濃縮咖啡搭配焦糖醬及精選牛奶，濃郁滋味。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "A luxurious sweet treat",
+          "zh": "奢享甜蜜",
+          "zh-Hant": "奢享甜蜜",
+          "ko": "고급스러운 달콤함",
+          "vi": "Vị ngọt cao cấp",
+          "ne": "विशेष मिठासको आनन्द"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "e3afcd00-be65-412f-9c01-0ebf0ca2c4cb",
+      "label": "バニラタピオカフラッペ",
+      "before": {
+        "display_names": {
+          "en": "Vanilla Tapioca Frappe",
+          "ko": "바닐라 타피오카 프라페",
+          "ne": "भेनिला ट्यापिओका फ्राप्पे",
+          "vi": "Frappe tran chau vanilla",
+          "zh": "香草珍珠冰沙",
+          "zh-Hant": "香草珍珠冰沙"
+        },
+        "description_display_names": {
+          "en": "Creamy vanilla with select milk and domestic condensed milk.",
+          "ko": "바닐라 향과 엄선된 우유, 국내산 연유를 사용한 부드러운 맛.",
+          "ne": "भ्यानिला स्वाद, छनोट गरिएको दूध र जापानी कन्डेन्स्ड मिल्कले बनेको मृदु पेय।",
+          "vi": "Ly frappe dịu mượt với hương vani, sữa tuyển chọn và sữa đặc nội địa.",
+          "zh": "香草风味，选用优质牛奶与国产炼乳，口感醇厚。",
+          "zh-Hant": "香草风味，選用優質牛奶與國產炼乳，口感醇厚。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Vanilla Tapioca Frappe",
+          "ko": "바닐라 타피오카 프라페",
+          "ne": "भेनिला ट्यापिओका फ्राप्पे",
+          "vi": "Frappe trân châu vani",
+          "zh": "香草珍珠冰沙",
+          "zh-Hant": "香草珍珠冰沙"
+        },
+        "description_display_names": {
+          "en": "Creamy vanilla with select milk and domestic condensed milk.",
+          "ko": "바닐라 향과 엄선된 우유, 국내산 연유를 사용한 부드러운 맛.",
+          "ne": "भ्यानिला स्वाद, छनोट गरिएको दूध र जापानी कन्डेन्स्ड मिल्कले बनेको मृदु पेय।",
+          "vi": "Ly frappe dịu mượt với hương vani, sữa tuyển chọn và sữa đặc nội địa.",
+          "zh": "香草风味，选用优质牛奶与国产炼乳，口感醇厚。",
+          "zh-Hant": "香草風味，選用優質牛奶與國產煉乳，口感醇厚。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "A rich vanilla treat",
+          "zh": "香醇香草之选",
+          "zh-Hant": "香醇香草之選",
+          "ko": "풍부한 바닐라의 선물",
+          "vi": "Tự thưởng vị vani thơm ngậy",
+          "ne": "गाढा भेनिलाको स्वाद"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "e2d48802-5640-4d42-ad89-2753d302ed90",
+      "label": "濃厚マンゴーヨーグルトスムージー",
+      "before": {
+        "display_names": {
+          "en": "Rich Mango Yogurt Smoothie",
+          "ko": "진한 망고 요거트 스무디",
+          "ne": "बाक्लो आँप योगर्ट स्मूदी",
+          "vi": "Sinh to xoai sua chua dam vi",
+          "zh": "浓郁芒果酸奶冰沙",
+          "zh-Hant": "濃郁芒果酸奶冰沙"
+        },
+        "description": "​荒ぶる自然の中で太陽の光を一身に浴び、圧倒的なエネルギーを蓄えて育った完熟マンゴー。\n\n私たちが選んだのは、ただ甘いだけの果実ではありません。\n\nひと口にした瞬間、身体の奥底からエネルギーがみなぎってくるような、力強い、生命力を宿した厳選マンゴーです。\n\n​効率やスピードばかりが優先され、日々のプレッシャーで心がすり減ることも多いなか、活力となるよう食材を自分に取り入れてほしいそんな思いから特別に仕立てました。\n\n​果肉感たっぷりの濃厚なマンゴーの甘みと、ヨーグルトがもたらす爽やかな酸味が重なり合うとき、鈍っていた五感が一気に覚醒していきます。\n\n\n​「ただの栄養」ではなく、自分のなかの情熱や生命力を取り戻すための、極上のご褒美体験をお届けします。",
+        "description_display_names": {
+          "en": "Rich mango smoothie blended with yogurt.",
+          "ko": "망고를 듬뿍 넣고 요거트와 어우러진 진한 한 잔.",
+          "ne": "प्रशस्त आँप र दही मिसाइएको गाढा स्वादको पेय।",
+          "vi": "Ly đậm vị, dùng nhiều xoài và kết hợp cùng sữa chua.",
+          "zh": "芒果丰富浓郁，搭配酸奶，口感浓厚。",
+          "zh-Hant": "芒果丰富濃郁，搭配酸奶，口感濃厚。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Rich Mango Yogurt Smoothie",
+          "ko": "진한 망고 요거트 스무디",
+          "ne": "बाक्लो आँप योगर्ट स्मूदी",
+          "vi": "Sinh tố xoài sữa chua đậm vị",
+          "zh": "浓郁芒果酸奶冰沙",
+          "zh-Hant": "濃郁芒果酸奶冰沙"
+        },
+        "description": "完熟マンゴーの濃厚な甘みと、ヨーグルトの爽やかな酸味を合わせたスムージー。果肉感を楽しめる、ご褒美の一杯です。",
+        "description_display_names": {
+          "en": "Rich mango smoothie blended with yogurt.",
+          "ko": "망고를 듬뿍 넣고 요거트와 어우러진 진한 한 잔.",
+          "ne": "प्रशस्त आँप र दही मिसाइएको गाढा स्वादको पेय।",
+          "vi": "Ly đậm vị, dùng nhiều xoài và kết hợp cùng sữa chua.",
+          "zh": "芒果丰富浓郁，搭配酸奶，口感浓厚。",
+          "zh-Hant": "芒果豐富濃郁，搭配酸奶，口感濃厚。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Limited quantity",
+          "zh": "限量供应",
+          "zh-Hant": "限量供應",
+          "ko": "수량 한정",
+          "vi": "Số lượng có hạn",
+          "ne": "सीमित परिमाण"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "7fcc9f2e-5dc9-49c2-8a5f-83fe863ab376",
+      "label": "ピーチクリーミー杏仁",
+      "before": {
+        "display_names": {
+          "en": "Peach Creamy Almond Jelly",
+          "ko": "복숭아 크리미 앤닌",
+          "ne": "पिच क्रीमी आल्मन्ड",
+          "vi": "Dao kem hanh nhan",
+          "zh": "桃味奶香杏仁冻",
+          "zh-Hant": "桃味奶香杏仁冻"
+        },
+        "description_display_names": {
+          "en": "A generous blend of almond jelly and peach.",
+          "ko": "풍부한 아몬드 풍미와 복숭아의 조화",
+          "ne": "प्रचुर आन्निन र पीचको संयोजन।",
+          "vi": "Sự kết hợp đầy đặn giữa khúc bạch và đào.",
+          "zh": "丰富杏仁与蜜桃的完美搭配。",
+          "zh-Hant": "丰富杏仁與蜜桃的完美搭配。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Peach Creamy Almond Jelly",
+          "ko": "복숭아 크리미 앤닌",
+          "ne": "पिच क्रीमी आल्मन्ड",
+          "vi": "Đào kem hạnh nhân",
+          "zh": "桃味奶香杏仁冻",
+          "zh-Hant": "桃味奶香杏仁凍"
+        },
+        "description_display_names": {
+          "en": "A generous blend of almond jelly and peach.",
+          "ko": "풍부한 아몬드 풍미와 복숭아의 조화",
+          "ne": "प्रचुर आन्निन र पीचको संयोजन।",
+          "vi": "Sự kết hợp đầy đặn giữa khúc bạch và đào.",
+          "zh": "丰富杏仁与蜜桃的完美搭配。",
+          "zh-Hant": "豐富杏仁與蜜桃的完美搭配。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "With peach pulp",
+          "zh": "含桃子果肉",
+          "zh-Hant": "含桃子果肉",
+          "ko": "복숭아 과육 함유",
+          "vi": "Có thịt đào",
+          "ne": "आरुको गुदीसहित"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "510a1b42-a72c-4b29-8a9e-1037403f9a6c",
+      "label": "抹茶タピオカフラッペ",
+      "before": {
+        "display_names": {
+          "en": "Matcha Tapioca Frappe",
+          "ko": "말차 타피오카 프라페",
+          "ne": "माचा ट्यापिओका फ्राप्पे",
+          "vi": "Frappe tran chau matcha",
+          "zh": "抹茶珍珠冰沙",
+          "zh-Hant": "抹茶珍珠冰沙"
+        },
+        "description_display_names": {
+          "en": "Rich in Yame-grown matcha. A creamy cup with distinct matcha flavor.",
+          "ko": "야메산 말차를 듬뿍 사용한, 밀키하고 말차 맛이 진한 한 잔.",
+          "ne": "यामे माचा प्रशस्त प्रयोग गरिएको, मिल्की र माचा स्वाद प्रबल भएको पेय।",
+          "vi": "Dùng nhiều matcha Yame, tạo nên ly frappe béo mượt đậm vị trà xanh.",
+          "zh": "使用丰富八女产抹茶，奶香浓郁又带抹茶风味。",
+          "zh-Hant": "使用丰富八女產抹茶，奶香濃郁又帶抹茶风味。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Matcha Tapioca Frappe",
+          "ko": "말차 타피오카 프라페",
+          "ne": "माचा ट्यापिओका फ्राप्पे",
+          "vi": "Frappe trân châu matcha",
+          "zh": "抹茶珍珠冰沙",
+          "zh-Hant": "抹茶珍珠冰沙"
+        },
+        "description_display_names": {
+          "en": "Rich in Yame-grown matcha. A creamy cup with distinct matcha flavor.",
+          "ko": "야메산 말차를 듬뿍 사용한, 밀키하고 말차 맛이 진한 한 잔.",
+          "ne": "यामे माचा प्रशस्त प्रयोग गरिएको, मिल्की र माचा स्वाद प्रबल भएको पेय।",
+          "vi": "Dùng nhiều matcha Yame, tạo nên ly frappe béo mượt đậm vị trà xanh.",
+          "zh": "使用丰富八女产抹茶，奶香浓郁又带抹茶风味。",
+          "zh-Hant": "使用豐富八女產抹茶，奶香濃郁又帶抹茶風味。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Selected Japanese matcha",
+          "zh": "精选日本抹茶",
+          "zh-Hant": "精選日本抹茶",
+          "ko": "엄선한 일본산 말차",
+          "vi": "Matcha Nhật tuyển chọn",
+          "ne": "चयनित जापानी माचा"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "cce34895-9179-4a7d-ac89-363d1304bf65",
+      "label": "緑茶",
+      "before": {
+        "display_names": {
+          "en": "Green Tea",
+          "ko": "녹차",
+          "ne": "ग्रीन टी",
+          "vi": "Tra xanh",
+          "zh": "绿茶",
+          "zh-Hant": "綠茶"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Green Tea",
+          "ko": "녹차",
+          "ne": "ग्रीन टी",
+          "vi": "Trà xanh",
+          "zh": "绿茶",
+          "zh-Hant": "綠茶"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "050a2479-1415-4667-974a-b7804a07a4bb",
+      "label": "抹茶バナナスムージー",
+      "before": {
+        "display_names": {
+          "en": "Yame Matcha Banana Smoothie",
+          "ko": "야메 말차 바나나 스무디",
+          "ne": "यामे माचा केरा स्मूदी",
+          "vi": "Sinh to chuoi matcha Yame",
+          "zh": "八女抹茶香蕉冰沙",
+          "zh-Hant": "八女抹茶香蕉冰沙"
+        },
+        "description_display_names": {
+          "en": "A blend of ripe banana and 100% Yame Matcha.",
+          "ko": "잘 익은 바나나와 야메산 100% 말차가 어우러진 한 잔.",
+          "ne": "पाकेको केरा र यामे उत्पादनको १००% माचा मिसाइएको पेय।",
+          "vi": "Một ly kết hợp chuối chín và matcha 100% từ Yame.",
+          "zh": "成熟香蕉与100%八女抹茶的结合。",
+          "zh-Hant": "成熟香蕉與100%八女抹茶的结合。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Yame Matcha Banana Smoothie",
+          "ko": "야메 말차 바나나 스무디",
+          "ne": "यामे माचा केरा स्मूदी",
+          "vi": "Sinh tố chuối matcha",
+          "zh": "八女抹茶香蕉冰沙",
+          "zh-Hant": "八女抹茶香蕉冰沙"
+        },
+        "description_display_names": {
+          "en": "A blend of ripe banana and 100% Yame Matcha.",
+          "ko": "잘 익은 바나나와 야메산 100% 말차가 어우러진 한 잔.",
+          "ne": "पाकेको केरा र यामे उत्पादनको १००% माचा मिसाइएको पेय।",
+          "vi": "Một ly kết hợp chuối chín và matcha 100% từ Yame.",
+          "zh": "成熟香蕉与100%八女抹茶的结合。",
+          "zh-Hant": "成熟香蕉與100%八女抹茶的結合。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Selected Japanese matcha",
+          "zh": "精选日本抹茶",
+          "zh-Hant": "精選日本抹茶",
+          "ko": "엄선한 일본산 말차",
+          "vi": "Matcha Nhật tuyển chọn",
+          "ne": "चयनित जापानी माचा"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "1f23ef54-9f47-43f2-9042-37c135aad2da",
+      "label": "カフェアメリカーノ",
+      "before": {
+        "display_names": {
+          "en": "Cafe Americano",
+          "ko": "카페 아메리카노",
+          "ne": "क्याफे अमेरिकानो",
+          "vi": "Ca phe Americano",
+          "zh": "美式咖啡",
+          "zh-Hant": "美式咖啡"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Cafe Americano",
+          "ko": "카페 아메리카노",
+          "ne": "क्याफे अमेरिकानो",
+          "vi": "Cà phê Americano",
+          "zh": "美式咖啡",
+          "zh-Hant": "美式咖啡"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "214f3c7a-0c52-4da8-a256-c0862d35c0fd",
+      "label": "ジャスミン茶",
+      "before": {
+        "display_names": {
+          "en": "Jasmine Tea",
+          "ko": "자스민 차",
+          "ne": "जास्मिन टी",
+          "vi": "Tra nhai",
+          "zh": "茉莉花茶",
+          "zh-Hant": "茉莉花茶"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Jasmine Tea",
+          "ko": "자스민 차",
+          "ne": "जास्मिन टी",
+          "vi": "Trà lài",
+          "zh": "茉莉花茶",
+          "zh-Hant": "茉莉花茶"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "a9aa71ff-5027-4112-a4e3-976d0973daa2",
+      "label": "ルイボス茶",
+      "before": {
+        "display_names": {
+          "en": "Rooibos Tea",
+          "ko": "루이보스차",
+          "ne": "रुइबोस टी",
+          "vi": "Tra rooibos",
+          "zh": "露伊波斯茶",
+          "zh-Hant": "露伊波斯茶"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Rooibos Tea",
+          "ko": "루이보스차",
+          "ne": "रुइबोस टी",
+          "vi": "Trà rooibos",
+          "zh": "露伊波斯茶",
+          "zh-Hant": "露伊波斯茶"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "6cd9b989-07cf-4ba3-b037-c656f3ae2ea3",
+      "label": "とろとろ国産豚なんこつ麻辣串",
+      "before": {
+        "category": "カップマーラータン",
+        "variable_schema": {},
+        "display_names": {}
+      },
+      "after": {
+        "category": "フード",
+        "variable_schema": {
+          "categoryId": "food",
+          "productType": "food"
+        },
+        "display_names": {
+          "en": "Tender Japanese pork cartilage mala skewers",
+          "zh": "软嫩日本猪软骨麻辣串",
+          "zh-Hant": "軟嫩日本豬軟骨麻辣串",
+          "ko": "부드러운 일본산 돼지 연골 마라 꼬치",
+          "vi": "Xiên sụn heo Nhật mềm vị mala",
+          "ne": "नरम जापानी सुँगुरको कुरकुरे हाडको माला स्क्युअर"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "23cf6a79-13a2-40c4-b4fa-7e7d281a0a01",
+      "label": "海老カクテルマーラータン",
+      "before": {
+        "category": "カップマーラータン",
+        "variable_schema": {},
+        "display_names": {}
+      },
+      "after": {
+        "category": "フード",
+        "variable_schema": {
+          "categoryId": "food",
+          "productType": "food"
+        },
+        "display_names": {
+          "en": "Shrimp cocktail malatang",
+          "zh": "鲜虾麻辣烫",
+          "zh-Hant": "鮮蝦麻辣燙",
+          "ko": "새우 칵테일 마라탕",
+          "vi": "Malatang tôm cocktail",
+          "ne": "श्रिम्प ककटेल मालाताङ"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "7364b7cd-78c1-4b28-bcd3-fb52ebae51c9",
+      "label": "【自由にカスタム】汁無しカップマーラータン",
+      "before": {
+        "category": "カップマーラータン",
+        "variable_schema": {},
+        "display_names": {}
+      },
+      "after": {
+        "category": "フード",
+        "variable_schema": {
+          "categoryId": "food",
+          "productType": "food"
+        },
+        "display_names": {
+          "en": "Build-your-own dry malatang cup",
+          "zh": "自选干拌杯装麻辣烫",
+          "zh-Hant": "自選乾拌杯裝麻辣燙",
+          "ko": "내 맘대로 고르는 국물 없는 컵 마라탕",
+          "vi": "Malatang khô dạng cốc tùy chọn",
+          "ne": "आफ्नो रोजाइको झोलरहित कप मालाताङ"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "1c1ba11f-334b-407b-8069-ce1ab81c54f8",
+      "label": "蜂蜜柚子茶",
+      "before": {
+        "display_names": {
+          "en": "Honey Yuzu Tea",
+          "ko": "꿀 유자차",
+          "ne": "मह युजु टी",
+          "vi": "Tra mat ong yuzu",
+          "zh": "蜂蜜柚子茶",
+          "zh-Hant": "蜂蜜柚子茶"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Honey Yuzu Tea",
+          "ko": "꿀 유자차",
+          "ne": "मह युजु टी",
+          "vi": "Trà yuzu mật ong",
+          "zh": "蜂蜜柚子茶",
+          "zh-Hant": "蜂蜜柚子茶"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Available hot",
+          "zh": "可选热饮",
+          "zh-Hant": "可選熱飲",
+          "ko": "따뜻하게 가능",
+          "vi": "Có thể chọn nóng",
+          "ne": "तातो पनि उपलब्ध"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "85772830-3479-448b-9bda-b191b10247b0",
+      "label": "３種の特選団子麻辣串",
+      "before": {
+        "category": "カップマーラータン",
+        "variable_schema": {},
+        "display_names": {}
+      },
+      "after": {
+        "category": "フード",
+        "variable_schema": {
+          "categoryId": "food",
+          "productType": "food"
+        },
+        "display_names": {
+          "en": "Three selected dumpling mala skewers",
+          "zh": "三种精选丸子麻辣串",
+          "zh-Hant": "三種精選丸子麻辣串",
+          "ko": "엄선한 완자 3종 마라 꼬치",
+          "vi": "Xiên mala ba loại viên tuyển chọn",
+          "ne": "तीन प्रकारका चयनित डम्प्लिङ माला स्क्युअर"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "cf3f5570-8650-4575-8b86-fd9547685ffc",
+      "label": "山盛りポテトマーラータン",
+      "before": {
+        "category": "カップマーラータン",
+        "variable_schema": {},
+        "display_names": {}
+      },
+      "after": {
+        "category": "フード",
+        "variable_schema": {
+          "categoryId": "food",
+          "productType": "food"
+        },
+        "display_names": {
+          "en": "Malatang with a generous serving of potatoes",
+          "zh": "满满土豆麻辣烫",
+          "zh-Hant": "滿滿馬鈴薯麻辣燙",
+          "ko": "감자 듬뿍 마라탕",
+          "vi": "Malatang đầy khoai tây",
+          "ne": "प्रशस्त आलु भएको मालाताङ"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "281e7015-d593-4677-86a3-759d7d192195",
+      "label": "プアール茶",
+      "before": {
+        "display_names": {
+          "en": "Pu'er Tea",
+          "ko": "푸얼 차",
+          "ne": "पुएर टी",
+          "vi": "Tra Pho Nhi",
+          "zh": "普洱茶",
+          "zh-Hant": "普洱茶"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Pu'er Tea",
+          "ko": "푸얼 차",
+          "ne": "पुएर टी",
+          "vi": "Trà Phổ Nhĩ",
+          "zh": "普洱茶",
+          "zh-Hant": "普洱茶"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "74f2b908-d5fb-411a-8378-d5f8048ff191",
+      "label": "ピーチ紅茶",
+      "before": {
+        "display_names": {
+          "en": "Peach Black Tea",
+          "ko": "복숭아 홍차",
+          "ne": "पिच ब्ल्याक टी",
+          "vi": "Tra den dao",
+          "zh": "桃子红茶",
+          "zh-Hant": "桃子紅茶"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Peach Black Tea",
+          "ko": "복숭아 홍차",
+          "ne": "पिच ब्ल्याक टी",
+          "vi": "Trà đen đào",
+          "zh": "桃子红茶",
+          "zh-Hant": "桃子紅茶"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Available hot",
+          "zh": "可选热饮",
+          "zh-Hant": "可選熱飲",
+          "ko": "따뜻하게 가능",
+          "vi": "Có thể chọn nóng",
+          "ne": "तातो पनि उपलब्ध"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "f21bb47c-9e8f-4286-aba6-bda1bf368d44",
+      "label": "蜂蜜柚子ジャスミン茶",
+      "before": {
+        "display_names": {
+          "en": "Honey Yuzu Jasmine Tea",
+          "ko": "꿀 유자 재스민차",
+          "ne": "मह युजु जास्मिन टी",
+          "vi": "Tra nhai mat ong yuzu",
+          "zh": "蜂蜜柚子茉莉花茶",
+          "zh-Hant": "蜂蜜柚子茉莉花茶"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Honey Yuzu Jasmine Tea",
+          "ko": "꿀 유자 재스민차",
+          "ne": "मह युजु जास्मिन टी",
+          "vi": "Trà lài yuzu mật ong",
+          "zh": "蜂蜜柚子茉莉花茶",
+          "zh-Hant": "蜂蜜柚子茉莉花茶"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Available hot",
+          "zh": "可选热饮",
+          "zh-Hant": "可選熱飲",
+          "ko": "따뜻하게 가능",
+          "vi": "Có thể chọn nóng",
+          "ne": "तातो पनि उपलब्ध"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "2bb64f04-3bab-4eeb-98ec-3c6d02a7169d",
+      "label": "蜂蜜柚子アッサム茶",
+      "before": {
+        "display_names": {
+          "en": "Honey Yuzu Assam Black Tea",
+          "ko": "꿀 유자 아쌈 홍차",
+          "ne": "मह युजु आसाम ब्ल्याक टी",
+          "vi": "Tra den Assam mat ong yuzu",
+          "zh": "蜂蜜柚子阿萨姆红茶",
+          "zh-Hant": "蜂蜜柚子阿萨姆紅茶"
+        },
+        "description_display_names": {
+          "en": "Bold Assam black tea blended with honey yuzu.",
+          "ko": "쓴맛이 진한 아쌈 홍차와 꿀 유자의 조화.",
+          "ne": "तीतोपन भएको असम चिया र महयुक्त युजुको संयोजन।",
+          "vi": "Sự kết hợp giữa trà Assam đậm vị chát và yuzu mật ong.",
+          "zh": "浓郁阿萨姆红茶搭配蜂蜜柚子香。",
+          "zh-Hant": "濃郁阿萨姆紅茶搭配蜂蜜柚子香。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Honey Yuzu Assam Black Tea",
+          "ko": "꿀 유자 아쌈 홍차",
+          "ne": "मह युजु आसाम ब्ल्याक टी",
+          "vi": "Trà Assam yuzu mật ong",
+          "zh": "蜂蜜柚子阿萨姆红茶",
+          "zh-Hant": "蜂蜜柚子阿薩姆紅茶"
+        },
+        "description_display_names": {
+          "en": "Bold Assam black tea blended with honey yuzu.",
+          "ko": "쓴맛이 진한 아쌈 홍차와 꿀 유자의 조화.",
+          "ne": "तीतोपन भएको असम चिया र महयुक्त युजुको संयोजन।",
+          "vi": "Sự kết hợp giữa trà Assam đậm vị chát và yuzu mật ong.",
+          "zh": "浓郁阿萨姆红茶搭配蜂蜜柚子香。",
+          "zh-Hant": "濃郁阿薩姆紅茶搭配蜂蜜柚子香。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Available hot",
+          "zh": "可选热饮",
+          "zh-Hant": "可選熱飲",
+          "ko": "따뜻하게 가능",
+          "vi": "Có thể chọn nóng",
+          "ne": "तातो पनि उपलब्ध"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "6c2d125b-e82a-43c7-9f08-fde68f11a361",
+      "label": "カフェラテ",
+      "before": {
+        "display_names": {
+          "en": "Cafe Latte",
+          "ko": "카페 라떼",
+          "ne": "क्याफे लाटे",
+          "vi": "Ca phe latte",
+          "zh": "拿铁咖啡",
+          "zh-Hant": "拿铁咖啡"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Cafe Latte",
+          "ko": "카페 라떼",
+          "ne": "क्याफे लाटे",
+          "vi": "Cà phê latte",
+          "zh": "拿铁咖啡",
+          "zh-Hant": "拿鐵咖啡"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "0e534667-47dc-4bf8-8473-5f79d7d246e6",
+      "label": "タピオカカフェラテ",
+      "before": {
+        "display_names": {
+          "en": "Tapioca Cafe Latte",
+          "ko": "타피오카 카페라떼",
+          "ne": "ट्यापिओका क्याफे लाटे",
+          "vi": "Ca phe latte tran chau",
+          "zh": "珍珠咖啡拿铁",
+          "zh-Hant": "珍珠咖啡拿铁"
+        },
+        "description_display_names": {
+          "en": "Cafe Latte made with high-quality espresso beans.",
+          "ko": "고급 원두로 내린 에스프레소로 만든 카페라떼.",
+          "ne": "उत्कृष्ट गुणस्तरका दानाबाट बनाइएको एस्प्रेसो प्रयोग गरिएको कफे लाटे।",
+          "vi": "Cà phê latte pha từ espresso làm bằng hạt cà phê chất lượng cao.",
+          "zh": "采用优质豆子萃取的浓缩咖啡，制成的咖啡拿铁。",
+          "zh-Hant": "采用優質豆子萃取的濃缩咖啡，製成的咖啡拿铁。"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Tapioca Cafe Latte",
+          "ko": "타피오카 카페라떼",
+          "ne": "ट्यापिओका क्याफे लाटे",
+          "vi": "Cà phê latte trân châu",
+          "zh": "珍珠咖啡拿铁",
+          "zh-Hant": "珍珠咖啡拿鐵"
+        },
+        "description_display_names": {
+          "en": "Cafe Latte made with high-quality espresso beans.",
+          "ko": "고급 원두로 내린 에스프레소로 만든 카페라떼.",
+          "ne": "उत्कृष्ट गुणस्तरका दानाबाट बनाइएको एस्प्रेसो प्रयोग गरिएको कफे लाटे।",
+          "vi": "Cà phê latte pha từ espresso làm bằng hạt cà phê chất lượng cao.",
+          "zh": "采用优质豆子萃取的浓缩咖啡，制成的咖啡拿铁。",
+          "zh-Hant": "採用優質豆子萃取的濃縮咖啡，製成的咖啡拿鐵。"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "333e0525-150f-41a9-9ac5-d12125f653c8",
+      "label": "バナナヨーグルトスムージー",
+      "before": {
+        "display_names": {
+          "en": "Banana Yogurt Smoothie",
+          "ko": "바나나 요거트 스무디",
+          "ne": "केरा योगर्ट स्मूदी",
+          "vi": "Sinh to chuoi sua chua",
+          "zh": "香蕉酸奶冰沙",
+          "zh-Hant": "香蕉酸奶冰沙"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Banana Yogurt Smoothie",
+          "ko": "바나나 요거트 스무디",
+          "ne": "केरा योगर्ट स्मूदी",
+          "vi": "Sinh tố chuối sữa chua",
+          "zh": "香蕉酸奶冰沙",
+          "zh-Hant": "香蕉酸奶冰沙"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Premium sweet flavor",
+          "zh": "精选香甜",
+          "zh-Hant": "精選香甜",
+          "ko": "프리미엄 달콤한 맛",
+          "vi": "Vị ngọt cao cấp",
+          "ne": "उत्कृष्ट गुलियो स्वाद"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "c2196a1e-ff60-4834-b5a1-253d6d8ace74",
+      "label": "アッサム紅茶タピオカミルクティー",
+      "before": {
+        "display_names": {
+          "en": "Assam Black Tea Tapioca Milk Tea",
+          "ko": "아삼 홍차 타피오카 밀크티",
+          "ne": "आसाम ट्यापिओका मिल्क टी",
+          "vi": "Tra sua Assam tran chau",
+          "zh": "阿萨姆红茶珍珠奶茶",
+          "zh-Hant": "阿萨姆紅茶珍珠奶茶"
+        },
+        "description": "芳醇な香りと力強い渋みを持つアッサム紅茶を、店内で丁寧に抽出☕️\n\nその一杯に合わせるのは、コク深くとろけるような最高級ミルク。\n計算し尽くされたバランスが生み出すのは、まるで上質なデザートのような贅沢な時間。\n口にした瞬間、思わず目を閉じてしまう――そんな特別な一杯をご用意しました。\n\nそしてこの一杯は、ただのご褒美ではありません。\n心と体を整え、あなたの一日のパフォーマンスを高めてくれる“最高の自己投資”。\n美味しさの中に宿る、静かな力強さを感じてください！\n\n料理長の口癖は【大切なお客様に美味しいお料理を提供して差し上げる】",
+        "description_display_names": {
+          "en": "Bold Assam black tea blended with milk.",
+          "ko": "향과 떫은 맛이 강한 아삼 홍차에 우유를 조화시켰습니다.",
+          "ne": "बलियो सुगन्ध र हल्का तितोपन भएको असम चियालाई दूधसँग मिसाइएको छ।",
+          "vi": "Trà sữa Assam đậm hương, vị chát nhẹ, kết hợp với sữa.",
+          "zh": "浓郁香气和涩味的阿萨姆红茶搭配鲜奶。",
+          "zh-Hant": "濃郁香氣和涩味的阿萨姆紅茶搭配鮮奶。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Assam Black Tea Tapioca Milk Tea",
+          "ko": "아삼 홍차 타피오카 밀크티",
+          "ne": "आसाम ट्यापिओका मिल्क टी",
+          "vi": "Trà sữa Assam trân châu",
+          "zh": "阿萨姆红茶珍珠奶茶",
+          "zh-Hant": "阿薩姆紅茶珍珠奶茶"
+        },
+        "description": "店内で丁寧に抽出したアッサム紅茶に、コクのあるミルクを合わせました。芳醇な香りとほどよい渋み、タピオカの食感をお楽しみください。",
+        "description_display_names": {
+          "en": "Bold Assam black tea blended with milk.",
+          "ko": "향과 떫은 맛이 강한 아삼 홍차에 우유를 조화시켰습니다.",
+          "ne": "बलियो सुगन्ध र हल्का तितोपन भएको असम चियालाई दूधसँग मिसाइएको छ।",
+          "vi": "Trà sữa Assam đậm hương, vị chát nhẹ, kết hợp với sữa.",
+          "zh": "浓郁香气和涩味的阿萨姆红茶搭配鲜奶。",
+          "zh-Hant": "濃郁香氣和澀味的阿薩姆紅茶搭配鮮奶。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Triple Assam tea leaves",
+          "zh": "三倍阿萨姆茶叶",
+          "zh-Hant": "三倍阿薩姆茶葉",
+          "ko": "아삼 찻잎 3배",
+          "vi": "Lá trà Assam gấp ba",
+          "ne": "असम चियापत्ती तीन गुणा"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "892a321e-674f-446f-afdd-973da60e4c8a",
+      "label": "タピオカコーヒー",
+      "before": {
+        "display_names": {
+          "en": "Tapioca Coffee",
+          "ko": "타피오카 커피",
+          "ne": "ट्यापिओका कफी",
+          "vi": "Ca phe tran chau",
+          "zh": "珍珠咖啡",
+          "zh-Hant": "珍珠咖啡"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Tapioca coffee",
+          "ko": "타피오카 커피",
+          "ne": "टापिओका कफी",
+          "vi": "Cà phê trân châu",
+          "zh": "珍珠咖啡",
+          "zh-Hant": "珍珠咖啡"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "147b0870-0b50-41b4-b822-1cda9a8c103d",
+      "label": "ジャスミンタピオカミルクティー",
+      "before": {
+        "display_names": {
+          "en": "Jasmine Tapioca Milk Tea",
+          "ko": "재스민 타피오카 밀크티",
+          "ne": "जास्मिन ट्यापिओका मिल्क टी",
+          "vi": "Tra sua nhai tran chau",
+          "zh": "茉莉花珍珠奶茶",
+          "zh-Hant": "茉莉花珍珠奶茶"
+        },
+        "description": "華やかで凛とした香りを湛える、本物のジャスミンを味わっていただくために――\n茶葉は、通常の3倍量を惜しみなく使用。\n空気にふわりと触れた瞬間に立ち上がる芳香、時間とともに深まるコク。\nその繊細な変化を“今ここ”に集中して感じていただけるよう、店内で丁寧に抽出しています。\n\nミルクのまろやかさに寄り添いながらも、静かに自己を見つめ直すような、ジャスミンの気高さ。\nまるでタロットのカードをめくるように、一口ごとに新しい気づきと対話が訪れる。\n感性を研ぎ澄ませる、内なる時間に寄り添う一杯を、どうぞ❤️",
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Jasmine Tapioca Milk Tea",
+          "ko": "재스민 타피오카 밀크티",
+          "ne": "जास्मिन ट्यापिओका मिल्क टी",
+          "vi": "Trà sữa lài trân châu",
+          "zh": "茉莉花珍珠奶茶",
+          "zh-Hant": "茉莉花珍珠奶茶"
+        },
+        "description": "通常の3倍量の茶葉を使い、店内で丁寧に抽出したジャスミン茶のミルクティー。華やかな香りに、ミルクのまろやかさとタピオカの食感が重なります。",
+        "promotion_prefix_display_names": {
+          "en": "Triple jasmine tea leaves",
+          "zh": "三倍茉莉茶叶",
+          "zh-Hant": "三倍茉莉茶葉",
+          "ko": "자스민 찻잎 3배",
+          "vi": "Lá trà lài gấp ba",
+          "ne": "चमेली चियापत्ती तीन गुणा"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "9c19c722-d636-496c-ae83-5d40b41b9c57",
+      "label": "きなこ豆乳くろごま",
+      "before": {
+        "display_names": {
+          "en": "Kinako Soy Milk Black Sesame",
+          "ko": "키나코 두유 흑임자",
+          "ne": "किनाको सोया मिल्क कालो तिल",
+          "vi": "Sua dau nanh bot dau nanh rang va me den",
+          "zh": "黄豆粉豆奶黑芝麻",
+          "zh-Hant": "黄豆粉豆奶黑芝麻"
+        },
+        "description_display_names": {
+          "en": "Gentle sweetness from pure soy milk, kinako, honey, and black sesame.",
+          "ko": "순두유, 키나코(콩가루), 꿀, 흑임자의 부드러운 단맛.",
+          "ne": "शुद्ध सोयादूध, किनाको, मह र कालो तिलको कोमल मिठास।",
+          "vi": "Vị ngọt dịu từ sữa đậu nành nguyên chất, kinako, mật ong và mè đen.",
+          "zh": "纯豆浆、黄豆粉、蜂蜜、黑芝麻的温和甜味。",
+          "zh-Hant": "纯豆浆、黄豆粉、蜂蜜、黑芝麻的溫和甜味。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Kinako Soy Milk Black Sesame",
+          "ko": "키나코 두유 흑임자",
+          "ne": "किनाको सोया मिल्क कालो तिल",
+          "vi": "Sữa đậu nành mè đen và bột đậu nành rang",
+          "zh": "黄豆粉豆奶黑芝麻",
+          "zh-Hant": "黃豆粉豆奶黑芝麻"
+        },
+        "description_display_names": {
+          "en": "Gentle sweetness from pure soy milk, kinako, honey, and black sesame.",
+          "ko": "순두유, 키나코(콩가루), 꿀, 흑임자의 부드러운 단맛.",
+          "ne": "शुद्ध सोयादूध, किनाको, मह र कालो तिलको कोमल मिठास।",
+          "vi": "Vị ngọt dịu từ sữa đậu nành nguyên chất, kinako, mật ong và mè đen.",
+          "zh": "纯豆浆、黄豆粉、蜂蜜、黑芝麻的温和甜味。",
+          "zh-Hant": "純豆漿、黃豆粉、蜂蜜、黑芝麻的溫和甜味。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Premium roasted soybean flour",
+          "zh": "精选黄豆粉",
+          "zh-Hant": "精選黃豆粉",
+          "ko": "고급 콩가루",
+          "vi": "Bột đậu nành rang cao cấp",
+          "ne": "उत्कृष्ट भुटेको भटमासको पिठो"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "2c980e8d-c865-46fe-a60b-452062b65854",
+      "label": "黒糖タピオカ国産抹茶ラテ",
+      "before": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Yame Matcha Latte",
+          "ko": "흑설탕 타피오카 야메 말차 라떼",
+          "ne": "ब्राउन सुगर ट्यापिओका यामे माचा लाटे",
+          "vi": "Latte matcha Yame tran chau duong den",
+          "zh": "黑糖珍珠八女抹茶拿铁",
+          "zh-Hant": "黑糖珍珠八女抹茶拿铁"
+        },
+        "description": "​【八女の聖地が生んだ上質な国産抹茶をおしげもなくふんだんに使用】\n\n​\n​福岡県八女の豊かな風土と朝霧に包まれた特定の一角。\n\nそこは、お茶づくりにおいて世界最高峰の環境と称される場所です。\n\n​私たちは現地に赴き、伝統的な製法と誇り高き職人技によって大切に育まれた「国内産最高級抹茶100%」のロットを直接買い付けました。\n\nしかし、最高品質を追い求めるがゆえに収穫できる茶葉の量には限りがあり、ご用意できる数量にもどうしても上限がございます。\n\n\n​単なる「抹茶」という枠を超え、茶葉の栽培環境、品種の選定、そして挽き方に至るまで一切の妥協を許さず、その時期に最も状態の良い限られたロットだけを厳選しました。\n\n​カップに注がれた瞬間、ふわりと鼻腔をくすぐる芳醇で繊細なアロマ。\n\nそして、キャラメリゼ加工を施した自家製シロップの奥深いコクと旨味が、抹茶本来の気高い苦味と美しく重なり合います。\n\n​さらに、より深い奥行きと豊かな余韻を求める方のために、圧倒的な密度を誇る、お抹茶ともちもちタピオカの組み合わせ。\n\n極上の苦味と上質な甘みが織りなすバランスは、まるで熟練の和菓子職人が仕立てた上生菓子を口にしたかのような、心がほどける贅沢なひとときをもたらします。",
+        "description_display_names": {
+          "en": "100% Yame Matcha from Fukuoka Prefecture.",
+          "ko": "후쿠오카현 야메 산 말차 100% 사용.",
+          "ne": "फुकुओकाको यामे उत्पादन 100% माचा प्रयोग गरिएको।",
+          "vi": "Dùng 100% matcha Yame, Fukuoka.",
+          "zh": "100%使用福冈县八女产抹茶。",
+          "zh-Hant": "100%使用福冈县八女產抹茶。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Yame Matcha Latte",
+          "ko": "흑설탕 타피오카 야메 말차 라떼",
+          "ne": "ब्राउन सुगर ट्यापिओका यामे माचा लाटे",
+          "vi": "Latte matcha Nhật trân châu đường đen",
+          "zh": "黑糖珍珠八女抹茶拿铁",
+          "zh-Hant": "黑糖珍珠八女抹茶拿鐵"
+        },
+        "description": "福岡県八女産の国産抹茶100%を使用。抹茶の芳醇な香りとほろ苦さに、自家製シロップのコクともちもちの黒糖タピオカを合わせました。",
+        "description_display_names": {
+          "en": "100% Yame Matcha from Fukuoka Prefecture.",
+          "ko": "후쿠오카현 야메 산 말차 100% 사용.",
+          "ne": "फुकुओकाको यामे उत्पादन 100% माचा प्रयोग गरिएको।",
+          "vi": "Dùng 100% matcha Yame, Fukuoka.",
+          "zh": "100%使用福冈县八女产抹茶。",
+          "zh-Hant": "100%使用福岡縣八女產抹茶。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Selected Japanese matcha",
+          "zh": "精选日本抹茶",
+          "zh-Hant": "精選日本抹茶",
+          "ko": "엄선한 일본산 말차",
+          "vi": "Matcha Nhật tuyển chọn",
+          "ne": "चयनित जापानी माचा"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "d5c00371-fc6b-4c06-b196-523526f99361",
+      "label": "黒糖タピオカオレオミルク",
+      "before": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Oreo Milk",
+          "ko": "흑설탕 타피오카 오레오 밀크",
+          "ne": "ब्राउन सुगर ट्यापिओका ओरियो मिल्क",
+          "vi": "Sua Oreo tran chau duong den",
+          "zh": "黑糖珍珠奥利奥奶茶",
+          "zh-Hant": "黑糖珍珠奧利奧奶茶"
+        },
+        "description_display_names": {
+          "en": "Perfect for Oreo lovers. A drink packed with mixed Oreo goodness.",
+          "ko": "오레오를 좋아하는 분께 추천하는, 듬뿍 섞어 즐기는 한 잔.",
+          "ne": "ओरियो मन पराउनेहरूका लागि सिफारिस गरिएको, राम्ररी मिसाएर रमाइलो गर्ने पेय।",
+          "vi": "Dành cho fan Oreo, khuấy đều thật nhiều để thưởng thức.",
+          "zh": "奥利奥爱好者推荐。混合丰富，尽享美味。",
+          "zh-Hant": "奧利奧愛好者推薦。混合丰富，尽享美味。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Oreo Milk",
+          "ko": "흑설탕 타피오카 오레오 밀크",
+          "ne": "ब्राउन सुगर ट्यापिओका ओरियो मिल्क",
+          "vi": "Sữa Oreo trân châu đường đen",
+          "zh": "黑糖珍珠奥利奥牛奶",
+          "zh-Hant": "黑糖珍珠Oreo牛奶"
+        },
+        "description_display_names": {
+          "en": "Perfect for Oreo lovers. A drink packed with mixed Oreo goodness.",
+          "ko": "오레오를 좋아하는 분께 추천하는, 듬뿍 섞어 즐기는 한 잔.",
+          "ne": "ओरियो मन पराउनेहरूका लागि सिफारिस गरिएको, राम्ररी मिसाएर रमाइलो गर्ने पेय।",
+          "vi": "Dành cho fan Oreo, khuấy đều thật nhiều để thưởng thức.",
+          "zh": "奥利奥爱好者推荐。混合丰富，尽享美味。",
+          "zh-Hant": "Oreo愛好者推薦。混合豐富，盡享美味。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Crunchy Oreo in every sip",
+          "zh": "一口爱上脆脆奥利奥",
+          "zh-Hant": "一口愛上酥脆 Oreo",
+          "ko": "한 모금에 반하는 바삭한 오레오",
+          "vi": "Oreo giòn cuốn hút từng ngụm",
+          "ne": "हरेक घुट्कोमा कुरकुरे Oreo"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "74ce6430-7fca-46c9-872f-d9a489955f25",
+      "label": "黒糖タピオカミルク",
+      "before": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Milk",
+          "ko": "흑설탕 타피오카 밀크",
+          "ne": "ब्राउन सुगर ट्यापिओका मिल्क",
+          "vi": "Sua tran chau duong den",
+          "zh": "黑糖珍珠奶茶",
+          "zh-Hant": "黑糖珍珠奶茶"
+        },
+        "description": "食感、食感、食感、食感、食感。\n食感、食感、食感、食感、食感。\n食感、食感、食感、食感、食感。\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜\n​圧倒的に「もちもち食感」への執念が違います。\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜\n\n​効率を優先するチェーン店の味では、もう満足できない。\n\n「とりあえず」ではなく、自分へのご褒美には本当にいいものを選びたい。\n\nそんな「本物」を知る大人の方にのみ届ける、極上の黒糖タピオカミルクです。\n\n​〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜\nなぜ、ここまで食感が違うのか？\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜\n\n\n​その裏側には、当店専属の職人による「異常なまでの食感への執念」があります。\n\n\n​普段はとても静かで真面目な彼ですが、厨房に立つと一切の妥協を許しません。\n\n彼の丁寧で実直な仕事ぶりを見ていると、なぜこれほどまでに極上の味わいが生み出されるのか、深く納得させられます。\n\n​その日の気温、湿度を肌で感じ取り、火加減を秒単位で微調整し続ける。\n\n片時も鍋から離れず、気の遠くなるような果てしない仕込み作業の先に、この究極の「もっちり感」が生まれているのです。\n\n\n​私はこれまで数え切れないほどのタピオカを飲んできましたが、彼が仕込むタピオカを超えるものに出会ったことがありません。\n\nここnanachaのタピオカは、「これだけのために選びたい」と思える特別な存在です。\n\n\n​採算やスピードは二の次。\n\nこの芸術的な品質を守り抜くため、彼が一度に仕込むのは「わずか8杯分」だけ。\n\n​生タピオカからタピオカを仕込むのに、どれだけ時間がかかるかご存知の方は、この8杯分ずつ仕込むことがどれだけ常軌を逸しているか想像がつくかと思います。\n\n​〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜\nそうです。彼にとって「本物の食感」を届けることこそが、人生を懸けた唯一の使命なのです。\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜\n\n\n​そしてベースとなるミルクには、豊かな大自然が育んだ「阿蘇の高級牛乳のみ」を贅沢に使用。\n\nさらに、高級天然砂糖から丁寧に煮詰めた自家製シロップと、複数の高級黒糖から炊き上げた特製黒蜜が牛乳と絶妙に絡み合い、深みのある上品な甘さを演出します。\n\n​この1杯は、ただの飲み物ではありません。\n\n日々を全力で駆け抜けるあなたが、心から自分を大切にし、甘やかすための「至福の体験」です。\n\n​〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜\nひと口飲めば、職人の情熱と厳選素材が織りなす上質な味わいが口いっぱいに広がり、一日の疲れとストレスがスッと溶けていく。\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜\n\n​彼が人生をかけて生み出した最高傑作。\n\n590円で手に入る、絶対に後悔させない最高のリラックスタイムを、今すぐあなたのお手元へ。",
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Milk",
+          "ko": "흑설탕 타피오카 밀크",
+          "ne": "ब्राउन सुगर ट्यापिओका मिल्क",
+          "vi": "Sữa trân châu đường đen",
+          "zh": "黑糖珍珠牛奶",
+          "zh-Hant": "黑糖珍珠牛奶"
+        },
+        "description": "もちもちの黒糖タピオカに、阿蘇の牛乳、自家製シロップ、特製黒蜜を合わせました。少量ずつ丁寧に仕込むタピオカの食感と、ミルクのコクをお楽しみください。",
+        "promotion_prefix_display_names": {
+          "en": "Over 20,000 cups served",
+          "zh": "累计售出超过 2 万杯",
+          "zh-Hant": "累計售出超過 2 萬杯",
+          "ko": "누적 2만 잔 돌파",
+          "vi": "Đã phục vụ hơn 20.000 ly",
+          "ne": "२०,००० कपभन्दा बढी बिक्री"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "30d6a639-65e9-423f-a901-b7e9da1d0c63",
+      "label": "濃厚ピーナッツタピオカミルク",
+      "before": {
+        "display_names": {
+          "en": "Rich Peanut Tapioca Milk",
+          "ko": "진한 땅콩 타피오카 밀크",
+          "ne": "बाक्लो बदाम ट्यापिओका मिल्क",
+          "vi": "Sua tran chau dau phong dam vi",
+          "zh": "浓郁花生珍珠牛奶",
+          "zh-Hant": "濃郁花生珍珠牛奶"
+        },
+        "description_display_names": {
+          "en": "Peanut aroma paired with chewy tapioca pearls.",
+          "ko": "땅콩 향과 쫄깃한 타피오카의 조화.",
+          "ne": "भुटेको बदामको सुगन्ध र चपाउने टापिओकाको संयोजन।",
+          "vi": "Hương thơm của đậu phộng hòa cùng trân châu dai dẻo.",
+          "zh": "花生香气搭配Q弹珍珠，风味独特。",
+          "zh-Hant": "花生香氣搭配Q弹珍珠，风味独特。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Rich Peanut Tapioca Milk",
+          "ko": "진한 땅콩 타피오카 밀크",
+          "ne": "बाक्लो बदाम ट्यापिओका मिल्क",
+          "vi": "Sữa đậu phộng trân châu đậm vị",
+          "zh": "浓郁花生珍珠牛奶",
+          "zh-Hant": "濃郁花生珍珠牛奶"
+        },
+        "description_display_names": {
+          "en": "Peanut aroma paired with chewy tapioca pearls.",
+          "ko": "땅콩 향과 쫄깃한 타피오카의 조화.",
+          "ne": "भुटेको बदामको सुगन्ध र चपाउने टापिओकाको संयोजन।",
+          "vi": "Hương thơm của đậu phộng hòa cùng trân châu dai dẻo.",
+          "zh": "花生香气搭配Q弹珍珠，风味独特。",
+          "zh-Hant": "花生香氣搭配Q彈珍珠，風味獨特。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "For a relaxing moment",
+          "zh": "享受放松时刻",
+          "zh-Hant": "享受放鬆時刻",
+          "ko": "편안한 휴식에",
+          "vi": "Cho phút giây thư giãn",
+          "ne": "आरामको पलका लागि"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "c2561dd1-665f-4765-b46e-8e4f1df209e0",
+      "label": "黒糖タピオカ塩キャラメルミルク",
+      "before": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Salted Caramel Milk",
+          "ko": "흑설탕 타피오카 소금 캐러멜 밀크",
+          "ne": "ब्राउन सुगर ट्यापिओका साल्टेड क्यारामेल मिल्क",
+          "vi": "Sua caramel muoi tran chau duong den",
+          "zh": "黑糖珍珠咸焦糖奶茶",
+          "zh-Hant": "黑糖珍珠咸焦糖奶茶"
+        },
+        "description": "フランス産の岩塩が、キャラメルの香ばしさをそっと引き立てる。\n\n隠し味に忍ばせたホワイトチョコが、まろやかさと奥行きを添えることで、ただ甘いだけじゃない、静かな贅沢が生まれました。\n\n忙しさを忘れて、今この瞬間、に意識を向ける。\n\n一口ごとに感覚が研ぎ澄まされるような、大人のご褒美ドリンクです。",
+        "description_display_names": {
+          "en": "Sweet caramel combined with a hint of French sea salt.",
+          "ko": "카라멜의 달콤함과 프랑스산 바다 소금의 은은한 짭조름함.",
+          "ne": "कारामेलको मिठास र फ्रान्सेली ढुंगे नुनको हल्का नुनिलोपन।",
+          "vi": "Vị ngọt của caramel hòa cùng chút mặn tinh tế từ muối đá Pháp.",
+          "zh": "焦糖甜味搭配法国产岩盐的微咸。",
+          "zh-Hant": "焦糖甜味搭配法國產岩鹽的微咸。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Salted Caramel Milk",
+          "ko": "흑설탕 타피오카 소금 캐러멜 밀크",
+          "ne": "ब्राउन सुगर ट्यापिओका साल्टेड क्यारामेल मिल्क",
+          "vi": "Sữa caramel muối trân châu đường đen",
+          "zh": "黑糖珍珠咸焦糖牛奶",
+          "zh-Hant": "黑糖珍珠鹹焦糖牛奶"
+        },
+        "description": "フランス産の岩塩がキャラメルの香ばしさを引き立てるミルクドリンク。隠し味のホワイトチョコが、まろやかなコクを添えます。",
+        "description_display_names": {
+          "en": "Sweet caramel combined with a hint of French sea salt.",
+          "ko": "카라멜의 달콤함과 프랑스산 바다 소금의 은은한 짭조름함.",
+          "ne": "कारामेलको मिठास र फ्रान्सेली ढुंगे नुनको हल्का नुनिलोपन।",
+          "vi": "Vị ngọt của caramel hòa cùng chút mặn tinh tế từ muối đá Pháp.",
+          "zh": "焦糖甜味搭配法国产岩盐的微咸。",
+          "zh-Hant": "焦糖甜味搭配法國產岩鹽的微鹹。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "French rock salt",
+          "zh": "法国岩盐",
+          "zh-Hant": "法國岩鹽",
+          "ko": "프랑스산 암염",
+          "vi": "Muối đá Pháp",
+          "ne": "फ्रान्सेली चट्टानी नुन"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "eaaf2ca3-63ce-4748-82d9-cbeb3ce9e8d0",
+      "label": "ルイボスタピオカティー",
+      "before": {
+        "display_names": {
+          "en": "Rooibos Tapioca Tea",
+          "ko": "루이보스 타피오카티",
+          "ne": "रुइबोस ट्यापिओका टी",
+          "vi": "Tra rooibos tran chau",
+          "zh": "nanacha 露伊波斯珍珠茶",
+          "zh-Hant": "nanacha 露伊波斯珍珠茶"
+        },
+        "description_display_names": {
+          "en": "A fragrant cup carefully brewed from rooibos tea leaves.",
+          "ko": "루이보스 차잎을 정성껏 우려낸 향기로운 한 잔.",
+          "ne": "रूइबोस चियापातलाई ध्यानपूर्वक पकाएर बनाइएको सुगन्धित पेय।",
+          "vi": "Một ly trà rooibos thơm ngon, được ủ cẩn thận.",
+          "zh": "精选露伊波斯茶叶，精心冲泡，香气浓郁的一杯好茶。",
+          "zh-Hant": "精選露伊波斯茶葉，精心冲泡，香氣濃郁的一杯好茶。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Rooibos Tapioca Tea",
+          "ko": "루이보스 타피오카티",
+          "ne": "रुइबोस ट्यापिओका टी",
+          "vi": "Trà rooibos trân châu",
+          "zh": "nanacha 露伊波斯珍珠茶",
+          "zh-Hant": "nanacha 露伊波斯珍珠茶"
+        },
+        "description_display_names": {
+          "en": "A fragrant cup carefully brewed from rooibos tea leaves.",
+          "ko": "루이보스 차잎을 정성껏 우려낸 향기로운 한 잔.",
+          "ne": "रूइबोस चियापातलाई ध्यानपूर्वक पकाएर बनाइएको सुगन्धित पेय।",
+          "vi": "Một ly trà rooibos thơm ngon, được ủ cẩn thận.",
+          "zh": "精选露伊波斯茶叶，精心冲泡，香气浓郁的一杯好茶。",
+          "zh-Hant": "精選露伊波斯茶葉，精心衝泡，香氣濃郁的一杯好茶。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Brewed in-store",
+          "zh": "店内现萃",
+          "zh-Hant": "店內現萃",
+          "ko": "매장에서 추출",
+          "vi": "Pha tại cửa hàng",
+          "ne": "पसलमै तयार गरिएको"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "798921fe-2264-484a-b510-7993ab6378af",
+      "label": "バナナタピオカフラッペ",
+      "before": {
+        "display_names": {
+          "en": "Banana Tapioca Frappe",
+          "ko": "바나나 타피오카 프라페",
+          "ne": "केरा ट्यापिओका फ्राप्पे",
+          "vi": "Frappe tran chau chuoi",
+          "zh": "香蕉珍珠冰沙",
+          "zh-Hant": "香蕉珍珠冰沙"
+        },
+        "description_display_names": {
+          "en": "Frozen whole banana pairs perfectly with brown sugar tapioca.",
+          "ko": "통째로 얼린 바나나와 흑설탕 타피오카가 최고의 조화.",
+          "ne": "पूरै जमाइएको केरा र ब्राउन सुगर टापिओकाको उत्कृष्ट मेल।",
+          "vi": "Chuối đông lạnh nguyên quả kết hợp cùng trân châu đường nâu cực hợp vị.",
+          "zh": "整根冷冻香蕉与黑糖珍珠的绝妙搭配。",
+          "zh-Hant": "整根冷冻香蕉與黑糖珍珠的绝妙搭配。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Banana Tapioca Frappe",
+          "ko": "바나나 타피오카 프라페",
+          "ne": "केरा ट्यापिओका फ्राप्पे",
+          "vi": "Frappe trân châu chuối",
+          "zh": "香蕉珍珠冰沙",
+          "zh-Hant": "香蕉珍珠冰沙"
+        },
+        "description_display_names": {
+          "en": "Frozen whole banana pairs perfectly with brown sugar tapioca.",
+          "ko": "통째로 얼린 바나나와 흑설탕 타피오카가 최고의 조화.",
+          "ne": "पूरै जमाइएको केरा र ब्राउन सुगर टापिओकाको उत्कृष्ट मेल।",
+          "vi": "Chuối đông lạnh nguyên quả kết hợp cùng trân châu đường nâu cực hợp vị.",
+          "zh": "整根冷冻香蕉与黑糖珍珠的绝妙搭配。",
+          "zh-Hant": "整根冷凍香蕉與黑糖珍珠的絕妙搭配。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "A cool, rich moment of indulgence",
+          "zh": "冰凉浓郁的享受",
+          "zh-Hant": "冰涼濃郁的享受",
+          "ko": "시원하고 진한 행복의 순간",
+          "vi": "Khoảnh khắc mát lạnh, đậm đà",
+          "ne": "चिसो र गाढा स्वादको आनन्द"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "b8e1e3e6-6564-4d33-bc67-0a0715915bdc",
+      "label": "濃厚黒ごまチーズタピオカフラッペ",
+      "before": {
+        "display_names": {
+          "en": "Rich Black Sesame Cheese Tapioca Frappe",
+          "ko": "진한 흑임자 치즈 타피오카 프라페",
+          "ne": "बाक्लो कालो तिल चीज ट्यापिओका फ्राप्पे",
+          "vi": "Frappe tran chau me den pho mai dam vi",
+          "zh": "浓郁黑芝麻芝士珍珠冰沙",
+          "zh-Hant": "濃郁黑芝麻芝士珍珠冰沙"
+        },
+        "description": "超濃厚 ― 濃厚黒ごまと特製チーズフォームの贅沢な出会い\n厳選した香り高い黒ごまに、厳選クリームチーズを使った特製チーズフォームを重ねた、リッチな一杯。\n芳醇な香りとコク、甘みの中にふわりと漂う塩味が、まるでスイーツのような奥行きを生み出します。\n\nこの出会いのために、職人は一切の妥協なく最高の仕事を仕上げました。\nまさに、“飲むご褒美”。ぜひ、ゆっくりと味わってください。",
+        "description_display_names": {
+          "en": "A rich blend of black sesame and special cheese foam.",
+          "ko": "진한 흑임자와 특별 치즈폼이 어우러진 풍부한 한 잔.",
+          "ne": "गाढा कालो तिल र विशेष चिज फोम मिसाइएको समृद्ध स्वादको पेय।",
+          "vi": "Thức uống đậm vị với mè đen nguyên chất và lớp cheese foam đặc biệt.",
+          "zh": "浓郁黑芝麻搭配特制芝士奶盖，奢华一杯。",
+          "zh-Hant": "濃郁黑芝麻搭配特製芝士奶蓋，奢华一杯。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Rich Black Sesame Cheese Tapioca Frappe",
+          "ko": "진한 흑임자 치즈 타피오카 프라페",
+          "ne": "बाक्लो कालो तिल चीज ट्यापिओका फ्राप्पे",
+          "vi": "Frappe trân châu mè đen phô mai đậm vị",
+          "zh": "浓郁黑芝麻芝士珍珠冰沙",
+          "zh-Hant": "濃郁黑芝麻芝士珍珠冰沙"
+        },
+        "description": "香り高い黒ごまのフラッペに、クリームチーズを使った特製チーズフォームを重ねました。濃厚なコクとほのかな塩味、タピオカの食感を楽しめます。",
+        "description_display_names": {
+          "en": "A rich blend of black sesame and special cheese foam.",
+          "ko": "진한 흑임자와 특별 치즈폼이 어우러진 풍부한 한 잔.",
+          "ne": "गाढा कालो तिल र विशेष चिज फोम मिसाइएको समृद्ध स्वादको पेय।",
+          "vi": "Thức uống đậm vị với mè đen nguyên chất và lớp cheese foam đặc biệt.",
+          "zh": "浓郁黑芝麻搭配特制芝士奶盖，奢华一杯。",
+          "zh-Hant": "濃郁黑芝麻搭配特製芝士奶蓋，奢華一杯。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "A treat after a tiring day",
+          "zh": "疲惫一天后的犒赏",
+          "zh-Hant": "疲憊一天後的犒賞",
+          "ko": "지친 하루를 위한 선물",
+          "vi": "Tự thưởng sau ngày mệt mỏi",
+          "ne": "थकित दिनपछिको मिठो उपहार"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "c15a4394-60d2-40dd-b5ea-08ffe5f542fa",
+      "label": "グリーンタピオカティー",
+      "before": {
+        "display_names": {
+          "en": "Green Tapioca Tea",
+          "ko": "그린 타피오카 티",
+          "ne": "ग्रीन टी ट्यापिओका टी",
+          "vi": "Tra xanh tran chau",
+          "zh": "绿茶珍珠茶",
+          "zh-Hant": "綠茶珍珠茶"
+        },
+        "description_display_names": {
+          "en": "Characterized by the crispness and refreshing taste of domestic green tea.",
+          "ko": "국산 녹차 특유의 깔끔하고 상쾌한 맛이 특징.",
+          "ne": "स्थानीय हरियो चियाको सफा र ताजा स्वादको विशेषता।",
+          "vi": "Đặc trưng bởi vị thanh mát, sảng khoái của trà xanh nội địa.",
+          "zh": "国产绿茶带来清新爽口的体验。",
+          "zh-Hant": "國產綠茶帶来清新爽口的體验。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Green Tapioca Tea",
+          "ko": "그린 타피오카 티",
+          "ne": "ग्रीन टी ट्यापिओका टी",
+          "vi": "Trà xanh trân châu",
+          "zh": "绿茶珍珠茶",
+          "zh-Hant": "綠茶珍珠茶"
+        },
+        "description_display_names": {
+          "en": "Characterized by the crispness and refreshing taste of domestic green tea.",
+          "ko": "국산 녹차 특유의 깔끔하고 상쾌한 맛이 특징.",
+          "ne": "स्थानीय हरियो चियाको सफा र ताजा स्वादको विशेषता।",
+          "vi": "Đặc trưng bởi vị thanh mát, sảng khoái của trà xanh nội địa.",
+          "zh": "国产绿茶带来清新爽口的体验。",
+          "zh-Hant": "國產綠茶帶來清新爽口的體驗。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Available hot",
+          "zh": "可选热饮",
+          "zh-Hant": "可選熱飲",
+          "ko": "따뜻하게 가능",
+          "vi": "Có thể chọn nóng",
+          "ne": "तातो पनि उपलब्ध"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "1af15d04-07f8-4d5c-879f-fbd68a9b7be2",
+      "label": "グリーンタピオカミルクティー",
+      "before": {
+        "display_names": {
+          "en": "Green Tapioca Milk Tea",
+          "ko": "그린 타피오카 밀크티",
+          "ne": "ग्रीन ट्यापिओका मिल्क टी",
+          "vi": "Tra sua xanh tran chau",
+          "zh": "绿茶珍珠奶茶",
+          "zh-Hant": "綠茶珍珠奶茶"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Green Tapioca Milk Tea",
+          "ko": "그린 타피오카 밀크티",
+          "ne": "ग्रीन ट्यापिओका मिल्क टी",
+          "vi": "Trà sữa xanh trân châu",
+          "zh": "绿茶珍珠奶茶",
+          "zh-Hant": "綠茶珍珠奶茶"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Japanese green tea",
+          "zh": "日本绿茶",
+          "zh-Hant": "日本綠茶",
+          "ko": "일본산 녹차",
+          "vi": "Trà xanh Nhật",
+          "ne": "जापानी हरियो चिया"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "916bfc3f-daee-461b-8333-1177bc918d7d",
+      "label": "ルイボスタピオカチーズティー",
+      "before": {
+        "display_names": {
+          "en": "Rooibos Tapioca Cheese Tea",
+          "ko": "루이보스 타피오카 치즈티",
+          "ne": "रुइबोस ट्यापिओका चीज टी",
+          "vi": "Tra rooibos pho mai tran chau",
+          "zh": "nanacha 露伊波斯奶盖珍珠茶",
+          "zh-Hant": "nanacha 露伊波斯奶蓋珍珠茶"
+        },
+        "description": "こちらも人気の組み合わせ、甘い香りと厳選した最高級クリームチーズで作ったチーズフォームのコクが癖になります。\n\n※品質保持の為、氷のカスタマイズはできかねます。"
+      },
+      "after": {
+        "display_names": {
+          "en": "Rooibos Tapioca Cheese Tea",
+          "ko": "루이보스 타피오카 치즈티",
+          "ne": "रुइबोस ट्यापिओका चीज टी",
+          "vi": "Trà rooibos kem phô mai trân châu",
+          "zh": "nanacha 露伊波斯奶盖珍珠茶",
+          "zh-Hant": "nanacha 露伊波斯奶蓋珍珠茶"
+        },
+        "description": "こちらも人気の組み合わせ、甘い香りと厳選した最高級クリームチーズで作ったチーズフォームのコクが癖になります。"
+      }
+    },
+    {
+      "type": "items",
+      "id": "6565c3b7-1520-4b75-9c54-d556f7530ed1",
+      "label": "オレオタピオカフラッペ",
+      "before": {
+        "display_names": {
+          "en": "Oreo Tapioca Frappe",
+          "ko": "오레오 타피오카 프라페",
+          "ne": "ओरियो ट्यापिओका फ्राप्पे",
+          "vi": "Frappe tran chau Oreo",
+          "zh": "奥利奥珍珠冰沙",
+          "zh-Hant": "奧利奧珍珠冰沙"
+        },
+        "description": "人気No.1フラッペ ― サクサク×もっちりの最強コンビ\n砕いたオレオのザクッとした食感と、もちもち食感がたまらない特製タピオカ。\nその組み合わせに、濃厚なフラッペがとろけ合う、大満足の一杯です。\n\nオレオの食感に“限界まで”こだわった職人の自信作。\nスイーツ好きも唸る、nanachaでしか味わえない極上のフラッペ体験をぜひ。",
+        "description_display_names": {
+          "en": "Popular frappe with crushed Oreos and chewy tapioca.",
+          "ko": "부순 오레오와 쫄깃한 타피오카가 어우러진 인기 프라페.",
+          "ne": "कुच्याइएको ओरियो र चिवचिवे टापिओका मिसाइएको लोकप्रिय फ्रापे।",
+          "vi": "Món frappe được ưa chuộng, kết hợp Oreo vụn và trân châu dai dẻo.",
+          "zh": "碎奥利奥与Q弹珍珠结合的人气冰沙。",
+          "zh-Hant": "碎奧利奧與Q弹珍珠结合的人氣冰沙。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Oreo Tapioca Frappe",
+          "ko": "오레오 타피오카 프라페",
+          "ne": "ओरियो ट्यापिओका फ्राप्पे",
+          "vi": "Frappe trân châu Oreo",
+          "zh": "奥利奥珍珠冰沙",
+          "zh-Hant": "Oreo珍珠冰沙"
+        },
+        "description": "砕いたオレオのザクザク感と、タピオカのもちもち感を楽しめるフラッペ。濃厚な味わいの、スイーツ感覚で楽しめる一杯です。",
+        "description_display_names": {
+          "en": "Popular frappe with crushed Oreos and chewy tapioca.",
+          "ko": "부순 오레오와 쫄깃한 타피오카가 어우러진 인기 프라페.",
+          "ne": "कुच्याइएको ओरियो र चिवचिवे टापिओका मिसाइएको लोकप्रिय फ्रापे।",
+          "vi": "Món frappe được ưa chuộng, kết hợp Oreo vụn và trân châu dai dẻo.",
+          "zh": "碎奥利奥与Q弹珍珠结合的人气冰沙。",
+          "zh-Hant": "碎Oreo與Q彈珍珠結合的人氣冰沙。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "A taste to come back for",
+          "zh": "让人想再来一杯",
+          "zh-Hant": "讓人想再來一杯",
+          "ko": "다시 찾고 싶은 맛",
+          "vi": "Hương vị muốn thưởng thức thêm",
+          "ne": "फेरि पिउन मन लाग्ने स्वाद"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "b7ebb896-6a86-4a57-a477-0912de4f7869",
+      "label": "特製ミックスジューススムージー",
+      "before": {
+        "display_names": {
+          "en": "Special Mixed Juice Smoothie",
+          "ko": "특제 믹스 주스 스무디",
+          "ne": "विशेष मिक्स जुस स्मूदी",
+          "vi": "Sinh to nuoc ep mix dac biet",
+          "zh": "特制混合果汁冰沙",
+          "zh-Hant": "特製混合果汁冰沙"
+        },
+        "description": "※こちらの商品にはタピオカは入っていません。お好みでカスタマイズよりお選びください。\n厳選バナナ使用、糖度がバナナ本来の持つ最高の状態になったのを見極め瞬間冷凍、\n桃、みかん、バニラカスタードの王道の組合せ！\n濃厚なミックスジュースが完成しました。\nプレミアム版、黒糖タピオカトッピングもおすすめです。",
+        "description_display_names": {
+          "en": "Classic mix of banana, peach, mandarin, and vanilla custard.",
+          "ko": "바나나, 복숭아, 귤, 바닐라 커스타드의 클래식 믹스.",
+          "ne": "केरा, आरु, सन्तरा र भ्यानिला कस्टर्डको क्लासिक मिक्स।",
+          "vi": "Sự kết hợp kinh điển của chuối, đào, quýt và sữa trứng vani.",
+          "zh": "经典香蕉、桃子、橘子、香草奶黄混合口味。",
+          "zh-Hant": "经典香蕉、桃子、橘子、香草奶黄混合口味。"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Special Mixed Juice Smoothie",
+          "ko": "특제 믹스 주스 스무디",
+          "ne": "विशेष मिक्स जुस स्मूदी",
+          "vi": "Sinh tố trái cây hỗn hợp đặc biệt",
+          "zh": "特制混合果汁冰沙",
+          "zh-Hant": "特製混合果汁冰沙"
+        },
+        "description": "バナナ、桃、みかん、バニラカスタードを合わせた濃厚なスムージー。タピオカは入っていません。ご希望の方はカスタマイズから追加してください。",
+        "description_display_names": {
+          "en": "Classic mix of banana, peach, mandarin, and vanilla custard.",
+          "ko": "바나나, 복숭아, 귤, 바닐라 커스타드의 클래식 믹스.",
+          "ne": "केरा, आरु, सन्तरा र भ्यानिला कस्टर्डको क्लासिक मिक्स।",
+          "vi": "Sự kết hợp kinh điển của chuối, đào, quýt và sữa trứng vani.",
+          "zh": "经典香蕉、桃子、橘子、香草奶黄混合口味。",
+          "zh-Hant": "經典香蕉、桃子、橘子、香草奶黃混合口味。"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "25c977d5-0d25-45f1-87cc-eddb6a9a1b6e",
+      "label": "アッサム紅茶タピオカチーズティー",
+      "before": {
+        "display_names": {
+          "en": "Assam Black Tea Tapioca Cheese Tea",
+          "ko": "아삼 홍차 타피오카 치즈티",
+          "ne": "आसाम ब्ल्याक टी ट्यापिओका चीज टी",
+          "vi": "Tra den Assam pho mai tran chau",
+          "zh": "阿萨姆红茶珍珠芝士茶",
+          "zh-Hant": "阿萨姆紅茶珍珠芝士茶"
+        },
+        "description": "王道の組み合わせ、nanachaのチーズフォームはコクと軽さのバランスが非常に良いクリームチーズを厳選し、店内手作りです。鮮度と香りにこだわったアッサム紅茶との組み合わせを堪能して下さい。\n\n※品質保持の為、氷のカスタマイズはできかねます",
+        "description_display_names": {
+          "en": "Assam black tea with our house-made cheese foam.",
+          "ko": "아삼 홍차와 매장 수제 치즈폼",
+          "ne": "असम कालो चिया र घरमै बनाइएको चिज फोम।",
+          "vi": "Trà Assam với lớp cheese foam tự làm tại quán.",
+          "zh": "阿萨姆红茶配店内自制芝士奶盖。",
+          "zh-Hant": "阿萨姆紅茶配店內自製芝士奶蓋。"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Assam Black Tea Tapioca Cheese Tea",
+          "ko": "아삼 홍차 타피오카 치즈티",
+          "ne": "आसाम ब्ल्याक टी ट्यापिओका चीज टी",
+          "vi": "Trà đen Assam kem phô mai trân châu",
+          "zh": "阿萨姆红茶珍珠芝士茶",
+          "zh-Hant": "阿薩姆紅茶珍珠芝士茶"
+        },
+        "description": "王道の組み合わせ、nanachaのチーズフォームはコクと軽さのバランスが非常に良いクリームチーズを厳選し、店内手作りです。鮮度と香りにこだわったアッサム紅茶との組み合わせを堪能して下さい。",
+        "description_display_names": {
+          "en": "Assam black tea with our house-made cheese foam.",
+          "ko": "아삼 홍차와 매장 수제 치즈폼",
+          "ne": "असम कालो चिया र घरमै बनाइएको चिज फोम।",
+          "vi": "Trà Assam với lớp cheese foam tự làm tại quán.",
+          "zh": "阿萨姆红茶配店内自制芝士奶盖。",
+          "zh-Hant": "阿薩姆紅茶配店內自制芝士奶蓋。"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "694f6004-9d6e-4473-9f71-a23c20d456ff",
+      "label": "グリーンタピオカチーズティー",
+      "before": {
+        "display_names": {
+          "en": "Green Tapioca Cheese Tea",
+          "ko": "그린 타피오카 치즈티",
+          "ne": "ग्रीन टी ट्यापिओका चीज टी",
+          "vi": "Tra xanh pho mai tran chau",
+          "zh": "绿茶珍珠芝士茶",
+          "zh-Hant": "綠茶珍珠芝士茶"
+        },
+        "description": "店内抽出の国産高級緑茶と厳選した最高級クリームチーズで作った、特製チーズフォームの相性の良さは抜群です。\n\nすっきりした緑茶とコクのあるチーズフォームが合わさり最高の一杯に。\n\n※品質保持の為、氷のカスタマイズはできかねます。"
+      },
+      "after": {
+        "display_names": {
+          "en": "Green Tapioca Cheese Tea",
+          "ko": "그린 타피오카 치즈티",
+          "ne": "ग्रीन टी ट्यापिओका चीज टी",
+          "vi": "Trà xanh kem phô mai trân châu",
+          "zh": "绿茶珍珠芝士茶",
+          "zh-Hant": "綠茶珍珠芝士茶"
+        },
+        "description": "店内抽出の国産高級緑茶と厳選した最高級クリームチーズで作った、特製チーズフォームの相性の良さは抜群です。\n\nすっきりした緑茶とコクのあるチーズフォームが合わさり最高の一杯に。"
+      }
+    },
+    {
+      "type": "items",
+      "id": "555fbf2a-8b39-4515-8649-0d7fb10f2654",
+      "label": "濃厚黒ごまタピオカミルク",
+      "before": {
+        "display_names": {
+          "en": "Rich Black Sesame Tapioca Milk",
+          "ko": "진한 흑임자 타피오카 밀크",
+          "ne": "बाक्लो कालो तिल ट्यापिओका मिल्क",
+          "vi": "Sua tran chau me den dam vi",
+          "zh": "浓郁黑芝麻珍珠牛奶",
+          "zh-Hant": "濃郁黑芝麻珍珠牛奶"
+        },
+        "description_display_names": {
+          "en": "Recommended for black sesame lovers—enjoy the rich aroma and texture.",
+          "ko": "고소한 흑임자 향과 알갱이감을 즐길 수 있는 흑임자 애호가 추천 메뉴.",
+          "ne": "कालो तिलको गहिरो सुगन्ध र दानादार स्वाद मन पराउनेहरूका लागि सिफारिस गरिएको पेय।",
+          "vi": "Món dành cho tín đồ mè đen, thơm đậm và có vị hạt rõ rệt.",
+          "zh": "推荐给喜欢黑芝麻的你，享受黑芝麻丰富香气与颗粒感。",
+          "zh-Hant": "推薦給喜欢黑芝麻的你，享受黑芝麻丰富香氣與颗粒感。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Rich Black Sesame Tapioca Milk",
+          "ko": "진한 흑임자 타피오카 밀크",
+          "ne": "बाक्लो कालो तिल ट्यापिओका मिल्क",
+          "vi": "Sữa mè đen trân châu đậm vị",
+          "zh": "浓郁黑芝麻珍珠牛奶",
+          "zh-Hant": "濃郁黑芝麻珍珠牛奶"
+        },
+        "description_display_names": {
+          "en": "Recommended for black sesame lovers—enjoy the rich aroma and texture.",
+          "ko": "고소한 흑임자 향과 알갱이감을 즐길 수 있는 흑임자 애호가 추천 메뉴.",
+          "ne": "कालो तिलको गहिरो सुगन्ध र दानादार स्वाद मन पराउनेहरूका लागि सिफारिस गरिएको पेय।",
+          "vi": "Món dành cho tín đồ mè đen, thơm đậm và có vị hạt rõ rệt.",
+          "zh": "推荐给喜欢黑芝麻的你，享受黑芝麻丰富香气与颗粒感。",
+          "zh-Hant": "推薦給喜歡黑芝麻的你，享受黑芝麻豐富香氣與顆粒感。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "An uplifting aroma",
+          "zh": "令人愉悦的香气",
+          "zh-Hant": "令人愉悅的香氣",
+          "ko": "기분 좋은 향",
+          "vi": "Hương thơm đầy hứng khởi",
+          "ne": "मन प्रसन्न बनाउने सुगन्ध"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "77f1a1b0-5db0-4383-957d-f48e91827fd6",
+      "label": "黒糖タピオカほうじ茶ラテ",
+      "before": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Hojicha Latte",
+          "ko": "흑설탕 타피오카 호지차 라떼",
+          "ne": "ब्राउन सुगर ट्यापिओका होजिचा लाटे",
+          "vi": "Latte hojicha tran chau duong den",
+          "zh": "黑糖珍珠焙茶拿铁",
+          "zh-Hant": "黑糖珍珠焙茶拿铁"
+        },
+        "description_display_names": {
+          "en": "Toasty Latte made with roasted hojicha from Kagoshima.",
+          "ko": "가고시마산 호지차를 사용한 고소한 라떼.",
+          "ne": "कागोशिमामा उत्पादित होजिचाबाट बनेको सुगन्धित लाटे।",
+          "vi": "Latte thơm béo làm từ hojicha của tỉnh Kagoshima.",
+          "zh": "使用鹿儿岛产焙茶，香醇烘焙拿铁。",
+          "zh-Hant": "使用鹿儿岛產焙茶，香醇烘焙拿铁。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Hojicha Latte",
+          "ko": "흑설탕 타피오카 호지차 라떼",
+          "ne": "ब्राउन सुगर ट्यापिओका होजिचा लाटे",
+          "vi": "Latte hojicha trân châu đường đen",
+          "zh": "黑糖珍珠焙茶拿铁",
+          "zh-Hant": "黑糖珍珠焙茶拿鐵"
+        },
+        "description_display_names": {
+          "en": "Toasty Latte made with roasted hojicha from Kagoshima.",
+          "ko": "가고시마산 호지차를 사용한 고소한 라떼.",
+          "ne": "कागोशिमामा उत्पादित होजिचाबाट बनेको सुगन्धित लाटे।",
+          "vi": "Latte thơm béo làm từ hojicha của tỉnh Kagoshima.",
+          "zh": "使用鹿儿岛产焙茶，香醇烘焙拿铁。",
+          "zh-Hant": "使用鹿兒島產焙茶，香醇烘焙拿鐵。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Selected Japanese ingredients",
+          "zh": "精选日本食材",
+          "zh-Hant": "精選日本食材",
+          "ko": "엄선한 일본산 재료",
+          "vi": "Nguyên liệu Nhật tuyển chọn",
+          "ne": "चयनित जापानी सामग्री"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "aa82b59a-2db1-4b42-8f83-1885bb860f8a",
+      "label": "黒糖タピオカチョコミルク",
+      "before": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Chocolate Milk",
+          "ko": "흑설탕 타피오카 초코 밀크",
+          "ne": "ब्राउन सुगर ट्यापिओका चकलेट मिल्क",
+          "vi": "Sua socola tran chau duong den",
+          "zh": "黑糖珍珠巧克力奶茶",
+          "zh-Hant": "黑糖珍珠巧克力奶茶"
+        },
+        "description": "​世界中のショコラティエたちから絶大な信頼を集める、伝統あるオランダメーカーの高級カカオ。\n\n\n私たちはその中から、深いコクと気品ある香りを兼ね備えた最高品質のチョコレートソースを厳選しました。\n\n​\n​グラスのフチを伝うチョコソースが、ミルクの中でゆっくりと形を変え、ひと口ごとに深みを増していく。\n\nその移り変わるグラデーションや、隠し味の国産練乳がそっと寄り添う繊細なバランスそのものを、五感ですべて味わい尽くしてほしい。\n\n​慌ただしい日々の戦場から離れ、グラスを傾けたその瞬間、現実のノイズがスッと消え去る。\n\n「味」を消費するのではなく、今この瞬間の尊さを「味わう」ための、大人のチョコミルクです。",
+        "description_display_names": {
+          "en": "Rich and smooth chocolate milk with perfect balance.",
+          "ko": "진하고 마시기 좋은 균형 잡힌 초코 밀크.",
+          "ne": "गाढापन र सजिलै पिउन मिल्ने स्वादको सन्तुलन भएको चकलेट मिल्क।",
+          "vi": "Sữa chocolate đậm vị với độ béo vừa phải, dễ uống.",
+          "zh": "浓郁又顺口的巧克力牛奶。",
+          "zh-Hant": "濃郁又顺口的巧克力牛奶。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Black Sugar Tapioca Chocolate Milk",
+          "ko": "흑설탕 타피오카 초코 밀크",
+          "ne": "ब्राउन सुगर ट्यापिओका चकलेट मिल्क",
+          "vi": "Sữa sô-cô-la trân châu đường đen",
+          "zh": "黑糖珍珠巧克力牛奶",
+          "zh-Hant": "黑糖珍珠巧克力牛奶"
+        },
+        "description": "オランダメーカーのカカオを使ったチョコレートソースに、ミルクと国産練乳を合わせました。チョコレートの深いコクと、黒糖タピオカの食感をお楽しみください。",
+        "description_display_names": {
+          "en": "Rich and smooth chocolate milk with perfect balance.",
+          "ko": "진하고 마시기 좋은 균형 잡힌 초코 밀크.",
+          "ne": "गाढापन र सजिलै पिउन मिल्ने स्वादको सन्तुलन भएको चकलेट मिल्क।",
+          "vi": "Sữa chocolate đậm vị với độ béo vừa phải, dễ uống.",
+          "zh": "浓郁又顺口的巧克力牛奶。",
+          "zh-Hant": "濃郁又順口的巧克力牛奶。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Made with flavor in mind",
+          "zh": "用心呈现风味",
+          "zh-Hant": "用心呈現風味",
+          "ko": "맛을 소중히",
+          "vi": "Chú trọng hương vị",
+          "ne": "स्वादलाई प्राथमिकता"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "479c4e9e-082a-41dd-a9b7-8b22c61ef047",
+      "label": "アッサム紅茶タピオカティー",
+      "before": {
+        "display_names": {
+          "en": "Assam Black Tea Tapioca Tea",
+          "ko": "아삼 홍차 타피오카 티",
+          "ne": "आसाम ब्ल्याक ट्यापिओका टी",
+          "vi": "Tra den Assam tran chau",
+          "zh": "阿萨姆红茶珍珠茶",
+          "zh-Hant": "阿萨姆紅茶珍珠茶"
+        },
+        "description_display_names": {
+          "en": "Strong aroma tea perfectly paired with brown sugar tapioca.",
+          "ko": "진한 향과 흑설탕 타피오카가 잘 어울리는 차.",
+          "ne": "बलियो सुगन्ध भएको अषाम ब्ल्याक टी र ब्राउन सुगर टापिओकाको राम्रो मेल।",
+          "vi": "Trà đen Assam có hương thơm đậm, hợp vị với trân châu đường nâu.",
+          "zh": "浓郁红茶香与黑糖珍珠完美结合。",
+          "zh-Hant": "濃郁紅茶香與黑糖珍珠完美结合。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Assam Black Tea Tapioca Tea",
+          "ko": "아삼 홍차 타피오카 티",
+          "ne": "आसाम ब्ल्याक ट्यापिओका टी",
+          "vi": "Trà đen Assam trân châu",
+          "zh": "阿萨姆红茶珍珠茶",
+          "zh-Hant": "阿薩姆紅茶珍珠茶"
+        },
+        "description_display_names": {
+          "en": "Strong aroma tea perfectly paired with brown sugar tapioca.",
+          "ko": "진한 향과 흑설탕 타피오카가 잘 어울리는 차.",
+          "ne": "बलियो सुगन्ध भएको अषाम ब्ल्याक टी र ब्राउन सुगर टापिओकाको राम्रो मेल।",
+          "vi": "Trà đen Assam có hương thơm đậm, hợp vị với trân châu đường nâu.",
+          "zh": "浓郁红茶香与黑糖珍珠完美结合。",
+          "zh-Hant": "濃郁紅茶香與黑糖珍珠完美結合。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Available hot",
+          "zh": "可选热饮",
+          "zh-Hant": "可選熱飲",
+          "ko": "따뜻하게 가능",
+          "vi": "Có thể chọn nóng",
+          "ne": "तातो पनि उपलब्ध"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "2de470ea-738b-4b91-8544-5498eb51ffc0",
+      "label": "ジャスミンタピオカチーズティー",
+      "before": {
+        "display_names": {
+          "en": "Jasmine Tapioca Cheese Tea",
+          "ko": "재스민 타피오카 치즈티",
+          "ne": "जास्मिन ट्यापिओका चीज टी",
+          "vi": "Tra nhai pho mai tran chau",
+          "zh": "茉莉花珍珠芝士茶",
+          "zh-Hant": "茉莉花珍珠芝士茶"
+        },
+        "description": "店内抽出の厳選ジャスミン茶の香りと厳選した最高級クリームチーズで作ったチーズフォームの相性は抜群で幸せな気持ちになれる飲み物です。\n\n※品質保持の為、氷のカスタマイズはできかねます。",
+        "description_display_names": {
+          "en": "In-house brewed jasmine tea with cheese foam.",
+          "ko": "가게에서 우린 쟈스민차와 치즈폼.",
+          "ne": "घरमै तयार गरिएको जैस्मिन चिया र चिज फोम।",
+          "vi": "Trà nhài pha tại quán với lớp cheese foam.",
+          "zh": "店内泡制茉莉花茶搭配芝士奶盖。",
+          "zh-Hant": "店內泡製茉莉花茶搭配芝士奶蓋。"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Jasmine Tapioca Cheese Tea",
+          "ko": "재스민 타피오카 치즈티",
+          "ne": "जास्मिन ट्यापिओका चीज टी",
+          "vi": "Trà lài kem phô mai trân châu",
+          "zh": "茉莉花珍珠芝士茶",
+          "zh-Hant": "茉莉花珍珠芝士茶"
+        },
+        "description": "店内抽出の厳選ジャスミン茶の香りと厳選した最高級クリームチーズで作ったチーズフォームの相性は抜群で幸せな気持ちになれる飲み物です。",
+        "description_display_names": {
+          "en": "In-house brewed jasmine tea with cheese foam.",
+          "ko": "가게에서 우린 쟈스민차와 치즈폼.",
+          "ne": "घरमै तयार गरिएको जैस्मिन चिया र चिज फोम।",
+          "vi": "Trà nhài pha tại quán với lớp cheese foam.",
+          "zh": "店内泡制茉莉花茶搭配芝士奶盖。",
+          "zh-Hant": "店內泡制茉莉花茶搭配芝士奶蓋。"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "70e9cdd6-60a6-4c50-84f3-1a5bf71dd397",
+      "label": "蜂蜜柚子緑茶",
+      "before": {
+        "display_names": {
+          "en": "Honey Yuzu Green Tea",
+          "ko": "꿀 유자 녹차",
+          "ne": "मह युजु ग्रीन टी",
+          "vi": "Tra xanh mat ong yuzu",
+          "zh": "蜂蜜柚子绿茶",
+          "zh-Hant": "蜂蜜柚子綠茶"
+        },
+        "description_display_names": {
+          "en": "Domestic green tea’s aroma and bitterness blended with honey yuzu.",
+          "ko": "국산 녹차 향과 쓴맛을 꿀 유자와 조합했습니다.",
+          "ne": "घरेलु हरियो चियाको सुगन्ध र हल्का तितोपनलाई मह युजुसँग मिसाइएको छ।",
+          "vi": "Kết hợp hương thơm và vị chát dịu của trà xanh Nhật với yuzu mật ong.",
+          "zh": "国产绿茶香气苦味配合蜂蜜柚子风味。",
+          "zh-Hant": "國產綠茶香氣苦味配合蜂蜜柚子风味。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Honey Yuzu Green Tea",
+          "ko": "꿀 유자 녹차",
+          "ne": "मह युजु ग्रीन टी",
+          "vi": "Trà xanh yuzu mật ong",
+          "zh": "蜂蜜柚子绿茶",
+          "zh-Hant": "蜂蜜柚子綠茶"
+        },
+        "description_display_names": {
+          "en": "Domestic green tea’s aroma and bitterness blended with honey yuzu.",
+          "ko": "국산 녹차 향과 쓴맛을 꿀 유자와 조합했습니다.",
+          "ne": "घरेलु हरियो चियाको सुगन्ध र हल्का तितोपनलाई मह युजुसँग मिसाइएको छ।",
+          "vi": "Kết hợp hương thơm và vị chát dịu của trà xanh Nhật với yuzu mật ong.",
+          "zh": "国产绿茶香气苦味配合蜂蜜柚子风味。",
+          "zh-Hant": "國產綠茶香氣苦味配合蜂蜜柚子風味。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Available hot",
+          "zh": "可选热饮",
+          "zh-Hant": "可選熱飲",
+          "ko": "따뜻하게 가능",
+          "vi": "Có thể chọn nóng",
+          "ne": "तातो पनि उपलब्ध"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "2e809e4f-4dcc-4f8c-a91c-2efd177ae8e9",
+      "label": "チョコタピオカフラッペ",
+      "before": {
+        "display_names": {
+          "en": "Chocolate Tapioca Frappe",
+          "ko": "초코 타피오카 프라페",
+          "ne": "चकलेट ट्यापिओका फ्राप्पे",
+          "vi": "Frappe tran chau socola",
+          "zh": "巧克力珍珠冰沙",
+          "zh-Hant": "巧克力珍珠冰沙"
+        },
+        "description_display_names": {
+          "en": "Rich dark chocolate and cocoa for a smooth, chocolatey taste.",
+          "ko": "다크 초콜릿과 코코아가 조화로운 부드러운 맛.",
+          "ne": "डार्क चकलेट र कोकोले पिउन सजिलो र चकलेटको स्वाद दुवै दिन्छ।",
+          "vi": "Sô-cô-la đen và cacao tạo nên vị dễ uống mà vẫn đậm chất chocolate.",
+          "zh": "黑巧克力与可可粉融合，香醇顺口，巧克力味十足。",
+          "zh-Hant": "黑巧克力與可可粉融合，香醇顺口，巧克力味十足。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Chocolate Tapioca Frappe",
+          "ko": "초코 타피오카 프라페",
+          "ne": "चकलेट ट्यापिओका फ्राप्पे",
+          "vi": "Frappe trân châu sô-cô-la",
+          "zh": "巧克力珍珠冰沙",
+          "zh-Hant": "巧克力珍珠冰沙"
+        },
+        "description_display_names": {
+          "en": "Rich dark chocolate and cocoa for a smooth, chocolatey taste.",
+          "ko": "다크 초콜릿과 코코아가 조화로운 부드러운 맛.",
+          "ne": "डार्क चकलेट र कोकोले पिउन सजिलो र चकलेटको स्वाद दुवै दिन्छ।",
+          "vi": "Sô-cô-la đen và cacao tạo nên vị dễ uống mà vẫn đậm chất chocolate.",
+          "zh": "黑巧克力与可可粉融合，香醇顺口，巧克力味十足。",
+          "zh-Hant": "黑巧克力與可可粉融合，香醇順口，巧克力味十足。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "An easy after-work treat",
+          "zh": "下班后的轻松犒赏",
+          "zh-Hant": "下班後的輕鬆犒賞",
+          "ko": "퇴근 후 간편한 선물",
+          "vi": "Tự thưởng nhanh sau giờ làm",
+          "ne": "कामपछि सजिलो मिठो उपहार"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "1ab2aa93-06b5-420d-8ca6-ed82e5a19da8",
+      "label": "バナナ豆乳黒ごまスムージー",
+      "before": {
+        "display_names": {
+          "en": "Banana Soy Milk Black Sesame Smoothie",
+          "ko": "바나나 두유 검은깨 스무디",
+          "ne": "केरा सोया मिल्क कालो तिल स्मूदी",
+          "vi": "Sinh to chuoi sua dau nanh me den",
+          "zh": "香蕉豆奶黑芝麻冰沙",
+          "zh-Hant": "香蕉豆奶黑芝麻冰沙"
+        },
+        "description_display_names": {
+          "en": "Rich smoothie with ripe banana, pure soy milk, and black sesame.",
+          "ko": "잘 익은 바나나, 순두유, 흑임자를 넣은 진한 스무디.",
+          "ne": "पाकेको केरा, शुद्ध सोया दूध र कालो तिल मिसाएर बनाइएको गाढा स्मूदी।",
+          "vi": "Sinh tố đậm vị từ chuối chín, sữa đậu nành nguyên chất và mè đen.",
+          "zh": "成熟香蕉、纯豆奶与黑芝麻浓郁冰沙。",
+          "zh-Hant": "成熟香蕉、纯豆奶與黑芝麻濃郁冰沙。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Banana Soy Milk Black Sesame Smoothie",
+          "ko": "바나나 두유 검은깨 스무디",
+          "ne": "केरा सोया मिल्क कालो तिल स्मूदी",
+          "vi": "Sinh tố chuối sữa đậu nành mè đen",
+          "zh": "香蕉豆奶黑芝麻冰沙",
+          "zh-Hant": "香蕉豆奶黑芝麻冰沙"
+        },
+        "description_display_names": {
+          "en": "Rich smoothie with ripe banana, pure soy milk, and black sesame.",
+          "ko": "잘 익은 바나나, 순두유, 흑임자를 넣은 진한 스무디.",
+          "ne": "पाकेको केरा, शुद्ध सोया दूध र कालो तिल मिसाएर बनाइएको गाढा स्मूदी।",
+          "vi": "Sinh tố đậm vị từ chuối chín, sữa đậu nành nguyên chất và mè đen.",
+          "zh": "成熟香蕉、纯豆奶与黑芝麻浓郁冰沙。",
+          "zh-Hant": "成熟香蕉、純豆奶與黑芝麻濃郁冰沙。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Sweet and flavorful",
+          "zh": "香甜浓郁",
+          "zh-Hant": "香甜濃郁",
+          "ko": "높은 당도의 달콤함",
+          "vi": "Ngọt đậm vị",
+          "ne": "भरपूर गुलियो स्वाद"
+        }
+      }
+    },
+    {
+      "type": "items",
+      "id": "05301c58-3116-4c0e-ba49-7e1a2ed9cadf",
+      "label": "ジャスミンタピオカティー",
+      "before": {
+        "display_names": {
+          "en": "Jasmine Tapioca Tea",
+          "ko": "재스민 타피오카 티",
+          "ne": "जास्मिन ट्यापिओका टी",
+          "vi": "Tra nhai tran chau",
+          "zh": "茉莉花珍珠茶",
+          "zh-Hant": "茉莉花珍珠茶"
+        },
+        "description_display_names": {
+          "en": "Enjoy the direct flavor of in-house brewed jasmine tea.",
+          "ko": "가게에서 우린 쟈스민차를 직접 즐길 수 있습니다.",
+          "ne": "घरमै तयार गरिएको जैस्मिन चियाको सिधा स्वाद लिनुहोस्।",
+          "vi": "Thưởng thức trọn vị trà nhài pha tại quán.",
+          "zh": "直接享受店内泡制茉莉花茶的纯正风味。",
+          "zh-Hant": "直接享受店內泡製茉莉花茶的纯正风味。"
+        },
+        "promotion_prefix_display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Jasmine Tapioca Tea",
+          "ko": "재스민 타피오카 티",
+          "ne": "जास्मिन ट्यापिओका टी",
+          "vi": "Trà lài trân châu",
+          "zh": "茉莉花珍珠茶",
+          "zh-Hant": "茉莉花珍珠茶"
+        },
+        "description_display_names": {
+          "en": "Enjoy the direct flavor of in-house brewed jasmine tea.",
+          "ko": "가게에서 우린 쟈스민차를 직접 즐길 수 있습니다.",
+          "ne": "घरमै तयार गरिएको जैस्मिन चियाको सिधा स्वाद लिनुहोस्।",
+          "vi": "Thưởng thức trọn vị trà nhài pha tại quán.",
+          "zh": "直接享受店内泡制茉莉花茶的纯正风味。",
+          "zh-Hant": "直接享受店內泡制茉莉花茶的純正風味。"
+        },
+        "promotion_prefix_display_names": {
+          "en": "Available hot",
+          "zh": "可选热饮",
+          "zh-Hant": "可選熱飲",
+          "ko": "따뜻하게 가능",
+          "vi": "Có thể chọn nóng",
+          "ne": "तातो पनि उपलब्ध"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "79f4b559-630c-443a-b772-66dc98bc7472",
+      "label": "サイズ",
+      "before": {
+        "display_names": {
+          "en": "Size",
+          "ko": "사이즈",
+          "ne": "साइज",
+          "vi": "Kich co",
+          "zh": "杯型",
+          "zh-Hant": "杯型"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Size",
+          "ko": "사이즈",
+          "ne": "आकार",
+          "vi": "Kích cỡ",
+          "zh": "规格",
+          "zh-Hant": "規格"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "d09fa893-14f1-4e1d-955c-7ddab9bcefe9",
+      "label": "オプション",
+      "before": {
+        "display_names": {
+          "en": "Options",
+          "ko": "옵션",
+          "ne": "विकल्प",
+          "vi": "Tuy chon",
+          "zh": "选项功能",
+          "zh-Hant": "選項功能"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Options",
+          "ko": "옵션",
+          "ne": "विकल्प",
+          "vi": "Tùy chọn",
+          "zh": "选项",
+          "zh-Hant": "選項"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "357bbdb7-9020-41e1-bf5f-d9bc4018335a",
+      "label": "甘さ",
+      "before": {
+        "display_names": {
+          "en": "Sweetness",
+          "ko": "단맛",
+          "ne": "गुलियोपन",
+          "vi": "Do ngot",
+          "zh": "甜度",
+          "zh-Hant": "甜度"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Sweetness",
+          "ko": "당도",
+          "ne": "गुलियोपन",
+          "vi": "Độ ngọt",
+          "zh": "甜度",
+          "zh-Hant": "甜度"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "bddb8509-7243-4b6e-a93b-fd26a1fe2b26",
+      "label": "温度",
+      "before": {
+        "display_names": {
+          "en": "Temperature",
+          "ko": "온도",
+          "ne": "तापक्रम",
+          "vi": "Nhiet do",
+          "zh": "温度",
+          "zh-Hant": "溫度"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Temperature",
+          "ko": "온도",
+          "ne": "तापक्रम",
+          "vi": "Nhiệt độ",
+          "zh": "温度",
+          "zh-Hant": "溫度"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "242981e2-9092-4e42-9fde-e53b171009b1",
+      "label": "氷",
+      "before": {
+        "display_names": {
+          "en": "Ice",
+          "ko": "얼음",
+          "ne": "बरफ",
+          "vi": "Da",
+          "zh": "冰",
+          "zh-Hant": "冰"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Ice",
+          "ko": "얼음",
+          "ne": "बरफ",
+          "vi": "Đá",
+          "zh": "冰量",
+          "zh-Hant": "冰量"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "5df116f3-92ef-429a-a518-2639ecc8421c",
+      "label": "トッピング",
+      "before": {
+        "display_names": {
+          "en": "Toppings",
+          "ko": "토핑",
+          "ne": "टपिङ",
+          "vi": "Topping",
+          "zh": "配料选择",
+          "zh-Hant": "配料選擇"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Toppings",
+          "ko": "토핑",
+          "ne": "टपिङ",
+          "vi": "Topping",
+          "zh": "配料",
+          "zh-Hant": "配料"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "d88eefc7-d17e-4d1b-9f2a-a7dcf8cdf268",
+      "label": "ザクザクオレオ追加",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add crunchy Oreo",
+          "zh": "加脆脆奥利奥",
+          "zh-Hant": "加酥脆 Oreo",
+          "ko": "바삭한 오레오 추가",
+          "vi": "Thêm Oreo giòn",
+          "ne": "कुरकुरे Oreo थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "7d5357dc-2853-4d63-b12e-5a6bee103f4a",
+      "label": "濃厚リッチにご褒美カスタム",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Rich indulgent extras",
+          "zh": "浓郁升级选项",
+          "zh-Hant": "濃郁升級選項",
+          "ko": "진한 맛 추가 옵션",
+          "vi": "Tùy chọn thêm vị đậm đà",
+          "ne": "गाढा स्वादका थप विकल्प"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "eac61d25-6295-47eb-adbf-592334dd3678",
+      "label": "高品質なエスプレッソで作った珈琲ジェリーのトッピングはいかがでしょうか？",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add premium espresso coffee jelly",
+          "zh": "加精选浓缩咖啡冻",
+          "zh-Hant": "加精選濃縮咖啡凍",
+          "ko": "고급 에스프레소 커피 젤리 추가",
+          "vi": "Thêm thạch cà phê espresso cao cấp",
+          "ne": "उत्कृष्ट एस्प्रेसो कफी जेली थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "eba72c41-9dd2-4aa1-bfb1-aaf72b24eb73",
+      "label": "トッピング",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Toppings",
+          "zh": "配料",
+          "zh-Hant": "配料",
+          "ko": "토핑",
+          "vi": "Topping",
+          "ne": "टपिङ"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "16c9cfba-b253-46e9-9ab3-738e1c388c3b",
+      "label": "甘さ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Sweetness",
+          "zh": "甜度",
+          "zh-Hant": "甜度",
+          "ko": "당도",
+          "vi": "Độ ngọt",
+          "ne": "गुलियोपन"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "73505f64-e7c0-44b5-9a46-d1a2f73e493f",
+      "label": "プレミアムトッピング",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Premium toppings",
+          "zh": "精选配料",
+          "zh-Hant": "精選配料",
+          "ko": "프리미엄 토핑",
+          "vi": "Topping cao cấp",
+          "ne": "प्रिमियम टपिङ"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "a47ad421-fc4f-478f-a42e-0dc4ba77dc26",
+      "label": "バージョン",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Version",
+          "zh": "版本",
+          "zh-Hant": "版本",
+          "ko": "버전",
+          "vi": "Phiên bản",
+          "ne": "संस्करण"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "86bfacc7-acff-4030-b083-897b4c292841",
+      "label": "バージョン",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Version",
+          "zh": "版本",
+          "zh-Hant": "版本",
+          "ko": "버전",
+          "vi": "Phiên bản",
+          "ne": "संस्करण"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "b440da59-beba-406f-b5fd-629fbb7959d3",
+      "label": "癖になる食感",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Extra texture",
+          "zh": "丰富口感",
+          "zh-Hant": "豐富口感",
+          "ko": "식감 추가",
+          "vi": "Thêm kết cấu thú vị",
+          "ne": "थप स्वादिलो बनावट"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "2d0391aa-413d-48c5-b90a-3d35d4e640f5",
+      "label": "タンパク質を補給する",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add protein",
+          "zh": "加蛋白质",
+          "zh-Hant": "加蛋白質",
+          "ko": "단백질 추가",
+          "vi": "Thêm protein",
+          "ne": "प्रोटिन थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "cd75a757-80bb-4fb6-afd0-d4c420047b03",
+      "label": "サイズ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Size",
+          "zh": "规格",
+          "zh-Hant": "規格",
+          "ko": "사이즈",
+          "vi": "Kích cỡ",
+          "ne": "आकार"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "15edea3a-7002-4dbc-9df8-4c70c217527d",
+      "label": "トッピング",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Toppings",
+          "zh": "配料",
+          "zh-Hant": "配料",
+          "ko": "토핑",
+          "vi": "Topping",
+          "ne": "टपिङ"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "228b5db0-2188-43f6-a88e-c93d1e82f349",
+      "label": "トッピング抜き",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Remove toppings",
+          "zh": "去除配料",
+          "zh-Hant": "去除配料",
+          "ko": "토핑 빼기",
+          "vi": "Bỏ topping",
+          "ne": "टपिङ हटाउनुहोस्"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "a663a3e9-2277-4a65-b356-f09444dc375e",
+      "label": "温度",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Temperature",
+          "zh": "温度",
+          "zh-Hant": "溫度",
+          "ko": "온도",
+          "vi": "Nhiệt độ",
+          "ne": "तापक्रम"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "66971c65-d052-4d88-b652-55097824f411",
+      "label": "ぷるぷる食感でご褒美タイム🥰",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Jelly and pudding treats 🥰",
+          "zh": "果冻布丁加料 🥰",
+          "zh-Hant": "果凍布丁加料 🥰",
+          "ko": "탱글탱글 젤리와 푸딩 🥰",
+          "vi": "Thạch và pudding mềm mịn 🥰",
+          "ne": "जेली र पुडिङको स्वाद 🥰"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "c98027cc-88ba-4a2a-8ada-8e6ce540728f",
+      "label": "ご一緒にお口直しのカットフルーツはいかがでしょうか？",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add refreshing cut fruit",
+          "zh": "加清爽鲜切水果",
+          "zh-Hant": "加清爽鮮切水果",
+          "ko": "상큼한 컷 과일 추가",
+          "vi": "Thêm trái cây cắt tươi mát",
+          "ne": "ताजा काटिएको फलफूल थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "167c6c0f-6bd4-4537-9dbe-c9c58256ad26",
+      "label": "トッピング",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Toppings",
+          "zh": "配料",
+          "zh-Hant": "配料",
+          "ko": "토핑",
+          "vi": "Topping",
+          "ne": "टपिङ"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "4632d1e1-4989-43c2-97d4-8c7a53ebb710",
+      "label": "甘さ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Sweetness",
+          "zh": "甜度",
+          "zh-Hant": "甜度",
+          "ko": "당도",
+          "vi": "Độ ngọt",
+          "ne": "गुलियोपन"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "c0a28578-b703-464d-b9f9-b9cfbf91fbc0",
+      "label": "トッピング",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Toppings",
+          "zh": "配料",
+          "zh-Hant": "配料",
+          "ko": "토핑",
+          "vi": "Topping",
+          "ne": "टपिङ"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "6fd455ca-8165-4cbe-85f5-077ce7f9d5a0",
+      "label": "温度",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Temperature",
+          "zh": "温度",
+          "zh-Hant": "溫度",
+          "ko": "온도",
+          "vi": "Nhiệt độ",
+          "ne": "तापक्रम"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "200b5d81-e844-4a2d-9832-16fdd7e59a43",
+      "label": "濃い抹茶カスタマイズ🍵",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Extra matcha 🍵",
+          "zh": "加浓抹茶 🍵",
+          "zh-Hant": "加濃抹茶 🍵",
+          "ko": "진한 말차 추가 🍵",
+          "vi": "Thêm matcha đậm vị 🍵",
+          "ne": "थप गाढा माचा 🍵"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "02e33227-7acc-43cf-99b7-4fa0c8f1864e",
+      "label": "スペシャルアレンジ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Special extras",
+          "zh": "特色加料",
+          "zh-Hant": "特色加料",
+          "ko": "스페셜 추가 옵션",
+          "vi": "Tùy chọn đặc biệt",
+          "ne": "विशेष थप विकल्प"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "3d53c29d-0fd8-45ce-8159-82723b9dcf90",
+      "label": "トッピング抜き",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Remove toppings",
+          "zh": "去除配料",
+          "zh-Hant": "去除配料",
+          "ko": "토핑 빼기",
+          "vi": "Bỏ topping",
+          "ne": "टपिङ हटाउनुहोस्"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "a7168e60-2311-4f94-8e98-40c0f7754f49",
+      "label": "追い練乳",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Extra condensed milk",
+          "zh": "加炼乳",
+          "zh-Hant": "加煉乳",
+          "ko": "연유 추가",
+          "vi": "Thêm sữa đặc",
+          "ne": "कन्डेन्स्ड मिल्क थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "c0f33549-a3cc-4a3b-8a1a-883f54deb05b",
+      "label": "ザクザクカスタマイズ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Crunchy extras",
+          "zh": "酥脆加料",
+          "zh-Hant": "酥脆加料",
+          "ko": "바삭한 추가 옵션",
+          "vi": "Topping giòn",
+          "ne": "कुरकुरे थप विकल्प"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "5a696c08-b311-4833-8105-da1f816937fa",
+      "label": "サイズ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Size",
+          "zh": "规格",
+          "zh-Hant": "規格",
+          "ko": "사이즈",
+          "vi": "Kích cỡ",
+          "ne": "आकार"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "39d0ae59-e9d3-439c-94ca-65e5c986dcf7",
+      "label": "トッピング",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Toppings",
+          "zh": "配料",
+          "zh-Hant": "配料",
+          "ko": "토핑",
+          "vi": "Topping",
+          "ne": "टपिङ"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "094522ff-6aa6-4dea-9a08-c639a20bd505",
+      "label": "甘さ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Sweetness",
+          "zh": "甜度",
+          "zh-Hant": "甜度",
+          "ko": "당도",
+          "vi": "Độ ngọt",
+          "ne": "गुलियोपन"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "a7fd0fb8-b7dc-4486-9fd7-6081bbffb61e",
+      "label": "フルーツフレーバー追加",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add fruit flavor",
+          "zh": "加水果风味",
+          "zh-Hant": "加水果風味",
+          "ko": "과일 맛 추가",
+          "vi": "Thêm vị trái cây",
+          "ne": "फलफूलको स्वाद थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "5677b4f0-ff9b-4e77-9a91-b3b1d319af75",
+      "label": "追い苺",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Extra strawberry",
+          "zh": "加草莓",
+          "zh-Hant": "加草莓",
+          "ko": "딸기 추가",
+          "vi": "Thêm dâu tây",
+          "ne": "स्ट्रबेरी थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "groups",
+      "id": "d0829316-17a6-4d15-94a3-9c9a238ed308",
+      "label": "【エンドロールまでなくならない】全てを忘れる没入タイムに（通常のサイズ選択の欄はレギュラーにチェックをいれてください）",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Extra-large upgrade (select Regular in the standard size field)",
+          "zh": "超大杯升级（常规规格请选择 Regular）",
+          "zh-Hant": "超大杯升級（一般規格請選 Regular）",
+          "ko": "초대용량 업그레이드 (기본 사이즈는 레귤러 선택)",
+          "vi": "Nâng cấp siêu lớn (chọn Regular ở mục kích cỡ thường)",
+          "ne": "अति ठूलो आकारमा अपग्रेड (सामान्य आकारमा Regular छान्नुहोस्)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "d9a99bd3-e94c-4461-96f8-cffe601097bf",
+      "label": "氷抜き",
+      "before": {
+        "display_names": {
+          "en": "No Ice",
+          "ko": "얼음 없음",
+          "ne": "बरफ बिना",
+          "vi": "Khong da",
+          "zh": "去冰",
+          "zh-Hant": "去冰"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "No ice",
+          "ko": "얼음 없이",
+          "ne": "बरफ नराख्नुहोस्",
+          "vi": "Không đá",
+          "zh": "去冰",
+          "zh-Hant": "去冰"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "b5409ebd-5dbc-4a97-950c-b33d31c724ab",
+      "label": "なし",
+      "before": {
+        "display_names": {
+          "en": "None",
+          "ko": "없음",
+          "ne": "छैन",
+          "vi": "Khong",
+          "zh": "无",
+          "zh-Hant": "無"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "None",
+          "ko": "없음",
+          "ne": "छैन",
+          "vi": "Không",
+          "zh": "无",
+          "zh-Hant": "無"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "0e8ef6ff-7493-4fe0-810d-0427c62eb09b",
+      "label": "デカフェ",
+      "before": {
+        "display_names": {
+          "en": "Decaf",
+          "ko": "디카페인",
+          "ne": "क्याफिन बिना",
+          "vi": "Khong caffeine",
+          "zh": "无咖啡因",
+          "zh-Hant": "無咖啡因"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Decaf",
+          "ko": "디카페인",
+          "ne": "क्याफिन बिना",
+          "vi": "Loại bỏ caffeine",
+          "zh": "无咖啡因",
+          "zh-Hant": "無咖啡因"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "5a2c90fa-12cc-46ee-9765-aa0e73916fef",
+      "label": "オレオ追加",
+      "before": {
+        "display_names": {
+          "en": "Add Oreo",
+          "ko": "오레오 추가",
+          "ne": "ओरियो थप्नुहोस्",
+          "vi": "Them Oreo",
+          "zh": "添加奥利奥",
+          "zh-Hant": "添加奧利奧"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Add Oreo",
+          "ko": "오레오 추가",
+          "ne": "ओरियो थप्नुहोस्",
+          "vi": "Thêm Oreo",
+          "zh": "添加奥利奥",
+          "zh-Hant": "添加Oreo"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "e3e3f6e9-a016-4a2e-a460-c4d2d2b66863",
+      "label": "タピオカ抜き",
+      "before": {
+        "display_names": {
+          "en": "No Tapioca",
+          "ko": "타피오카 없이",
+          "ne": "ट्यापिओका बिना",
+          "vi": "Khong tran chau",
+          "zh": "去珍珠",
+          "zh-Hant": "去珍珠"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "No tapioca pearls",
+          "ko": "타피오카 빼기",
+          "ne": "टापिओका नराख्नुहोस्",
+          "vi": "Không trân châu",
+          "zh": "去珍珠",
+          "zh-Hant": "去珍珠"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "3180a95a-2346-44a2-861b-2da76d4f8846",
+      "label": "HOT",
+      "before": {
+        "display_names": {
+          "en": "Temperature / Hot",
+          "ko": "HOT",
+          "ne": "तातो",
+          "vi": "Nong",
+          "zh": "温度 / 热",
+          "zh-Hant": "溫度 / 熱"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Temperature / Hot",
+          "ko": "HOT",
+          "ne": "तातो",
+          "vi": "Nóng",
+          "zh": "温度 / 热",
+          "zh-Hant": "溫度 / 熱"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "ef48af83-a2e5-4ddd-a840-66962292c41c",
+      "label": "L ラージ 700ml",
+      "before": {
+        "display_names": {
+          "en": "L Large 700ml",
+          "ko": "L 라지 700ml",
+          "ne": "L ठूलो 700ml",
+          "vi": "L lon 700ml",
+          "zh": "L 大杯 700ml",
+          "zh-Hant": "L 大杯 700ml"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "L Large 700ml",
+          "ko": "L 라지 700ml",
+          "ne": "L ठूलो 700ml",
+          "vi": "L lớn 700ml",
+          "zh": "L 大杯 700ml",
+          "zh-Hant": "L 大杯 700ml"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "dc619fa3-6df5-4e12-9f48-cad6e50b7434",
+      "label": "プレミアム（濃厚さ・甘さ２倍）",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Premium (double richness and sweetness)",
+          "zh": "浓郁版（浓度与甜度加倍）",
+          "zh-Hant": "濃郁版（濃度與甜度加倍）",
+          "ko": "프리미엄 (진함·당도 2배)",
+          "vi": "Cao cấp (đậm đà và ngọt gấp đôi)",
+          "ne": "प्रिमियम (गाढापन र गुलियोपन दोब्बर)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "4d19a070-f209-4d61-bfd0-912e0745cb0f",
+      "label": "プレミアム（濃厚さ・甘さ２倍）",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Premium (double richness and sweetness)",
+          "zh": "浓郁版（浓度与甜度加倍）",
+          "zh-Hant": "濃郁版（濃度與甜度加倍）",
+          "ko": "프리미엄 (진함·당도 2배)",
+          "vi": "Cao cấp (đậm đà và ngọt gấp đôi)",
+          "ne": "प्रिमियम (गाढापन र गुलियोपन दोब्बर)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "5ea65100-5e84-466e-8d0c-ee83255f6251",
+      "label": "ライト（低カロリー）",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Light (lower calorie)",
+          "zh": "轻盈版（低热量）",
+          "zh-Hant": "輕盈版（低熱量）",
+          "ko": "라이트 (저칼로리)",
+          "vi": "Nhẹ (ít calo)",
+          "ne": "लाइट (कम क्यालोरी)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "11f1dd92-a646-48da-a1f5-db6c896973ad",
+      "label": "ザクザクオレオ+",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Extra crunchy Oreo",
+          "zh": "脆脆奥利奥+",
+          "zh-Hant": "酥脆 Oreo+",
+          "ko": "바삭한 오레오+",
+          "vi": "Oreo giòn thêm",
+          "ne": "थप कुरकुरे Oreo"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "076b6641-5468-4172-96ba-56894882b669",
+      "label": "クリームフォーム追加",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add cream foam",
+          "zh": "加奶盖",
+          "zh-Hant": "加奶蓋",
+          "ko": "크림 폼 추가",
+          "vi": "Thêm kem sữa",
+          "ne": "क्रिम फोम थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "cdf12796-c36c-4e6c-9913-ae8e9c28cf05",
+      "label": "ICE",
+      "before": {
+        "display_names": {
+          "en": "Temperature / Ice",
+          "ko": "온도 / 얼음",
+          "ne": "चिसो",
+          "vi": "Da",
+          "zh": "温度 / 冰",
+          "zh-Hant": "溫度 / 冰"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Temperature / Ice",
+          "ko": "온도 / 얼음",
+          "ne": "चिसो",
+          "vi": "Đá",
+          "zh": "温度 / 冰",
+          "zh-Hant": "溫度 / 冰"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "585bf406-9984-4661-bcec-1e069ccc18e6",
+      "label": "S スモール 360ml",
+      "before": {
+        "display_names": {
+          "en": "S Small 360ml",
+          "ko": "S 스몰 360ml",
+          "ne": "S सानो 360ml",
+          "vi": "S nho 360ml",
+          "zh": "S 小杯 360ml",
+          "zh-Hant": "S 小杯 360ml"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "S Small 360ml",
+          "ko": "S 스몰 360ml",
+          "ne": "S सानो 360ml",
+          "vi": "S nhỏ 360ml",
+          "zh": "S 小杯 360ml",
+          "zh-Hant": "S 小杯 360ml"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "36c3cbfd-570f-4294-80db-6f80b4b07a24",
+      "label": "Regular（500ml）",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Regular (500ml)",
+          "zh": "常规杯（500ml）",
+          "zh-Hant": "標準杯（500ml）",
+          "ko": "레귤러 (500ml)",
+          "vi": "Vừa (500ml)",
+          "ne": "मध्यम (500ml)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "b648ccf0-2f3d-46f3-889c-eabf3320fc0c",
+      "label": "豆乳変更",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Switch to soy milk",
+          "zh": "换豆奶",
+          "zh-Hant": "換豆漿",
+          "ko": "두유로 변경",
+          "vi": "Đổi sang sữa đậu nành",
+          "ne": "सोया दूधमा बदल्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "c577364f-f079-4265-ad03-3b0115c7dbcb",
+      "label": "ココナッツミルク変更",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Switch to coconut milk",
+          "zh": "换椰奶",
+          "zh-Hant": "換椰奶",
+          "ko": "코코넛 밀크로 변경",
+          "vi": "Đổi sang sữa dừa",
+          "ne": "नरिवल दूधमा बदल्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "429ae785-55a2-40a6-b8da-bd9e74000c03",
+      "label": "アーモンドミルク変更",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Switch to almond milk",
+          "zh": "换扁桃仁奶",
+          "zh-Hant": "換杏仁奶",
+          "ko": "아몬드 밀크로 변경",
+          "vi": "Đổi sang sữa hạnh nhân",
+          "ne": "बदाम दूधमा बदल्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "953b13dd-5c2b-41b4-89dc-18672903e951",
+      "label": "ピーチ追加",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add peach",
+          "zh": "加桃子",
+          "zh-Hant": "加桃子",
+          "ko": "복숭아 추가",
+          "vi": "Thêm đào",
+          "ne": "आरु थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "c839850d-9735-4641-8972-23782f946ab8",
+      "label": "氷少なめ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Less ice",
+          "zh": "少冰",
+          "zh-Hant": "少冰",
+          "ko": "얼음 적게",
+          "vi": "Ít đá",
+          "ne": "कम बरफ"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "c3a8af7e-4c21-4b6a-9264-29550e1535e3",
+      "label": "氷抜き",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "No ice",
+          "zh": "去冰",
+          "zh-Hant": "去冰",
+          "ko": "얼음 없이",
+          "vi": "Không đá",
+          "ne": "बरफ नराख्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "f3a78de2-00ff-4477-9459-5b9188b916e1",
+      "label": "氷標準",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Regular ice",
+          "zh": "正常冰",
+          "zh-Hant": "正常冰",
+          "ko": "얼음 보통",
+          "vi": "Đá bình thường",
+          "ne": "सामान्य बरफ"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "6abb8e68-0e2e-437f-826a-f0ec1319ac43",
+      "label": "温かい",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Warm",
+          "zh": "温热",
+          "zh-Hant": "溫熱",
+          "ko": "따뜻하게",
+          "vi": "Ấm",
+          "ne": "तातो"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "7f2af549-bacf-4e95-aed2-41d88ea2a878",
+      "label": "シロップ100％（デフォルト） 100%",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "100% syrup (default)",
+          "zh": "100% 糖浆（默认）",
+          "zh-Hant": "100% 糖漿（預設）",
+          "ko": "시럽 100% (기본)",
+          "vi": "100% siro (mặc định)",
+          "ne": "100% सिरप (पूर्वनिर्धारित)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "a39077e8-a8cb-4b2f-8dfa-98ec4b75e2f5",
+      "label": "ふつう",
+      "before": {
+        "display_names": {
+          "en": "Regular",
+          "ko": "보통",
+          "ne": "सामान्य",
+          "vi": "Binh thuong",
+          "zh": "正常",
+          "zh-Hant": "正常"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Regular",
+          "ko": "보통",
+          "ne": "सामान्य",
+          "vi": "Bình thường",
+          "zh": "正常",
+          "zh-Hant": "正常"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "692cecb1-0fa1-42c9-997f-ef2492e293c3",
+      "label": "シロップ100％（デフォルト） 100%",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "100% syrup (default)",
+          "zh": "100% 糖浆（默认）",
+          "zh-Hant": "100% 糖漿（預設）",
+          "ko": "시럽 100% (기본)",
+          "vi": "100% siro (mặc định)",
+          "ne": "100% सिरप (पूर्वनिर्धारित)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "9a6346fb-ad58-4f07-b2bf-a46b9844d6b0",
+      "label": "シロップ150% 150%",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "150% syrup",
+          "zh": "150% 糖浆",
+          "zh-Hant": "150% 糖漿",
+          "ko": "시럽 150%",
+          "vi": "150% siro",
+          "ne": "150% सिरप"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "4a1e86b2-ca84-40b4-99d5-8dfcb1fcba44",
+      "label": "シロップ150% 150%",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "150% syrup",
+          "zh": "150% 糖浆",
+          "zh-Hant": "150% 糖漿",
+          "ko": "시럽 150%",
+          "vi": "150% siro",
+          "ne": "150% सिरप"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "be45fe2c-1586-4f28-8937-c62f195dbf31",
+      "label": "少なめ",
+      "before": {
+        "display_names": {
+          "en": "Less Sweet",
+          "ko": "당도 낮게",
+          "ne": "कम गुलियो",
+          "vi": "It ngot",
+          "zh": "少甜",
+          "zh-Hant": "少甜"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Less Sweet",
+          "ko": "당도 낮게",
+          "ne": "कम गुलियो",
+          "vi": "Ít đường",
+          "zh": "少甜",
+          "zh-Hant": "少甜"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "8fecc454-1b17-468e-8f42-0490a036164b",
+      "label": "ゼロ",
+      "before": {
+        "display_names": {
+          "en": "Zero Sugar",
+          "ko": "무가당",
+          "ne": "चिनी बिना",
+          "vi": "Khong duong",
+          "zh": "无糖",
+          "zh-Hant": "無糖"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Zero Sugar",
+          "ko": "무가당",
+          "ne": "चिनी बिना",
+          "vi": "Không đường",
+          "zh": "无糖",
+          "zh-Hant": "無糖"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "d16e7a88-6c34-4cb8-a347-76982b1cc545",
+      "label": "シロップ50％ 50%",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "50% syrup",
+          "zh": "50% 糖浆",
+          "zh-Hant": "50% 糖漿",
+          "ko": "시럽 50%",
+          "vi": "50% siro",
+          "ne": "50% सिरप"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "b91e8c1e-c559-4d66-9b4e-14ade318bb33",
+      "label": "ふつう",
+      "before": {
+        "display_names": {
+          "en": "Regular",
+          "ko": "보통",
+          "ne": "सामान्य",
+          "vi": "Binh thuong",
+          "zh": "正常",
+          "zh-Hant": "正常"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Regular",
+          "ko": "보통",
+          "ne": "सामान्य",
+          "vi": "Bình thường",
+          "zh": "正常",
+          "zh-Hant": "正常"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "bed52ab8-a7f9-4d21-b2df-024fe5cfbd27",
+      "label": "豆乳変更",
+      "before": {
+        "display_names": {
+          "en": "Switch to Soy Milk",
+          "ko": "두유로 변경",
+          "ne": "सोया मिल्कमा परिवर्तन",
+          "vi": "Doi sang sua dau nanh",
+          "zh": "更换豆奶",
+          "zh-Hant": "更換豆奶"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Switch to soy milk",
+          "ko": "두유로 변경",
+          "ne": "सोया दूधमा बदल्नुहोस्",
+          "vi": "Đổi sang sữa đậu nành",
+          "zh": "换豆奶",
+          "zh-Hant": "換豆漿"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "dfd0bea1-4cd3-47aa-ae70-bedeb2f6fea8",
+      "label": "シロップ50％ 50%",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "50% syrup",
+          "zh": "50% 糖浆",
+          "zh-Hant": "50% 糖漿",
+          "ko": "시럽 50%",
+          "vi": "50% siro",
+          "ne": "50% सिरप"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "78725a84-f6a2-4dba-98b5-4634866d76c1",
+      "label": "シロップ0％ 0%",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "0% syrup",
+          "zh": "0% 糖浆",
+          "zh-Hant": "0% 糖漿",
+          "ko": "시럽 0%",
+          "vi": "0% siro",
+          "ne": "0% सिरप"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "6eb83747-5fd7-453e-902e-e78223d063fa",
+      "label": "粒々みかんジュレ🍊",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Mandarin orange pulp jelly 🍊",
+          "zh": "橘子果粒冻 🍊",
+          "zh-Hant": "橘子果粒凍 🍊",
+          "ko": "귤 과육 젤리 🍊",
+          "vi": "Thạch quýt có tép 🍊",
+          "ne": "सुन्तलाका दानासहित जेली 🍊"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "abf65b22-a476-4631-8c58-8734df1de003",
+      "label": "極み濃厚マンゴープリン🥭",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Rich mango pudding 🥭",
+          "zh": "浓郁芒果布丁 🥭",
+          "zh-Hant": "濃郁芒果布丁 🥭",
+          "ko": "진한 망고 푸딩 🥭",
+          "vi": "Pudding xoài đậm vị 🥭",
+          "ne": "गाढा आँप पुडिङ 🥭"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "f7ea3e2d-92e6-4bc9-bfc1-1897ee7990a7",
+      "label": "フレッシュな生苺🍓",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Fresh strawberry 🍓",
+          "zh": "新鲜草莓 🍓",
+          "zh-Hant": "新鮮草莓 🍓",
+          "ko": "신선한 딸기 🍓",
+          "vi": "Dâu tây tươi 🍓",
+          "ne": "ताजा स्ट्रबेरी 🍓"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "817c6557-a699-4ca0-9722-69d3f386fbf8",
+      "label": "フレッシュな生パイナップル🍍",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Fresh pineapple 🍍",
+          "zh": "新鲜菠萝 🍍",
+          "zh-Hant": "新鮮鳳梨 🍍",
+          "ko": "신선한 파인애플 🍍",
+          "vi": "Dứa tươi 🍍",
+          "ne": "ताजा भुइँकटहर 🍍"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "cd5a6a1a-4611-4ccc-9eda-f9cf79481c74",
+      "label": "タピオカ追加",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add tapioca pearls",
+          "zh": "加珍珠",
+          "zh-Hant": "加珍珠",
+          "ko": "타피오카 추가",
+          "vi": "Thêm trân châu",
+          "ne": "टापिओका थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "3aa4e41b-0975-4d97-bfd5-700d2bd7cc11",
+      "label": "クリームフォーム追加",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add cream foam",
+          "zh": "加奶盖",
+          "zh-Hant": "加奶蓋",
+          "ko": "크림 폼 추가",
+          "vi": "Thêm kem sữa",
+          "ne": "क्रिम फोम थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "4e7cc333-2d39-42e7-aaca-bbae8c875d40",
+      "label": "氷少なめ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Less ice",
+          "zh": "少冰",
+          "zh-Hant": "少冰",
+          "ko": "얼음 적게",
+          "vi": "Ít đá",
+          "ne": "कम बरफ"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "aca7a5d1-df88-46dc-9d54-43223dd6eefa",
+      "label": "氷抜き",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "No ice",
+          "zh": "去冰",
+          "zh-Hant": "去冰",
+          "ko": "얼음 없이",
+          "vi": "Không đá",
+          "ne": "बरफ नराख्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "26a26a48-06f1-41d8-b2a0-71bcccc25222",
+      "label": "氷標準",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Regular ice",
+          "zh": "正常冰",
+          "zh-Hant": "正常冰",
+          "ko": "얼음 보통",
+          "vi": "Đá bình thường",
+          "ne": "सामान्य बरफ"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "ef221a14-6b75-4f8f-8c79-bb5187f2b591",
+      "label": "【特選品質】特製チーズフォーム追加",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add premium house-made cheese foam",
+          "zh": "加精选自制奶酪奶盖",
+          "zh-Hant": "加精選自製起司奶蓋",
+          "ko": "엄선한 수제 치즈 폼 추가",
+          "vi": "Thêm kem phô mai tự làm cao cấp",
+          "ne": "उत्कृष्ट घरमै बनाइएको चीज फोम थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "d2aacc5d-8bb7-4a13-a98a-c57cdeb1092a",
+      "label": "とろ〜り濃厚国産練乳っ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Rich Japanese condensed milk",
+          "zh": "浓郁日本炼乳",
+          "zh-Hant": "濃郁日本煉乳",
+          "ko": "진한 일본산 연유",
+          "vi": "Sữa đặc Nhật đậm đà",
+          "ne": "गाढा जापानी कन्डेन्स्ड मिल्क"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "2daf4ddf-4a68-492d-86b7-c0d0406424d7",
+      "label": "ホイップ抜き",
+      "before": {
+        "display_names": {
+          "en": "No Whipped Cream",
+          "ko": "휘핑 없이",
+          "ne": "ह्विप क्रीम बिना",
+          "vi": "Khong kem tuoi",
+          "zh": "不加奶油",
+          "zh-Hant": "不加奶油"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "No whipped cream",
+          "ko": "휘핑크림 빼기",
+          "ne": "ह्विप्ड क्रिम नराख्नुहोस्",
+          "vi": "Không kem tươi",
+          "zh": "去鲜奶油",
+          "zh-Hant": "去鮮奶油"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "8b6e16c3-4022-49bc-912e-76fa8135373e",
+      "label": "ホイップ抜き",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "No whipped cream",
+          "zh": "去鲜奶油",
+          "zh-Hant": "去鮮奶油",
+          "ko": "휘핑크림 빼기",
+          "vi": "Không kem tươi",
+          "ne": "ह्विप्ड क्रिम नराख्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "09601358-3eab-44f6-b947-6037c712c454",
+      "label": "タピオカ抜き",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "No tapioca pearls",
+          "zh": "去珍珠",
+          "zh-Hant": "去珍珠",
+          "ko": "타피오카 빼기",
+          "vi": "Không trân châu",
+          "ne": "टापिओका नराख्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "ad403549-e58c-44cc-9b06-edb1d939dc53",
+      "label": "【鬼練乳】濃厚国産練乳5倍",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Japanese condensed milk ×5",
+          "zh": "日本浓郁炼乳 ×5",
+          "zh-Hant": "日本濃郁煉乳 ×5",
+          "ko": "진한 일본산 연유 5배",
+          "vi": "Sữa đặc Nhật đậm đà ×5",
+          "ne": "जापानी कन्डेन्स्ड मिल्क ×5"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "4f7c53bc-c9de-464b-b17e-4d4130713dbf",
+      "label": "ゆず茶追加",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add yuzu tea",
+          "zh": "加柚子茶",
+          "zh-Hant": "加柚子茶",
+          "ko": "유자차 추가",
+          "vi": "Thêm trà yuzu",
+          "ne": "युजु चिया थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "284d1a33-b13b-4893-a454-73cd7ec5d769",
+      "label": "シロップ150% 150%",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "150% syrup",
+          "zh": "150% 糖浆",
+          "zh-Hant": "150% 糖漿",
+          "ko": "시럽 150%",
+          "vi": "150% siro",
+          "ne": "150% सिरप"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "fdbeee02-6d9d-407c-8ff2-78ad98a3c9a4",
+      "label": "シロップ50％ 50%",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "50% syrup",
+          "zh": "50% 糖浆",
+          "zh-Hant": "50% 糖漿",
+          "ko": "시럽 50%",
+          "vi": "50% siro",
+          "ne": "50% सिरप"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "fe54b47a-7235-4c15-91da-9df288d7a73d",
+      "label": "多め",
+      "before": {
+        "display_names": {
+          "en": "Extra Sweet",
+          "ko": "당도 높게",
+          "ne": "धेरै गुलियो",
+          "vi": "Nhieu ngot",
+          "zh": "多甜",
+          "zh-Hant": "多甜"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Extra Sweet",
+          "ko": "당도 높게",
+          "ne": "धेरै गुलियो",
+          "vi": "Nhiều đường",
+          "zh": "多甜",
+          "zh-Hant": "多甜"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "e39f7fda-8d3c-4904-8c54-3db18f4d3e1d",
+      "label": "R レギュラー 500ml",
+      "before": {
+        "display_names": {
+          "en": "R Regular 500ml",
+          "ko": "R 레귤러 500ml",
+          "ne": "R नियमित 500ml",
+          "vi": "R vua 500ml",
+          "zh": "R 中杯 500ml",
+          "zh-Hant": "R 中杯 500ml"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "R Regular 500ml",
+          "ko": "R 레귤러 500ml",
+          "ne": "R नियमित 500ml",
+          "vi": "R vừa 500ml",
+          "zh": "R 中杯 500ml",
+          "zh-Hant": "R 中杯 500ml"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "b3f11e9d-ec91-4d66-ac37-69719932695e",
+      "label": "氷少なめ",
+      "before": {
+        "display_names": {
+          "en": "Less Ice",
+          "ko": "얼음 적게",
+          "ne": "कम बरफ",
+          "vi": "It da",
+          "zh": "少冰",
+          "zh-Hant": "少冰"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Less ice",
+          "ko": "얼음 적게",
+          "ne": "कम बरफ",
+          "vi": "Ít đá",
+          "zh": "少冰",
+          "zh-Hant": "少冰"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "6585af4f-fb00-4eb0-b974-315e3f740430",
+      "label": "タピオカ追加",
+      "before": {
+        "display_names": {
+          "en": "Add Tapioca",
+          "ko": "타피오카 추가",
+          "ne": "ट्यापिओका थप्नुहोस्",
+          "vi": "Them tran chau",
+          "zh": "加珍珠",
+          "zh-Hant": "加珍珠"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Add tapioca pearls",
+          "ko": "타피오카 추가",
+          "ne": "टापिओका थप्नुहोस्",
+          "vi": "Thêm trân châu",
+          "zh": "加珍珠",
+          "zh-Hant": "加珍珠"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "0ca1bee6-874d-4ac3-81e8-107d0f9efb70",
+      "label": "ホイップ追加",
+      "before": {
+        "display_names": {
+          "en": "Add Whipped Cream",
+          "ko": "휘핑 추가",
+          "ne": "ह्विप क्रीम थप्नुहोस्",
+          "vi": "Them kem tuoi",
+          "zh": "加奶油",
+          "zh-Hant": "加奶油"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Add Whipped Cream",
+          "ko": "휘핑 추가",
+          "ne": "ह्विप क्रीम थप्नुहोस्",
+          "vi": "Thêm kem tươi",
+          "zh": "加奶油",
+          "zh-Hant": "加奶油"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "367e6d81-89ab-44a1-8109-258d4c707b5b",
+      "label": "チョコチップ追加",
+      "before": {
+        "display_names": {
+          "en": "Add Chocolate Chips",
+          "ko": "초코 칩 추가",
+          "ne": "चकलेट चिप थप्नुहोस्",
+          "vi": "Them hat socola",
+          "zh": "加巧克力碎片",
+          "zh-Hant": "加巧克力碎片"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Add Chocolate Chips",
+          "ko": "초코 칩 추가",
+          "ne": "चकलेट चिप थप्नुहोस्",
+          "vi": "Thêm hạt sô-cô-la",
+          "zh": "加巧克力碎片",
+          "zh-Hant": "加巧克力碎片"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "058a997a-1009-45d9-9159-d5331a6c0ab5",
+      "label": "タピオカ抜き",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "No tapioca pearls",
+          "zh": "去珍珠",
+          "zh-Hant": "去珍珠",
+          "ko": "타피오카 빼기",
+          "vi": "Không trân châu",
+          "ne": "टापिओका नराख्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "38dbdd49-98cc-40e5-9c6b-8096abe1b805",
+      "label": "タピオカ追加",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add tapioca pearls",
+          "zh": "加珍珠",
+          "zh-Hant": "加珍珠",
+          "ko": "타피오카 추가",
+          "vi": "Thêm trân châu",
+          "ne": "टापिओका थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "722c0e0a-c10c-4e17-844a-0b4a8f1440e8",
+      "label": "濃厚国産練乳3倍",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Japanese condensed milk ×3",
+          "zh": "日本浓郁炼乳 ×3",
+          "zh-Hant": "日本濃郁煉乳 ×3",
+          "ko": "진한 일본산 연유 3배",
+          "vi": "Sữa đặc Nhật đậm đà ×3",
+          "ne": "जापानी कन्डेन्स्ड मिल्क ×3"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "ebd7146c-e384-486f-bc1c-0af32bdbeb92",
+      "label": "オレオ大盛(2倍)",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Oreo ×2",
+          "zh": "奥利奥 ×2",
+          "zh-Hant": "Oreo ×2",
+          "ko": "오레오 2배",
+          "vi": "Oreo ×2",
+          "ne": "Oreo ×2"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "2c177bdd-b33b-4c74-b1bf-27f6da9aceb2",
+      "label": "オレオ特盛(3倍)",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Oreo ×3",
+          "zh": "奥利奥 ×3",
+          "zh-Hant": "Oreo ×3",
+          "ko": "오레오 3배",
+          "vi": "Oreo ×3",
+          "ne": "Oreo ×3"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "3c64a480-72f4-45ae-86c1-1003ad76db4d",
+      "label": "【たっぷり】オレオメガ盛(5倍)",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Oreo ×5",
+          "zh": "奥利奥 ×5",
+          "zh-Hant": "Oreo ×5",
+          "ko": "오레오 5배",
+          "vi": "Oreo ×5",
+          "ne": "Oreo ×5"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "4d29a4f7-8ff1-4087-99fc-078fce770270",
+      "label": "たっぷりナタデココ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Extra nata de coco",
+          "zh": "多多椰果",
+          "zh-Hant": "多多椰果",
+          "ko": "나타드코코 듬뿍",
+          "vi": "Thạch dừa thêm nhiều",
+          "ne": "प्रशस्त नाटा दे कोको"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "d6f632f4-6ccf-4145-abee-8c994c034c00",
+      "label": "グラスフェッドWPIホエイプロテイン20gを追加する",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add 20g grass-fed whey protein isolate",
+          "zh": "加 20g 草饲分离乳清蛋白",
+          "zh-Hant": "加 20g 草飼分離乳清蛋白",
+          "ko": "목초 사육 WPI 유청 단백질 20g 추가",
+          "vi": "Thêm 20g đạm whey cô lập từ bò ăn cỏ",
+          "ne": "घाँस खुवाइएका गाईको 20g वे प्रोटिन आइसोलेट थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "91ccb908-de8f-4432-9502-541d8b958d9e",
+      "label": "Large（700ml）",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Large (700ml)",
+          "zh": "大杯（700ml）",
+          "zh-Hant": "大杯（700ml）",
+          "ko": "라지 (700ml)",
+          "vi": "Lớn (700ml)",
+          "ne": "ठूलो (700ml)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "8ee6b06b-0a58-4b48-9f8d-7befa5b8151d",
+      "label": "Large（700ml）",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Large (700ml)",
+          "zh": "大杯（700ml）",
+          "zh-Hant": "大杯（700ml）",
+          "ko": "라지 (700ml)",
+          "vi": "Lớn (700ml)",
+          "ne": "ठूलो (700ml)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "93fbf0fa-4988-4fc0-b586-ec97cad06eba",
+      "label": "Regular（500ml）",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Regular (500ml)",
+          "zh": "常规杯（500ml）",
+          "zh-Hant": "標準杯（500ml）",
+          "ko": "레귤러 (500ml)",
+          "vi": "Vừa (500ml)",
+          "ne": "मध्यम (500ml)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "de70d517-a13c-40b6-a7dd-b1ddb1acdf3e",
+      "label": "チーズフォーム追加",
+      "before": {
+        "display_names": {
+          "en": "Add Cheese Foam",
+          "ko": "치즈 폼 추가",
+          "ne": "चीज फोम थप्नुहोस्",
+          "vi": "Them kem pho mai",
+          "zh": "加芝士奶盖",
+          "zh-Hant": "加芝士奶蓋"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Add Cheese Foam",
+          "ko": "치즈 폼 추가",
+          "ne": "चीज फोम थप्नुहोस्",
+          "vi": "Thêm kem phô mai",
+          "zh": "加芝士奶盖",
+          "zh-Hant": "加芝士奶蓋"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "1c82528d-d395-4359-bf5d-05aac46feae2",
+      "label": "プレミアム版",
+      "before": {
+        "display_names": {
+          "en": "Premium Version",
+          "ko": "프리미엄 버전",
+          "ne": "प्रिमियम संस्करण",
+          "vi": "Phien ban premium",
+          "zh": "尊享版",
+          "zh-Hant": "尊享版"
+        }
+      },
+      "after": {
+        "display_names": {
+          "en": "Premium Version",
+          "ko": "프리미엄 버전",
+          "ne": "प्रिमियम संस्करण",
+          "vi": "Phiên bản cao cấp",
+          "zh": "尊享版",
+          "zh-Hant": "尊享版"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "9dd4e6eb-e1e5-47a9-b8dd-45f169d78b0d",
+      "label": "タピオカ追加",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add tapioca pearls",
+          "zh": "加珍珠",
+          "zh-Hant": "加珍珠",
+          "ko": "타피오카 추가",
+          "vi": "Thêm trân châu",
+          "ne": "टापिओका थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "2a6f57a6-bdb8-4eca-bdc4-764cdb28598e",
+      "label": "濃厚国産練乳2倍",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Japanese condensed milk ×2",
+          "zh": "日本浓郁炼乳 ×2",
+          "zh-Hant": "日本濃郁煉乳 ×2",
+          "ko": "진한 일본산 연유 2배",
+          "vi": "Sữa đặc Nhật đậm đà ×2",
+          "ne": "जापानी कन्डेन्स्ड मिल्क ×2"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "b86c8979-b3b1-4504-a1f7-9bc6dcd717a9",
+      "label": "フレッシュな生キウイ🥝",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Fresh kiwi 🥝",
+          "zh": "新鲜猕猴桃 🥝",
+          "zh-Hant": "新鮮奇異果 🥝",
+          "ko": "신선한 키위 🥝",
+          "vi": "Kiwi tươi 🥝",
+          "ne": "ताजा किवी 🥝"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "d19b435e-b362-4a5d-8c44-cd3388af6d52",
+      "label": "フレッシュな八朔（はっさく）",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Fresh hassaku citrus",
+          "zh": "新鲜八朔柑橘",
+          "zh-Hant": "新鮮八朔柑橘",
+          "ko": "신선한 핫사쿠 감귤",
+          "vi": "Cam hassaku tươi",
+          "ne": "ताजा हास्साकु सुन्तला"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "c6a5523b-fe02-431a-b4bf-cded225ee20b",
+      "label": "クーベルチュールホワイトチョコ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "White couverture chocolate",
+          "zh": "白色调温巧克力",
+          "zh-Hant": "白色調溫巧克力",
+          "ko": "화이트 쿠베르튀르 초콜릿",
+          "vi": "Sô-cô-la trắng couverture",
+          "ne": "सेतो कुभर्त्युर चकलेट"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "c851dd64-76db-4377-a1c1-008822c46997",
+      "label": "Small（360ml）",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Small (360ml)",
+          "zh": "小杯（360ml）",
+          "zh-Hant": "小杯（360ml）",
+          "ko": "스몰 (360ml)",
+          "vi": "Nhỏ (360ml)",
+          "ne": "सानो (360ml)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "8b487f73-57e1-4f14-b454-8b3c2feb0e6a",
+      "label": "【特選品質】特製チーズフォーム追加",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add premium house-made cheese foam",
+          "zh": "加精选自制奶酪奶盖",
+          "zh-Hant": "加精選自製起司奶蓋",
+          "ko": "엄선한 수제 치즈 폼 추가",
+          "vi": "Thêm kem phô mai tự làm cao cấp",
+          "ne": "उत्कृष्ट घरमै बनाइएको चीज फोम थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "d55adc95-ebba-4c4d-9bc6-726f50a07f64",
+      "label": "自家製珈琲ジェリー",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "House-made coffee jelly",
+          "zh": "自制咖啡冻",
+          "zh-Hant": "自製咖啡凍",
+          "ko": "수제 커피 젤리",
+          "vi": "Thạch cà phê tự làm",
+          "ne": "घरमै बनाइएको कफी जेली"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "cfa0cdc3-846a-4053-96c4-a0258db5c63a",
+      "label": "自家製珈琲ジェリー（ハーフ）",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "House-made coffee jelly (half portion)",
+          "zh": "自制咖啡冻（半份）",
+          "zh-Hant": "自製咖啡凍（半份）",
+          "ko": "수제 커피 젤리 (반 분량)",
+          "vi": "Thạch cà phê tự làm (nửa phần)",
+          "ne": "घरमै बनाइएको कफी जेली (आधा भाग)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "40e01136-636c-4595-9db6-3b54a39d24a8",
+      "label": "濃厚マンゴーシロップ",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Rich mango syrup",
+          "zh": "浓郁芒果糖浆",
+          "zh-Hant": "濃郁芒果糖漿",
+          "ko": "진한 망고 시럽",
+          "vi": "Siro xoài đậm vị",
+          "ne": "गाढा आँप सिरप"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "b8034537-4630-4348-a4a2-2ee920bae35f",
+      "label": "シロップ0％（デフォルト） 0%",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "0% syrup (default)",
+          "zh": "0% 糖浆（默认）",
+          "zh-Hant": "0% 糖漿（預設）",
+          "ko": "시럽 0% (기본)",
+          "vi": "0% siro (mặc định)",
+          "ne": "0% सिरप (पूर्वनिर्धारित)"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "9b2c0a60-5050-417e-9f7f-e7ff4c8f04a5",
+      "label": "シロップ100％ 100%",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "100% syrup",
+          "zh": "100% 糖浆",
+          "zh-Hant": "100% 糖漿",
+          "ko": "시럽 100%",
+          "vi": "100% siro",
+          "ne": "100% सिरप"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "ad5b6813-e353-4f33-96e2-c5ac253fe614",
+      "label": "苺果肉2倍",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Strawberry pulp ×2",
+          "zh": "草莓果肉 ×2",
+          "zh-Hant": "草莓果肉 ×2",
+          "ko": "딸기 과육 2배",
+          "vi": "Thịt dâu tây ×2",
+          "ne": "स्ट्रबेरीको गुदी ×2"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "e53a740f-6de8-427f-aeb1-a902c41eab7b",
+      "label": "濃い抹茶",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Extra-strong matcha",
+          "zh": "加浓抹茶",
+          "zh-Hant": "加濃抹茶",
+          "ko": "진한 말차",
+          "vi": "Matcha đậm vị",
+          "ne": "थप गाढा माचा"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "039a3c0d-f427-439e-87ec-78cbf3fbf82b",
+      "label": "きな粉+",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Extra roasted soybean flour",
+          "zh": "加黄豆粉",
+          "zh-Hant": "加黃豆粉",
+          "ko": "콩가루 추가",
+          "vi": "Thêm bột đậu nành rang",
+          "ne": "थप भुटेको भटमासको पिठो"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "39658af0-abd7-40de-9c60-f3395f4213e5",
+      "label": "特製黒蜜追加",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Add special brown sugar syrup",
+          "zh": "加特制黑糖蜜",
+          "zh-Hant": "加特製黑糖蜜",
+          "ko": "특제 흑당 시럽 추가",
+          "vi": "Thêm siro đường đen đặc biệt",
+          "ne": "विशेष ब्राउन सुगर सिरप थप्नुहोस्"
+        }
+      }
+    },
+    {
+      "type": "options",
+      "id": "809a2d36-963b-4444-9bbb-57988f4b43b9",
+      "label": "【約1リットル】オメガギガント",
+      "before": {
+        "display_names": {}
+      },
+      "after": {
+        "display_names": {
+          "en": "Omega Gigant (about 1 litre)",
+          "zh": "超大杯（约 1 升）",
+          "zh-Hant": "超大杯（約 1 公升）",
+          "ko": "오메가 기간트 (약 1리터)",
+          "vi": "Siêu lớn (khoảng 1 lít)",
+          "ne": "ओमेगा गिगान्ट (करिब 1 लिटर)"
+        }
+      }
+    }
+  ]
+}

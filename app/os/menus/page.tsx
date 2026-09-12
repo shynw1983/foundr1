@@ -67,6 +67,9 @@ type MenuCategory = {
   storeId: string;
   externalId: string;
   name: string;
+  displayNames?: Record<string, string>;
+  noteDisplayNames?: Record<string, string>;
+  productType?: "food" | "drink" | "other";
   note: string;
   isTapiocaFree: boolean;
   hasWhipByDefault: boolean;
@@ -369,6 +372,9 @@ const emptyCategory: MenuCategory = {
   storeId: "",
   externalId: "",
   name: "",
+  displayNames: {},
+  noteDisplayNames: {},
+  productType: "other",
   note: "",
   isTapiocaFree: false,
   hasWhipByDefault: false,
@@ -1506,6 +1512,9 @@ export default function MenuAdminPage() {
       storeId: category.storeId || "",
       externalId: category.externalId || "",
       name: category.name,
+      displayNames: category.displayNames || {},
+      noteDisplayNames: category.noteDisplayNames || {},
+      productType: category.productType || "other",
       note: category.note || "",
       isTapiocaFree: category.isTapiocaFree === true,
       hasWhipByDefault: category.hasWhipByDefault === true,
@@ -3330,6 +3339,15 @@ export default function MenuAdminPage() {
                     <input value={categoryDraft.name} onChange={(event) => setCategoryDraft({ ...categoryDraft, name: event.target.value })} placeholder="例: タピオカドリンク" />
                   </label>
                   <label>
+                    <span>商品区分</span>
+                    <select value={categoryDraft.productType || "other"} onChange={(event) => setCategoryDraft({ ...categoryDraft, productType: event.target.value as "food" | "drink" | "other" })}>
+                      <option value="drink">ドリンク</option>
+                      <option value="food">フード</option>
+                      <option value="other">その他</option>
+                    </select>
+                    <small>フードには飲料用の甘さ・氷の選択を自動で追加しません。</small>
+                  </label>
+                  <label>
                     <span>公開 ID</span>
                     <input value={categoryDraft.externalId} onChange={(event) => setCategoryDraft({ ...categoryDraft, externalId: event.target.value })} placeholder="例: tapioca" />
                     <small>未入力なら分類名から自動生成します。同じブランド内では重複できません。</small>
@@ -3353,6 +3371,18 @@ export default function MenuAdminPage() {
                   <span>分類紹介文</span>
                   <textarea value={categoryDraft.note} onChange={(event) => setCategoryDraft({ ...categoryDraft, note: event.target.value })} rows={3} placeholder="ブランドサイトで分類見出しの下に表示する説明文" />
                 </label>
+                <div className="menu-translation-panel">
+                  <strong>客表示・会員・ブランドサイト用表示名</strong>
+                  <div className="menu-translation-grid">
+                    {customerMenuLanguageOptions.map((language) => (
+                      <label key={language.value}>
+                        <span>{language.label}</span>
+                        <input value={categoryDraft.displayNames?.[language.value] ?? ""} onChange={(event) => setCategoryDraft(updateDisplayName(categoryDraft, language.value, event.target.value))} placeholder={categoryDraft.name || "表示名"} />
+                        <textarea value={categoryDraft.noteDisplayNames?.[language.value] ?? ""} onChange={(event) => setCategoryDraft({ ...categoryDraft, noteDisplayNames: { ...categoryDraft.noteDisplayNames, [language.value]: event.target.value } })} rows={2} placeholder="分類紹介文" />
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <p className="category-edit-note">
                   分類名を変更すると、この分類に入っている商品も新しい分類名へ移動します。削除した場合、商品は未分類に戻ります。
                 </p>

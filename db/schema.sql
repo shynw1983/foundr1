@@ -2121,6 +2121,9 @@ create table if not exists menu_categories (
   store_id uuid references stores(id) on delete cascade,
   external_id text,
   name text not null,
+  display_names jsonb not null default '{}'::jsonb,
+  note_display_names jsonb not null default '{}'::jsonb,
+  product_type text not null default 'other' check (product_type in ('drink', 'food', 'other')),
   note text not null default '',
   is_tapioca_free boolean not null default false,
   has_whip_by_default boolean not null default false,
@@ -3531,6 +3534,9 @@ alter table menu_sources add column if not exists source_url text;
 alter table menu_sources add column if not exists status text not null default 'active';
 alter table menu_sources add column if not exists last_synced_at timestamptz;
 alter table menu_categories add column if not exists external_id text;
+alter table menu_categories add column if not exists display_names jsonb not null default '{}'::jsonb;
+alter table menu_categories add column if not exists note_display_names jsonb not null default '{}'::jsonb;
+alter table menu_categories add column if not exists product_type text not null default 'other' check (product_type in ('drink', 'food', 'other'));
 alter table menu_categories add column if not exists note text not null default '';
 alter table menu_categories add column if not exists is_tapioca_free boolean not null default false;
 alter table menu_categories add column if not exists has_whip_by_default boolean not null default false;

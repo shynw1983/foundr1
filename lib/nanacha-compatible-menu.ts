@@ -35,6 +35,8 @@ export type NanachaDrink = {
   name: string;
   displayNames?: Record<string, string>;
   category: string;
+  productType: "food" | "drink" | "other";
+  priceConfigured: boolean;
   price: number;
   description: string;
   descriptionDisplayNames?: Record<string, string>;
@@ -58,6 +60,9 @@ export type NanachaCompatibleMenu = {
     id: string;
     label: string;
     note: string;
+    displayNames?: Record<string, string>;
+    noteDisplayNames?: Record<string, string>;
+    productType: "food" | "drink" | "other";
     isTapiocaFree: boolean;
     hasWhipByDefault: boolean;
   }>;
@@ -113,6 +118,8 @@ type MenuGroupRow = {
   name: string;
   displayNames?: Record<string, string>;
   selectionType: string;
+  menuCatalogItemId: string;
+  applicableCategories: string[];
   ruleJson: Record<string, unknown>;
   sortOrder: number;
 };
@@ -122,6 +129,9 @@ type MenuCategoryRow = {
   externalId: string;
   name: string;
   note: string;
+  displayNames?: Record<string, string>;
+  noteDisplayNames?: Record<string, string>;
+  productType: "food" | "drink" | "other";
   isTapiocaFree: boolean;
   hasWhipByDefault: boolean;
   sortOrder: number;
@@ -249,6 +259,9 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         coalesce(external_id, '') as "externalId",
         name,
         coalesce(note, '') as note,
+        display_names as "displayNames",
+        note_display_names as "noteDisplayNames",
+        product_type as "productType",
         is_tapioca_free as "isTapiocaFree",
         has_whip_by_default as "hasWhipByDefault",
         sort_order as "sortOrder"
@@ -265,11 +278,12 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         name,
         coalesce(display_names, '{}'::jsonb) as "displayNames",
         selection_type as "selectionType",
+        coalesce(menu_catalog_item_id::text, '') as "menuCatalogItemId",
+        applicable_categories as "applicableCategories",
         rule_json as "ruleJson",
         sort_order as "sortOrder"
       from menu_option_groups
       where brand_id = ${brand.id}
-        and menu_catalog_item_id is null
         and is_active = true
       order by sort_order, name
     `,
@@ -289,7 +303,6 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
           select id
           from menu_option_groups
           where brand_id = ${brand.id}
-            and menu_catalog_item_id is null
         )
       order by sort_order, name
     `,
@@ -332,7 +345,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
     optionsByGroup.set(option.optionGroupId, list);
   }
 
-  const groupByKey = new Map(groups.map((group) => [group.groupKey, group]));
+  const groupByKey = new Map(groups.filter((group) => !group.menuCatalogItemId).map((group) => [group.groupKey, group]));
   const groupById = new Map(groups.map((group) => [group.id, group]));
   const itemOptionGroupsByItemId = new Map<string, MenuItemOptionGroupRow[]>();
   for (const link of itemOptionGroups) {
@@ -363,11 +376,21 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
       const categoryId = String(schema.categoryId || item.category || "menu");
       const categoryMaster = categoriesByExternalId.get(categoryId) ?? categoriesByName.get(item.category);
       const publicCategoryId = categoryMaster?.externalId || categoryId;
+      const productType = String(schema.productType || categoryMaster?.productType || "other") as NanachaDrink["productType"];
+      const links = itemOptionGroupsByItemId.get(item.id) ?? [];
+      const itemGroups = links.length
+        ? links.map((link) => groupById.get(link.optionGroupId)).filter((group): group is MenuGroupRow => Boolean(group))
+        : productType === "food"
+          ? groups.filter((group) => group.menuCatalogItemId === item.id || (!group.menuCatalogItemId && group.applicableCategories.includes(item.category)))
+          : [];
       if (!categoryMap.has(categoryId)) {
         categoryMap.set(categoryId, {
           id: publicCategoryId,
           label: categoryMaster?.name || item.category || categoryId,
           note: categoryMaster?.note || "",
+          displayNames: categoryMaster?.displayNames,
+          noteDisplayNames: categoryMaster?.noteDisplayNames,
+          productType,
           isTapiocaFree: categoryMaster?.isTapiocaFree ?? asBoolean(schema.isTapiocaFree),
           hasWhipByDefault: categoryMaster?.hasWhipByDefault ?? asBoolean(schema.hasWhipByDefault)
         });
@@ -381,6 +404,8 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         name: item.name,
         displayNames: item.displayNames,
         category: publicCategoryId,
+        productType,
+        priceConfigured: item.basePrice !== null && Number.isFinite(Number(item.basePrice)) && Number(item.basePrice) > 0,
         price: item.basePrice ?? 0,
         description: item.description,
         descriptionDisplayNames: item.descriptionDisplayNames,
@@ -393,14 +418,9 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         allowedIce: maybeLimitedArray(schema.allowedIce, ice),
         allowedOptions: maybeLimitedArray(schema.allowedOptions, optionIds, ["none"]),
         allowedToppings: maybeLimitedArray(schema.allowedToppings, toppingIds),
-        usesStructuredCustomizations: (itemOptionGroupsByItemId.get(item.id)?.length ?? 0) > 0,
+        usesStructuredCustomizations: productType === "food" || links.length > 0,
         customizationGroups: mergeDuplicateToppingGroups(
-          (itemOptionGroupsByItemId.get(item.id) ?? [])
-            .map((link) => {
-              const group = groupById.get(link.optionGroupId);
-              return group ? customizationGroupObject(group, optionsByGroup.get(group.id) ?? []) : null;
-            })
-            .filter((group): group is NanachaCustomizationGroup => Boolean(group?.options.length))
+          itemGroups.map((group) => customizationGroupObject(group, optionsByGroup.get(group.id) ?? []))
         ),
         isAvailable: true,
         websiteEnabled: true
@@ -503,12 +523,12 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
           ...group,
           options: group.options.filter((option) => !unavailableOptionKeys.has(option.optionKey))
         }))
-        .filter((group) => group.options.length)
     };
     if (!setting) return normalizedDrink;
     return {
       ...normalizedDrink,
       price: setting.priceOverride ?? normalizedDrink.price,
+      priceConfigured: setting.priceOverride !== null ? Number.isFinite(Number(setting.priceOverride)) && Number(setting.priceOverride) > 0 : normalizedDrink.priceConfigured,
       isAvailable: setting.isAvailable,
       websiteEnabled: setting.websiteEnabled
     };

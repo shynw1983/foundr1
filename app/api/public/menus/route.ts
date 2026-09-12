@@ -157,6 +157,9 @@ export async function GET(request: Request) {
       id::text,
       coalesce(external_id, '') as "externalId",
       name,
+      coalesce(display_names, '{}'::jsonb) as "displayNames",
+      coalesce(note_display_names, '{}'::jsonb) as "noteDisplayNames",
+      product_type as "productType",
       coalesce(note, '') as note,
       is_tapioca_free as "isTapiocaFree",
       has_whip_by_default as "hasWhipByDefault",
@@ -381,12 +384,16 @@ export async function GET(request: Request) {
     optionGroups: allGroups,
     items: items.map((item) => {
       const setting = settingsByItemId.get(item.id);
+      const schema = (item.variableSchema ?? {}) as Record<string, unknown>;
+      const category = categories.find((entry) => entry.name === item.category);
+      const productType = String(schema.productType || category?.productType || "other");
       const explicitLinks = itemOptionGroupsByItemId.get(String(item.id)) ?? [];
       const explicitOrder = new Map(explicitLinks.map((link) => [link.optionGroupId, link.sortOrder]));
       const customizationGroups = (explicitLinks.length
         ? allGroups.filter((group) => explicitOrder.has(group.id))
         : allGroups.filter((group) => (
             (!group.menuCatalogItemId || group.menuCatalogItemId === item.id)
+            && (productType !== "food" || group.menuCatalogItemId === item.id || group.applicableCategories.includes(String(item.category)))
             && (group.menuCatalogItemId || !group.applicableCategories.length || group.applicableCategories.includes(String(item.category || "未分類")))
           )))
         .sort((left, right) => (
@@ -408,6 +415,7 @@ export async function GET(request: Request) {
       ));
       return {
         ...item,
+        productType,
         basePrice: setting?.priceOverride ?? item.basePrice,
         imageUrl: publicUrl(item.imageUrl, request.url),
         storeSetting: setting ? {
@@ -425,7 +433,7 @@ export async function GET(request: Request) {
           isAvailable: true,
           statusNote: ""
         },
-        usesStructuredCustomizations: explicitLinks.length > 0,
+        usesStructuredCustomizations: productType === "food" || explicitLinks.length > 0,
         customizationGroups: customerCustomizationGroups,
         // Temporary compatibility for the current nanacha reservation UI.
         // New customer UIs must render customizationGroups.
