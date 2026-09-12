@@ -7,6 +7,7 @@ import puppeteer from "puppeteer-core";
 
 const DEBUG_PORTS = {
   uber_eats: 9331,
+  uber_competitor: 9334,
   rocket_now: 9332,
   demae_can: 9333
 };

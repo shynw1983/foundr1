@@ -1,8 +1,10 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 import { CdpPage } from "../cdp-page.mjs";
+import { BrowserSession } from "../browser-session.mjs";
 import { captureUberAuthoritativeCatalog } from "../uber-authoritative-catalog.mjs";
 import { buildUberCompetitorSnapshot } from "../competitor-snapshot.mjs";
+import { waitForCompetitorMenu, COMPETITOR_VERIFICATION_ERROR } from "../competitor-page.mjs";
 import { loginState, normalizeText, platformUiChanged, targetNameTiers, tieredTargetCandidates } from "./common.mjs";
 
 const UBER_ORIGIN = "https://merchants.ubereats.com/";
@@ -227,11 +229,21 @@ export class UberEatsAdapter {
     const sourceUrl = String(payload.sourceUrl ?? "").trim();
     const storeUuid = String(payload.storeUuid ?? "").trim();
     if (!sourceId || !sourceUrl || !storeUuid) throw new Error("competitor_snapshot_target_missing");
-    const port = await this.session.ensureRunning();
-    const page = await CdpPage.connect(port, "https://www.ubereats.com/");
+    const url = new URL(sourceUrl);
+    if (url.origin !== 'https://www.ubereats.com' || !url.pathname.startsWith('/store/')) throw new Error('competitor_snapshot_target_invalid');
+    this.competitorSession ??= new BrowserSession(this.session.config, 'uber_competitor');
+    const port = await this.competitorSession.ensureRunning();
+    const page = await CdpPage.connect(port, "https://www.ubereats.com/", { isolated: true, reuse: true });
+    let keepOpen = false;
+    let stage = 'page_open';
     try {
-      await page.navigate(sourceUrl);
-      await page.waitFor(`Boolean(document.querySelector('h1') && document.querySelector('a[href*="mod=quickView"]'))`, 30000);
+      // Do not navigate away from a retained human verification page. This also
+      // prevents scheduled jobs from continually creating new challenge pages.
+      if (page.reusedTarget) await waitForCompetitorMenu(page);
+      const navigation = await page.send('Page.navigate', { url: sourceUrl });
+      if (navigation.errorText) throw new Error(`competitor_navigation_failed: ${navigation.errorText}`);
+      stage = 'menu_load';
+      await waitForCompetitorMenu(page);
       const pageState = await page.evaluate(`(() => ({
         menuLoaded: Boolean(document.querySelector('h1') && document.querySelectorAll('a[href*="mod=quickView"]').length),
         locationReady: !/(?:Enter delivery address|配達先(?:住所)?を入力)/iu.test((document.body?.innerText || "").slice(0, 3000)),
@@ -240,7 +252,9 @@ export class UberEatsAdapter {
           text: anchor.innerText || anchor.textContent || ""
         }))
       }))()`);
+      stage = 'store_api';
       const apiData = await page.evaluate(`fetch("https://www.ubereats.com/_p/api/getStoreV1?localeCode=ja-JP", {
+        signal: AbortSignal.timeout(10000),
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", "x-csrf-token": "x" },
@@ -265,8 +279,13 @@ export class UberEatsAdapter {
         menuLoaded: pageState?.menuLoaded === true,
         locationReady: pageState?.locationReady === true
       });
+    } catch (error) {
+      keepOpen = String(error?.message).startsWith(COMPETITOR_VERIFICATION_ERROR)
+        || String(error?.message).startsWith('competitor_address_required');
+      console.error('competitor_capture_failed', JSON.stringify({ sourceId, stage, error: String(error?.message) }));
+      throw error;
     } finally {
-      page.close();
+      await page.dispose({ keepOpen });
     }
   }
 

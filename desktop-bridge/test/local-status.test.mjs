@@ -4,6 +4,10 @@ import {mkdtemp,readFile,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createLocalStatus,publicError} from '../src/local-status.mjs';
+test('navigation timeout is distinct from connection failures and stays redacted',()=>{
+ assert.equal(publicError('CDP Page.navigate timeout secret'), '打开页面超时（浏览器未及时响应）');
+ assert.equal(publicError('fetch timeout'), '连接超时');
+});
 test('status exposes only safe task fields, not payload or raw errors',async()=>{
  const dir=await mkdtemp(path.join(tmpdir(),'bridge-status-'));
  const status=await createLocalStatus({deviceName:'Mac',storeId:'store',serverUrl:'https://www.foundr1.jp',bridgeToken:'secret'},dir);

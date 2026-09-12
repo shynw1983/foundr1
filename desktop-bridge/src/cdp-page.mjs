@@ -13,15 +13,29 @@ export class CdpPage {
     this.pending = new Map();
   }
 
-  static async connect(port, urlPrefix) {
+  static async connect(port, urlPrefix, { isolated = false, reuse = false } = {}) {
     const versionResponse = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(3000) });
     if (!versionResponse.ok) throw new Error(`Chrome version endpoint failed: ${versionResponse.status}`);
     const version = await versionResponse.json();
     if (!version.webSocketDebuggerUrl) throw new Error("Chrome browser WebSocket is missing");
     const client = new CdpPage(port, urlPrefix, version.webSocketDebuggerUrl);
-    await client.open();
-    await client.attach();
-    return client;
+    try {
+      await client.open();
+      if (isolated) {
+        // Reuse is opt-in for the dedicated competitor profile, never a fallback
+        // to an arbitrary merchant tab.
+        const targets = reuse ? await client.send('Target.getTargets', {}, true) : null;
+        const existing = targets?.targetInfos?.find(target => target.type === 'page' && target.url.startsWith(urlPrefix));
+        const target = existing ?? await client.send("Target.createTarget", { url: "about:blank" }, true);
+        client.ownedTargetId = target.targetId;
+        client.reusedTarget = Boolean(existing);
+      }
+      await client.attach();
+      return client;
+    } catch (error) {
+      await client.dispose();
+      throw error;
+    }
   }
 
   async targetId(expectedPrefix = this.urlPrefix) {
@@ -64,7 +78,7 @@ export class CdpPage {
   }
 
   async attach(expectedPrefix = this.urlPrefix) {
-    const targetId = await this.targetId(expectedPrefix);
+    const targetId = this.ownedTargetId || await this.targetId(expectedPrefix);
     const result = await this.send("Target.attachToTarget", { targetId, flatten: true }, true);
     this.sessionId = result.sessionId;
   }
@@ -129,5 +143,17 @@ export class CdpPage {
     this.socket?.close();
     this.socket = null;
     this.sessionId = "";
+  }
+
+  async dispose({ keepOpen = false } = {}) {
+    try {
+      if (this.ownedTargetId && !keepOpen) {
+        await this.send("Target.closeTarget", { targetId: this.ownedTargetId }, true);
+      }
+    } catch {
+      // Cleanup must not replace the actual task error. Never close another tab.
+    } finally {
+      this.close();
+    }
   }
 }
