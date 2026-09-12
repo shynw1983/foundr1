@@ -20,6 +20,11 @@ export function validateAuthorityCommand(payload,platform,merchantId) {
  * the complete graph before writes and must return fresh native observations,
  * never desired-state echoes. Progress acknowledgements are mandatory. */
 export async function runUberAuthorityPublication(payload,driver,reportProgress) {
+  // A first missing observation is not deletion permission. Stop before any
+  // platform work, including parent updates that could indirectly remove it.
+  if(Array.isArray(payload?.pendingRemovals)&&payload.pendingRemovals.length) {
+    throw Error(`uber_source_pending_removal:${JSON.stringify(payload.pendingRemovals.map(row=>({sourceKey:row.sourceKey,name:row.name}))).slice(0,2400)}`);
+  }
   validateAuthorityCommand(payload,driver.platform,driver.merchantId);
   if(typeof reportProgress!=='function')throw Error('uber_authority_progress_required');
   await reportProgress({phase:'preflight',total:payload.targets.length});

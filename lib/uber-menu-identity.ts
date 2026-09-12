@@ -3,6 +3,13 @@ export type UberSourceIdentity = {
   targetId: string; priceMode: 'manual' | 'automatic'; archived: boolean;
 };
 
+// Missing once is not a retirement. Preserve these IDs until an independent
+// observation confirms deletion; moving the same target is handled upstream.
+export function pendingUberRemovals<T extends {sourceKey:string;archived:boolean}>(missing:T[],confirmed:{sourceKey:string}[]) {
+  const retired=new Set(confirmed.map(row=>row.sourceKey));
+  return missing.filter(row=>!row.archived&&!retired.has(row.sourceKey));
+}
+
 // Names are not identity evidence. Moves require one current placement and one
 // prior owner, so they preserve existing prices and stock without making copies.
 export function resolveUberOptionMove(input: {

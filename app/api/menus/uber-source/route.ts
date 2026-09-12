@@ -43,6 +43,7 @@ export async function POST(request: Request) {
         last_error='',updated_at=now()
         where c.id::text=${id} and c.store_id=${source.store_id} and c.payload->>'sourceId'=${source.id} and c.payload->>'authoritativePublication'='true'
           and c.platform in ('rocket_now','demae_can') and c.status='failed'
+          and coalesce(c.payload->'pendingRemovals','[]'::jsonb)='[]'::jsonb
           and c.payload->>'revision'=${String(source.revision)}
           and not exists(select 1 from local_bridge_commands newer where newer.store_id=c.store_id and newer.payload->>'sourceId'=c.payload->>'sourceId' and ((newer.platform=c.platform and newer.created_at>c.created_at) or newer.status in ('pending','processing')))
         returning c.id::text`

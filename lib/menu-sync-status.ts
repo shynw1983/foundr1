@@ -1,6 +1,15 @@
 export function menuSyncIssue(error = '',language='ja') {
   const label=(ja:string,cn:string,tw=cn)=>language==='ja'?ja:language==='zh-Hant'?tw:cn;
   if (!error) return null;
+  if(error.startsWith('uber_source_pending_removal:')) {
+    let names='';
+    try { names=JSON.parse(error.slice('uber_source_pending_removal:'.length)).map((row:{name?:string;sourceKey:string})=>row.name||row.sourceKey).join('、'); } catch {}
+    return {kind:'verify',title:label('Uber の欠落項目を再確認してください','等待确认 Uber 中缺失的项目','等待確認 Uber 中缺失的項目'),action:label(
+      `対象：${names||'技術情報を確認してください'}。誤削除を防ぐため今回の反映は保留しました。既存の状態は変更していません。1分以上あけて Uber の最新メニューを再読み取りしてください。`,
+      `对象：${names||'请查看技术信息'}。为防止误删，本次菜单写入已暂停，未改变现有状态。请间隔至少 1 分钟重新读取 Uber 最新菜单，不要重试旧任务。`,
+      `對象：${names||'請查看技術資訊'}。為防止誤刪，本次菜單寫入已暫停，未改變現有狀態。請間隔至少 1 分鐘重新讀取 Uber 最新菜單，不要重試舊工作。`),retry:false};
+  }
+  if(error.includes('item_group_migration_required'))return {kind:'verify',title:label('商品の選択グループの関連付けを確認する必要があります','商品的选择组关联需要核对','商品的選擇組關聯需要核對'),action:label('同期履歴と現在の関連付けが一致せず、書き込み前に停止しました。内部の一時保管グループを含めて確認が必要です。Uber の設定を推測で変更しないでください。','同步记录与现有分组关联不一致，已在写入前停止。需要核对历史身份和内部暂存组，请勿猜测并修改 Uber 设置。','同步紀錄與現有分組關聯不一致，已在寫入前停止。需要核對歷史身分及內部暫存組，請勿猜測並修改 Uber 設定。'),retry:false};
   if(error.startsWith('demae_menu_item_retirement_failed:')) {
     let name='';
     try {name=String(JSON.parse(error.match(/^demae_menu_item_retirement_failed:(\{.*\}):merchant_menu_operation_failed:/)?.[1]??'{}').name??'');} catch {}

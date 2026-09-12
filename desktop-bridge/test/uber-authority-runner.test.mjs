@@ -3,6 +3,17 @@ import assert from 'node:assert/strict';
 import {runUberAuthorityPublication} from '../src/uber-authority-runner.mjs';
 const target={kind:'item',sourceKey:'item:a',targetId:'a',name:'new',price:227,marker:'FS0123456789abcd',mappings:[{externalId:'1'}]};
 const payload=()=>({authoritativePublication:true,sourceId:'s',storeId:'os',platformKey:'rocket_now',merchantId:'1',revision:1,newItemsHidden:true,imagePolicy:'read_only',targets:[structuredClone(target)]});
+
+test('unconfirmed missing identities block every platform before reads or writes, also on retry',async()=>{
+ for(const platform of ['rocket_now','demae_can']) {
+  const p={...payload(),platformKey:platform,pendingRemovals:[{sourceKey:'option:fruit:mango',name:'マンゴー',targetId:'os-mango',mappings:[{externalId:'207',externalParentId:'stage:0041'}]}]};
+  const {driver,events}=fixture();driver.platform=platform;
+  driver.preflight=async()=>{throw Error('must not touch platform');};
+  const before=structuredClone(p);
+  for(let n=0;n<2;n++)await assert.rejects(()=>runUberAuthorityPublication(p,driver,async()=>{}),/uber_source_pending_removal:.*マンゴー/);
+  assert.deepEqual(events,[]);assert.deepEqual(p,before);
+ }
+});
 function fixture(issues=[]) {
  const events=[],native={name:'old',price:100};
  const driver={platform:'rocket_now',merchantId:'1',preflight:async()=>({issues}),

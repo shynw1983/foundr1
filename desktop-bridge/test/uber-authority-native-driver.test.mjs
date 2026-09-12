@@ -19,6 +19,19 @@ function fixture() {
  };
  return {payload,driver,rows,writes};
 }
+
+test('confirmed retirement retains Demae carrier ownership without trusting unknown groups',()=>{
+ const target={kind:'item',sourceKey:'item:beef',targetId:'beef',source:{groupIds:[]},mappings:[{externalId:'00000015'}]};
+ const option={kind:'option',sourceKey:'option:fruit:mango',targetId:'mango',archived:true,mappings:[{externalId:'00000210',externalParentId:'stage:0044'}]};
+ const driver=new AuthorityNativeDriver({}, {platformKey:'demae_can',merchantId:'1',menuPatternCode:'live',targets:[target,option]});
+ const rows=[{kind:'item',id:'00000015',staged:true,parentIds:[],groupIds:['0044']},
+  {kind:'option_group',id:'0044',staged:true,childIds:['00000210']},
+  {kind:'option',id:'00000210',staged:true,hidden:true,parentIds:['0044']}];
+ driver.contentSnapshot=rows;
+ assert.deepEqual(driver.structureIssues(target,rows,{preflight:true}),[]);
+ rows[0].groupIds.push('unknown');
+ assert.deepEqual(driver.structureIssues(target,rows,{preflight:true}).map(row=>row.code),['item_group_migration_required']);
+});
 test('same-name options in another group are safe only with a distinct exact mapped owner',()=>{
  const {payload,driver,rows}=fixture();
  const owner=payload.targets[2];owner.sourceKey='option:g:old';

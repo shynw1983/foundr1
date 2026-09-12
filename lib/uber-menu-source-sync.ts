@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {UBER_PLACEMENT_RULE_VERSION} from './uber-option-placement.ts';
 import { uberMenuChanges } from './uber-menu-diff.ts';
 import { sql } from './db.ts';
-import { resolveUberOptionMove, missingUberSourceObjects } from './uber-menu-identity.ts';
+import { resolveUberOptionMove, missingUberSourceObjects, pendingUberRemovals } from './uber-menu-identity.ts';
 import { buildUberPublication, type UberPublicationMapping, type UberPublicationNode } from './uber-menu-publication.ts';
 import { splitUberName, uberContextPrice, resolveUberBasePrice, uberSourceContentHash, validateUberSourceCatalog, confirmedUberRemovals, type UberSourceCatalog } from './uber-menu-authority.ts';
 
@@ -22,7 +22,7 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
   const removals = confirmedUberRemovals(previous, catalog, (source.missing_keys as string[]).filter(key=>!key.startsWith('object:')));
   const hash = uberSourceContentHash(catalog);
   const [objects, mappings, items, groups, options, categories, platforms] = await Promise.all([
-    sql`select source_key as "sourceKey",kind,uber_id as "uberId",parent_uber_id as "parentUberId",target_id::text as "targetId",price_mode as "priceMode",archived from menu_uber_objects where source_id=${source.id}`,
+    sql`select source_key as "sourceKey",kind,uber_id as "uberId",parent_uber_id as "parentUberId",target_id::text as "targetId",price_mode as "priceMode",archived,source_payload->>'name' as "sourceName" from menu_uber_objects where source_id=${source.id}`,
     sql`select m.target_type as kind,m.target_id::text as "targetId",m.external_id as "uberId" from menu_platform_object_mappings m join menu_external_platforms p on p.id=m.external_platform_id where p.brand_id=${source.brand_id} and p.store_id is null and p.platform_key='uber_eats'`,
     sql`select id::text,display_names as "displayNames",base_price::float as price,variable_schema as payload from menu_catalog_items where brand_id=${source.brand_id} and store_id is null`,
     sql`select id::text,display_names as "displayNames",external_id as "uberId",group_key as "groupKey",rule_json as payload from menu_option_groups where brand_id=${source.brand_id}`,
@@ -184,12 +184,23 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
     for(const platform of ['rocket_now','demae_can'] as const) {
       if(!config?.[platform]?.merchantId || (platform==='demae_can' && !config[platform]?.menuPatternCode)) throw new Error(`uber_publish_store_not_configured:${platform}`);
       const payload=buildUberPublication({sourceId:String(source.id),brandId:String(source.brand_id),storeId:String(source.store_id),revision,platform,merchantId:config[platform].merchantId!,menuPatternCode:config[platform].menuPatternCode,draftPatternCode:config[platform].draftPatternCode,draftCarrierItemCode:config[platform].draftCarrierItemCode,selectionPolicy:config[platform].selectionPolicy,quarantinedSourceKeys:config[platform].quarantinedSourceKeys,excludedSourceKeys:config[platform].excludedSourceKeys,nodes:[...nodes,...retired],mappings:deliveryMappings.filter(row=>row.platform===platform) as UberPublicationMapping[],creationIdentities:creationAttempts.filter(row=>row.platform===platform).map(row=>({sourceKey:String(row.sourceKey),status:String(row.status),externalId:String(row.externalId),externalParentId:String(row.externalParentId)}))});
+      const pendingRemovals=pendingUberRemovals(missingObjects,archived).filter(row=>!config[platform].excludedSourceKeys?.includes(row.sourceKey)).map(row=>({
+          sourceKey:row.sourceKey,kind:row.kind,targetId:row.targetId,
+          name:String(objects.find(old=>old.sourceKey===row.sourceKey)?.sourceName??row.sourceKey),
+          mappings:deliveryMappings.filter(mapping=>mapping.platform===platform&&mapping.kind===row.kind&&mapping.targetId===row.targetId)
+            .map(mapping=>({externalId:mapping.externalId,externalParentId:mapping.externalParentId}))
+        }));
       Object.assign(payload,{
+        pendingRemovals,
         ...(platform==='rocket_now'&&config[platform].optionMigrationPolicy?{optionMigrationPolicy:config[platform].optionMigrationPolicy}:{}),
         authorityState:Object.fromEntries(creationAttempts.filter(row=>row.platform===platform).map(row=>[row.sourceKey,row])),
         migrationState:Object.fromEntries(migrations.filter(row=>row.platform===platform).map(row=>[row.migration_key,row.state]))
       });
-      statements.push(sql`insert into local_bridge_commands(store_id,platform,command_type,idempotency_key,payload) values(${source.store_id},${platform},'publish_menu_changes',${`uber-publish:${source.id}:${revision}:${platform}`},${JSON.stringify(payload)}::jsonb) on conflict(idempotency_key) do nothing`);
+      // Do not enqueue unsafe work even if a machine still runs an older Bridge.
+      // Keep the task/identities visible in history with an actionable reason.
+      const pendingError=pendingRemovals.length
+        ?`uber_source_pending_removal:${JSON.stringify(pendingRemovals.map(row=>({sourceKey:row.sourceKey,name:row.name})))}`:'';
+      statements.push(sql`insert into local_bridge_commands(store_id,platform,command_type,idempotency_key,payload,status,last_error) values(${source.store_id},${platform},'publish_menu_changes',${`uber-publish:${source.id}:${revision}:${platform}`},${JSON.stringify(payload)}::jsonb,${pendingError?'failed':'pending'},${pendingError}) on conflict(idempotency_key) do nothing`);
     }
   }
   statements.push(sql`update menu_uber_sources set revision=${revision},last_catalog=${JSON.stringify(catalog)}::jsonb,last_content_hash=${hash},missing_keys=${pendingKeys},last_checked_at=now(),last_error='',updated_at=now() where id=${source.id}`);

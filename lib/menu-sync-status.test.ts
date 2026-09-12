@@ -6,6 +6,18 @@ import type {UberSourceCatalog} from './uber-menu-authority.ts';
 import {canonicalMenuValue,meaningfulMenuChanges,menuChangeValue} from './menu-change-display.ts';
 
 const catalog=():UberSourceCatalog=>({version:1,storeUuid:'s',menuId:'m',capturedAt:'2026-09-09T00:00:00Z',sections:[],categories:[],groups:[{id:'g',name:'Base',optionIds:['a'],min:0,max:10}],entities:[{id:'a',name:'Tofu',price:200,description:'',imageUrl:'',groupIds:[],contextPrices:[]}]});
+
+test('pending removal and carrier mismatch are explained without blaming Uber input',()=>{
+ const error='uber_source_pending_removal:'+JSON.stringify([{sourceKey:'option:g:mango',name:'マンゴー'}]);
+ for(const language of ['ja','zh-Hans','zh-Hant']) {
+  const issue=menuSyncIssue(error,language)!;
+  assert.match(issue.action,/マンゴー/);assert.equal(issue.retry,false);
+ }
+ assert.match(menuSyncIssue(error,'ja')!.action,/1分以上/);
+ assert.match(menuSyncIssue(error,'zh-Hans')!.action,/未改变现有状态/);
+ assert.equal(menuSyncIssue('uber_authority_preflight_blocked:1:item_group_migration_required')!.kind,'verify');
+ assert.doesNotThrow(()=>menuSyncIssue('uber_source_pending_removal:[truncated'));
+});
 test('quantity key order is not a change, including historical records',()=>{
  const before=JSON.stringify([0,50,{overrides:null,defaultValue:{minPermitted:null,maxPermitted:50}}]);
  const after=JSON.stringify([0,50,{defaultValue:{maxPermitted:50,minPermitted:null},overrides:null}]);

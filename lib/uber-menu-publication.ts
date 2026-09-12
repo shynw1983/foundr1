@@ -90,6 +90,7 @@ export function buildUberPublication(input: {
 
 /** Only independently read platform observations can satisfy a publication. */
 export function verifyUberPublication(payload: Record<string,unknown>, result: Record<string,unknown>) {
+  if(Array.isArray(payload.pendingRemovals)&&payload.pendingRemovals.length)throw Error('uber_publication_pending_removal_not_applied');
   const expected=payload.targets as Array<Record<string,unknown>>;
   const observed=result.observations as Array<Record<string,unknown>>;
   if (!Array.isArray(expected) || !Array.isArray(observed)) throw new Error('uber_publication_observations_missing');

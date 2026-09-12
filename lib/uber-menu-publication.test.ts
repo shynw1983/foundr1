@@ -70,7 +70,8 @@ test('publications carry source-specific exact prices and a stable hidden-create
 test('success without actual observations, wrong prices, unverified structure or exposed drafts is rejected',()=>{
  const payload=buildUberPublication({...input,platform:'rocket_now'});
  const observation={sourceKey:'item:a',externalId:'123',name:payload.targets[0].name,price:227,created:true,hidden:true,structureVerified:true};
- assert.deepEqual(verifyUberPublication(payload,{observations:[observation]}),{verified:1,observed:1});
+  assert.deepEqual(verifyUberPublication(payload,{observations:[observation]}),{verified:1,observed:1});
+  assert.throws(()=>verifyUberPublication({...payload,pendingRemovals:[{sourceKey:'option:g:missing'}]},{observations:[observation]}),/pending_removal_not_applied/);
  assert.throws(()=>verifyUberPublication(payload,{outcome:'applied'}),/observations_missing/);
  for(const patch of [{price:180},{name:'old'},{structureVerified:false},{hidden:false}]) assert.throws(()=>verifyUberPublication(payload,{observations:[{...observation,...patch}]}));
 });
