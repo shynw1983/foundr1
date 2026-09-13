@@ -1,5 +1,59 @@
 # Uber-authoritative menu synchronization
 
+## Scope and reading order
+
+For configured Uber-authoritative brand/store sources, the ownership contract below governs upstream content and downstream publication. OS remains the operational store and public menu API for customer frontends. Brands without an enabled source are not implicitly migrated to this model. The earlier [platform publishing draft](delivery-menu-publishing-rules.md) is historical background, not a competing ownership policy.
+
+Read Ownership, the relevant implementation references, and any applicable policy first. The rollout history records facts and limitations at each checkpoint; deployment IDs, process IDs, schedules, flags, and test counts there are not assertions about today's environment. Check current configuration and runtime evidence when needed. A later explicit decision or verified result supersedes an earlier checkpoint only for the same scope; unresolved identity, stock, image, or access restrictions remain in force.
+
+An already-authorized automatic source does not require a new manual confirmation for each scheduled run within its saved scope. Historical activation approval is not permission to enable another source, change publication policy, or perform a new live migration. Target and authorization checks follow [AGENTS.md](../AGENTS.md#working-approach-and-authorization); preserve existing grants and ask only when necessary authorization is missing.
+
+## Ownership
+
+- Uber owns menu identity, source names, descriptions, images, category placement,
+  groups, option membership, ordering and Uber channel prices.
+- OS keeps stable operational IDs, website/POS data and supplementary translations.
+  All linked item and option prices use exact contextual Uber yen prices, including
+  OS, Web予約, POS, Rocket and Demae. No 80% conversion, rounding or manual price mode.
+  The `uber-exact-v1` policy forces reconciliation on the next successful read even
+  when Uber content is unchanged. Linked store overrides are cleared; existing
+  platform overrides are reconciled. Unlinked products are not guessed or repriced.
+  Both brand websites consume OS prices without substituting local seed menus during
+  outages. Discounts, minimum-order rules, historical orders and stock are unchanged.
+- OS continues owning stockout/restore. Content import never restores availability.
+  New OS items/options and newly created downstream counterparts have a persistent
+  unavailable hold, not a today-only stockout.
+- Authority is explicitly scoped to one configured brand/store, not every brand.
+  The nanacha and maamaa frontends continue consuming OS menu IDs and display names.
+
+## Implemented foundation
+
+1. `desktop-bridge/src/uber-authoritative-catalog.mjs` captures the delivery menu,
+   including orphan objects and contextual prices. Historical overrides referencing
+   deleted groups are retained but never substituted for the current group price.
+2. `lib/uber-menu-source-sync.ts` validates identities/references/prices and adopts
+   existing OS records strictly by stable IDs. The import, its revision checkpoint,
+   run log and optional publication commands share a database transaction.
+3. A revision lock rejects concurrent or stale writers; command IDs make retries
+   idempotent. Two complete observations at least 60 seconds apart are needed for
+   retirement. Legacy mapped objects missing before first import are included.
+4. `vercel.json` configures `/api/cron/uber-menu-sync` once daily at 12:00 Asia/Tokyo
+   (03:00 UTC, `0 3 * * *`). The route requires `CRON_SECRET`; manual scans remain
+   available between scheduled runs. `/api/menus/uber-source` exposes source status,
+   jobs, observed prices, scans, and failed-job retries to authorized managers.
+   Direct price changes return 409 and direct the operator to edit Uber and rescan.
+   The OS menu screen has a dedicated panel. Verify deployed scheduling separately.
+5. Source ownership guards block the ordinary OS content-edit/publish path once
+   enabled. Old pending OS-led publication commands are superseded. Inventory
+   matching prioritizes verified external IDs over historical name exclusions.
+6. `lib/uber-menu-publication.ts` builds versioned channel payloads and verifies all
+   mapped occurrences. It rejects missing observations, wrong prices/names,
+   unverified structure, and newly created objects that are exposed.
+7. `lib/uber-menu-publication-store.ts` journals creation intent and discovered IDs
+   before a worker may rename a newly created marker. Conflicting mapping ownership
+   fails rather than reassigning another OS object's external ID. The worker must
+   treat progress acknowledgements as required for this protocol.
+
 ## New-arrival presentation policy — 2026-09-11
 
 `新登場トッピング` is an optional Uber presentation membership. Within one
@@ -26,7 +80,11 @@ Previously queued publication payloads retain their original graph; obtain a new
 publication payload to apply the presentation filtering rather than silently
 rewriting a receipt-bearing command during retry.
 
-## Production activation — 2026-09-08
+## Rollout and verification history
+
+The following entries preserve earlier implementation and deployment evidence. Statements such as “automatic publication remains disabled”, “not deployed”, or “required before activation” describe that checkpoint; do not convert them into permanent blockers or assume old verification covers later code changes.
+
+### Production activation — 2026-09-08
 
 Runtime commit `e80c920b` is READY on `https://foundr1.vercel.app`; the public
 version endpoint independently confirmed it. Desktop Bridge was restarted while
@@ -58,7 +116,7 @@ Runtime log inspection found a Node dependency deprecation warning, not a menu
 sync failure. Log drain configuration was not inspected. Production command
 results and source state, rather than older notes below, determine live status.
 
-## Lifecycle and native ordering fixes — 2026-09-08
+### Lifecycle and native ordering fixes — 2026-09-08
 
 - The obsolete rice-cake mappings were backed up and removed after native
   replacement proof (two rows, three stale occurrences).
@@ -93,7 +151,7 @@ results and source state, rather than older notes below, determine live status.
 
 Older sections below are historical checkpoints, not current readiness claims.
 
-## Rocket request compatibility fix — 2026-09-08 (latest)
+### Rocket request compatibility fix — 2026-09-08
 
 The merchant UI and Bridge window both displayed menus normally. In the same
 Bridge window, the official option-tab request returned HTTP 200, while the
@@ -114,7 +172,7 @@ complete the group/mapping acceptance or enable automatic publication; those
 remaining tasks below are still pending. No merchant content was changed in
 this increment.
 
-## Replacement migration checkpoint — 2026-09-08 (latest)
+### Replacement migration checkpoint — 2026-09-08
 
 Automatic source ingestion/publication remains OFF, revision 1. This is not
 a completed full-CRUD launch. The sections below describe older checkpoints.
@@ -159,7 +217,7 @@ a completed full-CRUD launch. The sections below describe older checkpoints.
 - Generic Demae category moves and non-option retirement remain guarded adapter
   gaps. Current baseline acceptance does not prove future arbitrary CRUD.
 
-## Live acceptance in progress — 2026-09-08 (latest)
+### Live acceptance in progress — 2026-09-08
 
 - Server release `3240d84c` is deployed READY to production; the mapped-ID
   uniqueness migration is applied. The desktop Bridge was restarted and
@@ -203,7 +261,7 @@ a completed full-CRUD launch. The sections below describe older checkpoints.
 
 The sections below are historical increments, not the latest readiness claim.
 
-## Current publication gate — 2026-09-08
+### Publication gate checkpoint — 2026-09-08
 
 **Not deployed; automatic publication remains disabled.** The latest full
 live preflight returned one Rocket issue and 103 Demae issues. These are
@@ -235,7 +293,7 @@ whitespace checks passed. Source remained `enabled=false`, `auto_publish=false`,
 revision zero. No server deployment, uniqueness migration, full source import,
 or full downstream publication was performed.
 
-## Identity and hidden-option execution increment — 2026-09-08
+### Identity and hidden-option execution increment — 2026-09-08
 
 - Source group moves now reuse a unique prior OS option identity, preserve its
   price policy/stock settings, rekey its source object in the same transaction,
@@ -290,7 +348,7 @@ checks. These are issue counts, not missing-product counts. Do not describe the
 full CRUD feature as complete. Five genuinely new Uber options were observed by
 the latest OS dry run; they have not yet been imported or published.
 
-## Confirmed duplicate cleanup — 2026-09-08
+### Confirmed duplicate cleanup — 2026-09-08
 
 Owner explicitly approved deleting the old Rocket duck and keeping beef only in
 the premium group. Deleted native option IDs `6308315` (old duck) and `6053170`
@@ -313,7 +371,7 @@ This cleanup does **not** complete or enable full automated publication. Native
 create/move/retirement preflight gaps below remain. The pending mapping-uniqueness
 migration must not be applied before every runtime mapping writer is updated.
 
-## Latest increment — 2026-09-08
+### Implementation checkpoint — 2026-09-08
 
 Full automated publication is **still not complete or enabled**. Both adapters
 now call the shared execution runner and native driver, replacing the unconditional
@@ -351,7 +409,7 @@ and a Webpack production build passed. No server deployment, Bridge restart,
 source activation, or native menu mutation occurred in this increment. Creation
 and move primitives added for Rocket are unit-tested only, not live-validated.
 
-### Earlier draft-area increment
+#### Earlier draft-area increment
 
 This earlier increment resolved the Demae main-item hidden-create blocker, not
 the complete category/group synchronization path. Images are now excluded from
@@ -396,7 +454,7 @@ after the store's active stockout commands finished; its updated sales-menu
 selection is loaded. Server-side changes have not been deployed. Full Webpack
 build, 40 focused source/price tests and Bridge regression tests passed.
 
-## Rollout status — 2026-09-07
+### Rollout status — 2026-09-07
 
 **Not enabled and not production-ready end to end.** See the live-test incident
 below before attempting any further creates. The maamaa source record is
@@ -405,7 +463,7 @@ have been applied. Source-import verification deliberately rolled its transactio
 back. Subsequent OS mapping writes and the uncertain merchant create are recorded
 below; neither constitutes a completed downstream publication.
 
-### Mapping migration and live-test incident (latest increment)
+#### Mapping migration and live-test incident
 
 48 unambiguous parent mappings have now been committed to OS using independently
 read child-ID evidence: Rocket 6 categories + 20 groups; Demae 7 categories +
@@ -456,51 +514,7 @@ with `uber_authority_publisher_not_ready`. Do not enable `auto_publish` until th
 checks below pass. An empty `changes` array must never make an authoritative
 publication look successful.
 
-## Ownership
-
-- Uber owns menu identity, source names, descriptions, images, category placement,
-  groups, option membership, ordering and Uber channel prices.
-- OS keeps stable operational IDs, website/POS data and supplementary translations.
-  All linked item and option prices use exact contextual Uber yen prices, including
-  OS, Web予約, POS, Rocket and Demae. No 80% conversion, rounding or manual price mode.
-  The `uber-exact-v1` policy forces reconciliation on the next successful read even
-  when Uber content is unchanged. Linked store overrides are cleared; existing
-  platform overrides are reconciled. Unlinked products are not guessed or repriced.
-  Both brand websites consume OS prices without substituting local seed menus during
-  outages. Discounts, minimum-order rules, historical orders and stock are unchanged.
-- OS continues owning stockout/restore. Content import never restores availability.
-  New OS items/options and newly created downstream counterparts have a persistent
-  unavailable hold, not a today-only stockout.
-- Authority is explicitly scoped to one configured brand/store, not every brand.
-  The nanacha and maamaa frontends continue consuming OS menu IDs and display names.
-
-## Implemented foundation
-
-1. `desktop-bridge/src/uber-authoritative-catalog.mjs` captures the delivery menu,
-   including orphan objects and contextual prices. Historical overrides referencing
-   deleted groups are retained but never substituted for the current group price.
-2. `lib/uber-menu-source-sync.ts` validates identities/references/prices and adopts
-   existing OS records strictly by stable IDs. The import, its revision checkpoint,
-   run log and optional publication commands share a database transaction.
-3. A revision lock rejects concurrent or stale writers; command IDs make retries
-   idempotent. Two complete observations at least 60 seconds apart are needed for
-   retirement. Legacy mapped objects missing before first import are included.
-4. `/api/cron/uber-menu-sync` schedules enabled sources once daily at 12:00 Asia/Tokyo
-   (03:00 UTC, `0 3 * * *`). Manual scans remain available between scheduled runs. It requires
-   `CRON_SECRET`. `/api/menus/uber-source` exposes status, explicit scans and OS base
-   price modes for owner/manager sessions. The OS menu screen has a dedicated panel.
-5. Source ownership guards block the ordinary OS content-edit/publish path once
-   enabled. Old pending OS-led publication commands are superseded. Inventory
-   matching prioritizes verified external IDs over historical name exclusions.
-6. `lib/uber-menu-publication.ts` builds versioned channel payloads and verifies all
-   mapped occurrences. It rejects missing observations, wrong prices/names,
-   unverified structure, and newly created objects that are exposed.
-7. `lib/uber-menu-publication-store.ts` journals creation intent and discovered IDs
-   before a worker may rename a newly created marker. Conflicting mapping ownership
-   fails rather than reassigning another OS object's external ID. The worker must
-   treat progress acknowledgements as required for this protocol.
-
-## Publisher transport and mutation primitives — next increment
+### Publisher transport and mutation primitives — next increment
 
 `desktop-bridge/src/merchant-menu-client.mjs` keeps requests inside the existing
 authenticated merchant browser and checks the origin on every request. Requests
@@ -549,9 +563,9 @@ Read-only audit command (does not publish):
 node scripts/audit-authority-publishers.mjs <Demae chain ID> <menu pattern>
 ```
 
-## Required before activation
+### Activation checklist recorded on 2026-09-08
 
-### Scope and verification update — 2026-09-08
+#### Scope and verification update — 2026-09-08
 
 Outbound images are explicitly excluded by the owner. OS still imports Uber
 images, but authoritative publication targets omit image fields, including nested
@@ -602,7 +616,7 @@ primitives or image changes as a completed full publisher.
 - Deploy the server, update/restart the desktop Bridge, capture baselines, then
   enable the explicitly configured source only after both adapters pass.
 
-## Local verification
+### Local verification
 
 2026-09-08 acceptance hardening:
 

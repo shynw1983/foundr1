@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file is the canonical project instruction entry point for coding agents and future maintainers of Foundr1 OS. `AI_RULES.md` is a navigation aid; `README.md`, `PROJECT_CONTEXT.md`, `DATABASE.md`, and `docs/` provide supporting context rather than separate agent execution policies. Read relevant domain documentation when needed; do not load every document for every task. Keep domain requirements intact and resolve stale factual descriptions against current code. Report material contradictions instead of silently changing business policy.
+This file defines project execution rules. The user's current task and explicit decisions govern scope; project defaults fill routine gaps. `AI_RULES.md` is a navigation aid. `README.md`, `PROJECT_CONTEXT.md`, `DATABASE.md`, and `docs/` supply domain contracts, implementation references, and history. Read relevant sections as the task requires, not every document. Resolve implementation facts against current code and verifiable environment state; code alone does not override a business rule. Use explicit decisions within their recorded scope, and treat dated rollout notes as historical evidence. Report unresolved business-policy conflicts while continuing unaffected work.
 
 ## Working Approach and Authorization
 
@@ -26,15 +26,13 @@ This file is the canonical project instruction entry point for coding agents and
 - Backoffice app path: `/os`.
 - Product direction: Foundr1 OS is a full backoffice platform for restaurant operators. Procurement, electronic procedures, Timecard, POS, checklists, training, inventory, audits, and analytics are parallel modules that share product master, employees, stores, brands, and permissions.
 
-## Native Shell Requirements
+## Product Image Work
 
-Foundr1 Store and Foundr1 OS are maintained as WebView-based native shells for Android and iOS. Keep business logic in the Next.js web app and shared APIs whenever possible; native shells should provide device capabilities through stable JavaScript bridges.
+For food product photography, menu images, or Uber listing images, read [Product Image Workflow](docs/product-image-workflow.md). Preserve the approved composition and real-photo surface compositing method for the matching product series; the document retains the per-ingredient fitting, masking, and rejected-method details. Apply the user's newer requirements when the requested series or composition changes.
 
-- Store order, kitchen, and pickup operation screens must support foreground alert sounds in native shells without requiring the staff member to manually press a web "sound on" button on every launch.
-- Ordinary browsers should still keep an explicit sound enable control, because browser autoplay policies may block audio without user activation.
-- Android WebView shells should keep media playback enabled without user gesture for trusted Foundr1 pages and expose native bridges such as `window.Foundr1Printer` and `window.Foundr1NativeNotifications`.
-- Future iOS WKWebView shells must account for the same requirement: configure WebView media playback appropriately and/or expose a native sound bridge so foreground order alerts can play reliably.
-- Background, lock-screen, or app-not-running alerts should use native notification mechanisms with sound rather than relying on webpage audio.
+## Store Operations and Native Shells
+
+`/os` is the management workbench; `/store` is the store operation workbench. Before changing store operations, procedures, kitchen/order-production data, or native device capabilities, read the relevant [Store Operation Rules](docs/store-operation-rules.md). Menu and checkout changes that feed kitchen production must also follow its structured-item contract. Native foreground alerts must work without a per-launch web sound-enable tap; ordinary browsers retain explicit sound activation.
 
 ## Associated Brand Websites
 
@@ -43,19 +41,17 @@ Foundr1 OS is connected to two separate brand website projects on this machine. 
 - nanacha milk tea site: `/Users/wushengyin/Desktop/nanacha New HP`.
   - Main pickup reservation UI: `components/reservation-form.js`.
   - Checkout proxy: `app/api/create-checkout/route.js` and `server/create-checkout.js`.
-- Menu data imported into Foundr1 OS from `published/menu.json` via `scripts/import-brand-menus.mjs`.
-- Uses Foundr1 OS public checkout endpoint `/api/public/orders/nanacha/checkout` and Square payment.
-- The brand site may own non-menu UI translations, but menu/catalog translations are owned by Foundr1 OS. See `docs/customer-menu-i18n.md`.
+  - Bootstrap import source: `published/menu.json`, via `scripts/import-brand-menus.mjs`.
+  - Uses Foundr1 OS public checkout endpoint `/api/public/orders/nanacha/checkout` and Square payment.
 - maamaa / まぁ麻 malatang site: `/Users/wushengyin/Desktop/maamaa`.
   - Main pickup reservation UI: `src/components/malatang-order-builder.tsx`.
   - Checkout proxy: `src/app/api/orders/route.js`.
-- Menu data imported into Foundr1 OS from `src/data/malatang-menu.ts` via `scripts/import-brand-menus.mjs`.
-- Uses Foundr1 OS public checkout endpoint `/api/public/orders/maamaa/checkout` and KOMOJU payment.
-- The brand site may own non-menu UI translations, but menu/catalog translations are owned by Foundr1 OS. See `docs/customer-menu-i18n.md`.
+  - Bootstrap import source: `src/data/malatang-menu.ts`, via `scripts/import-brand-menus.mjs`.
+  - Uses Foundr1 OS public checkout endpoint `/api/public/orders/maamaa/checkout` and KOMOJU payment.
 
-Foundr1 OS already owns shared menu/catalog data, store operations status, public checkout APIs, order records, kitchen/production data, POS linkage, and member/loyalty records. The brand sites are the customer-facing frontends and should pass structured order and member fields to Foundr1 OS rather than duplicating backend business logic.
+Foundr1 OS provides shared menu/catalog data, store operations status, public checkout APIs, order records, kitchen/production data, POS linkage, and member/loyalty records. Brand sites pass structured order and member fields to OS and consume its public menu API. For a configured Uber-authoritative source, upstream content follows [Uber Menu Authority](docs/uber-menu-authority.md#ownership); OS retains operational IDs, supplementary translations, availability, and the customer API. This source policy is scoped to the configured brand/store, not all brands.
 
-When changing online ordering, checkout, member/loyalty, completion, receipt, or pickup-status flows for either nanacha or maamaa, check and update the other brand site in the same pass unless the business owner explicitly scopes the change to one brand only. Keep customer-facing flow behavior aligned across both websites.
+When changing online ordering, checkout, member/loyalty, completion, receipt, or pickup-status flows for either brand, assess the corresponding flow in both websites unless the user explicitly scopes the task to one brand. Update every affected implementation in the same pass to keep shared behavior aligned. A brand-specific fix does not require changing an unaffected website; briefly state why no change is needed there.
 
 When changing multilingual behavior for the brand websites, keep this ownership boundary clear: Foundr1 OS owns menu/catalog translations and IDs, while the brand websites may own their page UI, form, navigation, validation, help, and static-copy translations. Do not fork product, topping, option, size, sweetness, heat/numb, or category translations into brand-site UI dictionaries as a long-term source.
 
@@ -76,14 +72,17 @@ npm run db:push
 
 ## Validation and Command Execution
 
-Choose validation according to the change:
+Choose checks by changed behavior, affected consumers, and risk. Complete applicable checks once for the final task changes, plus `git diff --check`.
 
-- Documentation-only changes: inspect the diff, check references and consistency, and run `git diff --check`. No application build is required.
-- Application code, UI, dependencies, or build configuration changes: run relevant focused checks and one successful `npm run build` for the final code state, plus `git diff --check`. A build does not replace behavior testing.
-- Visible UI changes: inspect the affected flow in a browser at mobile and desktop sizes, including tablet/half-width where layout is affected.
-- Orders, POS, checkout, kitchen, permissions, and loyalty changes: verify the affected flow across API, persistence, and downstream output, including failure or access-denied cases where relevant. Use an appropriate test environment for actions with side effects.
-- Database changes: maintain `db/schema.sql`, inspect affected readers/writers and data preservation, and run `npm run db:check` against the established environment when available. This checks the connected database; it does not prove an unapplied schema patch is correct. Apply with `npm run db:push` only within authorization for that database and change, then verify the result.
-- Report checks actually run and any unavailable or unverified portions. Do not claim completion of tests that were blocked.
+- Documentation-only changes: inspect the diff, references, and consistency. No application build is required.
+- Isolated copy, color, icon, or local styling changes with no behavior, shared-layout, routing, type, dependency, or configuration effects: use focused checks and browser inspection; a full build is optional unless evidence points to a broader impact.
+- Application logic, APIs, shared components/layouts, types, dependencies, or build configuration changes: run relevant focused checks and one successful `npm run build` for the final code state. A build does not replace behavior testing.
+- Visible UI changes: inspect affected states at representative sizes. Check mobile and desktop for component/interaction changes; include tablet/half-width when layout, density, or text wrapping may change. A color/icon-only adjustment can use a representative viewport. Follow this rule instead of treating every device size as a separate mandatory check.
+- Changes to order, POS, checkout, kitchen, permission, or loyalty behavior: verify affected API, persistence, and downstream output, including failure/access-denied cases where relevant. Use an appropriate test environment for side effects. Purely cosmetic changes do not require replaying unrelated transactions.
+- Database changes: maintain `db/schema.sql`, inspect affected readers/writers and data preservation, and validate any migration separately. Run `npm run db:check` against the established environment when available; it checks the connected database, not an unapplied patch. Apply schema or migrations only within authorization for that target and change, then verify the result.
+- If a check fails, establish whether the task caused it. Fix task-related failures; isolate and report unrelated existing failures or missing access, and continue independent work. Do not expand scope just to make an unrelated check pass. Clearly report failed or unavailable checks and the resulting verification limit.
+
+Do not add tests that merely mirror a trivial implementation. Broaden or repeat checks only for new changes, failures, or unresolved concerns.
 
 Use bounded command waits and an overall timeout appropriate to the operation. After roughly 30 seconds without output, inspect available logs and process activity; silence alone does not mean a command is frozen. Keep the user informed during long-running work. A healthy build may continue beyond 60 seconds with monitoring.
 
@@ -91,7 +90,7 @@ If there is evidence of a hang or the operation exceeds its reasonable timeout, 
 
 The current `npm run lint` script points to `next lint`, which is unavailable in the installed Next.js CLI. Until a supported linter is configured, do not use it as a required diagnostic or report lint as passed.
 
-Clear generated caches only when evidence suggests cache corruption, after stopping processes that use them. Do not clear caches on every failure. Once checks pass, repeat them only for new changes or unresolved concerns.
+Clear generated caches only when evidence suggests cache corruption, after stopping processes that use them. Do not clear caches on every failure.
 
 ## Important Product Language
 
@@ -109,52 +108,9 @@ Keep Japanese UI terminology consistent.
 
 Do not reintroduce mixed terms such as using `仕入れ` for the primary flow unless the business owner explicitly changes the vocabulary again.
 
-## Workflow Rules
+## Procurement and Product Master
 
-The workflow has two separate sides:
-
-- Store/request side: `/os/orders`.
-- Buyer/procurement side: `/os/procurement`.
-
-Rules:
-
-- Requester defaults to the current logged-in user.
-- Buyer defaults to store owner first, then owner/manager fallback.
-- Changing actual quantity alone must not create a store confirmation/report.
-- Store confirmation is created only after an execution action such as delivery, arrival, or confirmed purchase state.
-- Store confirmation should be handled on the order/request side, not mainly in procurement.
-- Procurement is the buyer work area.
-- Online shops and wholesalers are supplier-level order/arrival flows, not physical delivery batch flows.
-- A single order may have multiple online/wholesale suppliers with different arrival dates.
-- Unavailable items can be marked as `購入不可`; the order can still be completed.
-- Completed disabled buttons should use black background and white text.
-- Procurement UI actions are optimistic and `/os/procurement` refreshes `/api/dashboard` in the background. Any new purchase, delivery, arrival, receipt, or confirmation action must merge pending/recent local state into refreshed dashboard data so a stale refresh cannot visually undo a user's tap, such as `購入済み`, `配送中`, `納品済み`, or `店舗確認済み`.
-
-## Future Operations Modules
-
-Store operations is a top-level Foundr1 OS module. Electronic procedures are its current core feature, not a separate top-level module and not a procurement subpage:
-
-- Store-facing reader: `/store/procedures`, tablet landscape first, with mobile and desktop support.
-- Admin/editor area: `/os/procedures`, grouped under `店舗運営` in OS navigation.
-- Store operation surfaces live under `/store` as a sibling workbench. Timecard and POS staff operation screens can live under `/store/timecard` and `/store/pos`, while detailed settings, reports, permissions, and management remain under `/os/timecard` and `/os/pos`.
-- Menu management lives at `/os/menus`. It is the OS-side source of truth for customer-facing menu items and options used by brand websites, POS, and procedure variants.
-- Kitchen/production screens must render from structured order item fields first, not from customer-facing long summary text. Brand menu architectures must stay separate: nanacha-style drink choices can use `temperature`, `sweetness`, and `ice`, but maamaa malatang must not map heat/numb/medicinal-spice choices into those drink fields. For buildable brands such as maamaa malatang, persist the brand-specific payload under `customer_summary.maamaa` and use `size_key = 'maamaa_buildable'` plus `topping_labels`/structured labels for kitchen production. Kitchen summaries should deduplicate and count repeated structured choices. Avoid showing both a long multi-line customer summary and the same structured toppings on kitchen screens, because it can duplicate ingredients such as seafood or toppings.
-- When adding a new brand, test kitchen display output from both POS checkout and web checkout. Complex/customizable brands should keep a clear distinction between customer/order-detail display text and production/kitchen item data.
-- Procedure steps should link to product master data instead of copying product names where possible.
-- Procedure books can link to menu catalog data. Fixed products such as nanacha drinks and buildable products such as maaamaa malatang must both support variant conditions through JSON, for example size/temperature for drinks and heat/numb/toppings for malatang.
-- Keep procedures, checklists, training, audits, and store execution records under `店舗運営`; keep inventory, recipes/BOM, franchise operations, and analytics aligned with `docs/operations-platform-roadmap.md`.
-
-## Receipts
-
-Receipt data is supplier-fulfillment level.
-
-- Do not attach receipt photos to individual items.
-- Use `purchase_order_supplier_fulfillments.receipt_photo_url`.
-- Receipt uploads happen in procurement.
-- Receipt review happens in history.
-- Receipt preview should be a modal, not a new tab.
-- If items were purchased and no receipt exists, make `レシート未アップロード` visible.
-- Client-side image compression should be preserved for mobile uploads.
+Before changing procurement, receipts, product master, suppliers, or comparison behavior, read the relevant sections of [Procurement Business Rules](docs/procurement-backoffice-framework.md). Store requests and confirmations belong to `/os/orders`; buying work belongs to `/os/procurement`. Quantity edits alone do not create store confirmations. Receipts belong to supplier fulfillments, and dashboard refreshes must preserve pending/recent optimistic actions. The linked document contains the full workflow, receipt, unit-price, freight, and product-card rules.
 
 ## Permissions
 
@@ -179,81 +135,11 @@ Permission rules are role plus scope.
 
 ## Notifications
 
-In-app notifications are stored in `os_notifications`.
-
-Lark integration lives in `lib/lark.ts`.
-
-Do not make Lark a hard dependency. If Lark fails, the core operation should still work with in-app notifications.
-
-Known Lark status:
-
-- Internal employee direct messages can work with Lark open_id/user_id.
-- Owner can look up Lark user ID by email after Lark permissions are configured.
-- External/franchise group webhook support is planned but not verified yet because no external store group is available for testing.
-
-## Product Master Rules
-
-Product master is operational data, not only display data.
-
-Important fields include:
-
-- `name`
-- `japanese_note`
-- `category`
-- `subcategory`
-- `unit`
-- `package_quantity`
-- `package_quantity_unit`
-- `package_spec`
-- `reference_price`
-- supplier options and purchase URLs.
-
-Unit price rules:
-
-- If package quantity exists, use quantity first.
-- If no quantity exists, use weight where appropriate.
-- Convert g and kg.
-- Do not convert ml/L into weight.
-- Do not calculate cup/container cost from capacity when count exists.
-
-User-selected basic info display belongs in `employees.ui_preferences` and should affect the right-side product card info area without causing horizontal overflow.
-
-## Product Comparison Rules
-
-Product comparison is for candidate channel/product evaluation.
-
-- Existing product selection should be category-aware.
-- Candidate supplier can be a free text supplier name.
-- Candidate purchase URL should be kept for online/import products.
-- Imported products can use CNY and exchange rate conversion to JPY.
-- Freight is calculated from total import weight and freight per kg.
-- For `箱`, require case weight when freight comparison needs weight.
-- Only g/kg auto-convert for weight comparison.
-- ml/L are not treated as weight.
-- History supports edit, copy to re-compare, archive/restore, and delete.
+In-app notifications are stored in `os_notifications`; Lark integration lives in `lib/lark.ts`. Lark is optional: failure must not block the core operation or in-app notifications. See the notification section in [Procurement Business Rules](docs/procurement-backoffice-framework.md) for integration capabilities and unverified external-group support.
 
 ## Styling and Responsive Layout
 
-The app is heavily used on mobile and half-width/tablet browser windows.
-
-When editing UI:
-
-- Use the Foundr1 theme direction: deep green primary with clean neutral surfaces and no decorative accent color. Prefer shared tokens over one-off hex colors. Keep neutral surfaces dominant, use green for primary actions/success/brand emphasis, blue only for information/link states, amber only for warnings, red for destructive/error states, and violet only when there is a clear module meaning.
-- Check mobile, tablet, half-width desktop, and wide desktop behavior.
-- Avoid horizontal overflow.
-- Keep dense operational screens compact.
-- Keep operational typography light and scannable. Routine table cells, list rows, form labels, helper text, and status pills should generally use `font-weight` 400-600. Reserve 650+ for page titles, important metric values, and rare emphasis; avoid 800/900 weights for ordinary OS data because Japanese text becomes visually heavy and harder to scan.
-- Do not add marketing-style hero sections.
-- Avoid nested cards.
-- For analytics/dashboard metric cards, use a stable vertical layout: label on top, value in the middle, note on the bottom. Do not use horizontal card layouts for KPI cards, because values and notes must not overlap or force awkward wrapping in half-width and mobile windows.
-- Keep spacing between dashboard modules consistent in both directions. Reuse one page-level gap for vertical module spacing and matching grid gaps for cards/charts, instead of mixing unrelated margins.
-- In management analytics, keep `原価` separate from monthly `経費`. Procurement/order data feeds product costs such as food, packaging, and consumables. Monthly expenses should be grouped into fixed costs (`固定費`: rent, equipment leases), variable costs (`変動費`: utilities and communication fees), and miscellaneous costs (`雑費`: garbage handling and other store expenses).
-- Use normal button heights for mobile action rows. Prefer existing button styles and `lucide-react` for new icons.
-- Sidebar/mobile menu must be scrollable when content is long.
-- Product cards and comparison history must wrap before tablet widths overflow.
-- The OS navigation/sidebar must always keep language switching available near the top of the navigation, including collapsed desktop sidebars and mobile navigation. In collapsed desktop sidebars, show only a globe icon for language switching; when the sidebar is expanded, show the full language selector/name.
-- Keep sidebar active states minimal. Do not add decorative accent lines or extra highlight colors; use only the restrained active background/text treatment.
-- Do not let native form controls fall back to browser/system blue. Checkboxes and compact selectors should use the Foundr1 green theme and stable compact dimensions. Broad input styles must not accidentally stretch checkboxes into large blocks.
+For OS/store UI changes, read the relevant rules in [OS UI Guidelines](docs/os-ui-guidelines.md). Keep neutral surfaces dominant, deep green primary actions, compact operational typography, and layouts without horizontal overflow. Preserve language switching near the top of expanded, collapsed, and mobile navigation. Choose browser checks under [Validation and Command Execution](#validation-and-command-execution); brand marketing pages follow their own design requirements.
 
 ## Translation
 
@@ -274,11 +160,11 @@ Customer-facing language rules:
 
 See `docs/customer-menu-i18n.md` for the required data/API structure and brand website integration pattern.
 
-## Data Compatibility
+## Environment and Data Compatibility
 
-The system is not live yet. Do not preserve old fields or legacy compatibility paths unless the user explicitly asks for compatibility.
+Readiness and external dependencies vary by module and environment. Do not infer that data is disposable or integrations are inactive from an old “not live yet” statement. Establish the relevant target from configuration and available read-only evidence before consequential operations; historical approvals apply only to their recorded scope.
 
-Prefer clean schema and clean UI language over backwards-compatible clutter.
+Prefer clean schemas and APIs. Do not introduce speculative legacy compatibility. Before removing existing fields or paths, check actual readers, writers, stored data, deployed clients, and queued work as relevant. Update affected consumers and prepare any data-preserving migration within scope. Retain only compatibility needed for an identified consumer or rollout, with a removal condition; unused drafts do not need permanent support.
 
 ## Git
 

@@ -9,7 +9,7 @@ Foundr1 OS 使用 Neon/Postgres，应用侧通过 `@neondatabase/serverless` 连
 - 必需环境变量：`DATABASE_URL`
 - 导出对象：`sql = neon(process.env.DATABASE_URL)`
 
-schema 文件是 `db/schema.sql`。当前项目没有独立迁移目录，schema 采用 `create table if not exists` 加 `alter table ... add column if not exists` 的方式维护，并包含少量历史清理语句，例如 `drop column if exists`、`drop constraint if exists`。
+结构定义维护在 `db/schema.sql`，使用 `create table if not exists` 和 `alter table`，也包含历史清理语句。专项迁移可以放在 `db/migrations/` 或维护脚本中；文件存在不代表已应用，执行状态需要单独核实。`scripts/apply-schema.mjs` 读取 schema 并执行脚本内的迁移逻辑，不会自动扫描迁移目录。执行前应检查实际脚本，不能把 `db:push` 理解为只增加字段。
 
 常用数据库命令在 `package.json`：
 
@@ -27,7 +27,7 @@ npm run db:data
 
 ## 重要维护规则
 
-- schema 变更只改 `db/schema.sql`，除非项目以后引入正式迁移系统。
+- schema 变更必须同步 `db/schema.sql`；需要数据保留、分阶段发布或受限修复时，可准备专项迁移 SQL/脚本，并说明目标、执行顺序、验证和恢复方式。不要假设新增迁移文件会由 `db:push` 自动执行。
 - 字段、表、约束与迁移修改应服务于当前任务，并说明数据影响。可先完成已授权的本地 schema 草案与验证；实际应用数据库变更的授权边界统一遵循 `AGENTS.md`，已有授权不重复询问。
 - 当前系统尚在快速演进，schema 中已有许多 `alter table`。不要为了“整理”重排或压缩整个文件。
 - レシート数据是供应商履行维度，不是商品明细维度；当前字段是 `purchase_order_supplier_fulfillments.receipt_photo_url`。
@@ -72,7 +72,7 @@ npm run db:data
 - `staff`
 - `store_terminal`
 
-旧文档中出现过 `buyer`，但当前 AGENTS.md 的角色列表不包含它，是否仍使用为「未确认」。
+当前可配置角色由 `lib/role-permissions.ts` 的 `configurableRoles` 定义，不包含 `buyer`；部分 UI 仍有旧显示标签，这不等于该角色可分配。是否存在历史数据库记录需在涉及角色迁移时只读核实，不作为每次任务的前置检查。
 
 ### employee_scopes
 
@@ -543,13 +543,7 @@ schema 已为常用查询建立索引，主要覆盖：
 
 ## 变更验证建议
 
-普通 schema 或数据库相关改动后：
-
-```bash
-npm run db:check
-npm run build
-git diff --check
-```
+验证范围统一遵循 [AGENTS.md](AGENTS.md#validation-and-command-execution)。schema 变更需检查相关读写方、数据保留和迁移本身；有可用且已核实的环境时运行 `npm run db:check`。该命令只检查连接数据库，不能证明未应用的 SQL 正确。应用逻辑、类型或构建配置受影响时运行完整构建，纯文档修改不需要。
 
 需要真实应用 schema 时，在确认数据库环境后执行：
 
@@ -557,10 +551,10 @@ git diff --check
 npm run db:push
 ```
 
-涉及数据流的改动还应按模块验证：
+以下是各模块可选的验证入口，按实际变更及受影响链路选择，不要求每次逐项执行：
 
 - 发注/采购：创建发注、采购记录、供应商履行、納品、店舗確認、レシート上传/预览。
 - POS/Web 预约：checkout、支付回调、订单状态、厨房任务、取餐显示、销售订单同步。
-- 菜单：OS 菜单保存、品牌兼容 API、POS 显示、Web 预约读取、手顺书条件。
+- 菜单：按源归属检查 OS 保存或源导入、标准 `/api/public/menus`、POS 显示、Web 预约读取、手顺书条件；仅在实际仍有消费者且此次改动影响它时验证旧兼容接口。
 - Timecard：打卡、休息、希望シフト、工资确认。
 - 会员：登录、会员资料、积分流水、stamp、优惠券使用。

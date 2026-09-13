@@ -4,7 +4,7 @@ This guide defines the multilingual menu and customer-display contract for Found
 
 ## Principle
 
-Foundr1 OS is the source of truth for customer-facing menu data. Brand websites and POS surfaces must not maintain separate translated menu catalogs.
+Foundr1 OS is the shared data/API authority for customer-facing menu data. Brand websites and POS surfaces must not maintain separate translated menu catalogs. For configured Uber-authoritative sources, upstream content follows [Uber ownership](uber-menu-authority.md#ownership); OS keeps stable operational IDs, supplementary translations, and the public display contract. This does not transfer brand-site UI copy to Uber or change unrelated brands.
 
 The backoffice UI may stay Japanese for staff operation, but anything shown to customers must be rendered from stable menu/member/order IDs and translated display data from Foundr1 OS.
 
@@ -163,7 +163,7 @@ Avoid these patterns:
 - Reading member language from an old profile preference after the member card already carries the selected language.
 - Using browser locale to override the member/customer language.
 - Returning different menu structures per language.
-- Preserving old compatibility endpoints for new projects when the system is not live yet.
+- Building new projects on legacy compatibility endpoints. Existing consumers and any removal/migration follow [AGENTS.md](../AGENTS.md#environment-and-data-compatibility); do not infer that deployed clients or stored data are disposable.
 - Sending only human-readable summary text to Foundr1 OS instead of structured item and option IDs.
 
 ## Category metadata and food products

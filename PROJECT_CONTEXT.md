@@ -11,7 +11,7 @@ Foundr1 OS 是面向餐饮门店运营的后台与现场工作台。项目当前
 - nanacha milk tea site：`/Users/wushengyin/Desktop/nanacha New HP`
 - maamaa / まぁ麻 malatang site：`/Users/wushengyin/Desktop/maamaa`
 
-Foundr1 OS 负责共享菜单/目录、门店营业状态、公开 checkout API、订单记录、厨房/制作数据、POS 链接、会员/积分记录。品牌网站是顾客侧前端，应向 Foundr1 OS 传递结构化订单和会员字段，避免重复实现后台业务逻辑。
+Foundr1 OS 负责共享菜单/目录、门店营业状态、公开 checkout API、订单记录、厨房/制作数据、POS 链接、会员/积分记录。品牌网站是顾客侧前端，应向 Foundr1 OS 传递结构化订单和会员字段，避免重复实现后台业务逻辑。配置了 Uber 权威源时，源内容按 [Uber 归属规则](docs/uber-menu-authority.md#ownership) 导入 OS，顾客端仍从 OS 读取；其他品牌不自动套用该配置。
 
 ## 业务目标
 
@@ -137,7 +137,7 @@ Foundr1 OS 负责共享菜单/目录、门店营业状态、公开 checkout API�
 - 当前部署环境变量是否完整配置。
 - 所有 API 是否已通过最新端到端验证。
 - POS、Timecard、会员积分、销售分析等模块在业务上是否已经达到可正式上线标准。
-- `buyer` 角色在旧文档中出现，但当前 AGENTS.md 的角色列表以 `owner`、`manager`、`store_owner`、`store_manager`、`staff`、`store_terminal` 为准；是否仍保留 `buyer` 未确认。
+- 数据库是否仍有旧 `buyer` 记录尚未确认。当前代码的 `configurableRoles` 不含该角色，UI 旧标签不代表可分配；仅在涉及角色迁移时核实历史记录。
 
 ## 下一步计划
 
