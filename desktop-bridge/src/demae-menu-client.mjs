@@ -36,6 +36,20 @@ function storedSizes(sizes) {
   return sizes.map(({originalApplyStartDate,originalApplyEndDate,...size})=>size);
 }
 
+function sameRequestedCategoryLinks(actual, expected, chainId) {
+  // A category move sends a minimal link. GET enriches it with the category's
+  // name, dates and flags. Verify every requested field, not response shape.
+  // Ordinary content saves still compare the complete original link below.
+  if (!Array.isArray(actual) || !Array.isArray(expected) || actual.length!==expected.length) return false;
+  return expected.every((link,index)=>{
+    const saved=actual[index];
+    if (!saved || !link.categoryCode || String(saved.categoryCode)!==String(link.categoryCode)) return false;
+    if (saved.chainId!==undefined && String(saved.chainId)!==chainId) return false;
+    return Object.entries(link).every(([key,value])=>key==='categoryCode'
+      ? String(saved[key])===String(value) : sameMenuValue(saved[key],value));
+  });
+}
+
 export function sameDemaeImage(before, actual) {
   // Native text/price saves refresh the CDN cache version without changing
   // the image. Ignore only that parameter on the observed image CDN path;
@@ -160,7 +174,9 @@ export class DemaeMenuClient {
     if(String(actual.itemCode)!==String(id) || String(actual.chainId)!==this.chainId
       || actual.itemName!==body.itemName || String(actual.itemDescription??'')!==String(body.itemDescription??'')
       || (patch.price!==undefined && (active.length!==1||Number(active[0].price)!==patch.price))
-      || !sameMenuValue(actual.categoryItemLinkList,body.categoryItemLinkList)
+      || !(patch.categoryLinks!==undefined
+        ? sameRequestedCategoryLinks(actual.categoryItemLinkList,body.categoryItemLinkList,this.chainId)
+        : sameMenuValue(actual.categoryItemLinkList,body.categoryItemLinkList))
       || !sameMenuValue(storedSizes(actual.sizeInfoList),storedSizes(body.sizeInfoList))
       || !sameDemaeImage(before,actual))throw new Error('demae_menu_item_verification_failed');
     const afterOccurrences=await this.itemOccurrences(id);
