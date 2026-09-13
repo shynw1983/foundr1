@@ -32,10 +32,6 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
   const [error,setError]=useState('');
   const [notice,setNotice]=useState('');
   const [busy,setBusy]=useState(false);
-  const [search,setSearch]=useState('');
-  const [selected,setSelected]=useState('');
-  const [mode,setMode]=useState<'manual'|'automatic'>('manual');
-  const [price,setPrice]=useState('');
   const [showAll,setShowAll]=useState(false);
   const load=useCallback(async(signal?:AbortSignal)=>{
     const response=await fetch(`/api/menus/uber-source?brandId=${encodeURIComponent(brandId)}`,{signal,cache:'no-store'});
@@ -45,7 +41,7 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
     if(!signal?.aborted){setData(value);setError('');}
   },[brandId]);
   useEffect(()=>{
-    setData(null);setSelected('');setSearch('');setNotice('');setError('');
+    setData(null);setNotice('');setError('');
     if(!brandId)return;
     const controller=new AbortController();
     let timer:ReturnType<typeof setTimeout>;
@@ -56,20 +52,19 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
     void refresh();
     return()=>{controller.abort();clearTimeout(timer);};
   },[brandId,load]);
-  const submit=async(action:'scan'|'price'|'retry',jobId?:string)=>{
+  const submit=async(action:'scan'|'retry',jobId?:string)=>{
     setBusy(true);setNotice('');setError('');
     try {
-      const response=await fetch('/api/menus/uber-source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brandId,action,jobId,targetId:selected,mode,price})});
+      const response=await fetch('/api/menus/uber-source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brandId,action,jobId})});
       const value=await response.json();
       if(!response.ok)throw new Error(value.error??'保存できませんでした。');
-      setNotice(action==='retry'?'このプラットフォームだけ再試行を予約しました。':action==='scan'?(value.queued?'Uber の読み取りを予約しました。':'読み取りはすでに待機・処理中です。'):'OS 基準価格を保存しました。配信完了は下の状態で確認してください。');
+      setNotice(action==='retry'?'このプラットフォームだけ再試行を予約しました。':(value.queued?'Uber の読み取りを予約しました。':'読み取りはすでに待機・処理中です。'));
       await load();
     }catch(failure){setError(failure instanceof Error?failure.message:'保存できませんでした。');}
     finally{setBusy(false);}
   };
   if(!data?.source && !error)return null;
   const source=data?.source;
-  const selectedPrice=data?.prices.find(row=>row.id===selected);
   const active=data?.jobs.some(job=>['pending','processing'].includes(job.status));
   const failed=data?.jobs.filter(job=>job.status==='failed')??[];
   const jobLabel=(job:Job)=>t(job.status==='processing'&&job.phase?phaseNames[job.phase]??statusNames.processing:job.status==='pending'&&job.attempts>0?'自動再試行を待機中':statusNames[job.status]??job.status);
@@ -122,22 +117,8 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
       </div>
       <details><summary>{t('同期設定')}</summary><div className={styles.settings}>
         <p>{t(source.enabled?'Uber 原本の読み取り：有効':'Uber 原本の読み取り：未有効化')} / {t(source.auto_publish?'他社への自動配信：有効':'他社への自動配信：未有効化')}</p>
-        <p>{t('Rocket Now は Uber 実価格、出前館は OS 基準価格。新規作成は非公開。メニュー同期では販売を再開しません。')}</p>
+        <p>{label('価格は Uber と統一します。OS・Web予約・POS・Rocket Now・出前館も同じ価格です。価格変更は Uber で行ってください。','价格统一跟随 Uber，OS、网站预约、POS、火箭和出前馆使用相同价格。请在 Uber 修改价格。','價格統一跟隨 Uber，OS、網站預約、POS、火箭和出前館使用相同價格。請在 Uber 修改價格。')}</p><p>{t('新規商品は非公開')}</p>
         <p>{t('画像は読み取りのみです。画像の登録・変更・削除は各配達サービスの管理画面で行ってください。')}</p>
-      <details><summary>{t('OS 基準価格の設定')}</summary>
-        <p>{t('既存価格は維持。自動計算を選ぶと Uber 価格 × 0.8 を 10 円単位に丸めます。Rocket Now の価格には影響しません。')}</p>
-        <div className={`menu-publish-scope-fields ${styles.fields}`}>
-          <label><span>{t('商品・選択肢を検索')}</span><input value={search} onChange={event=>setSearch(event.target.value)}/></label>
-          <label><span>{t('商品・選択肢')}</span><select value={selected} onChange={event=>{const row=data?.prices.find(value=>value.id===event.target.value);setSelected(event.target.value);setMode(row?.mode??'manual');setPrice(String(row?.price??''));}}>
-            <option value="">{t('選択してください')}</option>
-            {data?.prices.filter(row=>row.id===selected||row.name.toLowerCase().includes(search.toLowerCase())).map(row=><option key={row.id} value={row.id}>{row.name} / ¥{row.price} ({row.kind==='item'?t('商品'):t('選択肢')})</option>)}
-          </select></label>
-          <label><span>{t('価格の決め方')}</span><select value={mode} onChange={event=>setMode(event.target.value as 'manual'|'automatic')}><option value="manual">{t('手動価格を維持')}</option><option value="automatic">{t('Uber から自動計算')}</option></select></label>
-          {mode==='manual'&&<label><span>{t('OS 基準価格')}</span><input type="number" min="0" step="1" value={price} onChange={event=>setPrice(event.target.value)}/></label>}
-        </div>
-        {selectedPrice&&<p>Uber / Rocket Now：¥{selectedPrice.uberPrice} · OS / {t('出前館')}：¥{mode==='automatic'?Math.round(selectedPrice.uberPrice*0.8/10)*10:price}</p>}
-        <button type="button" className="primary-button compact-button" disabled={busy||!source.enabled||!selected||(mode==='manual'&&(!price.trim()||!Number.isSafeInteger(Number(price))||Number(price)<0))} onClick={()=>void submit('price')}>{t('基準価格を保存')}</button>
-      </details>
       </div></details>
     </>}
     {notice&&<p role="status">{t(notice)}</p>}

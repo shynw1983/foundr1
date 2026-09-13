@@ -66,19 +66,14 @@ export function uberContextPrice(entity: UberSourceEntity, groupId = '') {
   return overrides[0]?.price ?? entity.price;
 }
 
+export const UBER_PRICE_RULE_VERSION = 'uber-exact-v1';
 export function resolveUberBasePrice(input: { uberPrice: number; currentBasePrice?: number | null; previousUberPrice?: number | null; mode?: 'manual' | 'automatic' }) {
   if (!Number.isSafeInteger(input.uberPrice) || input.uberPrice < 0) throw new Error('uber_source_price_invalid');
-  // Existing prices migrate as manual. New products follow the agreed 0.8 / ¥10 rule.
-  const mode = input.mode ?? (input.currentBasePrice == null ? 'automatic' : 'manual');
-  if (mode === 'manual' && input.currentBasePrice != null) {
-    if(!Number.isSafeInteger(input.currentBasePrice)||input.currentBasePrice<0)throw new Error('os_base_price_invalid');
-    return {mode, price: input.currentBasePrice};
-  }
-  return { mode, price: Math.round(input.uberPrice * 0.8 / 10) * 10 };
+  return {mode:'automatic' as const,price:input.uberPrice};
 }
 
 export function authoritativeDeliveryPrice(platform: 'rocket_now' | 'demae_can', uberPrice: number, osPrice: number) {
-  const price = platform === 'rocket_now' ? uberPrice : osPrice;
+  const price = uberPrice;
   if (!Number.isSafeInteger(price) || price < 0) throw new Error(`authoritative_price_missing:${platform}`);
   return price;
 }

@@ -4,7 +4,7 @@ import { uberMenuChanges } from './uber-menu-diff.ts';
 import { sql } from './db.ts';
 import { resolveUberOptionMove, missingUberSourceObjects, pendingUberRemovals } from './uber-menu-identity.ts';
 import { buildUberPublication, type UberPublicationMapping, type UberPublicationNode } from './uber-menu-publication.ts';
-import { splitUberName, uberContextPrice, resolveUberBasePrice, uberSourceContentHash, validateUberSourceCatalog, confirmedUberRemovals, type UberSourceCatalog } from './uber-menu-authority.ts';
+import { splitUberName, uberContextPrice, resolveUberBasePrice, uberSourceContentHash, validateUberSourceCatalog, confirmedUberRemovals, UBER_PRICE_RULE_VERSION, type UberSourceCatalog } from './uber-menu-authority.ts';
 
 type SourceObject = { sourceKey: string; kind: string; uberId: string; parentUberId: string; targetId: string; priceMode: 'manual' | 'automatic'; archived: boolean; movedFromSourceKey?: string };
 type Node = SourceObject & { name: string; displayNames: Record<string, string>; price: number | null; uberPrice: number | null; description: string; imageUrl: string; sortOrder: number; parentId: string | null; groupKey: string; payload: Record<string, unknown>; isNew: boolean };
@@ -85,6 +85,7 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
       const entity = entityById.get(id)!;
       const option = add('option',id,entity.name,optionIndex,{parentUberId:row.id,parentId:node.targetId,payload:{...entity,groupId:row.id},description:entity.description,imageUrl:entity.imageUrl,uberPrice:uberContextPrice(entity,row.id)});
       option.price = resolveUberBasePrice({uberPrice:option.uberPrice!,currentBasePrice:options.find(old=>old.id===option.targetId)?.price as number|undefined,mode:option.priceMode}).price;
+      option.priceMode='automatic';
     }
   }
   const productIds = [...new Set(catalog.categories.flatMap(row => row.itemIds))];
@@ -96,6 +97,7 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
     const category = catalog.categories.find(row=>row.itemIds.includes(id));
     const node = add('item',id,entity.name,index,{payload:{...entity,categoryIds:catalog.categories.filter(row=>row.itemIds.includes(id)).map(row=>row.id),attached:Boolean(category)},parentId:nodes.find(row=>row.kind==='category'&&row.uberId===category?.id)?.targetId ?? null,description:entity.description,imageUrl:entity.imageUrl,uberPrice:entity.price});
     node.price = resolveUberBasePrice({uberPrice:entity.price,currentBasePrice:items.find(old=>old.id===node.targetId)?.price as number|undefined,mode:node.priceMode}).price;
+    node.priceMode='automatic';
   }
   // Adopt only stable legacy mappings. Objects deleted before the first source
   // capture must also enter the two-observation removal process.
@@ -115,13 +117,21 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
   const archived = missingObjects.filter(row => independent && oldMissing.includes(`object:${row.sourceKey}`));
   const pendingKeys = [...removals.pending,...objectMissingKeys];
   const changes=uberMenuChanges(previous,catalog);
-  const lastPolicy=await sql`select summary->>'placementRuleVersion' as version from menu_uber_sync_runs
+  const lastPolicy=await sql`select summary->>'placementRuleVersion' as version,summary->>'priceRuleVersion' as "priceVersion" from menu_uber_sync_runs
     where source_id=${source.id} order by created_at desc limit 1`;
   const placementPolicyChanged=lastPolicy[0]?.version!==UBER_PLACEMENT_RULE_VERSION;
+  const pricePolicyChanged=lastPolicy[0]?.priceVersion!==UBER_PRICE_RULE_VERSION;
+  const overrides=await sql`select 'item' as kind,menu_catalog_item_id::text as id,price_override::float as price from menu_store_settings where brand_id=${source.brand_id} and price_override is not null
+    union all select target_type as kind,target_id::text as id,price_override::float as price from menu_platform_target_settings where brand_id=${source.brand_id} and price_override is not null`;
+  const priceDrift=nodes.some(node=>['item','option'].includes(node.kind) && (
+    (node.kind==='item'?items:options).find(old=>old.id===node.targetId)?.price!==node.price ||
+    overrides.some(row=>row.kind===node.kind&&row.id===node.targetId&&row.price!==node.price)
+  ));
   const summary = {added:nodes.filter(row=>row.isNew).length,moved:nodes.filter(row=>row.kind==='option' && options.some(old=>old.id===row.targetId && old.parentId!==row.parentId)).length,observed:nodes.length,archived:archived.length,pendingRemoval:missingObjects.length,contentChanged:hash!==source.last_content_hash,changes,renamed:changes.filter(row=>row.kind==='renamed').length,repriced:changes.filter(row=>row.kind==='repriced').length,noChanges:false};
   Object.assign(summary,{placementRuleVersion:UBER_PLACEMENT_RULE_VERSION,placementPolicyChanged});
+  Object.assign(summary,{priceRuleVersion:UBER_PRICE_RULE_VERSION,pricePolicyChanged,priceDrift});
   if(input.dryRun) return {...summary, dryRun:true, additions:nodes.filter(row=>row.isNew).map(row=>({kind:row.kind,name:row.name,uberId:row.uberId})), prices:nodes.filter(row=>row.price!==null).map(row=>({kind:row.kind,name:row.name,uberPrice:row.uberPrice,osPrice:row.price,mode:row.priceMode})), nodes};
-  if(!input.verifyRollback&&!input.bootstrap&&!placementPolicyChanged&&!summary.contentChanged&&!summary.added&&!summary.moved&&!missingObjects.length) {
+  if(!input.verifyRollback&&!input.bootstrap&&!pricePolicyChanged&&!priceDrift&&!placementPolicyChanged&&!summary.contentChanged&&!summary.added&&!summary.moved&&!missingObjects.length) {
     summary.noChanges=true;
     await sql.transaction([
       sql`select lock_menu_uber_revision(${source.id},${source.revision})`,
@@ -144,6 +154,7 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
     }
     if (node.kind==='option') statements.push(sql`insert into menu_options(id,option_group_id,external_id,option_key,name,display_names,price_delta,image_url,sort_order) values(${node.targetId},${node.parentId},${node.uberId},${node.uberId},${node.name},${translations}::jsonb,${node.price},${node.imageUrl},${node.sortOrder}) on conflict(id) do update set option_group_id=excluded.option_group_id,external_id=excluded.external_id,option_key=excluded.option_key,name=excluded.name,display_names=menu_options.display_names||excluded.display_names,price_delta=excluded.price_delta,image_url=excluded.image_url,sort_order=excluded.sort_order,is_active=true,updated_at=now()`);
     if (node.kind==='item') {
+      statements.push(sql`update menu_store_settings set price_override=null,updated_at=now() where menu_catalog_item_id=${node.targetId} and price_override is not null`);
       const categoryName = nodes.find(row=>row.targetId===node.parentId)?.name ?? '';
       const variables = JSON.stringify({...((items.find(row=>row.id===node.targetId)?.payload ?? {}) as object),source:'uber_eats',sourceProductId:node.uberId,uberPrice:node.uberPrice,customizationGroupKeys:(node.payload.groupIds as string[]).map(id=>nodes.find(row=>row.kind==='option_group'&&row.uberId===id)?.groupKey).filter(Boolean)});
       statements.push(sql`insert into menu_catalog_items(id,brand_id,external_id,name,display_names,description,image_url,base_price,category,variable_schema,sort_order,is_active) values(${node.targetId},${source.brand_id},${node.uberId},${node.name},${translations}::jsonb,${node.description},${node.imageUrl},${node.price},${categoryName},${variables}::jsonb,${node.sortOrder},${node.payload.attached!==false}) on conflict(id) do update set promotion_prefix='',name=excluded.name,display_names=menu_catalog_items.display_names||excluded.display_names,description=excluded.description,image_url=excluded.image_url,base_price=excluded.base_price,category=excluded.category,variable_schema=excluded.variable_schema,sort_order=excluded.sort_order,is_active=excluded.is_active,updated_at=now()`);
@@ -159,7 +170,8 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
       for (const platform of ['rocket_now','demae_can']) statements.push(sql`insert into menu_platform_availability_settings(brand_id,store_id,target_kind,target_id,platform,availability) values(${source.brand_id},${source.store_id},${node.kind},${node.targetId},${platform},'unavailable') on conflict(store_id,target_kind,target_id,platform) do nothing`);
     }
     const payload = JSON.stringify(node.payload);
-    statements.push(sql`insert into menu_uber_objects(source_id,source_key,kind,uber_id,parent_uber_id,target_id,price_mode,last_uber_price,source_payload) values(${source.id},${node.sourceKey},${node.kind},${node.uberId},${node.parentUberId},${node.targetId},${node.priceMode},${node.uberPrice},${payload}::jsonb) on conflict(source_id,source_key) do update set source_payload=excluded.source_payload,last_uber_price=excluded.last_uber_price,archived=false,updated_at=now()`);
+    statements.push(sql`insert into menu_uber_objects(source_id,source_key,kind,uber_id,parent_uber_id,target_id,price_mode,last_uber_price,source_payload) values(${source.id},${node.sourceKey},${node.kind},${node.uberId},${node.parentUberId},${node.targetId},${node.priceMode},${node.uberPrice},${payload}::jsonb) on conflict(source_id,source_key) do update set source_payload=excluded.source_payload,last_uber_price=excluded.last_uber_price,price_mode=excluded.price_mode,archived=false,updated_at=now()`);
+    if (node.kind==='item'||node.kind==='option') statements.push(sql`update menu_platform_target_settings set price_override=${node.price},updated_at=now() where brand_id=${source.brand_id} and target_type=${node.kind} and target_id=${node.targetId} and price_override is distinct from ${node.price}`);
     const uberPlatform = platforms.find(row=>row.key==='uber_eats');
     if (uberPlatform) {
       statements.push(sql`insert into menu_platform_target_settings(brand_id,external_platform_id,target_type,target_id,name_override,price_override,placement_config) values(${source.brand_id},${uberPlatform.id},${node.kind},${node.targetId},${String(node.payload.name??node.name)},${node.uberPrice},'{"authoritativeSource":"uber_eats","useExactNameOverride":true}'::jsonb) on conflict(external_platform_id,target_type,target_id) do update set name_override=excluded.name_override,price_override=excluded.price_override,placement_config=menu_platform_target_settings.placement_config||excluded.placement_config,updated_at=now()`);

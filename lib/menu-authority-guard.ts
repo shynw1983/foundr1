@@ -19,4 +19,4 @@ export async function menuAuthorityWriteBlocked(body: Record<string, unknown>) {
   return rows.length>0;
 }
 
-export const MENU_AUTHORITY_MESSAGE = 'このブランドのメニュー原本は Uber です。名称・構成・追加・削除は Uber で変更してください。OS 基準価格は Uber 連携の価格設定から変更できます。';
+export const MENU_AUTHORITY_MESSAGE = 'このブランドのメニュー原本は Uber です。名称・価格・構成・追加・削除は Uber で変更してください。価格は全プラットフォーム共通です。';

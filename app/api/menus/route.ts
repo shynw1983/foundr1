@@ -906,7 +906,9 @@ async function upsertStoreSetting(body: Record<string, unknown>, employeeId: str
     throw new Error("ブランド、店舗、商品を選択してください。");
   }
 
-  const priceOverride = parseOptionalNumber(body.priceOverride);
+  const uberOwner = await sql`select 1 from menu_uber_objects objects join menu_uber_sources sources on sources.id=objects.source_id
+    where objects.target_id=${menuCatalogItemId} and objects.kind='item' and objects.archived=false and sources.enabled=true limit 1`;
+  const priceOverride = uberOwner.length ? null : parseOptionalNumber(body.priceOverride);
   const statusNote = String(body.statusNote ?? "").trim();
   const isAvailable = body.isAvailable !== false;
   const stockStatus = isAvailable ? "available" : "unavailable";

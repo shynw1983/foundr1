@@ -461,10 +461,13 @@ publication look successful.
 - Uber owns menu identity, source names, descriptions, images, category placement,
   groups, option membership, ordering and Uber channel prices.
 - OS keeps stable operational IDs, website/POS data and supplementary translations.
-  Existing OS base prices migrate as manual; new automatic prices are
-  `round(Uber yen × 0.8 / 10) × 10`. Rocket never uses this calculation.
-- Rocket takes the exact contextual Uber price. Demae takes the OS base price.
-  Independent channel overrides cannot supersede these sources.
+  All linked item and option prices use exact contextual Uber yen prices, including
+  OS, Web予約, POS, Rocket and Demae. No 80% conversion, rounding or manual price mode.
+  The `uber-exact-v1` policy forces reconciliation on the next successful read even
+  when Uber content is unchanged. Linked store overrides are cleared; existing
+  platform overrides are reconciled. Unlinked products are not guessed or repriced.
+  Both brand websites consume OS prices without substituting local seed menus during
+  outages. Discounts, minimum-order rules, historical orders and stock are unchanged.
 - OS continues owning stockout/restore. Content import never restores availability.
   New OS items/options and newly created downstream counterparts have a persistent
   unavailable hold, not a today-only stockout.

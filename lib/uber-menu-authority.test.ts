@@ -27,12 +27,14 @@ test('historical overrides for deleted groups do not replace current prices',()=
  source.entities[1].contextPrices.push({contextType:'UNKNOWN',contextId:'other',price:111});
  assert.throws(()=>validateUberSourceCatalog(source,'store'),/unsupported/);
 });
-test('existing OS base prices stay intact; new automatic prices follow the agreed rule',()=>{
- assert.deepEqual(resolveUberBasePrice({uberPrice:216,currentBasePrice:170}),{mode:'manual',price:170});
- assert.deepEqual(resolveUberBasePrice({uberPrice:2222}),{mode:'automatic',price:1780});
- assert.deepEqual(resolveUberBasePrice({uberPrice:500,currentBasePrice:170,mode:'automatic'}),{mode:'automatic',price:400});
+test('all platforms follow exact Uber prices including formerly manual OS prices',()=>{
+ assert.deepEqual(resolveUberBasePrice({uberPrice:216,currentBasePrice:170,mode:'manual'}),{mode:'automatic',price:216});
+ assert.deepEqual(resolveUberBasePrice({uberPrice:2222}),{mode:'automatic',price:2222});
+ assert.deepEqual(resolveUberBasePrice({uberPrice:500,currentBasePrice:170,mode:'automatic'}),{mode:'automatic',price:500});
  assert.equal(authoritativeDeliveryPrice('rocket_now',2222,1780),2222);
- assert.equal(authoritativeDeliveryPrice('demae_can',2222,1780),1780);
+ assert.equal(authoritativeDeliveryPrice('demae_can',2222,1780),2222);
+ assert.equal(authoritativeDeliveryPrice('demae_can',0,100),0);
+ assert.throws(()=>resolveUberBasePrice({uberPrice:-1}),/invalid/);
  assert.throws(()=>authoritativeDeliveryPrice('rocket_now',NaN,1780),/missing/);
 });
 test('removal needs two independent complete observations, not a retry',()=>{

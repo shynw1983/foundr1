@@ -63,7 +63,7 @@ test('OS image ingestion is not turned into outbound image publishing',()=>{
 test('publications carry source-specific exact prices and a stable hidden-create identity',()=>{
  const rocket=buildUberPublication({...input,platform:'rocket_now'});
  const demae=buildUberPublication({...input,platform:'demae_can'});
- assert.equal(rocket.targets[0].price,227);assert.equal(demae.targets[0].price,180);
+ assert.equal(rocket.targets[0].price,227);assert.equal(demae.targets[0].price,227);
  assert.equal(rocket.targets[0].name,'湯(汤)');assert.equal(rocket.newItemsHidden,true);
  assert.equal(rocket.targets[0].marker,buildUberPublication({...input,revision:2,platform:'rocket_now'}).targets[0].marker);
 });
@@ -86,7 +86,7 @@ test('every mapped occurrence must be verified, and retired items must remain hi
 
 test('the worker cannot conceal a newly created exposed item by omitting its created flag',()=>{
  const payload=buildUberPublication({...input,platform:'demae_can'});
- assert.throws(()=>verifyUberPublication(payload,{observations:[{sourceKey:node.sourceKey,externalId:'new',name:payload.targets[0].name,price:180,structureVerified:true,hidden:false}]}),/draft_exposed/);
+ assert.throws(()=>verifyUberPublication(payload,{observations:[{sourceKey:node.sourceKey,externalId:'new',name:payload.targets[0].name,price:227,structureVerified:true,hidden:false}]}),/draft_exposed/);
 });
 test('user-authorized quarantine is acknowledged separately, never counted as verified publication',()=>{
  const payload=buildUberPublication({...input,platform:'demae_can',quarantinedSourceKeys:[node.sourceKey]});

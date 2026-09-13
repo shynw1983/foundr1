@@ -52,21 +52,6 @@ export async function POST(request: Request) {
     await publishBridgeCommandAvailable(String(source.store_id)).catch(()=>undefined);
     return Response.json({queued:1});
   }
-  if(body.action==='price') {
-    const price=Number(body.price);
-    if(!['manual','automatic'].includes(body.mode) || (body.mode==='manual' && (body.price===null||body.price===undefined||String(body.price).trim()===''||!Number.isSafeInteger(price)||price<0))) return Response.json({error:'価格を確認してください。'},{status:400});
-    const rows=await sql`select kind,target_id::text,last_uber_price::float from menu_uber_objects where source_id=${sources[0].id} and target_id::text=${String(body.targetId)} and kind in ('item','option') and not archived`;
-    if(rows.length!==1) return Response.json({error:'商品が見つかりません。'},{status:404});
-    const value=body.mode==='manual'?price:Math.round(Number(rows[0].last_uber_price)*0.8/10)*10;
-    if(rows[0].last_uber_price===null || !Number.isSafeInteger(value) || value<0) return Response.json({error:'Uber の確定価格がありません。'},{status:409});
-    await sql.transaction([
-      sql`select lock_menu_uber_revision(${sources[0].id},${sources[0].revision})`,
-      sql`update menu_uber_objects set price_mode=${body.mode},updated_at=now() where source_id=${sources[0].id} and target_id::text=${String(body.targetId)}`,
-      rows[0].kind==='item' ? sql`update menu_catalog_items set base_price=${value},updated_at=now() where id=${rows[0].target_id}` : sql`update menu_options set price_delta=${value},updated_at=now() where id=${rows[0].target_id}`,
-      sql`update menu_uber_sources set revision=revision+1,last_content_hash='',updated_at=now() where id=${sources[0].id}`
-    ]);
-    await scheduleUberSourceScans(sources[0].store_id);
-    return Response.json({ok:true,price:value,mode:body.mode});
-  }
+  if(body.action==='price') return Response.json({error:'価格は Uber で変更し、最新メニューを読み取ってください。'},{status:409});
   return Response.json({error:'操作が不正です。'},{status:400});
 }
