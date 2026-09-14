@@ -75,7 +75,19 @@ Bridge checks `/downloads/bridge/version.json` at startup and every six hours. W
 
 Foundr1 OS deduplicates bridge orders by store, local order date, and Uber order number. Only recent order-detail screens are imported, so browsing older order history does not create operational orders.
 
-Rocket Now notifications open the matching merchant-app order screen. The same accessibility service reads the six-character Rocket Now order number, items, options, quantities, customer request, amount, and operational status, then imports the order with `order_source = 'rocket_now'`. It never accepts or cancels a Rocket Now order automatically.
+Rocket Now notifications open the matching merchant-app order screen. The same accessibility service reads the six-character Rocket Now order number, items, options, quantities, customer request, amount, and operational status, then imports the order with `order_source = 'rocket_now'`. Automatic acceptance is opt-in via the Bridge setting `Rocket Now 自動受諾`.
+It defaults off. The worker opens the time dialog and uses observed recommended
+and current minutes to add at most 10 minutes, stopping early at the explicit
+platform limit. It uses refreshed, exact-label accessibility ACTION_CLICK only,
+with no coordinate fallback. It never cancels an order. Unknown controls or an
+unconfirmed time change stop automatic actions. A live acceptance test passed
+on 2026-09-15 using `1.0.52-test` (versionCode 53); the tested Rocket tablet
+remains enabled. Fresh installations still default off.
+A persisted per-order dispatch marker prevents repeat submission after restart;
+dispatch alone is not proof that the server accepted the order. Logs use the
+`Foundr1RocketAccept` tag. Empty or unrecognized identities are not accepted.
+The initial notification must open the new-order view; discovery from an unknown
+order-list layout is not implemented by this worker.
 
 Platform mode is enforced by notification capture, accessibility parsing, Uber command polling, and foreground recovery. In dual-platform mode, only the configured primary app is guarded as the normal foreground. Explicit work in the secondary app temporarily owns the foreground, and Uber commands use a single controlled launch with a loading grace period instead of repeatedly launching and backing out of the app.
 
@@ -167,3 +179,62 @@ A swipe on non-scrollable content did not emit a scroll event and therefore did
 not defer scanning; idle detection depends on accessibility interaction events.
 Android build, standalone idle-policy tests, TypeScript, and diff checks passed.
 The unrelated Next.js production build stalled during compilation and was stopped.
+
+### Rocket acceptance regression replay
+
+Run `JAVA_HOME=<JDK home> node Foundr1Android/tests/rocket-auto-accept-replay.mjs`
+from the repository root. It executes the production worker against a minimal
+Android test double and the sanitized Flutter dialog captured on 2026-09-15.
+Cases cover merged semantics, 13→18→23 minutes, unchanged frames, limit response
+without a value change, stale nodes, stacked dialogs, duplicate dispatch after
+restart, and package isolation. This verifies decisions/dispatch behavior only;
+it cannot prove Rocket responds to accessibility clicks or accepts server-side.
+The captured UI title is a line within a merged content description, not an
+exact standalone label. Never repeatedly open the dialog while awaiting it.
+
+### Rocket live acceptance verification — 2026-09-15
+
+On the Rocket tablet with `1.0.52-test` (versionCode 53), test order `13ALUW`
+automatically advanced from the time dialog to the processing-order screen.
+The user confirmed automatic acceptance with a final preparation time of
+23 minutes and approved keeping this version enabled. Device logs recorded
+opening the dialog at 02:01:43.242, adding time at 02:01:45.050, and dispatching
+acceptance at 02:01:48.000 (about five seconds from dialog opening). The
+post-action screenshot showed the order under `処理中` with `準備完了` available;
+this is separate confirmation from the dispatch log. The rule remains
+recommended time plus 10 minutes, stopping at the platform's explicit limit.
+This verifies the tested merchant-app flow; it does not cover every order layout
+or assert downstream Foundr1 OS persistence. The test APK was installed directly
+on this tablet; it has not been published as a general Bridge release.
+
+### Rocket kitchen-import repair — 2026-09-15
+
+The acceptance test above exposed a separate import failure. A success popup
+over the Rocket home dashboard was uploaded as an order: revenue/counters became
+items and the 07:00 opening time became the order time. Later detail snapshots
+could not replace the inflated completeness score, and a different history row's
+completion status contaminated the selected order. The real test order was
+placed at 02:01 for JPY 3,605, and was subsequently cancelled on Rocket.
+
+Prepared `1.0.53-test` (versionCode 54) requires the actual menu/quantity/amount
+table before capture, prefers the detail's order identity, resets accumulated
+frames when the detail phase changes, and prevents countdown updates from
+indefinitely postponing upload. After a matching acceptance confirmation closes,
+it opens order management and the accepted order's card using refreshed semantic
+clicks. Scrolling requires that the current detail still belongs to that order.
+
+Server parser version 6 rejects confirmation-only dashboards, isolates the
+selected detail and matching card, and reads order time separately from opening
+hours. Recognized dashboard imports can be replaced even when their old
+completeness score was higher; the repair also corrects their operational and
+sales timestamps. Correctly parsed prior orders keep the existing completeness
+policy. This is a Bridge import change; brand website checkout flows are unaffected.
+
+Verification: sanitized real snapshots in `lib/fixtures/rocket-order-snapshots.json`,
+23 parser/import/access tests, both Android replay scripts, the Bridge debug APK
+build, and the Next.js production build pass. Run the additional capture replay
+with `JAVA_HOME=<JDK home> node Foundr1Android/tests/rocket-order-capture-replay.mjs`.
+Import tests verify persistence inputs and downstream calls using doubles, not
+the production kitchen screen. The paired release uses the server repair and
+`1.0.53-test` (versionCode 54). Publish the server repair before installing the
+paired APK; a new live acceptance-to-kitchen test remains outstanding.

@@ -1,0 +1,1216 @@
+[
+  {
+    "capturedAt": "2026-09-14T17:01:51.658Z",
+    "nodes": [
+      {
+        "path": "0.0.0",
+        "contentDescription": ""
+      },
+      {
+        "path": "0.0.0.0.0.0.1",
+        "contentDescription": "閉じる"
+      },
+      {
+        "path": "0.0.0.0.0.0.2.1",
+        "contentDescription": "T3ST01 注文受諾完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.2.2",
+        "contentDescription": "今すぐ調理を開始してください。"
+      },
+      {
+        "path": "0.0.0.0.0.0.2.3",
+        "contentDescription": "閉じる"
+      },
+      {
+        "path": "0.0.0.0.0.0.2.4",
+        "contentDescription": "5秒後、自動に閉じます"
+      },
+      {
+        "path": "0.0.0.0.0.0.3",
+        "contentDescription": "T3ST01注文が承認されました。"
+      },
+      {
+        "path": "0.1",
+        "contentDescription": ""
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.0",
+        "contentDescription": "ホーム\nタブ: 1/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.1",
+        "contentDescription": "テスト店舗"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.2",
+        "contentDescription": "オープン予定  午前 7:00\n変更"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.3",
+        "contentDescription": "注文管理\nタブ: 2/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.4",
+        "contentDescription": "セルフサービス\nタブ: 3/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5",
+        "contentDescription": "店舗 ID  000000"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.1",
+        "contentDescription": "本日の状況"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.2",
+        "contentDescription": "午前2:00基準"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.3",
+        "contentDescription": "運営状況"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.5",
+        "contentDescription": "28日基準"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.6",
+        "contentDescription": "売上高(進行中の注文を含む)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.7",
+        "contentDescription": "注文完了率"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.9",
+        "contentDescription": "13,876円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.10",
+        "contentDescription": "92%"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.11",
+        "contentDescription": "84件 / 91件"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.12",
+        "contentDescription": "注文数 (進行中の注文を含む)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.13",
+        "contentDescription": "5件"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.14",
+        "contentDescription": "売上高"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.15",
+        "contentDescription": "252,524円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.16",
+        "contentDescription": "平均注文金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.17",
+        "contentDescription": "84件"
+      },
+      {
+        "path": "0.0.0.0.0.0.1.1",
+        "contentDescription": "T3ST01 注文受諾完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.1.2",
+        "contentDescription": "今すぐ調理を開始してください。"
+      },
+      {
+        "path": "0.0.0.0.0.0.1.3",
+        "contentDescription": "閉じる"
+      },
+      {
+        "path": "0.0.0.0.0.0.1.4",
+        "contentDescription": "5秒後、自動に閉じます"
+      },
+      {
+        "path": "0.0.0.0.0.0.2",
+        "contentDescription": "T3ST01注文が承認されました。"
+      }
+    ]
+  },
+  {
+    "capturedAt": "2026-09-14T17:02:05.438Z",
+    "nodes": [
+      {
+        "path": "0.0.0",
+        "contentDescription": ""
+      },
+      {
+        "path": "0.0.0.0.0.0.1",
+        "contentDescription": "閉じる"
+      },
+      {
+        "path": "0.0.0.0.0.0.2.1",
+        "contentDescription": "T3ST01 注文受諾完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.2.2",
+        "contentDescription": "今すぐ調理を開始してください。"
+      },
+      {
+        "path": "0.0.0.0.0.0.2.3",
+        "contentDescription": "閉じる"
+      },
+      {
+        "path": "0.0.0.0.0.0.2.4",
+        "contentDescription": "5秒後、自動に閉じます"
+      },
+      {
+        "path": "0.0.0.0.0.0.3",
+        "contentDescription": "T3ST01注文が承認されました。"
+      },
+      {
+        "path": "0.1",
+        "contentDescription": ""
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.0",
+        "contentDescription": "ホーム\nタブ: 1/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.1",
+        "contentDescription": "テスト店舗"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.2",
+        "contentDescription": "オープン予定  午前 7:00\n変更"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.3",
+        "contentDescription": "注文管理\nタブ: 2/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.4",
+        "contentDescription": "セルフサービス\nタブ: 3/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5",
+        "contentDescription": "店舗 ID  000000"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.1",
+        "contentDescription": "本日の状況"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.2",
+        "contentDescription": "午前2:00基準"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.3",
+        "contentDescription": "運営状況"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.5",
+        "contentDescription": "28日基準"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.6",
+        "contentDescription": "売上高(進行中の注文を含む)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.7",
+        "contentDescription": "注文完了率"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.9",
+        "contentDescription": "13,876円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.10",
+        "contentDescription": "92%"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.11",
+        "contentDescription": "84件 / 91件"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.12",
+        "contentDescription": "注文数 (進行中の注文を含む)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.13",
+        "contentDescription": "5件"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.14",
+        "contentDescription": "売上高"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.15",
+        "contentDescription": "252,524円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.16",
+        "contentDescription": "平均注文金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.17",
+        "contentDescription": "84件"
+      },
+      {
+        "path": "0.0.0.0.0.0.1.1",
+        "contentDescription": "T3ST01 注文受諾完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.1.2",
+        "contentDescription": "今すぐ調理を開始してください。"
+      },
+      {
+        "path": "0.0.0.0.0.0.1.3",
+        "contentDescription": "閉じる"
+      },
+      {
+        "path": "0.0.0.0.0.0.1.4",
+        "contentDescription": "5秒後、自動に閉じます"
+      },
+      {
+        "path": "0.0.0.0.0.0.2",
+        "contentDescription": "T3ST01注文が承認されました。"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.1",
+        "contentDescription": "注文管理\nタブ: 2/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.2",
+        "contentDescription": "セルフサービス\nタブ: 3/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.3",
+        "contentDescription": "注文管理"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.4",
+        "contentDescription": "オープン予定  午前 7:00\n変更"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0",
+        "contentDescription": "過去順"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.0",
+        "contentDescription": "処理中 1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.1",
+        "contentDescription": "完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0",
+        "contentDescription": "T3ST01\n午前 02:01\n[メニュー 1個] 3,605円\n【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)x1\n近くのドライバーを\n探しています。\n受取まで\n23分\n予想"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0.0",
+        "contentDescription": "準備完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0",
+        "contentDescription": "T3ST01"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.1",
+        "contentDescription": "レシート出力"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.2",
+        "contentDescription": "お客様"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.3",
+        "contentDescription": "お客様の注文回数 :0回"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.4",
+        "contentDescription": "注文時間 : 午前 02:01"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.5",
+        "contentDescription": "[カトラリー✓]"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.6",
+        "contentDescription": "メニュー"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.7",
+        "contentDescription": "数量"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.8",
+        "contentDescription": "金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.9",
+        "contentDescription": "【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.10",
+        "contentDescription": "1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.11",
+        "contentDescription": "2,280円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.12",
+        "contentDescription": "薬膳スパイスあり【超おすすめ】(添加药膳香料)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.13",
+        "contentDescription": "0円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.14",
+        "contentDescription": "【食べる、サウナ】地獄の業火(地狱业火)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.7",
+        "contentDescription": "注文キャンセル"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.8",
+        "contentDescription": "準備遅延"
+      }
+    ]
+  },
+  {
+    "capturedAt": "2026-09-14T17:02:07.729Z",
+    "nodes": [
+      {
+        "path": "0.0.0",
+        "contentDescription": ""
+      },
+      {
+        "path": "0.0.0.0.0.0.1",
+        "contentDescription": "閉じる"
+      },
+      {
+        "path": "0.0.0.0.0.0.2.1",
+        "contentDescription": "T3ST01 注文受諾完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.2.2",
+        "contentDescription": "今すぐ調理を開始してください。"
+      },
+      {
+        "path": "0.0.0.0.0.0.2.3",
+        "contentDescription": "閉じる"
+      },
+      {
+        "path": "0.0.0.0.0.0.2.4",
+        "contentDescription": "5秒後、自動に閉じます"
+      },
+      {
+        "path": "0.0.0.0.0.0.3",
+        "contentDescription": "T3ST01注文が承認されました。"
+      },
+      {
+        "path": "0.1",
+        "contentDescription": ""
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.0",
+        "contentDescription": "ホーム\nタブ: 1/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.1",
+        "contentDescription": "テスト店舗"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.2",
+        "contentDescription": "オープン予定  午前 7:00\n変更"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.3",
+        "contentDescription": "注文管理\nタブ: 2/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.4",
+        "contentDescription": "セルフサービス\nタブ: 3/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5",
+        "contentDescription": "店舗 ID  000000"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.1",
+        "contentDescription": "本日の状況"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.2",
+        "contentDescription": "午前2:00基準"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.3",
+        "contentDescription": "運営状況"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.5",
+        "contentDescription": "28日基準"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.6",
+        "contentDescription": "売上高(進行中の注文を含む)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.7",
+        "contentDescription": "注文完了率"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.9",
+        "contentDescription": "13,876円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.10",
+        "contentDescription": "92%"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.11",
+        "contentDescription": "84件 / 91件"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.12",
+        "contentDescription": "注文数 (進行中の注文を含む)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.13",
+        "contentDescription": "5件"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.14",
+        "contentDescription": "売上高"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.15",
+        "contentDescription": "252,524円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.16",
+        "contentDescription": "平均注文金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0.0.0.0.17",
+        "contentDescription": "84件"
+      },
+      {
+        "path": "0.0.0.0.0.0.1.1",
+        "contentDescription": "T3ST01 注文受諾完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.1.2",
+        "contentDescription": "今すぐ調理を開始してください。"
+      },
+      {
+        "path": "0.0.0.0.0.0.1.3",
+        "contentDescription": "閉じる"
+      },
+      {
+        "path": "0.0.0.0.0.0.1.4",
+        "contentDescription": "5秒後、自動に閉じます"
+      },
+      {
+        "path": "0.0.0.0.0.0.2",
+        "contentDescription": "T3ST01注文が承認されました。"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.1",
+        "contentDescription": "注文管理\nタブ: 2/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.2",
+        "contentDescription": "セルフサービス\nタブ: 3/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.3",
+        "contentDescription": "注文管理"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.4",
+        "contentDescription": "オープン予定  午前 7:00\n変更"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0",
+        "contentDescription": "過去順"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.0",
+        "contentDescription": "処理中 1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.1",
+        "contentDescription": "完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0",
+        "contentDescription": "T3ST01\n午前 02:01\n[メニュー 1個] 3,605円\n【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)x1\n近くのドライバーを\n探しています。\n受取まで\n23分\n予想"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0.0",
+        "contentDescription": "準備完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0",
+        "contentDescription": "T3ST01"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.1",
+        "contentDescription": "レシート出力"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.2",
+        "contentDescription": "お客様"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.3",
+        "contentDescription": "お客様の注文回数 :0回"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.4",
+        "contentDescription": "注文時間 : 午前 02:01"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.5",
+        "contentDescription": "[カトラリー✓]"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.6",
+        "contentDescription": "メニュー"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.7",
+        "contentDescription": "数量"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.8",
+        "contentDescription": "金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.9",
+        "contentDescription": "【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.10",
+        "contentDescription": "1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.11",
+        "contentDescription": "2,280円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.12",
+        "contentDescription": "薬膳スパイスあり【超おすすめ】(添加药膳香料)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.13",
+        "contentDescription": "0円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.14",
+        "contentDescription": "【食べる、サウナ】地獄の業火(地狱业火)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.7",
+        "contentDescription": "注文キャンセル"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.8",
+        "contentDescription": "準備遅延"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0",
+        "contentDescription": "メニュー"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.1",
+        "contentDescription": "数量"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.2",
+        "contentDescription": "金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.3",
+        "contentDescription": "【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.4",
+        "contentDescription": "1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.5",
+        "contentDescription": "2,280円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.6",
+        "contentDescription": "薬膳スパイスあり【超おすすめ】(添加药膳香料)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.7",
+        "contentDescription": "0円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.8",
+        "contentDescription": "【食べる、サウナ】地獄の業火(地狱业火)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.9",
+        "contentDescription": "+999円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.10",
+        "contentDescription": "【舌が痺れるほどの幸福を】ビリビリ(特麻)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.11",
+        "contentDescription": "+126円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.12",
+        "contentDescription": "こってり派(厚醇派)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.13",
+        "contentDescription": "+200円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.14",
+        "contentDescription": "注文金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.15",
+        "contentDescription": "3,605円"
+      }
+    ]
+  },
+  {
+    "capturedAt": "2026-09-14T17:02:28.381Z",
+    "nodes": [
+      {
+        "path": "0.0.0",
+        "contentDescription": ""
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.0",
+        "contentDescription": "ホーム\nタブ: 1/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.1",
+        "contentDescription": "注文管理\nタブ: 2/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.2",
+        "contentDescription": "セルフサービス\nタブ: 3/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.3",
+        "contentDescription": "注文管理"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.4",
+        "contentDescription": "オープン予定  午前 7:00\n変更"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0",
+        "contentDescription": "過去順"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.0",
+        "contentDescription": "処理中 1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.1",
+        "contentDescription": "完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0",
+        "contentDescription": "T3ST01\n午前 02:01\n[メニュー 1個] 3,605円\n【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)x1\n近くのドライバーを\n探しています。\n受取まで\n23分\n予想"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0.0",
+        "contentDescription": "準備完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0",
+        "contentDescription": "レシート出力"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.1",
+        "contentDescription": "お客様"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.2",
+        "contentDescription": "メニュー"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.3",
+        "contentDescription": "数量"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.4",
+        "contentDescription": "金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.5",
+        "contentDescription": "【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.6",
+        "contentDescription": "1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.7",
+        "contentDescription": "2,280円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.8",
+        "contentDescription": "薬膳スパイスあり【超おすすめ】(添加药膳香料)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.9",
+        "contentDescription": "0円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.10",
+        "contentDescription": "【食べる、サウナ】地獄の業火(地狱业火)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.11",
+        "contentDescription": "+999円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.12",
+        "contentDescription": "【舌が痺れるほどの幸福を】ビリビリ(特麻)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.13",
+        "contentDescription": "+126円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.14",
+        "contentDescription": "こってり派(厚醇派)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.15",
+        "contentDescription": "+200円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.16",
+        "contentDescription": "注文金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.17",
+        "contentDescription": "3,605円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.7",
+        "contentDescription": "注文キャンセル"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.8",
+        "contentDescription": "準備遅延"
+      },
+      {
+        "path": "0.1",
+        "contentDescription": ""
+      }
+    ]
+  },
+  {
+    "capturedAt": "2026-09-14T17:02:53.355Z",
+    "nodes": [
+      {
+        "path": "0.0.0",
+        "contentDescription": ""
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.0",
+        "contentDescription": "ホーム\nタブ: 1/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.1",
+        "contentDescription": "注文管理\nタブ: 2/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.2",
+        "contentDescription": "セルフサービス\nタブ: 3/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.3",
+        "contentDescription": "注文管理"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.4",
+        "contentDescription": "オープン予定  午前 7:00\n変更"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0",
+        "contentDescription": "過去順"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.0",
+        "contentDescription": "処理中 1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.1",
+        "contentDescription": "完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0",
+        "contentDescription": "T3ST01\n午前 02:01\n[メニュー 1個] 3,605円\n【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)x1\n近くのドライバーを\n探しています。\n受取まで\n23分\n予想"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0.0",
+        "contentDescription": "準備完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0",
+        "contentDescription": "レシート出力"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.1",
+        "contentDescription": "お客様"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.2",
+        "contentDescription": "メニュー"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.3",
+        "contentDescription": "数量"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.4",
+        "contentDescription": "金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.5",
+        "contentDescription": "【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.6",
+        "contentDescription": "1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.7",
+        "contentDescription": "2,280円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.8",
+        "contentDescription": "薬膳スパイスあり【超おすすめ】(添加药膳香料)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.9",
+        "contentDescription": "0円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.10",
+        "contentDescription": "【食べる、サウナ】地獄の業火(地狱业火)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.11",
+        "contentDescription": "+999円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.12",
+        "contentDescription": "【舌が痺れるほどの幸福を】ビリビリ(特麻)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.13",
+        "contentDescription": "+126円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.14",
+        "contentDescription": "こってり派(厚醇派)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.15",
+        "contentDescription": "+200円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.16",
+        "contentDescription": "注文金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.17",
+        "contentDescription": "3,605円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.7",
+        "contentDescription": "注文キャンセル"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.8",
+        "contentDescription": "準備遅延"
+      },
+      {
+        "path": "0.1",
+        "contentDescription": ""
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0",
+        "contentDescription": "T3ST01\n午前 02:01\n[メニュー 1個] 3,605円\n【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)x1\n近くのドライバーを\n探しています。\n受取まで\n22分\n予想"
+      }
+    ]
+  },
+  {
+    "capturedAt": "2026-09-14T17:03:27.803Z",
+    "nodes": [
+      {
+        "path": "0.0.0",
+        "contentDescription": ""
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.0",
+        "contentDescription": "ホーム\nタブ: 1/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.1",
+        "contentDescription": "注文管理\nタブ: 2/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.2",
+        "contentDescription": "セルフサービス\nタブ: 3/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.3",
+        "contentDescription": "注文管理"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.4",
+        "contentDescription": "オープン予定  午前 7:00\n変更"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0",
+        "contentDescription": "過去順"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.0",
+        "contentDescription": "処理中 1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.1",
+        "contentDescription": "完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0",
+        "contentDescription": "T3ST01\n午前 02:01\n[メニュー 1個] 3,605円\n【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)x1\n近くのドライバーを\n探しています。\n受取まで\n23分\n予想"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0.0",
+        "contentDescription": "準備完了"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0",
+        "contentDescription": "レシート出力"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.1",
+        "contentDescription": "お客様"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.2",
+        "contentDescription": "メニュー"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.3",
+        "contentDescription": "数量"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.4",
+        "contentDescription": "金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.5",
+        "contentDescription": "【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.6",
+        "contentDescription": "1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.7",
+        "contentDescription": "2,280円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.8",
+        "contentDescription": "薬膳スパイスあり【超おすすめ】(添加药膳香料)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.9",
+        "contentDescription": "0円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.10",
+        "contentDescription": "【食べる、サウナ】地獄の業火(地狱业火)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.11",
+        "contentDescription": "+999円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.12",
+        "contentDescription": "【舌が痺れるほどの幸福を】ビリビリ(特麻)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.13",
+        "contentDescription": "+126円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.14",
+        "contentDescription": "こってり派(厚醇派)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.15",
+        "contentDescription": "+200円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.16",
+        "contentDescription": "注文金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.17",
+        "contentDescription": "3,605円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.7",
+        "contentDescription": "注文キャンセル"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.8",
+        "contentDescription": "準備遅延"
+      },
+      {
+        "path": "0.1",
+        "contentDescription": ""
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0",
+        "contentDescription": "T3ST01\n午前 02:01\n[メニュー 1個] 3,605円\n【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)x1\n近くのドライバーを\n探しています。\n受取まで\n22分\n予想"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.1",
+        "contentDescription": "注文管理"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.2",
+        "contentDescription": "オープン予定  午前 7:00\n変更"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.3",
+        "contentDescription": "注文管理\nタブ: 2/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.4",
+        "contentDescription": "セルフサービス\nタブ: 3/3"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0",
+        "contentDescription": "最新順"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.0",
+        "contentDescription": "処理中"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.0",
+        "contentDescription": "今日"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.1",
+        "contentDescription": "注文キャンセル\nT3ST01\n午前 02:01\n[メニュー 1個] 3,605円\n【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)x1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.2",
+        "contentDescription": "注文キャンセル\nT3ST02\n午前 01:50\n[メニュー 1個] 2,280円\n牛肉マーラータン(牛肉麻辣烫)x1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.3",
+        "contentDescription": "昨日"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.0.2.0.0.0.0.4",
+        "contentDescription": "配達完了\nT3ST03\n午後 06:14\n[メニュー 1個] 1,449円\n【自由にカスタム】旨味マーラータンスープ(麻辣烫汤底)x1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.1.0.0.0",
+        "contentDescription": "メニュー管理"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.5.0.1.0.0.1",
+        "contentDescription": "店舗管理"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.0",
+        "contentDescription": "T3ST01"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.2",
+        "contentDescription": "お客様の注文回数 :0回"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.3",
+        "contentDescription": "注文時間 : 午前 02:01"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.4",
+        "contentDescription": "キャンセル理由： 顧客キャンセル"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.5",
+        "contentDescription": "•"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.6",
+        "contentDescription": "店舗によりキャンセルされた注文です。"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.7",
+        "contentDescription": "[カトラリー✓]"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.8",
+        "contentDescription": "メニュー"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.9",
+        "contentDescription": "数量"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.10",
+        "contentDescription": "金額"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.11",
+        "contentDescription": "【人気No.1】とろとろ国産牛すじの麻辣湯(国产牛筋麻辣烫)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.12",
+        "contentDescription": "1"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.13",
+        "contentDescription": "2,280円"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.14",
+        "contentDescription": "薬膳スパイスあり【超おすすめ】(添加药膳香料)"
+      },
+      {
+        "path": "0.0.0.0.0.0.0.0.6.15",
+        "contentDescription": "0円"
+      }
+    ]
+  }
+]

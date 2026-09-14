@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class UberAccessibilityService extends AccessibilityService {
+    private RocketAutoAccept rocketAutoAccept;
     private static final String TAG = "Foundr1BridgeRecovery";
     private static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
     private static final String ROCKET_NOW_PACKAGE = "com.cpone.merchant";
@@ -70,13 +71,15 @@ public class UberAccessibilityService extends AccessibilityService {
     );
     private final Map<String, JSONObject> rocketAccumulatedNodes = new LinkedHashMap<>();
     private String rocketActiveOrderCode = "";
+    private String rocketCapturePhase = "";
     private String rocketLastUploadedSignature = "";
     private long rocketLastUploadedAt = 0L;
     private int rocketScrollSteps = 0;
-    private final Runnable rocketUploadRunnable = () -> runGuarded(
-        "rocket_order_upload",
-        this::uploadRocketOrder
-    );
+    private boolean rocketUploadScheduled;
+    private final Runnable rocketUploadRunnable = () -> {
+        rocketUploadScheduled = false;
+        runGuarded("rocket_order_upload", this::uploadRocketOrder);
+    };
     private final Map<String, JSONObject> demaeAccumulatedNodes = new LinkedHashMap<>();
     private String demaeActiveOrderCode = "";
     private String demaeLastUploadedSignature = "";
@@ -571,6 +574,9 @@ public class UberAccessibilityService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        if (rocketAutoAccept != null) rocketAutoAccept.stop();
+        rocketAutoAccept = new RocketAutoAccept(this);
+        rocketAutoAccept.start();
         idleScan.noteInteraction(SystemClock.uptimeMillis());
         handler.removeCallbacks(idleScanRunnable);
         handler.postDelayed(idleScanRunnable, 5000L);
@@ -616,6 +622,7 @@ public class UberAccessibilityService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
+        if (rocketAutoAccept != null) rocketAutoAccept.stop();
         BridgeHealthState.setAccessibilityConnected(this, false);
         if (overlayController != null) {
             overlayController.destroy();
@@ -3356,17 +3363,33 @@ public class UberAccessibilityService extends AccessibilityService {
         JSONArray nodes = new JSONArray();
         collectNodes(root, "0", builder, nodes, new HashSet<>());
         root.recycle();
-        String orderCode = extractRocketOrderCode(nodes);
-        if (orderCode.isEmpty() || !containsRocketOrderDetails(nodes)) return;
-        if (!orderCode.equals(rocketActiveOrderCode)) {
+        if (RocketAutoAccept.enabled(this) && (builder.toString().contains("新規注文")
+            || builder.toString().contains("予想調理時間の変更"))) {
+            // Leave the new-order header visible for identity capture; resume import after acceptance.
+            handler.removeCallbacks(rocketUploadRunnable);
+            rocketUploadScheduled = false;
+            return;
+        }
+        // A success toast above the home dashboard is not an order detail.
+        // In particular, "注文受諾完了" must not admit home revenue statistics.
+        if (!containsRocketOrderDetails(nodes)) return;
+        String phase = builder.toString().contains("キャンセル理由") ? "cancelled"
+            : builder.toString().contains("準備遅延") ? "preparing" : "details";
+        String orderCode = extractRocketDetailOrderCode(nodes);
+        if (orderCode.isEmpty()) return;
+        if (!orderCode.equals(rocketActiveOrderCode) || !phase.equals(rocketCapturePhase)) {
             rocketActiveOrderCode = orderCode;
+            rocketCapturePhase = phase;
             rocketAccumulatedNodes.clear();
             rocketScrollSteps = 0;
             rocketLastUploadedSignature = "";
         }
         mergeRocketNodes(nodes);
-        handler.removeCallbacks(rocketUploadRunnable);
-        handler.postDelayed(rocketUploadRunnable, 1200L);
+        // Countdown/accessibility updates must not postpone the upload forever.
+        if (!rocketUploadScheduled) {
+            rocketUploadScheduled = true;
+            handler.postDelayed(rocketUploadRunnable, 1200L);
+        }
     }
 
     private boolean containsRocketOrderDetails(JSONArray nodes) {
@@ -3380,13 +3403,41 @@ public class UberAccessibilityService extends AccessibilityService {
             combined.append('\n');
         }
         String value = combined.toString();
-        return value.contains("注文受諾")
-            || value.contains("調理時間変更")
-            || value.contains("準備完了")
-            || value.contains("準備遅延")
-            || value.contains("注文キャンセル")
-            || value.contains("決済金額")
-            || value.contains("お客様のご要望");
+        return RocketAcceptPolicy.hasLine(value, "メニュー")
+            && RocketAcceptPolicy.hasLine(value, "数量")
+            && RocketAcceptPolicy.hasLine(value, "金額");
+    }
+
+    private String extractRocketDetailOrderCode(JSONArray nodes) {
+        String detailPath = "";
+        for (int i = 0; i < nodes.length(); i++) {
+            JSONObject node = nodes.optJSONObject(i);
+            if (node != null && RocketAcceptPolicy.hasLine(
+                node.optString("text") + "\n" + node.optString("contentDescription"), "メニュー")) {
+                String path = node.optString("path");
+                int separator = path.lastIndexOf('.');
+                if (separator > 0) detailPath = path.substring(0, separator) + ".";
+            }
+        }
+        if (detailPath.isEmpty()) return "";
+        JSONArray detail = new JSONArray();
+        Set<String> cards = new HashSet<>();
+        for (int i = 0; i < nodes.length(); i++) {
+            JSONObject node = nodes.optJSONObject(i);
+            if (node == null) continue;
+            if (node.optString("path").startsWith(detailPath)) detail.put(node);
+            String label = node.optString("text") + "\n" + node.optString("contentDescription");
+            if (label.contains("[メニュー")) {
+                JSONArray card = new JSONArray(); card.put(node);
+                String code = extractRocketOrderCode(card);
+                if (!code.isEmpty()) cards.add(code);
+            }
+        }
+        String explicit = extractRocketOrderCode(detail);
+        if (!explicit.isEmpty()) return explicit;
+        // Scrolled details can hide their header. A single card is unambiguous;
+        // never borrow the first code from a multi-order history/list screen.
+        return cards.size() == 1 ? cards.iterator().next() : "";
     }
 
     private String extractRocketOrderCode(JSONArray nodes) {
@@ -3455,7 +3506,11 @@ public class UberAccessibilityService extends AccessibilityService {
             if (root != null) root.recycle();
             return;
         }
-        boolean scrolled = scrollRocketOrderForward(root);
+        JSONArray current = new JSONArray();
+        collectNodes(root, "0", new StringBuilder(), current, new HashSet<>());
+        boolean scrolled = containsRocketOrderDetails(current)
+            && rocketActiveOrderCode.equals(extractRocketDetailOrderCode(current))
+            && scrollRocketOrderForward(root);
         root.recycle();
         if (scrolled) rocketScrollSteps += 1;
     }

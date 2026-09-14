@@ -222,6 +222,20 @@ public class BridgeActivity extends Activity {
         platformHint.setPadding(0, dp(7), 0, 0);
         platformSection.addView(platformSummary);
         platformSection.addView(platformHint);
+        if (BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_ROCKET_NOW)) {
+            android.widget.Switch autoAccept = new android.widget.Switch(this);
+            autoAccept.setText("Rocket Now 自動受諾（推奨時間＋10分・上限まで）");
+            autoAccept.setTextColor(COLOR_INK);
+            android.content.res.ColorStateList switchColors = new android.content.res.ColorStateList(
+                new int[][] { new int[] { android.R.attr.state_checked }, new int[] {} },
+                new int[] { COLOR_HEALTHY, COLOR_MUTED });
+            autoAccept.setThumbTintList(switchColors);
+            autoAccept.setTrackTintList(switchColors);
+            autoAccept.setChecked(BridgeConfig.prefs(this).getBoolean(RocketAutoAccept.ENABLED, false));
+            autoAccept.setOnCheckedChangeListener((button, checked) ->
+                BridgeConfig.prefs(this).edit().putBoolean(RocketAutoAccept.ENABLED, checked).apply());
+            platformSection.addView(autoAccept);
+        }
 
         openUberButton = addPrimaryButton(page, "Uber Orders を開く", view -> openUberOrders());
         openRocketButton = addSecondaryButton(page, "Rocket Now を開く", view -> openRocketNow());

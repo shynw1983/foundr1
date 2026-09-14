@@ -28,6 +28,12 @@ export type ParsedRocketNowBridgeOrder = {
   completeness: number;
 };
 
+export function isRocketDashboardImport(items: unknown) {
+  return Array.isArray(items) && items.some((item) => (
+    /^(?:注文完了率|売上高(?:\(進行中の注文を含む\))?|平均注文金額|本日の状況|運営状況)$/.test(String(item?.name ?? ""))
+  ));
+}
+
 function clean(value: unknown) {
   return String(value ?? "").replace(/[\t\r]+/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -71,6 +77,10 @@ function extractOrderNo(values: string[]) {
 }
 
 function parseOrderedAt(values: string[], capturedAt: Date) {
+  // Store opening hours and dashboard refresh times are not order timestamps.
+  values = values.filter((value) => !/オープン|営業時間|基準/.test(value));
+  const labeled = values.filter((value) => /注文時間/.test(value));
+  if (labeled.length) values = labeled;
   for (const value of values) {
     const full = value.match(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日[^\d]*(午前|午後)?\s*(\d{1,2}):([0-5]\d)/);
     if (!full) continue;
@@ -93,7 +103,12 @@ function parseOrderedAt(values: string[], capturedAt: Date) {
       month: "2-digit",
       day: "2-digit"
     }).format(capturedAt);
-    return new Date(`${parts}T${String(hour).padStart(2, "0")}:${time[3]}:00+09:00`);
+    const parsed = new Date(`${parts}T${String(hour).padStart(2, "0")}:${time[3]}:00+09:00`);
+    // A just-after-midnight capture can still show yesterday's order time.
+    if (parsed.getTime() - capturedAt.getTime() > 5 * 60 * 1000) {
+      parsed.setUTCDate(parsed.getUTCDate() - 1);
+    }
+    return parsed;
   }
   return capturedAt;
 }
@@ -192,16 +207,44 @@ export function parseRocketNowBridgeSnapshot(
   rawNodes: UberBridgeNode[],
   capturedAt: Date
 ): ParsedRocketNowBridgeOrder | null {
-  const lines = rawNodes.flatMap((node) => {
+  const nodeLines = (node: UberBridgeNode) => {
     const raw = String(node.text || node.contentDescription || "");
     return raw.split(/\n+/).map(clean).filter(Boolean);
-  });
-  const orderNo = extractOrderNo(lines);
+  };
+  const menuIndex = rawNodes.findLastIndex((node) => nodeLines(node).includes("メニュー"));
+  const menuPath = rawNodes[menuIndex]?.path ?? "";
+  const detailPath = menuPath.slice(0, menuPath.lastIndexOf("."));
+  const scoped = detailPath.split(".").length > 1;
+  const inDetail = (node: UberBridgeNode) => Boolean(node.path?.startsWith(`${detailPath}.`));
+  const detailNodes = scoped ? rawNodes.filter(inDetail) : rawNodes;
+  const detailIdentity = [...detailNodes].reverse().map(nodeLines).find((values) => (
+    values.length === 1 && /^[A-Z0-9]{6}$/.test(values[0])
+      && /[A-Z]/.test(values[0]) && /\d/.test(values[0])
+  ));
+  const cards = rawNodes.filter((node) => nodeLines(node).some((line) => /\[メニュー\s*\d+個\]/.test(line)));
+  const cardCodes = [...new Set(cards.map((node) => extractOrderNo(nodeLines(node))).filter(Boolean))];
+  const orderNo = detailIdentity?.[0]
+    || (cardCodes.length === 1 ? cardCodes[0] : "")
+    || (!scoped ? extractOrderNo(rawNodes.flatMap(nodeLines)) : "");
   if (!orderNo) return null;
-  const joined = lines.join("\n");
-  const detailMenuIndex = lines.findLastIndex((line) => line === "メニュー");
-  const detailLines = detailMenuIndex >= 0 ? lines.slice(detailMenuIndex + 1) : lines;
-  const items = parseItems(detailLines, orderNo);
+  const matchingCard = [...cards].reverse().find((node) => extractOrderNo(nodeLines(node)) === orderNo);
+  const targetCardLines = matchingCard ? nodeLines(matchingCard) : [];
+  // Old tablets accumulated multiple UI frames. Use the last detail menu and
+  // only this order's card, never home statistics or another history row.
+  const selectedNodes = scoped
+    ? rawNodes.slice(menuIndex).filter(inDetail)
+    : rawNodes.filter((node) => {
+      const values = nodeLines(node);
+      return !cards.includes(node) || extractOrderNo(values) === orderNo;
+    });
+  const detailLines = selectedNodes.flatMap(nodeLines);
+  const headerLines = scoped ? detailNodes.slice(0, detailNodes.findLastIndex((node) => nodeLines(node).includes("メニュー"))).flatMap(nodeLines) : [];
+  const lines = [...targetCardLines, ...headerLines, ...detailLines];
+  // An acceptance toast over the home dashboard has a code and currency values,
+  // but no menu. Do not create a kitchen order from that transient screen.
+  if (menuIndex < 0 && !lines.some((line) => /^(?:注文受諾|調理時間変更)(?:\s|$)/.test(line))) return null;
+  const detailMenuIndex = detailLines.findLastIndex((line) => line === "メニュー");
+  const items = parseItems(detailMenuIndex >= 0 ? detailLines.slice(detailMenuIndex + 1) : detailLines, orderNo);
   const displayedTotalIndex = lines.findLastIndex((line) => /^(?:合計|決済金額|注文金額|総額)/.test(line));
   const displayedTotal = displayedTotalIndex >= 0
     ? lines.slice(displayedTotalIndex + 1, displayedTotalIndex + 4).map(parseMoney).find((value) => value > 0) ?? 0
@@ -212,13 +255,16 @@ export function parseRocketNowBridgeSnapshot(
     .find((value) => value > 0) ?? 0;
   const derivedTotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
   const total = displayedTotal || overviewTotal || derivedTotal;
-  const status: ParsedRocketNowBridgeOrder["status"] = /キャンセル済み|注文キャンセル完了/.test(joined)
+  const controls = rawNodes.filter((node) => /^(準備完了|準備遅延|注文受諾|調理時間変更)$/.test(nodeLines(node).join("\n")));
+  const statusText = [...targetCardLines, ...headerLines, ...controls.flatMap(nodeLines)].join("\n");
+  const status: ParsedRocketNowBridgeOrder["status"] = /キャンセル済み|注文キャンセル完了|キャンセル理由|キャンセルされた注文/.test(statusText)
+    || targetCardLines.includes("注文キャンセル")
     ? "cancelled"
-    : /配達完了|受け渡し完了|完了した注文/.test(joined)
+    : /配達完了|受け渡し完了|完了した注文/.test(statusText)
       ? "completed"
-      : /準備完了済み|配達パートナー.{0,12}(?:到着|待機)|受け渡し待ち/.test(joined)
+      : /準備完了済み|配達パートナー.{0,12}(?:到着|待機)|受け渡し待ち/.test(statusText)
         ? "ready"
-        : /準備完了|準備遅延|調理中|配達パートナー.{0,12}(?:検索|割り当て)/.test(joined)
+        : /準備完了|準備遅延|調理中|配達パートナー.{0,12}(?:検索|割り当て)|探しています/.test(statusText)
           ? "preparing"
           : "new";
   const customerNameLine = lines.find((line) => /(?:様|さん)$/.test(line) && isCandidateName(line, orderNo));
@@ -227,7 +273,7 @@ export function parseRocketNowBridgeSnapshot(
     orderNo,
     customerName: customerNameLine?.replace(/(?:様|さん)$/, "").trim() ?? "",
     customerNote: extractCustomerNote(lines, orderNo),
-    orderedAt: parseOrderedAt(lines, capturedAt),
+    orderedAt: parseOrderedAt([...headerLines, ...targetCardLines, ...detailLines], capturedAt),
     status,
     orderType: "delivery",
     items,

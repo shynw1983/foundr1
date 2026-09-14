@@ -15,6 +15,7 @@ import {
   type UberBridgeNode
 } from "../../../../../lib/uber-bridge";
 import {
+  isRocketDashboardImport,
   parseRocketNowBridgeSnapshot,
   toRocketNowBridgeOperationalItem
 } from "../../../../../lib/rocket-now-bridge";
@@ -185,9 +186,12 @@ async function upsertOperationalOrder(input: {
         ? existingNoteZh
         : await translateOrderNoteToChinese(customerNote))
     : "";
+  const repairRocketDashboard = input.platform === "rocket_now" && Boolean(existing)
+    && isRocketDashboardImport(existing.bridgeItems);
   const shouldReplaceItems = !existing
     || parsed.completeness > Number(existing.completeness ?? 0)
     || (input.platform === "rocket_now" && Number(existing.parserVersion ?? 0) < 5)
+    || repairRocketDashboard
     || (input.platform === "demae_can" && Number(existing.parserVersion ?? 0) < 1)
     || hasExactDuplicateBridgeItems(existing.bridgeItems);
   const nextStatus = existing
@@ -215,7 +219,7 @@ async function upsertOperationalOrder(input: {
       eventId: input.eventId,
       capturedAt: input.capturedAt.toISOString(),
       completeness: parsed.completeness,
-      parserVersion: input.platform === "rocket_now" ? 5 : 1,
+      parserVersion: input.platform === "rocket_now" ? 6 : 1,
       sourceExternalId,
       items: parsed.items
     }
@@ -268,6 +272,10 @@ async function upsertOperationalOrder(input: {
       store_id = excluded.store_id,
       status = ${nextStatus},
       payment_status = 'paid',
+      pickup_date = case when ${repairRocketDashboard} then excluded.pickup_date else store_customer_orders.pickup_date end,
+      pickup_time = case when ${repairRocketDashboard} then excluded.pickup_time else store_customer_orders.pickup_time end,
+      created_at = case when ${repairRocketDashboard} then excluded.created_at else store_customer_orders.created_at end,
+      paid_at = case when ${repairRocketDashboard} then excluded.paid_at else store_customer_orders.paid_at end,
       amount = case when ${shouldReplaceItems} then excluded.amount else store_customer_orders.amount end,
       customer_summary = case
         when ${shouldReplaceItems || noteChanged || Boolean(noteZh && !existingNoteZh)} then store_customer_orders.customer_summary || excluded.customer_summary
@@ -278,7 +286,7 @@ async function upsertOperationalOrder(input: {
           true
         )
       end,
-      completed_at = coalesce(excluded.completed_at, store_customer_orders.completed_at),
+      completed_at = case when ${repairRocketDashboard} then excluded.completed_at else coalesce(excluded.completed_at, store_customer_orders.completed_at) end,
       cancelled_at = coalesce(excluded.cancelled_at, store_customer_orders.cancelled_at),
       updated_at = now()
     returning id::text
@@ -362,6 +370,13 @@ async function upsertOperationalOrder(input: {
   }
 
   await syncWebReservationToSalesOrder(orderId);
+  if (repairRocketDashboard) {
+    await sql`
+      update sales_orders
+      set ordered_at = ${parsed.orderedAt.toISOString()}, updated_at = now()
+      where source_order_id::text = ${orderId}
+    `;
+  }
   await ensureProductionTasksForOrder(orderId);
   if (shouldPublishOrderEvent) {
     await publishCustomerOrderEvent(

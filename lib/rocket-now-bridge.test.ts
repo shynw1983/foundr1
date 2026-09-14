@@ -1,7 +1,46 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
 import { parseRocketNowBridgeSnapshot, toRocketNowBridgeOperationalItem } from "./rocket-now-bridge.ts";
+
+const captured = JSON.parse(readFileSync(new URL("./fixtures/rocket-order-snapshots.json", import.meta.url), "utf8")) as Array<{
+  capturedAt: string;
+  nodes: Array<{path: string; contentDescription: string}>;
+}>;
+
+test("rejects a real acceptance confirmation over the home sales dashboard", () => {
+  assert.equal(parseRocketNowBridgeSnapshot(captured[0].nodes, new Date(captured[0].capturedAt)), null);
+});
+
+test("keeps the real accepted order out of dashboard statistics and opening hours", () => {
+  for (const snapshot of captured.slice(1, -1)) {
+    const order = parseRocketNowBridgeSnapshot(snapshot.nodes, new Date(snapshot.capturedAt));
+    assert.ok(order);
+    assert.equal(order.orderNo, "T3ST01");
+    assert.equal(order.status, "preparing");
+    assert.equal(order.total, 3605);
+    assert.equal(order.orderedAt.toISOString(), "2026-09-14T17:01:00.000Z");
+    assert.equal(order.items.length, 1);
+    assert.match(order.items[0].name, /牛すじ/);
+  }
+  const full = parseRocketNowBridgeSnapshot(captured[2].nodes, new Date(captured[2].capturedAt))!;
+  assert.equal(full.items[0].lineTotal, 3605);
+  assert.equal(full.items[0].modifiers.length, 4);
+});
+
+test("isolates the selected history detail from other completed orders and old frames", () => {
+  const snapshot = captured.at(-1)!;
+  const order = parseRocketNowBridgeSnapshot(snapshot.nodes, new Date(snapshot.capturedAt))!;
+  assert.equal(order.orderNo, "T3ST01");
+  assert.equal(order.status, "cancelled");
+  assert.equal(order.total, 3605);
+  assert.equal(order.orderedAt.toISOString(), "2026-09-14T17:01:00.000Z");
+  const otherCard = snapshot.nodes.find((node) => node.contentDescription.includes("T3ST03"))!;
+  const reordered = parseRocketNowBridgeSnapshot([otherCard, ...snapshot.nodes], new Date(snapshot.capturedAt))!;
+  assert.equal(reordered.orderNo, "T3ST01");
+  assert.equal(reordered.status, "cancelled");
+});
 
 test("parses a Rocket Now new-order accessibility snapshot", () => {
   const capturedAt = new Date("2026-08-06T12:35:00+09:00");
