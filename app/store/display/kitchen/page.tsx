@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Menu } from "lucide-react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
 import { useVisibleRefresh } from "../../components/useVisibleRefresh";
@@ -1036,7 +1037,7 @@ export default function StoreKitchenPage() {
           if (!menuOpen) void activateDisplayMode();
           setMenuOpen((current) => !current);
         }}
-      />
+      ><Menu size={20} /></button>
       {menuOpen ? (
         <div className="store-display-menu">
           <strong>{isChinese ? "厨房" : "キッチン"}</strong>

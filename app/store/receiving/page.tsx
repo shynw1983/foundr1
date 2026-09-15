@@ -55,6 +55,7 @@ export default function StoreReceivingPage() {
   }
 
   async function confirmReceiving(target: ReceivingConfirmation) {
+    if (!target.items.length || savingId) return;
     setSavingId(target.id);
     setMessage("");
     const response = await fetch("/api/store/procurement-receiving", {
@@ -86,7 +87,7 @@ export default function StoreReceivingPage() {
   }, []);
 
   return (
-    <main className="store-workbench-shell">
+    <main className="store-workbench-shell store-receiving-page">
       <header className="store-workbench-topbar">
         <a className="brand-block" href="/store" aria-label="Foundr1 店舗">
           <div className="brand-mark">F1</div>
@@ -129,6 +130,7 @@ export default function StoreReceivingPage() {
                   <span>{confirmation.items.length} 件</span>
                 </div>
                 <div className="staff-mini-list">
+                  {!confirmation.items.length ? <p className="empty-state-text">確認する商品がありません。発注内容を確認してください。</p> : null}
                   {confirmation.items.map((item) => {
                     const requested = formatQuantity(item.requestedQuantity, item.unit);
                     const actual = formatQuantity(item.actualQuantity, item.unit);
@@ -146,7 +148,7 @@ export default function StoreReceivingPage() {
                 <button
                   className="primary-button"
                   type="button"
-                  disabled={savingId === confirmation.id}
+                  disabled={Boolean(savingId) || confirmation.items.length === 0}
                   onClick={() => void confirmReceiving(confirmation)}
                 >
                   <PackageCheck size={16} />

@@ -1,5 +1,8 @@
 "use client";
 
+import { useStoreDialog } from "../components/useStoreDialog";
+import { isPosSellableItem } from "../../../lib/pos-catalog-policy";
+
 import { Banknote, Camera, CreditCard, Gift, Minus, Plus, ReceiptText, ScanLine, Search, ShoppingCart, Trash2, UserRound, X } from "lucide-react";
 import jsQR from "jsqr";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
@@ -701,6 +704,11 @@ export default function StorePosPage() {
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<PosCartItem[]>([]);
   const [configuringItem, setConfiguringItem] = useState<PosMenuItem | null>(null);
+  const [optionQuery, setOptionQuery] = useState("");
+  const [optionGroupId, setOptionGroupId] = useState("");
+  const [cartOpen, setCartOpen] = useState(false);
+  const cartDialogRef = useStoreDialog(cartOpen, () => setCartOpen(false), "(max-width: 900px)");
+  const optionDialogRef = useStoreDialog(Boolean(configuringItem), () => setConfiguringItem(null));
   const [optionDraft, setOptionDraft] = useState<Record<string, string[]>>({});
   const [weightDraft, setWeightDraft] = useState("");
   const [orderType, setOrderType] = useState("eat_in");
@@ -814,7 +822,7 @@ export default function StorePosPage() {
     }
     const nextAccess = body.access as PosAccess;
     const nextBrands = body.brands as BrandOption[];
-    const nextItems = body.items as PosMenuItem[];
+    const nextItems = ((body.items ?? []) as PosMenuItem[]).filter(isPosSellableItem);
     const nextCategories = (body.categories ?? []) as PosMenuCategory[];
     const responseStoreId = body.selectedStoreId || nextAccess.stores?.[0]?.id || "";
     const nextBrandId = nextBrands.some((brand) => brand.id === selectedBrandId)
@@ -1820,6 +1828,8 @@ export default function StorePosPage() {
       }
     }
     setConfiguringItem(item);
+    setOptionQuery("");
+    setOptionGroupId("");
     setWeightDraft("");
     setOptionDraft(nextDraft);
   }
@@ -2220,7 +2230,12 @@ export default function StorePosPage() {
   }
 
   function revealCheckoutSection() {
-    checkoutSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      setCartOpen(true);
+      return;
+    } else {
+      checkoutSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
     window.setTimeout(() => {
       checkoutSectionRef.current?.querySelector<HTMLButtonElement>("button.is-active")?.focus({ preventScroll: true });
     }, 450);
@@ -2424,8 +2439,15 @@ export default function StorePosPage() {
               </div>
             </div>
 
-            <div className="store-pos-filter-group">
-              <span>分類</span>
+            <div className="store-pos-filter-group store-pos-categories">
+              <label className="store-pos-category-select">
+                <span>分類</span>
+                <select value={selectedCategory ?? ""} onChange={(event) => setSelectedCategory(event.target.value || null)}>
+                  <option value="">すべて</option>
+                  {categorySummaries.map((category) => <option key={category.name} value={category.name}>{category.name} ({category.count})</option>)}
+                </select>
+              </label>
+              <span className="store-pos-category-heading">分類</span>
               <div className="store-pos-filter-list">
                 <button className={!selectedCategory ? "is-active" : ""} type="button" onClick={() => setSelectedCategory(null)}>
                   すべて
@@ -2489,7 +2511,9 @@ export default function StorePosPage() {
           </section>
         </div>
 
-        <aside className="store-pos-cart-panel">
+        <aside ref={cartDialogRef} className={`store-pos-cart-panel${cartOpen ? " is-open" : ""}`} role={cartOpen ? "dialog" : undefined} aria-modal={cartOpen || undefined} aria-label="会計内容">
+          {cartOpen ? <ModalHistoryScope historyKey="store-pos-cart" onClose={() => setCartOpen(false)}><span /></ModalHistoryScope> : null}
+          <button className="secondary-button store-pos-cart-back" type="button" onClick={() => setCartOpen(false)}>商品選択に戻る</button>
           <div className="store-pos-cart-head">
             <div>
               <p className="eyebrow">Cart</p>
@@ -2908,10 +2932,10 @@ export default function StorePosPage() {
         </aside>
       </section>
 
-      {hasCurrentTransaction ? (
+      <>
         <aside className="store-pos-floating-checkout" aria-label="会計ショートカット">
           <div>
-            <span>{selectedTableCheckout ? `${selectedTableCheckout.orderCount}件のテーブル会計` : `${cartCount}点を選択中`}</span>
+            <span>{selectedTableCheckout ? `${selectedTableCheckout.orderCount}件のテーブル会計` : <><span>会計内容</span> · {cartCount}</>}</span>
             <strong>{formatYen(activeCheckoutAmount)}</strong>
           </div>
           <button
@@ -2925,7 +2949,7 @@ export default function StorePosPage() {
             会計へ
           </button>
         </aside>
-      ) : null}
+      </>
 
       {memberScannerOpen && !offlineCheckoutOnly ? (
         <ModalHistoryScope historyKey="store-pos-member-scanner" onClose={() => setMemberScannerOpen(false)}>
@@ -3298,7 +3322,7 @@ export default function StorePosPage() {
 
       {configuringItem ? (
         <ModalHistoryScope historyKey="store-pos-item-options" onClose={() => setConfiguringItem(null)}>
-          <div className="store-pos-option-overlay" role="dialog" aria-modal="true" aria-label="商品オプション">
+          <div ref={optionDialogRef as React.RefObject<HTMLDivElement | null>} className="store-pos-option-overlay" role="dialog" aria-modal="true" aria-label="商品オプション">
             <div className="store-pos-option-panel">
             <div className="store-pos-option-head">
               <div>
@@ -3309,6 +3333,14 @@ export default function StorePosPage() {
               <button className="secondary-button" type="button" onClick={() => setConfiguringItem(null)}>閉じる</button>
             </div>
 
+            <div className="store-pos-option-navigation">
+              <input aria-label="オプションを検索" placeholder="オプションを検索" value={optionQuery} onChange={(event) => setOptionQuery(event.target.value)} />
+              <select aria-label="オプショングループ" value={optionGroupId} onChange={(event) => setOptionGroupId(event.target.value)}>
+                <option value="">すべてのグループ</option>
+                {getItemOptionGroups(configuringItem).map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+              </select>
+            </div>
+            <div className="store-pos-option-body">
             {configuringWeightPricing ? (
               <section className="store-pos-weight-entry">
                 <div>
@@ -3333,7 +3365,11 @@ export default function StorePosPage() {
             ) : null}
 
             <div className="store-pos-option-groups">
+              {optionQuery.trim() && !getItemOptionGroups(configuringItem).some((group) => (!optionGroupId || group.id === optionGroupId) && group.options.some((option) => `${group.name} ${option.name}`.toLocaleLowerCase().includes(optionQuery.trim().toLocaleLowerCase()))) ? <p className="empty-state-text">一致するオプションがありません。</p> : null}
               {getItemOptionGroups(configuringItem).map((group) => {
+                if (optionGroupId && group.id !== optionGroupId) return null;
+                const matchingOptions = group.options.filter((option) => `${group.name} ${option.name}`.toLocaleLowerCase().includes(optionQuery.trim().toLocaleLowerCase()));
+                if (!matchingOptions.length) return null;
                 const selectionType = getEffectiveSelectionType(group);
                 return (
                   <section className="store-pos-option-group" key={group.id}>
@@ -3348,7 +3384,7 @@ export default function StorePosPage() {
                       </span>
                     </div>
                     <div className="store-pos-option-choice-grid">
-                      {group.options.map((option) => {
+                      {matchingOptions.map((option) => {
                         const selectedIds = optionDraft[group.id] ?? [];
                         const count = selectedIds.filter((id) => id === option.id).length;
                         const selected = count > 0;
@@ -3356,19 +3392,10 @@ export default function StorePosPage() {
                           <div
                             className={selected ? "store-pos-option-choice is-active" : "store-pos-option-choice"}
                             key={option.id}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => toggleOption(group, option.id)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                toggleOption(group, option.id);
-                              }
-                            }}
                           >
                             <button
                               type="button"
-                              tabIndex={-1}
+                              aria-pressed={selected}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 toggleOption(group, option.id);
@@ -3381,6 +3408,7 @@ export default function StorePosPage() {
                               <div className="store-pos-option-stepper">
                                 <button
                                   type="button"
+                                  disabled={count === 0}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     decrementOption(group, option.id);
@@ -3410,10 +3438,16 @@ export default function StorePosPage() {
                 );
               })}
             </div>
-
+            </div>
+            <div className="store-pos-option-footer">
+              <div className="store-pos-option-summary">
+                <strong>{formatYen((configuringWeightPricing ? configuringWeightBasePrice : getItemPrice(configuringItem)) + selectedOptionPreviewTotal)}</strong>
+                <span>{getItemOptionGroups(configuringItem).flatMap((group) => (optionDraft[group.id] ?? []).map((id) => group.options.find((option) => option.id === id)?.name)).filter(Boolean).join(" / ") || "未選択"}</span>
+              </div>
             <button className="primary-button store-pos-option-add" type="button" onClick={addConfiguredItem} disabled={!canAddConfiguredItem}>
               この内容で追加
             </button>
+            </div>
             </div>
           </div>
         </ModalHistoryScope>

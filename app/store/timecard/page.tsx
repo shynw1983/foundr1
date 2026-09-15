@@ -207,6 +207,7 @@ export default function StoreTimecardPage() {
             )}
           </div>
 
+          <div className="store-timecard-actions-panel">
           <div className={`timecard-status is-${state}`}>
             <span>{selectedEmployee?.name ?? "従業員未選択"} / {statusLabel}</span>
             <strong>{isStoreTimecardRole ? "店舗端末で打刻操作を選択してください" : selectedLatestPunch ? `${formatJstDateTime(selectedLatestPunch.punchedAt)} に最終打刻` : "本日の打刻を開始できます"}</strong>
@@ -231,6 +232,7 @@ export default function StoreTimecardPage() {
                 </button>
               );
             })}
+          </div>
           </div>
         </section>
       </section>

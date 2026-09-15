@@ -69,6 +69,7 @@ const statusMeta: Record<SeatStatus, { label: string; action?: string; source: "
 export default function StoreSeatsPage() {
   const [seats, setSeats] = useState<Seat[]>(initialSeats);
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [showMap, setShowMap] = useState(false);
   const [storeId, setStoreId] = useState("");
   const [storeName, setStoreName] = useState("桜並木店");
   const [loading, setLoading] = useState(true);
@@ -376,6 +377,11 @@ export default function StoreSeatsPage() {
         <div className="is-cleaning"><strong>{counts.cleaning}</strong><span>清掃待ち</span></div>
       </section>
 
+      <div className="seat-view-switch" aria-label="客席の表示方法">
+        <button className="secondary-button" type="button" aria-pressed={!showMap} onClick={() => setShowMap(false)}>座席一覧</button>
+        <button className="secondary-button" type="button" aria-pressed={showMap} onClick={() => setShowMap(true)}>配置図</button>
+      </div>
+      <div className={`seat-workspace${showMap ? " is-map" : ""}`}>
       <section className="seat-floor-card">
         <div className="seat-floor-heading">
           <div>
@@ -408,6 +414,22 @@ export default function StoreSeatsPage() {
           </div>
         </div>
       </section>
+
+      <section className="seat-list" aria-label="座席一覧">
+        <h2>座席一覧</h2>
+        <div className="seat-list-targets">
+          {(["A", "B", "A+B"] as const).map((table) => {
+            const state = table === "A+B" ? combinedTableState().status : tableStatus(table);
+            return <button type="button" key={table} onClick={() => selectTarget({ type: "table", id: table })} disabled={table === "A+B" && !combinedTableState().enabled}>
+              <strong>{table}</strong><span><span>テーブル</span><span>{state && state !== "mixed" ? statusMeta[state].label : "一部使用中"}</span></span>
+            </button>;
+          })}
+          {seats.filter((seat) => seat.kind === "counter" || sharedTables.includes(seat.kind === "table-a" ? "A" : "B")).map((seat) => <button type="button" key={seat.id} onClick={() => selectTarget({ type: "seat", id: seat.id })}>
+            <strong>{seat.id}</strong><span><span>{statusMeta[seat.status].label}</span>{seat.startedAt ? <small>{seat.startedAt}〜</small> : null}{seat.overdue ? <small>案内後20分未会計</small> : null}</span>
+          </button>)}
+        </div>
+      </section>
+      </div>
 
       <section className="seat-management-legend" aria-label="座席状態の凡例">
         {(["available", "selecting", "cooking", "dining", "cleaning"] as SeatStatus[]).map((status) => (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Menu } from "lucide-react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
 import { useVisibleRefresh } from "../../components/useVisibleRefresh";
@@ -212,7 +213,7 @@ export default function StorePickupDisplayPage() {
           if (!menuOpen) void activateDisplayMode();
           setMenuOpen((current) => !current);
         }}
-      />
+      ><Menu size={20} /></button>
       {menuOpen ? (
         <div className="store-display-menu">
           <strong>受取表示</strong>
@@ -255,21 +256,45 @@ export default function StorePickupDisplayPage() {
       ) : null}
 
       <section className="store-pickup-board">
-        <div className="store-pickup-column is-ready">
-          <h2>準備完了</h2>
-          <div className="store-pickup-code-grid">
-            {ready.map((order) => <strong key={`${order.pickupCode}-${order.createdTime}`}>{order.pickupCode}</strong>)}
-            {!ready.length ? <p>完成した注文はありません。</p> : null}
-          </div>
-        </div>
-        <div className="store-pickup-column">
-          <h2>制作中</h2>
-          <div className="store-pickup-code-grid">
-            {preparing.map((order) => <strong key={`${order.pickupCode}-${order.createdTime}`}>{order.pickupCode}</strong>)}
-            {!preparing.length ? <p>制作中の注文はありません。</p> : null}
-          </div>
-        </div>
+        <PickupColumn orders={ready} ready menuOpen={menuOpen} />
+        <PickupColumn orders={preparing} menuOpen={menuOpen} />
       </section>
     </main>
   );
+}
+
+function PickupColumn({ orders, ready = false, menuOpen }: { orders: PickupOrder[]; ready?: boolean; menuOpen: boolean }) {
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const [capacity, setCapacity] = useState({ columns: 2, count: 8 });
+  const [page, setPage] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const pages = Math.max(1, Math.ceil(orders.length / capacity.count));
+  const currentPage = Math.min(page, pages - 1);
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const observer = new ResizeObserver(() => {
+      const columns = Math.max(1, Math.floor((grid.clientWidth + 10) / 160));
+      const rows = Math.max(1, Math.floor((grid.clientHeight + 10) / 100));
+      setCapacity((current) => current.columns === columns && current.count === columns * rows ? current : { columns, count: columns * rows });
+    });
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    setPage((current) => Math.min(current, pages - 1));
+    if (pages < 2 || paused || menuOpen) return;
+    const timer = window.setInterval(() => setPage((current) => (current + 1) % pages), 8000);
+    return () => window.clearInterval(timer);
+  }, [pages, paused, menuOpen]);
+  return <div className={`store-pickup-column${ready ? " is-ready" : ""}${orders.length ? "" : " is-empty"}`}>
+    <h2>{ready ? "準備完了" : "制作中"}</h2>
+    <div ref={gridRef} className="store-pickup-code-grid" style={{ gridTemplateColumns: `repeat(${capacity.columns}, minmax(0, 1fr))` }}>
+      {orders.slice(currentPage * capacity.count, (currentPage + 1) * capacity.count).map((order) => <strong key={`${order.pickupCode}-${order.createdTime}`}>{order.pickupCode}</strong>)}
+      {!orders.length ? <p>{ready ? "完成した注文はありません。" : "制作中の注文はありません。"}</p> : null}
+    </div>
+    {orders.length ? <div className="store-pickup-pages">
+      {pages > 1 ? <><button type="button" aria-label="前のページ" onClick={() => setPage((currentPage + pages - 1) % pages)}>‹</button><span>{currentPage + 1} / {pages}</span><button type="button" aria-label="次のページ" onClick={() => setPage((currentPage + 1) % pages)}>›</button><button type="button" onClick={() => setPaused((value) => !value)}>{paused ? "自動切替を再開" : "自動切替を停止"}</button></> : <span>{orders.length} <span>件</span></span>}
+    </div> : null}
+  </div>;
 }

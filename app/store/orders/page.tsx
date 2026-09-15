@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft } from "lucide-react";
+import { useModalHistory } from "../../../components/useModalHistory";
+import { useStoreDialog } from "../components/useStoreDialog";
 import { defaultStoreModuleSettings, storeOrderAlertSoundOptions, type StoreModuleSettings, type StoreOrderAlertSound } from "../../../lib/module-setting-defaults";
 import { playStoreOrderAlertSound } from "../../../lib/store-order-alert-sounds";
 import { getStoreOrderAlertPhase, isStoreOrderAlertAcknowledged, shouldRepeatStoreOrderAlert, type StoreOrderAlertPhase } from "../../../lib/store-order-alert-timing";
@@ -302,6 +305,15 @@ export default function StoreOrdersPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("active");
   const [selectedId, setSelectedId] = useState("");
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const orderTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const detailBackRef = useRef<HTMLButtonElement | null>(null);
+  function closeMobileDetail() {
+    setMobileDetailOpen(false);
+    window.requestAnimationFrame(() => orderTriggerRef.current?.focus({ preventScroll: true }));
+  }
+  useModalHistory(mobileDetailOpen, closeMobileDetail, "store-order-detail");
+  const detailDialogRef = useStoreDialog(mobileDetailOpen, closeMobileDetail, "(max-width: 760px)");
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
@@ -929,7 +941,7 @@ export default function StoreOrdersPage() {
   };
 
   return (
-    <main className="store-workbench-shell store-orders-page">
+    <main className={`store-workbench-shell store-orders-page${mobileDetailOpen ? " is-detail-open" : ""}`}>
       <header className="store-workbench-topbar">
         <a className="brand-block" href="/store" aria-label="Foundr1 店舗">
           <div className="brand-mark">F1</div>
@@ -943,11 +955,32 @@ export default function StoreOrdersPage() {
 
       <section className="store-orders-layout">
         <aside className="panel store-orders-list">
-          <div className="store-stats-heading">
-            <h2>注文</h2>
+          <div className="store-orders-toolbar">
+            <h2>注文ワーク台</h2>
+            <button type="button" className="secondary-button" onClick={refresh}>
+              {isRefreshing ? "更新中..." : "更新"}
+            </button>
+          </div>
+          <div className="store-orders-controls">
+            <input
+              aria-label="注文を検索"
+              placeholder="番号・商品・お客様"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="表示状態">
+              <option value="active">対応中</option>
+              <option value="pending_payment">未決済</option>
+              <option value="new">新規</option>
+              <option value="preparing">制作中</option>
+              <option value="ready">受け取り可</option>
+              <option value="completed">完了</option>
+              <option value="all">すべて</option>
+            </select>
           </div>
           {access?.canViewSalesStats ? (
-            <>
+            <details className="store-orders-secondary store-orders-performance-disclosure">
+              <summary>実績・商品ランキング</summary>
               <div className="store-stats-heading">
                 <h2>実績</h2>
                 <select value={statsDays} onChange={(event) => setStatsDays(Number(event.target.value))} aria-label="集計期間">
@@ -985,7 +1018,7 @@ export default function StoreOrdersPage() {
                   ))}
                 </section>
               ) : null}
-            </>
+            </details>
           ) : null}
           <section className="store-order-stats" aria-label="注文数">
             <article>
@@ -1037,7 +1070,9 @@ export default function StoreOrdersPage() {
             </section>
           ) : null}
           {access?.stores.length ? (
-            <section className="store-pickup-setting" id="reception-settings" aria-label="最短受け取り準備時間">
+            <details className="store-orders-secondary" id="reception-settings">
+              <summary>受付設定 · <span>{operation?.acceptanceMode === "force_closed" ? "受付停止" : operation?.acceptanceMode === "force_open" ? "受付中" : "自動"}</span></summary>
+            <section className="store-pickup-setting" aria-label="最短受け取り準備時間">
               <div>
                 <span>受付設定</span>
                 <small>受付状態と最短準備時間</small>
@@ -1122,30 +1157,10 @@ export default function StoreOrdersPage() {
               )}
               {operationMessage ? <p>{operationMessage}</p> : null}
             </section>
+            </details>
           ) : null}
-          <div className="store-orders-toolbar">
-            <h2>注文ワーク台</h2>
-            <button type="button" className="secondary-button" onClick={refresh}>
-              {isRefreshing ? "更新中..." : "更新"}
-            </button>
-          </div>
-          <div className="store-orders-controls">
-            <input
-              aria-label="注文を検索"
-              placeholder="番号・商品・お客様"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="表示状態">
-              <option value="active">対応中</option>
-              <option value="pending_payment">未決済</option>
-              <option value="new">新規</option>
-              <option value="preparing">制作中</option>
-              <option value="ready">受け取り可</option>
-              <option value="completed">完了</option>
-              <option value="all">すべて</option>
-            </select>
-          </div>
+          <details className="store-orders-secondary">
+            <summary>通知音 · <span>{soundEnabled ? "ON" : "OFF"}</span></summary>
           <div className="store-orders-sound-row">
             <button
               type="button"
@@ -1174,6 +1189,7 @@ export default function StoreOrdersPage() {
               {storeSettings.orderAlerts.repeatUntilHandled ? " / 未対応は30秒ごとに再通知" : " / 新規注文時に2回通知"}
             </span>
           </div>
+          </details>
           <p className="store-orders-live-note">
             {realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}
             {lastUpdatedAt ? ` · ${lastUpdatedAt}` : ""}
@@ -1193,7 +1209,13 @@ export default function StoreOrdersPage() {
                   newOrderIds.includes(order.id) ? "is-new" : ""
                 ].filter(Boolean).join(" ")}
                 key={order.id}
-                onClick={() => setSelectedId(order.id)}
+                onClick={(event) => {
+                  setSelectedId(order.id);
+                  if (window.matchMedia("(max-width: 760px)").matches) {
+                    orderTriggerRef.current = event.currentTarget;
+                    setMobileDetailOpen(true);
+                  }
+                }}
               >
                 <PickupTimeChip order={order} />
                 {!isPaidOrder(order) ? (
@@ -1222,7 +1244,10 @@ export default function StoreOrdersPage() {
           </div>
         </aside>
 
-        <section className="panel store-order-detail">
+        <section ref={detailDialogRef} className="panel store-order-detail" role={mobileDetailOpen ? "dialog" : undefined} aria-modal={mobileDetailOpen || undefined} aria-label="注文詳細">
+          <button ref={detailBackRef} className="secondary-button store-order-detail-back" type="button" onClick={closeMobileDetail}>
+            <ArrowLeft size={18} />注文一覧へ戻る
+          </button>
           {selectedOrder ? (
             <>
               <div className="store-order-detail-head">

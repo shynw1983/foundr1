@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Clock3, RefreshCw, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useOsTranslation } from "../../../os/components/OsTranslationProvider";
 import { StoreNavTabs } from "../../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
@@ -21,6 +21,8 @@ type InventoryReport = {
   runType: "availability_change" | "full_sync";
   action: string;
   itemLabel: string;
+  itemName?: string;
+  itemDisplayNames?: Record<string, string>;
   source: string;
   actorName: string;
   createdAt: string;
@@ -192,17 +194,37 @@ function actorLabel(report: InventoryReport, labels: ReturnType<typeof copy>) {
   return labels.system;
 }
 
+function historyItemName(report: InventoryReport, language: Language) {
+  if (!report.itemName) return report.itemLabel;
+  if (language === "ja") return report.itemName;
+  return report.itemDisplayNames?.[language === "zh-Hans" ? "zh" : language] || report.itemDisplayNames?.en || report.itemName;
+}
+
 export default function InventoryHistoryPage() {
   const { language } = useOsTranslation();
   const labels = copy(language);
   const [storeId, setStoreId] = useState("");
   const [days, setDays] = useState(30);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const listRef = useRef<HTMLElement | null>(null);
   const [reports, setReports] = useState<InventoryReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expandedReports, setExpandedReports] = useState<Set<string>>(() => new Set());
   const [retryingPlatforms, setRetryingPlatforms] = useState<Set<string>>(() => new Set());
   const [retryMessages, setRetryMessages] = useState<Record<string, string>>({});
+  const filteredReports = reports.filter((report) => (!statusFilter || report.status === statusFilter)
+    && `${historyItemName(report, language)} ${report.itemLabel} ${report.actorName} ${actionLabel(report, labels)} ${report.platforms.map((platform) => platformName(platform.platform, language)).join(" ")}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const pageCount = Math.max(1, Math.ceil(filteredReports.length / 20));
+  const currentPage = Math.min(page, pageCount);
+  const pageReports = filteredReports.slice((currentPage - 1) * 20, currentPage * 20);
+  function changePage(next: number) {
+    setPage(next);
+    listRef.current?.scrollIntoView({ block: "start" });
+    listRef.current?.focus({ preventScroll: true });
+  }
 
   useEffect(() => {
     const stored = getStoredStoreSelection();
@@ -290,7 +312,7 @@ export default function InventoryHistoryPage() {
             <p data-i18n-ignore>{labels.description}</p>
           </div>
           <div className="store-inventory-history-actions">
-            <select value={days} onChange={(event) => setDays(Number(event.target.value))} aria-label="期間">
+            <select value={days} onChange={(event) => { setDays(Number(event.target.value)); setPage(1); }} aria-label="期間">
               <option value={7}>7日</option>
               <option value={30}>30日</option>
               <option value={90}>90日</option>
@@ -302,21 +324,33 @@ export default function InventoryHistoryPage() {
           </div>
         </div>
 
-        <section className="panel store-inventory-history-list" aria-live="polite">
+        <div className="store-history-filters">
+          <label><span>履歴を検索</span><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="商品・操作担当・プラットフォーム" /></label>
+          <label><span>表示状態</span><select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}>
+            <option value="">すべて</option>
+            <option value="succeeded">完了</option><option value="failed">要確認</option><option value="processing">実行中</option>
+            <option value="awaiting_confirmation">確認待ち（未適用）</option><option value="expired">期限切れ（未適用）</option>
+          </select></label>
+        </div>
+        <section ref={listRef} tabIndex={-1} className="panel store-inventory-history-list" aria-live="polite">
           {loading && !reports.length ? <p className="empty-state" data-i18n-ignore>{labels.loading}</p> : null}
           {error ? <div className="inline-alert" role="alert">{error}</div> : null}
-          {!loading && !error && !reports.length ? <p className="empty-state" data-i18n-ignore>{labels.empty}</p> : null}
-          {reports.map((report) => {
+          {!loading && !error && !filteredReports.length ? <p className="empty-state" data-i18n-ignore>{labels.empty}</p> : null}
+          {pageReports.map((report, index) => {
+            const dateLabel = new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "zh-CN", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(report.createdAt));
+            const previousDateLabel = index ? new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "zh-CN", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(pageReports[index - 1].createdAt)) : "";
             const stateLabel = report.status==='expired' ? (language==='ja'?'期限切れ（未適用）':language==='zh-Hant'?'已過期（未套用）':'已过期（未应用）') : report.status==='awaiting_confirmation' ? (language==='ja'?'確認待ち（未適用）':language==='zh-Hant'?'等待確認（未套用）':'等待确认（未应用）') : labels[report.status];
             const expanded = expandedReports.has(report.id);
             return (
-              <article className="store-inventory-history-row" key={report.id}>
+              <Fragment key={report.id}>
+              {dateLabel !== previousDateLabel ? <h3 className="store-inventory-history-day">{dateLabel}</h3> : null}
+              <article className="store-inventory-history-row">
                 <div className="store-inventory-history-time">
                   <strong>{new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "zh-CN", { timeZone: "Asia/Tokyo", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(report.createdAt))}</strong>
                   <span data-i18n-ignore>{labels.operator}: {actorLabel(report, labels)}</span>
                 </div>
                 <div className="store-inventory-history-operation">
-                  <strong data-i18n-ignore>{report.runType === "full_sync" ? actionLabel(report, labels) : report.itemLabel}</strong>
+                  <strong data-i18n-ignore>{report.runType === "full_sync" ? actionLabel(report, labels) : historyItemName(report, language)}</strong>
                   <span data-i18n-ignore>{report.runType === "full_sync" ? "Store → Bridge" : actionLabel(report, labels)}</span>
                 </div>
                 <div className="store-inventory-history-platforms">
@@ -386,9 +420,16 @@ export default function InventoryHistoryPage() {
                   </div>
                 ) : null}
               </article>
+              </Fragment>
             );
           })}
         </section>
+        <nav className="store-history-pagination" aria-label="履歴ページ">
+          <button className="secondary-button" type="button" disabled={currentPage === 1} onClick={() => changePage(currentPage - 1)}>前へ</button>
+          <span>{currentPage} / {pageCount} · {filteredReports.length} <span>件</span></span>
+          <button className="secondary-button" type="button" disabled={currentPage === pageCount} onClick={() => changePage(currentPage + 1)}>次へ</button>
+        </nav>
+        {reports.length >= 200 ? <p className="muted-text">最新200件を表示しています。期間を絞り込んで確認してください。</p> : null}
       </section>
     </main>
   );

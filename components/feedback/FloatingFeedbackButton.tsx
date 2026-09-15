@@ -31,6 +31,8 @@ export function FloatingFeedbackButton() {
     if (pathname === "/os/login" || pathname.startsWith("/os/logout")) return null;
     if (pathname === "/store/feedback" || pathname === "/os/feedback") return null;
     if (pathname.startsWith("/store/pos/customer-display")) return null;
+    if (["/store/pos", "/store/timecard", "/store/seats"].includes(pathname)) return null;
+    if (pathname.startsWith("/store/display/") || pathname === "/store/kitchen" || pathname === "/store/pickup-display") return null;
     if (pathname.startsWith("/store")) {
       return {
         source: "store" as const,

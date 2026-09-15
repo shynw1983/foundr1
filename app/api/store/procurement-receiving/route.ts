@@ -107,7 +107,12 @@ export async function PATCH(request: Request) {
     if (!batchId) return Response.json({ error: "配送バッチが見つかりません。" }, { status: 400 });
 
     const batchRows = await sql`
-      select purchase_orders.store_id::text as "storeId"
+      select purchase_orders.store_id::text as "storeId",
+        exists (
+          select 1 from delivery_batch_items
+          join purchase_order_items on purchase_order_items.id = delivery_batch_items.purchase_order_item_id
+          where delivery_batch_items.delivery_batch_id = delivery_batches.id
+        ) as "hasItems"
       from delivery_batches
       join purchase_orders on purchase_orders.id = delivery_batches.purchase_order_id
       where delivery_batches.id = ${batchId}
@@ -116,6 +121,9 @@ export async function PATCH(request: Request) {
     if (!batchRows[0]) return Response.json({ error: "配送バッチが見つかりません。" }, { status: 404 });
     if (!await canAccessStore(session, batchRows[0].storeId)) {
       return Response.json({ error: "この納品を確認する権限がありません。" }, { status: 403 });
+    }
+    if (!batchRows[0].hasItems) {
+      return Response.json({ error: "確認する商品がありません。発注内容を確認してください。" }, { status: 409 });
     }
 
     await sql`

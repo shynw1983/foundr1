@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { isPosSellableItem } from "../../../../lib/pos-catalog-policy";
 import { requireOsSession } from "../../../../lib/api-auth";
 import { createPickupCode, findCustomerOrderById } from "../../../../lib/customer-orders";
 import { sql } from "../../../../lib/db";
@@ -471,7 +472,8 @@ async function getPosMenu(selectedStoreId: string) {
     `
   ]);
 
-  const itemIds = (items as Array<{ id: string }>).map((item) => item.id);
+  const sellableItems = (items as Array<{ id: string; name: string }>).filter(isPosSellableItem);
+  const itemIds = sellableItems.map((item) => item.id);
   const optionGroups = itemIds.length
     ? await sql`
       select
@@ -521,7 +523,7 @@ async function getPosMenu(selectedStoreId: string) {
     `
     : [];
 
-  return { brands, categories, items, optionGroups };
+  return { brands, categories, items: sellableItems, optionGroups };
 }
 
 async function getTodaySummary(selectedStoreId: string) {
@@ -1132,6 +1134,9 @@ export async function POST(request: Request) {
       and coalesce(menu_store_settings.pos_enabled, true) = true
       and coalesce(menu_store_settings.is_available, true) = true
   `;
+  if ((menuRows as Array<{ name: string }>).some((item) => !isPosSellableItem(item))) {
+    return Response.json({ error: "案内専用の商品は会計できません。商品を選び直してください。" }, { status: 400 });
+  }
   const menuById = new Map((menuRows as Array<{
     id: string;
     brandId: string;
@@ -1144,7 +1149,7 @@ export async function POST(request: Request) {
     posWeightUnitPrice: number | null;
     price: number;
     variableSchema: Record<string, unknown>;
-  }>).map((item) => [item.id, item]));
+  }>).filter(isPosSellableItem).map((item) => [item.id, item]));
   const optionRows = await sql`
     select
       menu_options.id::text,

@@ -4,6 +4,7 @@ import { StoreNativeOrderNotifier } from "./components/StoreNativeOrderNotifier"
 import { StoreInventorySyncStatus } from "./components/StoreInventorySyncStatus";
 import { StorePrintStation } from "./components/StorePrintStation";
 import { StoreVersionNotice } from "./components/StoreVersionNotice";
+import "./store-responsive.css";
 
 export const metadata: Metadata = {
   title: "Foundr1 STORE",

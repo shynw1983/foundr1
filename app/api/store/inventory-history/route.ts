@@ -81,6 +81,8 @@ export async function GET(request: Request) {
       recent_runs.run_type as "runType",
       recent_runs.action,
       recent_runs.item_label as "itemLabel",
+      coalesce(catalog_item.name, catalog_option.name, '') as "itemName",
+      coalesce(catalog_item.display_names, catalog_option.display_names, '{}'::jsonb) as "itemDisplayNames",
       recent_runs.inventory_key as "inventoryKey",
       recent_runs.source,
       recent_runs.scheduled_for::text as "scheduledFor",
@@ -97,6 +99,8 @@ export async function GET(request: Request) {
       commands.result as "commandResult",
       commands.updated_at::text as "commandUpdatedAt"
     from recent_runs
+    left join menu_catalog_items catalog_item on recent_runs.inventory_key = concat('item:', catalog_item.id::text)
+    left join menu_options catalog_option on recent_runs.inventory_key = concat('option:', catalog_option.id::text)
     left join local_bridge_commands commands
       on coalesce(nullif(commands.payload->>'syncRunId', ''), commands.payload->>'fullSyncRunId') = recent_runs.id::text
     order by recent_runs.created_at desc, commands.created_at
@@ -110,6 +114,8 @@ export async function GET(request: Request) {
       runType: String(row.runType),
       action: String(row.action),
       itemLabel: String(row.itemLabel),
+      itemName: String(row.itemName ?? ""),
+      itemDisplayNames: row.itemDisplayNames ?? {},
       inventoryKey: String(row.inventoryKey),
       source: String(row.source),
       scheduledFor: String(row.scheduledFor ?? ""),

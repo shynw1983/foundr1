@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ChefHat, Clock3 } from "lucide-react";
+import { CheckCircle2, ChefHat, Clock3, Menu } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
@@ -229,7 +229,7 @@ export default function StorePickupStatusDisplayPage() {
           if (!menuOpen) void activateDisplayMode();
           setMenuOpen((current) => !current);
         }}
-      />
+      ><Menu size={20} /></button>
       {menuOpen ? (
         <div className="store-display-menu">
           <strong>Pick Up 画面</strong>

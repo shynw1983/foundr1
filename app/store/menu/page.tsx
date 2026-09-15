@@ -693,7 +693,7 @@ export default function StoreMenuPage() {
           <div>
             <p className="eyebrow">Daily Availability</p>
             <h2>本日の販売状態</h2>
-            <p data-i18n-ignore>{storeMenuDescription(language)}</p>
+            <details className="store-menu-guide"><summary>操作ガイド</summary><p data-i18n-ignore>{storeMenuDescription(language)}</p></details>
           </div>
           <div className="store-menu-head-actions">
             <a className="secondary-button" href="/store/menu/inventory-history">
@@ -749,6 +749,14 @@ export default function StoreMenuPage() {
         {message ? <div className="inline-alert">{message}</div> : null}
 
         <div className="store-menu-layout">
+          <label className="store-menu-category-select">
+            <span>カテゴリー</span>
+            <select value={selectedCategory ?? ""} onChange={(event) => setSelectedCategory(event.target.value || null)}>
+              <option value="">すべて</option>
+              {categorySummaries.map((category) => <option key={category.name} value={category.name}>{category.name} ({category.count})</option>)}
+              {showOptionCategory ? <option value={optionCategoryKey}>オプション</option> : null}
+            </select>
+          </label>
           <aside className="panel store-menu-category-panel">
             <button
               className={selectedCategory === null ? "menu-category-button is-active" : "menu-category-button"}
@@ -876,6 +884,8 @@ export default function StoreMenuPage() {
                           <span data-i18n-ignore>{statusText(language, "unavailable")}</span>
                         </button>
                       </div>
+                      <details className="store-menu-note-disclosure">
+                        <summary>メモ</summary>
                       <div className="store-menu-note">
                         <input
                           value={item.statusNote}
@@ -888,6 +898,7 @@ export default function StoreMenuPage() {
                           メモ保存
                         </button>
                       </div>
+                      </details>
                       <PlatformAvailabilityPanel
                         target={item}
                         targetKind="item"

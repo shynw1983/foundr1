@@ -74,6 +74,8 @@ export default function ProcedureReaderPage() {
   const [selectedBookId, setSelectedBookId] = useState("maamaa-production-reference");
   const [selectedStepIndex, setSelectedStepIndex] = useState(0);
   const [query, setQuery] = useState("");
+  const [directoryOpen, setDirectoryOpen] = useState(false);
+  const [referenceOpen, setReferenceOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [maamaaReferenceSettings, setMaamaaReferenceSettings] = useState<MaamaaProductionReferenceSettings>(defaultMaamaaProductionReferenceSettings);
@@ -132,6 +134,7 @@ export default function ProcedureReaderPage() {
   function selectBook(id: string) {
     setSelectedBookId(id);
     setSelectedStepIndex(0);
+    setDirectoryOpen(false);
   }
 
   return (
@@ -148,7 +151,11 @@ export default function ProcedureReaderPage() {
       </header>
 
       <section className="procedure-reader-layout">
-        <aside className="procedure-reader-list" aria-label="手順書一覧">
+        <div className="procedure-reader-mobile-tools">
+          <button className="secondary-button" type="button" aria-expanded={directoryOpen} aria-controls="procedure-directory" onClick={() => setDirectoryOpen((open) => !open)}>手順書一覧</button>
+          <button className="secondary-button" type="button" aria-expanded={referenceOpen} aria-controls="procedure-reference" onClick={() => setReferenceOpen((open) => !open)}>関連商品・早見表</button>
+        </div>
+        <aside id="procedure-directory" className={`procedure-reader-list${directoryOpen ? " is-open" : ""}`} aria-label="手順書一覧">
           <label className="search-box procedure-reader-search">
             <Search size={17} />
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="手順書を検索" />
@@ -159,8 +166,7 @@ export default function ProcedureReaderPage() {
               className={`procedure-reader-book ${showMaamaaReference ? "is-active" : ""}`}
               type="button"
               onClick={() => {
-                setSelectedBookId("maamaa-production-reference");
-                setSelectedStepIndex(0);
+                selectBook("maamaa-production-reference");
               }}
             >
               <span>マーラータン</span>
@@ -270,7 +276,7 @@ export default function ProcedureReaderPage() {
           )}
         </section>
 
-        <aside className="procedure-reader-products" aria-label="関連商品">
+        <aside id="procedure-reference" className={`procedure-reader-products${referenceOpen ? " is-open" : ""}`} aria-label="関連商品">
           {showMaamaaReference ? (
             <MaamaaProductionSideReference language={maamaaReferenceLanguage} settings={maamaaReferenceSettings} />
           ) : (
