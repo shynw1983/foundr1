@@ -55,6 +55,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
   const days = Math.max(1, Math.min(90, Number(params.get("days") ?? 30) || 30));
+  const latestFullSync = params.get("scope") === "latest_full_sync";
   const rows = await sql`
     with recent_runs as (
       select
@@ -66,15 +67,16 @@ export async function GET(request: Request) {
         runs.inventory_key,
         runs.source,
         runs.scheduled_for,
-        runs.details,
+        runs.details - 'snapshot' as details,
         runs.created_at,
         employees.name as actor_name
       from menu_inventory_sync_runs runs
       left join employees on employees.id = runs.requested_by
       where runs.store_id::text = ${storeId}
         and runs.created_at >= now() - (${days}::text || ' days')::interval
+        and (not ${latestFullSync} or (runs.run_type = 'full_sync' and runs.details->>'authority' = 'uber_eats'))
       order by runs.created_at desc
-      limit 200
+      limit ${latestFullSync ? 1 : 200}
     )
     select
       recent_runs.id::text,
@@ -95,8 +97,29 @@ export async function GET(request: Request) {
       commands.command_type as "commandType",
       commands.last_error as "lastError",
       commands.attempts,
-      commands.payload as "commandPayload",
-      commands.result as "commandResult",
+      -- History and progress need comparison identities and statuses, not the
+      -- full platform snapshots/staging data stored with each bridge command.
+      -- Project in SQL so those blobs never cross the database response limit.
+      jsonb_build_object(
+        'comparisonAudit', commands.payload->'comparisonAudit',
+        'isAvailable', commands.payload->'isAvailable',
+        'targets', coalesce((select jsonb_agg(jsonb_build_object(
+          'kind', target->'kind', 'targetId', target->'targetId', 'label', target->'label'
+        )) from jsonb_array_elements(case when jsonb_typeof(commands.payload->'targets') = 'array'
+          then commands.payload->'targets' else '[]'::jsonb end) target), '[]'::jsonb)
+      ) as "commandPayload",
+      jsonb_build_object(
+        'missingTargets', commands.result->'missingTargets',
+        'items', coalesce((select jsonb_agg(jsonb_build_object(
+          'kind', item->'kind', 'targetId', item->'targetId', 'found', item->'found',
+          'isAvailable', item->'isAvailable', 'status', item->'status',
+          'stagingVerified', item->'stagingVerified',
+          'releasePlan', case when jsonb_typeof(item->'releasePlan') in ('object', 'array')
+            then 'true'::jsonb else item->'releasePlan' end,
+          'releaseError', item->'releaseError'
+        )) from jsonb_array_elements(case when jsonb_typeof(commands.result->'items') = 'array'
+          then commands.result->'items' else '[]'::jsonb end) item), '[]'::jsonb)
+      ) as "commandResult",
       commands.updated_at::text as "commandUpdatedAt"
     from recent_runs
     left join menu_catalog_items catalog_item on recent_runs.inventory_key = concat('item:', catalog_item.id::text)
