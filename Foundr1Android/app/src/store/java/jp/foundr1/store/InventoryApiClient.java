@@ -23,10 +23,25 @@ final class InventoryApiClient {
 
     private InventoryApiClient() {}
 
+    static final class ApiException extends java.io.IOException {
+        final int status;
+        ApiException(int status, String message) { super(message); this.status = status; }
+        boolean accessDenied() { return status == 401 || status == 403; }
+    }
+
     static JSONObject loadAll(String storeId) throws Exception {
         // Use the same ID-addressed catalog as the Store sales-status page.
         // Kitchen inventory rows can aggregate several options by ingredient.
-        return normalizeMenuSettings(loadConfiguration(storeId));
+        JSONObject result = normalizeMenuSettings(loadConfiguration(storeId));
+        if (storeId != null && !storeId.isEmpty() && !storeId.equals(result.optString("storeId"))) {
+            throw new ApiException(403, "店舗の操作権限を確認してください。 / 请确认门店操作权限。");
+        }
+        return result;
+    }
+
+    static JSONObject loadHistory(String storeId) throws Exception {
+        return request("GET", BASE_URL + "/api/store/inventory-history?days=1&storeId="
+            + URLEncoder.encode(storeId, "UTF-8"), null);
     }
 
     static JSONObject loadConfiguration(String storeId) throws Exception {
@@ -58,7 +73,18 @@ final class InventoryApiClient {
         context.getSharedPreferences(CACHE_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(cacheKey(storeId), body.toString())
+            .putLong(cacheKey(storeId) + "_checked_at", System.currentTimeMillis())
             .apply();
+    }
+
+    static long cacheCheckedAt(Context context, String storeId) {
+        return context.getSharedPreferences(CACHE_NAME, Context.MODE_PRIVATE)
+            .getLong(cacheKey(storeId) + "_checked_at", 0);
+    }
+
+    static void clearCache(Context context, String storeId) {
+        context.getSharedPreferences(CACHE_NAME, Context.MODE_PRIVATE).edit()
+            .remove(cacheKey(storeId)).remove(cacheKey(storeId) + "_checked_at").apply();
     }
 
     static JSONObject readCache(Context context, String storeId) {
@@ -163,45 +189,54 @@ final class InventoryApiClient {
 
     private static JSONObject request(String method, String endpoint, String payload) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(endpoint).openConnection();
-        connection.setConnectTimeout(10000);
-        connection.setReadTimeout(20000);
-        connection.setRequestMethod(method);
-        connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("X-Foundr1-Native-Surface", "store-widget");
-        String cookies = CookieManager.getInstance().getCookie(BASE_URL);
-        if (cookies != null && !cookies.trim().isEmpty()) {
-            connection.setRequestProperty("Cookie", cookies);
-        }
-        if (payload != null) {
-            byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setFixedLengthStreamingMode(bytes.length);
-            try (OutputStream output = connection.getOutputStream()) {
-                output.write(bytes);
+        try {
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(20000);
+            connection.setRequestMethod(method);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("X-Foundr1-Native-Surface", "store-widget");
+            String cookies = CookieManager.getInstance().getCookie(BASE_URL);
+            if (cookies != null && !cookies.trim().isEmpty()) {
+                connection.setRequestProperty("Cookie", cookies);
             }
-        }
-
-        int status = connection.getResponseCode();
-        InputStream stream = status >= 200 && status < 300
-            ? connection.getInputStream()
-            : connection.getErrorStream();
-        StringBuilder text = new StringBuilder();
-        if (stream != null) {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) text.append(line);
+            if (payload != null) {
+                byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                connection.setFixedLengthStreamingMode(bytes.length);
+                try (OutputStream output = connection.getOutputStream()) {
+                    output.write(bytes);
+                }
             }
-        }
-        connection.disconnect();
 
-        JSONObject body = text.length() == 0 ? new JSONObject() : new JSONObject(text.toString());
-        if (status < 200 || status >= 300) {
-            String message = status == 401
-                ? "ログインの有効期限が切れています。Foundr1 Storeを開いてログインしてください。"
-                : body.optString("error", "在庫状態を更新できませんでした。");
-            throw new IllegalStateException(message);
+            int status = connection.getResponseCode();
+            InputStream stream = status >= 200 && status < 300
+                ? connection.getInputStream()
+                : connection.getErrorStream();
+            StringBuilder text = new StringBuilder();
+            if (stream != null) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) text.append(line);
+                }
+            }
+
+            JSONObject body;
+            try {
+                body = text.length() == 0 ? new JSONObject() : new JSONObject(text.toString());
+            } catch (org.json.JSONException invalidJson) {
+                if (status >= 200 && status < 300) throw new java.io.IOException("Invalid inventory response", invalidJson);
+                body = new JSONObject();
+            }
+            if (status < 200 || status >= 300) {
+                String message = status == 401
+                    ? "ログインの有効期限が切れています。Foundr1 Storeを開いてログインしてください。"
+                    : body.optString("error", "在庫状態を更新できませんでした。");
+                throw new ApiException(status, message);
+            }
+            return body;
+        } finally {
+            connection.disconnect();
         }
-        return body;
     }
 }

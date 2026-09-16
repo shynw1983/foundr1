@@ -51,6 +51,7 @@ public class InventoryWidgetConfigActivity extends Activity {
     private String savedStoreId = "";
     private String savedBrandId = "";
     private int brandLoadSequence = 0;
+    private boolean brandsLoaded = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -218,6 +219,8 @@ public class InventoryWidgetConfigActivity extends Activity {
 
     private void loadBrands(String storeId) {
         int sequence = ++brandLoadSequence;
+        brandsLoaded = false;
+        updateScopeSummary();
         loading.setVisibility(View.VISIBLE);
         brandSpinner.setEnabled(false);
         status.setText("品牌读取中… / ブランドを読み込み中…");
@@ -236,6 +239,7 @@ public class InventoryWidgetConfigActivity extends Activity {
     }
 
     private void showBrands(JSONObject body) {
+        brandsLoaded = true;
         brands.clear();
         brands.add(new Choice("", "全ブランド / 全部品牌"));
         JSONArray rows = body.optJSONArray("brands");
@@ -259,6 +263,7 @@ public class InventoryWidgetConfigActivity extends Activity {
     }
 
     private void clearBrands() {
+        brandsLoaded = false;
         brandLoadSequence += 1;
         brands.clear();
         brands.add(new Choice("", "全ブランド / 全部品牌"));
@@ -284,7 +289,7 @@ public class InventoryWidgetConfigActivity extends Activity {
         String storeLabel = store == null || store.id.isEmpty() ? (chinese ? "未选择门店" : "店舗未選択") : store.name;
         String brandLabel = brand == null || brand.id.isEmpty() ? allBrands : brand.name;
         if (scopeSummary != null) scopeSummary.setText(storeLabel + "  ·  " + brandLabel);
-        boolean ready = store != null && !store.id.isEmpty() && brandSpinner != null && brandSpinner.getAdapter() != null;
+        boolean ready = brandsLoaded && store != null && !store.id.isEmpty();
         if (saveButton != null) {
             saveButton.setEnabled(ready);
             saveButton.setAlpha(ready ? 1f : 0.45f);
@@ -295,7 +300,7 @@ public class InventoryWidgetConfigActivity extends Activity {
         Choice language = (Choice) languageSpinner.getSelectedItem();
         Choice store = selected(storeSpinner, stores);
         Choice brand = selected(brandSpinner, brands);
-        if (store == null || store.id.isEmpty()) return;
+        if (!brandsLoaded || store == null || store.id.isEmpty()) return;
         InventoryWidgetProvider.saveConfiguration(
             this,
             widgetId,

@@ -12,6 +12,12 @@
             android:theme="@style/QuickInventoryTheme" />
 
         <activity
+            android:name=".InventoryWidgetSyncActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@style/QuickInventoryTheme" />
+
+        <activity
             android:name=".InventoryWidgetConfigActivity"
             android:exported="true"
             android:theme="@style/QuickInventoryTheme">
@@ -22,6 +28,7 @@
 
         <receiver
             android:name=".InventoryWidgetProvider"
+            android:label="@string/inventory_widget_name"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -29,6 +36,11 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/inventory_widget_info" />
+        </receiver>
+        <receiver android:name=".InventoryQuickWidgetProvider"
+            android:label="@string/inventory_quick_widget_name" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/inventory_quick_widget_info" />
         </receiver>
         <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false" />
         <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
