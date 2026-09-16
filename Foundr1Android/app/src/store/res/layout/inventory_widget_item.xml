@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/inventory_widget_item"
-    android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-    android:layout_marginEnd="4dp" android:gravity="center_vertical"
-    android:paddingHorizontal="4dp" android:maxLines="1" android:ellipsize="end"
-    android:textColor="#183B2E" android:textSize="12sp" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/inventory_widget_item_link"
+    android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center_vertical">
+    <TextView android:id="@+id/inventory_widget_item" style="@style/InventoryWidgetText"
+        android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+        android:textSize="11sp" />
+    <TextView style="@style/InventoryWidgetText"
+        android:layout_width="16dp" android:layout_height="match_parent"
+        android:gravity="center_vertical|end" android:text="›" android:textColor="@color/widget_muted"
+        android:importantForAccessibility="no" />
+</LinearLayout>

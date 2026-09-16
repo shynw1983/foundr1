@@ -168,7 +168,8 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
         RemoteViews views;
         if (Build.VERSION.SDK_INT >= 31) {
             Map<SizeF, RemoteViews> layouts = new java.util.LinkedHashMap<>();
-            layouts.put(new SizeF(110, 56), views(context, widgetId, InventoryWidgetPolicy.COMPACT, data));
+            layouts.put(new SizeF(110, 56), views(context, widgetId, InventoryWidgetPolicy.MINIMAL, data));
+            layouts.put(new SizeF(160, 88), views(context, widgetId, InventoryWidgetPolicy.COMPACT, data));
             layouts.put(new SizeF(250, 110), views(context, widgetId, InventoryWidgetPolicy.DENSE, data));
             layouts.put(new SizeF(InventoryWidgetPolicy.SUMMARY_WIDTH, InventoryWidgetPolicy.SUMMARY_HEIGHT),
                 views(context, widgetId, InventoryWidgetPolicy.SUMMARY, data));
@@ -189,12 +190,12 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
         manager.updateAppWidget(widgetId, views);
     }
 
-    private static RemoteViews views(Context context, int id, int size, InventoryWidgetData data) {
+    static RemoteViews views(Context context, int id, int size, InventoryWidgetData data) {
         boolean zh = LANGUAGE_ZH.equals(language(context, id));
-        boolean compact = size == InventoryWidgetPolicy.COMPACT;
+        boolean compact = size == InventoryWidgetPolicy.COMPACT || size == InventoryWidgetPolicy.MINIMAL;
         boolean configured = !storeId(context, id).isEmpty();
-        RemoteViews views = new RemoteViews(context.getPackageName(), compact
-            ? R.layout.quick_inventory_widget_compact : size == InventoryWidgetPolicy.DENSE
+        RemoteViews views = new RemoteViews(context.getPackageName(), size == InventoryWidgetPolicy.MINIMAL
+            ? R.layout.quick_inventory_widget_minimal : compact ? R.layout.quick_inventory_widget_compact : size == InventoryWidgetPolicy.DENSE
                 ? R.layout.quick_inventory_widget_dense : R.layout.quick_inventory_widget);
         String scope = configured ? storeName(context, id) + " · "
             + (brandName(context, id).isEmpty() ? (zh ? "全部品牌" : "全ブランド") : brandName(context, id)) : "Foundr1 Store";
@@ -210,12 +211,12 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
         if (compact) return views;
 
         String error = InventoryWidgetData.denied(data.syncError) ? data.syncError : data.inventoryError;
-        String status = !configured ? (zh ? "请设置门店" : "店舗を設定")
-            : !data.hasInventory ? errorText(error, zh)
-            : data.shortages.isEmpty() ? (zh ? "暂无缺货" : "欠品なし")
-            : (zh ? "缺货 " + data.shortages.size() + " 项" : "欠品 " + data.shortages.size() + "件");
-        views.setTextViewText(R.id.inventory_widget_status, status);
-        views.setOnClickPendingIntent(R.id.inventory_widget_status, configured
+        views.setTextViewText(R.id.inventory_widget_count, data.hasInventory ? String.valueOf(data.shortages.size()) : "—");
+        views.setTextViewText(R.id.inventory_widget_status, zh ? "缺货 ›" : "欠品 ›");
+        views.setContentDescription(R.id.inventory_widget_metric, data.hasInventory
+            ? (zh ? "缺货 " + data.shortages.size() + " 项，查看全部" : "欠品 " + data.shortages.size() + "件、すべて表示")
+            : errorText(error, zh));
+        views.setOnClickPendingIntent(R.id.inventory_widget_metric, configured
             ? actionIntent(context, id, QuickInventoryActivity.MODE_RESTORE, null) : configurationIntent(context, id));
         long checked = data.inventoryCheckedAt;
         if (data.syncCheckedAt > 0 && checked > 0) checked = Math.min(checked, data.syncCheckedAt);
@@ -227,31 +228,31 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
         views.setContentDescription(R.id.inventory_widget_refresh, (zh ? "刷新，数据更新于 " : "再読込、更新時刻 ") + time(checked));
         views.setOnClickPendingIntent(R.id.inventory_widget_refresh, refreshIntent(context, id));
         views.removeAllViews(R.id.inventory_widget_items);
-        views.removeAllViews(R.id.inventory_widget_more);
-        int visible = size == InventoryWidgetPolicy.EXPANDED ? 4 : 2;
+        int visible = size == InventoryWidgetPolicy.EXPANDED ? 4 : size == InventoryWidgetPolicy.DENSE ? 1 : 2;
         for (int i = 0; i < Math.min(visible, data.shortages.size()); i++) {
             JSONObject item = data.shortages.get(i);
-            RemoteViews row = new RemoteViews(context.getPackageName(), i < 2 ? R.layout.inventory_widget_item : R.layout.inventory_widget_item_row);
+            RemoteViews row = new RemoteViews(context.getPackageName(), R.layout.inventory_widget_item);
             String label = InventoryWidgetData.itemLabel(item, language(context, id));
             String description = label + " · " + item.optString("brandName") + " · " + item.optString("groupName");
-            row.setTextViewText(R.id.inventory_widget_item, i < 2 ? label : description);
-            row.setContentDescription(R.id.inventory_widget_item, description + (zh ? "，恢复销售" : "、販売再開"));
-            row.setOnClickPendingIntent(R.id.inventory_widget_item, actionIntent(context, id, QuickInventoryActivity.MODE_RESTORE, item));
-            views.addView(i < 2 ? R.id.inventory_widget_items : R.id.inventory_widget_more, row);
+            row.setTextViewText(R.id.inventory_widget_item, label);
+            row.setContentDescription(R.id.inventory_widget_item_link, description + (zh ? "，恢复销售" : "、販売再開"));
+            row.setOnClickPendingIntent(R.id.inventory_widget_item_link, actionIntent(context, id, QuickInventoryActivity.MODE_RESTORE, item));
+            views.addView(R.id.inventory_widget_items, row);
         }
-        if (data.shortages.size() > visible) {
-            RemoteViews more = new RemoteViews(context.getPackageName(), R.layout.inventory_widget_item);
-            more.setTextViewText(R.id.inventory_widget_item, "+" + (data.shortages.size() - visible) + " ›");
-            more.setContentDescription(R.id.inventory_widget_item, zh ? "查看全部缺货" : "欠品をすべて表示");
-            more.setOnClickPendingIntent(R.id.inventory_widget_item, actionIntent(context, id, QuickInventoryActivity.MODE_RESTORE, null));
-            views.addView(R.id.inventory_widget_items, more);
+        if (data.shortages.isEmpty()) {
+            RemoteViews message = new RemoteViews(context.getPackageName(), R.layout.inventory_widget_message);
+            message.setTextViewText(R.id.inventory_widget_item, !configured ? (zh ? "点击门店名称进行设置" : "店舗名をタップして設定")
+                : !data.hasInventory ? errorText(error, zh) : (zh ? "全部商品销售中" : "すべて販売中"));
+            views.addView(R.id.inventory_widget_items, message);
         }
-        String operation = zh ? "暂无可显示的最近操作" : "表示できる直近の操作なし";
-        CharSequence platforms = zh ? "同步结果将在这里显示" : "同期結果をここに表示";
+        String operation = "";
+        String operationDescription = "";
+        CharSequence platforms = zh ? "暂无最近操作" : "直近の操作なし";
         if (data.latestRun != null) {
-            operation = (zh ? "最近：" : "直近：") + InventoryWidgetData.runLabel(data.latestRun, language(context, id))
-                + " → " + ("available".equals(data.latestRun.optString("action")) ? (zh ? "恢复" : "販売再開") : (zh ? "缺货" : "欠品"));
-            platforms = platformSummary(data, zh);
+            String action = "available".equals(data.latestRun.optString("action")) ? (zh ? "恢复" : "販売再開") : (zh ? "缺货" : "欠品登録");
+            operation = (zh ? "最近 · " : "直近 · ") + action + " ›";
+            operationDescription = InventoryWidgetData.runLabel(data.latestRun, language(context, id)) + " → " + action;
+            platforms = syncSummary(data, zh);
         }
         if (!data.syncError.isEmpty() || !error.isEmpty()) {
             platforms = errorText(data.syncError.isEmpty() ? error : data.syncError, zh)
@@ -260,13 +261,29 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
             platforms = zh ? "同步结果确认中…" : "同期結果を確認中…";
         }
         if (!configured) {
-            operation = zh ? "点击门店名称进行设置" : "店舗名をタップして設定";
+            operation = "";
             platforms = zh ? "选择这个小组件的门店和品牌" : "このウィジェットの店舗・ブランドを選択";
         }
         views.setTextViewText(R.id.inventory_widget_operation, operation);
+        views.setViewVisibility(R.id.inventory_widget_operation, size == InventoryWidgetPolicy.DENSE ? android.view.View.GONE : android.view.View.VISIBLE);
         views.setTextViewText(R.id.inventory_widget_platforms, platforms);
+        views.setTextColor(R.id.inventory_widget_platforms, context.getColor(!data.syncError.isEmpty() || !error.isEmpty() || data.failed()
+            ? R.color.widget_error : data.pending() ? R.color.widget_warning : R.color.widget_muted));
+        views.setContentDescription(R.id.inventory_widget_sync, operationDescription + "。" + platforms + "。" + platformSummary(data, zh));
         views.setOnClickPendingIntent(R.id.inventory_widget_sync, configured ? detailIntent(context, id) : configurationIntent(context, id));
         return views;
+    }
+
+    // Summarize the last operation here; keep full product names and each platform in its detail view.
+    static String syncSummary(InventoryWidgetData data, boolean zh) {
+        java.util.List<JSONObject> platforms = InventoryWidgetData.platforms(data.latestRun);
+        int completed = 0;
+        for (JSONObject platform : platforms) if ("succeeded".equals(InventoryWidgetData.status(platform))) completed++;
+        String progress = completed + "/" + platforms.size();
+        if (data.failed()) return zh ? "! 同步失败 · 查看详情 ›" : "! 同期に失敗 · 詳細 ›";
+        if (data.pending()) return (zh ? "同步中 · " : "同期中 · ") + progress;
+        if (!platforms.isEmpty() && completed == platforms.size()) return "✓ " + progress + (zh ? " 同步完成" : " 同期完了");
+        return zh ? "同步结果待确认 ›" : "同期結果は未確認 ›";
     }
 
     static CharSequence platformSummary(InventoryWidgetData data, boolean zh) {

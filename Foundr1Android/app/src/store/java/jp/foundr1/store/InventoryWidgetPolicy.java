@@ -8,15 +8,16 @@ final class InventoryWidgetPolicy {
     static final int SUMMARY = 1;
     static final int EXPANDED = 2;
     static final int DENSE = 3;
+    static final int MINIMAL = 4;
     static final int SUMMARY_WIDTH = 250;
-    static final int SUMMARY_HEIGHT = 156;
-    static final int EXPANDED_HEIGHT = 236;
+    static final int SUMMARY_HEIGHT = 164;
+    static final int EXPANDED_HEIGHT = 208;
     static final long FRESH_MILLIS = 5 * 60 * 1000L;
 
     private InventoryWidgetPolicy() {}
 
     static int layout(int width, int height) {
-        if (width < SUMMARY_WIDTH || height < 110) return COMPACT;
+        if (width < SUMMARY_WIDTH || height < 110) return width >= 160 && height >= 88 ? COMPACT : MINIMAL;
         if (height < SUMMARY_HEIGHT) return DENSE;
         return height >= EXPANDED_HEIGHT ? EXPANDED : SUMMARY;
     }

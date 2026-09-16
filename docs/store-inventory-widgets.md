@@ -4,11 +4,13 @@ The Android Store app offers two launcher entries using the same saved store,
 brand and language settings:
 
 - **2×1 shortcuts:** shortage registration and sales resumption, with the scope
-  above the buttons. Tap the scope to reconfigure.
+  above the buttons. Tap the scope to reconfigure. The standard shortcut layout
+  starts at 160 x 88 dp; a separate minimum layout supports 110 x 56 dp.
 - **4×2 sales status:** unavailable item/option count, two named shortcuts,
-  overflow into the full unavailable list, the latest operation and its platform
-  outcomes. Taller layouts show two more named items. A dense layout supports
-  launcher allocations as short as 110 dp; regular layouts start at 156 dp.
+  a count that opens the full unavailable list, and a compact summary of the
+  latest operation. Tap the summary for the full product name and each platform
+  outcome. Dense layouts start at 110 dp with one product, regular layouts at
+  164 dp with two, and expanded layouts at 208 dp with four.
 
 Cell counts are launcher targets. Android 12+ selects responsive RemoteViews by
 available width/height; older launchers use portrait/landscape options. Existing
@@ -78,3 +80,6 @@ Compile the Store variant with `./gradlew :app:assembleStoreDebug` from
 `Foundr1Android`. The 2026-09-16 implementation intentionally omits connected-phone
 testing at the user's request. Launcher appearance, resize interactions, and
 background refresh timing still require later device confirmation.
+
+See [Store visual refinement](store-visual-refinement.md) for the shared visual
+system and host-side RemoteViews render checks.

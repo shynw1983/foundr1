@@ -338,3 +338,111 @@ body:has(.store-pos-page) .floating-feedback { bottom: calc(94px + env(safe-area
   .seat-plan-table { min-width: 36px; }
   .seat-plan-table-combine { top: 41%; min-height: 36px; }
 }
+
+/* Store visual system: quiet surfaces, one clear action, consistent type hierarchy.
+   Scoped to staff workbenches; customer displays and the OS keep their own theme. */
+body:has(.store-workbench-shell, .procedure-reader-shell, .store-inventory-history-page) {
+  --color-bg: #f3f5f3;
+  --color-surface-muted: #eef2ee;
+  --color-surface-subtle: #f8faf8;
+  --color-border: #dfe6df;
+  --color-border-strong: #c7d4ca;
+  --color-text: #23352e;
+  --color-text-muted: #6c7c73;
+  --color-brand: #245d49;
+  --color-brand-hover: #173f35;
+  --color-brand-soft: #e8f0ea;
+  --color-brand-border: #bbd0c1;
+  --bg: var(--color-bg);
+  --panel: #fff;
+  --ink: var(--color-text);
+  --muted: var(--color-text-muted);
+  --line: var(--color-border);
+  --green: var(--color-brand);
+  --green-soft: var(--color-brand-soft);
+  --soft: var(--color-surface-muted);
+  --shadow: 0 2px 8px #173f3504;
+  --shadow-soft: 0 4px 16px #173f3508;
+  --shadow-focus: 0 0 0 3px #245d4924;
+  background: var(--bg);
+}
+.store-workbench-shell,
+.procedure-reader-shell,
+.store-inventory-history-page { background: var(--bg); }
+
+:is(.store-workbench-shell, .procedure-reader-shell, .store-inventory-history-page) :is(.panel, .os-module-card, .store-push-section) {
+  border-color: var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+:is(.store-workbench-shell, .procedure-reader-shell, .store-inventory-history-page) :is(.primary-button, .secondary-button, .text-button) {
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+:is(.store-workbench-shell, .procedure-reader-shell, .store-inventory-history-page) :is(button, a, select, input):focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+}
+:is(.store-workbench-topbar, .procedure-reader-topbar) .brand-block h1 { font-weight: 600; letter-spacing: -.025em; }
+:is(.store-workbench-topbar, .procedure-reader-topbar) { background: transparent; }
+:is(.store-workbench-topbar, .procedure-reader-topbar) .eyebrow { color: var(--muted); font-weight: 400; letter-spacing: .025em; }
+.store-live-clock { border-color: transparent; background: transparent; }
+.store-live-clock strong { font-weight: 500; }
+.store-nav-tabs { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 5px 0 12px; gap: 4px; background: transparent; }
+.store-nav-tabs a,
+.store-nav-tabs .store-display-nav-menu button,
+.store-nav-store-switch :is(span, select) { font-weight: 500; }
+.store-nav-tabs a.is-active,
+.store-nav-tabs .store-display-nav-menu button.is-active { color: var(--green); background: var(--green-soft); font-weight: 600; }
+.store-nav-store-switch { background: transparent; }
+.store-user-tools :is(.user-badge, .notification-menu > summary, .os-language-picker select) { border-color: var(--line); border-radius: 10px; }
+.store-workbench-grid { gap: 14px; }
+.store-workbench-grid .os-module-card { padding: 20px; }
+.store-workbench-grid .os-module-heading h2 { font-size: 18px; font-weight: 600; }
+.store-workbench-grid .os-module-card p { font-size: 13px; font-weight: 400; line-height: 1.65; color: var(--muted); }
+.store-workbench-grid .os-module-icon { color: var(--green); background: var(--green-soft); border-color: transparent; border-radius: 12px; box-shadow: none; }
+
+/* Availability is one product list, not a pile of nested cards. */
+.store-menu-page { gap: 12px; }
+.store-menu-head.panel { padding: 4px 2px 8px; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.store-menu-head .eyebrow { display: none; }
+.store-menu-head h2 { font-size: 18px; font-weight: 500; margin: 0; }
+.store-menu-page > details.panel:not([open]) { padding-block: 12px; box-shadow: none; }
+.store-menu-page > details.panel > summary { font-size: 13px; font-weight: 500; color: var(--muted); }
+.store-menu-controls :is(label, legend) { font-weight: 500; }
+.store-menu-status-filter button:not(.is-active) { border-color: transparent; background: var(--color-surface-subtle); }
+.store-menu-status-filter button :is(span, small) { font-weight: 500; }
+.store-menu-list-head h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.store-menu-category-panel { padding: 8px; box-shadow: none; }
+.store-menu-category-panel .menu-category-button { border-color: transparent; font-weight: 500; }
+.store-menu-category-panel .menu-category-button.is-active { border-color: transparent; }
+.store-menu-item-list { gap: 0; }
+.store-menu-item-row { padding: 16px 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+.store-menu-item-row:last-child { border-bottom: 0; }
+.store-menu-item-main strong { font-size: 15px; font-weight: 600; line-height: 1.5; }
+.store-menu-item-main :is(span, small) { font-size: 12px; font-weight: 400; line-height: 1.5; color: var(--muted); }
+.store-menu-image-empty { border: 0; background: var(--color-surface-muted); color: var(--muted); border-radius: 10px; font-weight: 400; }
+.store-menu-platform-settings { border-color: var(--line); }
+.store-menu-platform-summary-title { font-size: 12px; font-weight: 500; }
+.store-menu-platform-summary { font-size: 11px; font-weight: 400; }
+.store-menu-option-group { background: var(--panel); border-radius: 10px; }
+.store-menu-option-group-title :is(strong, span) { font-weight: 500; }
+.store-timecard-punch .timecard-employee-card { border-color: transparent; border-radius: 10px; background: var(--color-surface-subtle); }
+.store-timecard-punch .timecard-employee-card.is-selected { border-color: var(--color-brand-border); background: var(--green-soft); box-shadow: none; }
+.store-timecard-punch .timecard-employee-avatar { background: var(--green-soft); color: var(--green); font-weight: 500; }
+.store-timecard-punch .timecard-status { border-color: transparent; border-radius: 10px; background: var(--color-surface-subtle); }
+.store-timecard-punch .panel-title h2 { font-size: 18px; font-weight: 600; }
+
+@media (max-width: 760px) {
+  .store-workbench-grid .os-module-card { padding: 16px; }
+  .store-menu-head.panel { padding: 2px 2px 6px; }
+  .store-menu-head > div:first-child { flex-basis: auto; }
+  .store-menu-head-actions { gap: 6px; }
+  .store-menu-item-row { padding-block: 14px; }
+  .store-menu-status-filter button { min-height: 44px; }
+  .store-menu-status-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .store-menu-status-actions button { min-width: 0; min-height: 44px; padding: 8px 5px; gap: 4px; font-size: 12px; font-weight: 500; }
+  .store-menu-status-actions button svg { width: 14px; height: 14px; flex-shrink: 0; }
+}

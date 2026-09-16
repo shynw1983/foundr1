@@ -1,59 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:background="@drawable/inventory_widget_background"
-    android:paddingHorizontal="12dp" android:paddingVertical="8dp" android:orientation="vertical">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="22dp" android:gravity="center_vertical">
-        <TextView android:id="@+id/inventory_widget_title"
+    android:paddingHorizontal="14dp" android:paddingVertical="10dp" android:orientation="vertical">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="20dp" android:gravity="center_vertical">
+        <TextView android:id="@+id/inventory_widget_title" style="@style/InventoryWidgetText"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:text="Foundr1 Store" android:textColor="#183B2E" android:textSize="13sp"
-            android:fontFamily="sans-serif-medium" android:gravity="center_vertical"
-            android:maxLines="1" android:ellipsize="end" />
-        <TextView android:id="@+id/inventory_widget_refresh"
+            android:text="Foundr1 Store" android:fontFamily="sans-serif-medium" />
+        <TextView android:id="@+id/inventory_widget_refresh" style="@style/InventoryWidgetText"
             android:layout_width="wrap_content" android:layout_height="match_parent"
-            android:minWidth="60dp" android:gravity="center_vertical|end"
-            android:paddingStart="6dp" android:text="@string/inventory_widget_refresh"
-            android:textColor="#526A5F" android:textSize="10sp" android:maxLines="1" />
+            android:gravity="center_vertical|end" android:paddingStart="10dp"
+            android:text="@string/inventory_widget_refresh" android:textColor="@color/widget_muted" android:textSize="10sp" />
     </LinearLayout>
-    <LinearLayout android:layout_width="match_parent" android:layout_height="34dp" android:gravity="center_vertical">
-        <TextView android:id="@+id/inventory_widget_status"
-            android:layout_width="wrap_content" android:layout_height="match_parent"
-            android:gravity="center_vertical" android:paddingEnd="8dp"
-            android:text="@string/inventory_widget_empty" android:textColor="#183B2E" android:textSize="12sp"
-            android:maxLines="1" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:layout_marginTop="6dp" android:layout_marginBottom="4dp" android:gravity="center_vertical">
+        <LinearLayout android:id="@+id/inventory_widget_metric"
+            android:layout_width="64dp" android:layout_height="match_parent"
+            android:orientation="vertical" android:gravity="center_vertical">
+            <TextView android:id="@+id/inventory_widget_count" style="@style/InventoryWidgetText"
+                android:layout_width="match_parent" android:layout_height="34dp"
+                android:text="—" android:textSize="32sp" android:fontFamily="sans-serif-light"
+                android:autoSizeTextType="uniform" android:autoSizeMinTextSize="18sp" android:autoSizeMaxTextSize="32sp" />
+            <TextView android:id="@+id/inventory_widget_status" style="@style/InventoryWidgetText"
+                android:layout_width="match_parent" android:layout_height="16dp"
+                android:text="@string/inventory_widget_shortage_short" android:textSize="10sp" android:textColor="@color/widget_muted" />
+        </LinearLayout>
         <LinearLayout android:id="@+id/inventory_widget_items"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:gravity="center_vertical" android:orientation="horizontal" />
+            android:orientation="vertical" android:gravity="center_vertical" />
     </LinearLayout>
-    <LinearLayout android:id="@+id/inventory_widget_more"
-        android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
-        android:orientation="vertical" />
     <LinearLayout android:id="@+id/inventory_widget_sync"
-        android:layout_width="match_parent" android:layout_height="34dp" android:orientation="vertical">
-        <TextView android:id="@+id/inventory_widget_operation"
-            android:layout_width="match_parent" android:layout_height="16dp"
-            android:maxLines="1" android:ellipsize="end" android:text="@string/inventory_widget_no_operation"
-            android:textColor="#526A5F" android:textSize="11sp" android:includeFontPadding="false" />
-        <TextView android:id="@+id/inventory_widget_platforms"
-            android:layout_width="match_parent" android:layout_height="18dp"
-            android:maxLines="1" android:ellipsize="end" android:text="@string/inventory_widget_sync_help"
-            android:textColor="#526A5F" android:textSize="11sp" android:includeFontPadding="false" />
-    </LinearLayout>
-    <LinearLayout android:layout_width="match_parent" android:layout_height="48dp"
-        android:layout_marginTop="2dp" android:orientation="horizontal">
-        <Button android:id="@+id/inventory_widget_shortage"
+        android:layout_width="match_parent" android:layout_height="22dp" android:gravity="center_vertical">
+        <TextView android:id="@+id/inventory_widget_platforms" style="@style/InventoryWidgetText"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:layout_marginEnd="4dp" android:background="@drawable/inventory_widget_button"
-            android:gravity="center" android:minHeight="0dp" android:minWidth="0dp" android:padding="4dp"
-            android:text="@string/inventory_widget_shortage" android:textAllCaps="false"
-            android:textColor="#183B2E" android:textSize="13sp" android:fontFamily="sans-serif-medium"
-            android:maxLines="1" android:ellipsize="end" />
-        <Button android:id="@+id/inventory_widget_restore"
+            android:text="@string/inventory_widget_sync_help" android:textSize="10sp" android:textColor="@color/widget_muted" />
+        <TextView android:id="@+id/inventory_widget_operation" style="@style/InventoryWidgetText"
+            android:layout_width="wrap_content" android:layout_height="match_parent"
+            android:maxWidth="100dp" android:paddingStart="8dp" android:textSize="10sp"
+            android:textColor="@color/widget_muted" android:gravity="center_vertical|end" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="36dp" android:layout_marginTop="6dp">
+        <Button android:id="@+id/inventory_widget_shortage" style="@style/InventoryWidgetButton"
+            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_marginEnd="4dp" android:background="@drawable/inventory_widget_secondary"
+            android:text="@string/inventory_widget_shortage" />
+        <Button android:id="@+id/inventory_widget_restore" style="@style/InventoryWidgetButton"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
             android:layout_marginStart="4dp" android:background="@drawable/inventory_widget_primary"
-            android:gravity="center" android:minHeight="0dp" android:minWidth="0dp" android:padding="4dp"
-            android:text="@string/inventory_widget_restore" android:textAllCaps="false"
-            android:textColor="#FFFFFF" android:textSize="13sp" android:fontFamily="sans-serif-medium"
-            android:maxLines="1" android:ellipsize="end" />
+            android:text="@string/inventory_widget_restore" android:textColor="@color/widget_surface" />
     </LinearLayout>
 </LinearLayout>

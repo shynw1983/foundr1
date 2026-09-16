@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_surface">#173F35</color>
+    <color name="widget_text">#F5F8F5</color>
+    <color name="widget_muted">#B8CDC1</color>
+    <color name="widget_line">#3C5F52</color>
+    <color name="widget_control">#274D40</color>
+    <color name="widget_action">#EDF3E9</color>
+    <color name="widget_warning">#F2D394</color>
+    <color name="widget_error">#FFCCC2</color>
+    <style name="InventoryWidgetText">
+        <item name="android:textColor">@color/widget_text</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+    <style name="InventoryWidgetButton" parent="InventoryWidgetText">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:gravity">center</item>
+        <item name="android:padding">2dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:backgroundTint">@null</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:elevation">0dp</item>
+    </style>
+</resources>

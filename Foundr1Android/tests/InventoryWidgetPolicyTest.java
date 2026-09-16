@@ -50,8 +50,9 @@ public class InventoryWidgetPolicyTest {
         check(!InventoryWidgetPolicy.fresh(0, 100), "unknown read times are not fresh");
         check(!InventoryWidgetPolicy.fresh(100, 99), "future timestamps are not fresh");
         check(!InventoryWidgetPolicy.fresh(100, 100 + InventoryWidgetPolicy.FRESH_MILLIS + 1), "old inventory gets fetched on follow-up");
-        check(InventoryWidgetPolicy.layout(110, 56) == InventoryWidgetPolicy.COMPACT, "2x1 entry uses compact layout");
-        check(InventoryWidgetPolicy.layout(330, 156) == InventoryWidgetPolicy.SUMMARY, "4x2 entry shows summary");
+        check(InventoryWidgetPolicy.layout(110, 56) == InventoryWidgetPolicy.MINIMAL, "smallest launchers retain both actions");
+        check(InventoryWidgetPolicy.layout(176, 88) == InventoryWidgetPolicy.COMPACT, "2x1 entry has room around the controls");
+        check(InventoryWidgetPolicy.layout(330, 164) == InventoryWidgetPolicy.SUMMARY, "4x2 entry shows summary");
         check(InventoryWidgetPolicy.layout(250, 110) == InventoryWidgetPolicy.DENSE, "short 4x2 launchers still show status, not just two buttons");
         check(InventoryWidgetPolicy.layout(330, 236) == InventoryWidgetPolicy.EXPANDED, "taller widgets show more shortages");
         check(InventoryWidgetPolicy.layout(180, 300) == InventoryWidgetPolicy.COMPACT, "narrow tall widgets do not clip wide rows");
