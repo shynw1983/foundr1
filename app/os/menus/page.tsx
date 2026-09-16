@@ -1,5 +1,8 @@
 "use client";
 
+import { useReadRequest, readJson } from "../../../components/useReadRequest";
+import { ReadStatusNotice } from "../../../components/ReadStatusNotice";
+
 import {
   AlertTriangle,
   Boxes,
@@ -753,6 +756,8 @@ export default function MenuAdminPage() {
   const [groupDraft, setGroupDraft] = useState<MenuGroup>(emptyGroup);
   const [optionDraft, setOptionDraft] = useState<MenuOption>(emptyOption);
   const [activeOptionGroupId, setActiveOptionGroupId] = useState("");
+  const menuRead = useReadRequest();
+  const progressRead = useReadRequest();
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [photoStatus, setPhotoStatus] = useState("");
@@ -1240,34 +1245,28 @@ export default function MenuAdminPage() {
 
   async function loadMenus(nextSelectedItemId = selectedItemId) {
     setLoading(true);
-    const response = await fetch("/api/menus");
-    if (!response.ok) {
-      setMessage("メニュー情報を読み込めませんでした。");
+    return menuRead.run("menu", signal => readJson<MenuAdminData>("/api/menus", signal), nextData => {
+      const contextStore = nextData.stores.find((store) => store.id === nextData.selectedStoreId);
+      const nextBrandId = activeBrandId || contextStore?.brandIds[0] || nextData.brands[0]?.id || "";
+      const brandItems = nextData.items.filter((item) => item.brandId === nextBrandId && !item.storeId);
+      const nextItem = brandItems.find((item) => item.id === nextSelectedItemId) ?? brandItems[0];
+
+      setData(nextData);
+      setActiveBrandId(nextBrandId);
+      const eligibleStores = nextData.stores.filter((store) => store.brandIds.includes(nextBrandId));
+      setPublishStoreId((current) => eligibleStores.some((store) => store.id === current)
+        ? current
+        : eligibleStores.find((store) => store.id === nextData.selectedStoreId)?.id ?? eligibleStores[0]?.id ?? "");
+      setSelectedPublishPlatforms((current) => current.length ? current : nextData.externalPlatforms
+        .filter((platform) => platform.brandId === nextBrandId && !platform.storeId && platform.isActive)
+        .map((platform) => platform.platformKey));
+      setSelectedItemId(nextItem?.id ?? "");
+      setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId: nextBrandId, storeId: "" });
+      setDetailMode("item");
+      setActiveCategory((current) => current ?? nextItem?.category ?? null);
       setLoading(false);
-      return;
-    }
-
-    const nextData = await response.json() as MenuAdminData;
-    const contextStore = nextData.stores.find((store) => store.id === nextData.selectedStoreId);
-    const nextBrandId = activeBrandId || contextStore?.brandIds[0] || nextData.brands[0]?.id || "";
-    const brandItems = nextData.items.filter((item) => item.brandId === nextBrandId && !item.storeId);
-    const nextItem = brandItems.find((item) => item.id === nextSelectedItemId) ?? brandItems[0];
-
-    setData(nextData);
-    setActiveBrandId(nextBrandId);
-    const eligibleStores = nextData.stores.filter((store) => store.brandIds.includes(nextBrandId));
-    setPublishStoreId((current) => eligibleStores.some((store) => store.id === current)
-      ? current
-      : eligibleStores.find((store) => store.id === nextData.selectedStoreId)?.id ?? eligibleStores[0]?.id ?? "");
-    setSelectedPublishPlatforms((current) => current.length ? current : nextData.externalPlatforms
-      .filter((platform) => platform.brandId === nextBrandId && !platform.storeId && platform.isActive)
-      .map((platform) => platform.platformKey));
-    setSelectedItemId(nextItem?.id ?? "");
-    setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId: nextBrandId, storeId: "" });
-    setDetailMode("item");
-    setActiveCategory((current) => current ?? nextItem?.category ?? null);
-    setLoading(false);
-    void loadPublishPreview(nextBrandId);
+      void loadPublishPreview(nextBrandId);
+    }).then(() => setLoading(false));
   }
 
   useEffect(() => {
@@ -1281,34 +1280,30 @@ export default function MenuAdminPage() {
     return () => window.clearTimeout(timer);
   }, [actionNotice]);
 
+  const hasRunningMenuTask = data.syncTasks.some(task => task.brandId === activeBrandId
+    && (!publishStoreId || !task.storeId || task.storeId === publishStoreId)
+    && ["queued", "processing", "retrying"].includes(task.status));
+  const refreshProgress = () => progressRead.run(`${activeBrandId}:${publishStoreId}`, signal => {
+    const params = new URLSearchParams({ brandId: activeBrandId, storeId: publishStoreId });
+    return readJson<Pick<MenuAdminData, "externalPlatforms" | "syncTasks" | "platformTargetSettings" | "publishBatches" | "platformImportCandidates">>(`/api/menus/progress?${params}`, signal);
+  }, nextData => {
+    setData(current => {
+      // Keep other brands/stores cached when replacing just the requested scope.
+      const merge = <T extends { brandId: string; storeId: string }>(before: T[], incoming: T[]) => [
+        ...before.filter(row => row.brandId !== activeBrandId || (publishStoreId && row.storeId && row.storeId !== publishStoreId)), ...incoming
+      ];
+      return { ...current, externalPlatforms: merge(current.externalPlatforms, nextData.externalPlatforms),
+        syncTasks: merge(current.syncTasks, nextData.syncTasks), platformTargetSettings: merge(current.platformTargetSettings, nextData.platformTargetSettings),
+        publishBatches: merge(current.publishBatches, nextData.publishBatches), platformImportCandidates: merge(current.platformImportCandidates, nextData.platformImportCandidates) };
+    });
+    if (!nextData.syncTasks.some(task => ["queued", "processing", "retrying"].includes(task.status))) void loadPublishPreview(activeBrandId);
+  });
   useEffect(() => {
-    const hasRunningMenuTask = data.syncTasks.some((task) => (
-      task.brandId === activeBrandId
-      && (!publishStoreId || !task.storeId || task.storeId === publishStoreId)
-      && ["queued", "processing", "retrying"].includes(task.status)
-    ));
-    if (!hasRunningMenuTask) return;
-    const timer = window.setInterval(async () => {
-      const response = await fetch("/api/menus", { cache: "no-store" }).catch(() => null);
-      if (!response?.ok) return;
-      const nextData = await response.json() as MenuAdminData;
-      setData((current) => ({
-        ...current,
-        externalPlatforms: nextData.externalPlatforms,
-        syncTasks: nextData.syncTasks,
-        platformTargetSettings: nextData.platformTargetSettings,
-        publishBatches: nextData.publishBatches,
-        platformImportCandidates: nextData.platformImportCandidates
-      }));
-      const stillRunning = nextData.syncTasks.some((task) => (
-        task.brandId === activeBrandId
-        && (!publishStoreId || !task.storeId || task.storeId === publishStoreId)
-        && ["queued", "processing", "retrying"].includes(task.status)
-      ));
-      if (!stillRunning) void loadPublishPreview(activeBrandId);
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [activeBrandId, data.syncTasks, publishStoreId]);
+    if (!hasRunningMenuTask || !activeBrandId) return;
+    void refreshProgress();
+    const timer = window.setInterval(() => void refreshProgress(), 5000);
+    return () => { window.clearInterval(timer); progressRead.cancel(); };
+  }, [activeBrandId, publishStoreId, hasRunningMenuTask, progressRead.run, progressRead.cancel]);
 
   const filteredItems = useMemo(() => {
     const categoryOrders = new Map(
@@ -2127,6 +2122,9 @@ export default function MenuAdminPage() {
       </aside>
 
       <section className="workspace menu-admin-page">
+        <ReadStatusNotice state={menuRead} onRetry={() => void loadMenus()} />
+        <ReadStatusNotice state={progressRead} onRetry={() => void refreshProgress()} />
+
         {actionNotice ? (
           <div className={`menu-action-toast is-${actionNotice.tone}`} role={actionNotice.tone === "error" ? "alert" : "status"} aria-live="polite">
             {actionNotice.tone === "success" ? <CheckCircle2 size={18} aria-hidden="true" /> : actionNotice.tone === "error" ? <AlertTriangle size={18} aria-hidden="true" /> : <Info size={18} aria-hidden="true" />}

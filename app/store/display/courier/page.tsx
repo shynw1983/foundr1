@@ -1,5 +1,8 @@
 "use client";
 
+import { useReadRequest, readJson } from "../../../../components/useReadRequest";
+import { ReadStatusNotice } from "../../../../components/ReadStatusNotice";
+
 import { CheckCircle2, ChefHat, Clock3, Menu } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -88,6 +91,7 @@ export default function StorePickupStatusDisplayPage() {
   const [brandLogos, setBrandLogos] = useState<BrandLogo[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+  const readState = useReadRequest();
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [menuOpen, setMenuOpen] = useState(false);
   const selectedStoreIdRef = useRef(selectedStoreId);
@@ -107,26 +111,25 @@ export default function StorePickupStatusDisplayPage() {
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
     params.set("ts", String(Date.now()));
-    const response = await fetch(`/api/store/display/courier?${params.toString()}`, { cache: "no-store" });
-    if (!response.ok) return;
-    const body = await response.json();
-    const nextStoreId = String(body.selectedStoreId || storeId || "");
-    const serverNow = new Date(String(body.serverNow || "")).getTime();
-    if (Number.isFinite(serverNow)) {
-      serverOffsetRef.current = serverNow - Date.now();
-      setNow(serverNow);
-    }
-    setStores(body.access?.stores ?? []);
-    rememberStoreBusinessHours(body.access?.stores);
-    setSelectedStoreId(nextStoreId);
-    selectedStoreIdRef.current = nextStoreId;
-    if (nextStoreId) setStoredStoreSelection(nextStoreId);
-    setOrders(body.orders ?? []);
-    setBrandLogos(body.brandLogos ?? []);
-    setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit"
-    }).format(new Date()));
+    return readState.run(storeId, (signal) => readJson(`/api/store/display/courier?${params.toString()}`, signal), (body) => {
+      const nextStoreId = String(body.selectedStoreId || storeId || "");
+      const serverNow = new Date(String(body.serverNow || "")).getTime();
+      if (Number.isFinite(serverNow)) {
+        serverOffsetRef.current = serverNow - Date.now();
+        setNow(serverNow);
+      }
+      setStores(body.access?.stores ?? []);
+      rememberStoreBusinessHours(body.access?.stores);
+      setSelectedStoreId(nextStoreId);
+      selectedStoreIdRef.current = nextStoreId;
+      if (nextStoreId) setStoredStoreSelection(nextStoreId);
+      setOrders(body.orders ?? []);
+      setBrandLogos(body.brandLogos ?? []);
+      setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", {
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(new Date()));
+    });
   }
 
   useVisibleRefresh(() => {
@@ -221,6 +224,7 @@ export default function StorePickupStatusDisplayPage() {
 
   return (
     <main className="store-courier-display" style={displayLayoutStyle}>
+      <ReadStatusNotice state={readState} onRetry={() => void load()} />
       <button
         className="store-display-menu-button"
         type="button"
@@ -238,6 +242,8 @@ export default function StorePickupStatusDisplayPage() {
               <span>表示店舗</span>
               <select value={selectedStoreId} onChange={(event) => {
                 const storeId = event.target.value;
+                setOrders([]);
+                setLastUpdatedAt("");
                 setSelectedStoreId(storeId);
                 selectedStoreIdRef.current = storeId;
                 setStoredStoreSelection(storeId);
@@ -251,7 +257,7 @@ export default function StorePickupStatusDisplayPage() {
           <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
             全画面・常時点灯 ON
           </button>
-          <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
+          <small>{readState.failed ? "更新失敗・再取得中" : realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
           <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
           <a className="secondary-button" href="/store/display/kitchen">キッチン</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>
@@ -283,7 +289,7 @@ export default function StorePickupStatusDisplayPage() {
           <h1>Pick Up 状況</h1>
           <p>注文番号をご確認ください</p>
         </div>
-        <span className="store-courier-live"><i />自動更新中</span>
+        <span className="store-courier-live"><i />{readState.failed ? "更新失敗・再取得中" : "自動更新中"}</span>
       </header>
 
       <section className="store-courier-ready store-courier-status-panel is-ready">

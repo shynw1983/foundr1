@@ -1,5 +1,8 @@
 "use client";
 
+import { useReadRequest, readJson } from "../../../components/useReadRequest";
+import { ReadStatusNotice } from "../../../components/ReadStatusNotice";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useModalHistory } from "../../../components/useModalHistory";
@@ -9,7 +12,7 @@ import { playStoreOrderAlertSound } from "../../../lib/store-order-alert-sounds"
 import { getStoreOrderAlertPhase, isStoreOrderAlertAcknowledged, shouldRepeatStoreOrderAlert, type StoreOrderAlertPhase } from "../../../lib/store-order-alert-timing";
 import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../lib/store-polling-client";
 import { StoreNavTabs } from "../components/StoreNavTabs";
-import { clearStoredStoreSelection, getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
+import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
 type StoreOrder = {
   id: string;
@@ -293,6 +296,13 @@ function PickupTimeChip({ order, detail = false }: { order: Pick<StoreOrder, "pi
 
 export default function StoreOrdersPage() {
   const [orders, setOrders] = useState<StoreOrder[]>([]);
+  const [historyOrders, setHistoryOrders] = useState<StoreOrder[]>([]);
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const [historyHasNext, setHistoryHasNext] = useState<string | null>(null);
+  const [historyPages, setHistoryPages] = useState<Array<string | null>>([]);
+  const historyRead = useReadRequest();
+  const statsRead = useReadRequest();
+  const queueRead = useReadRequest();
   const [access, setAccess] = useState<StoreOrderAccess | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [stats, setStats] = useState<StoreOrderStats | null>(null);
@@ -304,6 +314,7 @@ export default function StoreOrdersPage() {
   const [operationMessage, setOperationMessage] = useState("");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("active");
+  const historyMode = ["all", "completed", "pending_payment"].includes(status);
   const [selectedId, setSelectedId] = useState("");
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const orderTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -314,14 +325,13 @@ export default function StoreOrdersPage() {
   }
   useModalHistory(mobileDetailOpen, closeMobileDetail, "store-order-detail");
   const detailDialogRef = useStoreDialog(mobileDetailOpen, closeMobileDetail, "(max-width: 760px)");
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const loading = !queueRead.lastSuccessAt && !queueRead.failed;
+  const isRefreshing = queueRead.refreshing;
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [newOrderIds, setNewOrderIds] = useState<string[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [soundReady, setSoundReady] = useState(false);
-  const [error, setError] = useState("");
   const [cancelNotice, setCancelNotice] = useState("");
   const [checkoutHandlingId, setCheckoutHandlingId] = useState("");
   const [alertAcknowledgingId, setAlertAcknowledgingId] = useState("");
@@ -337,7 +347,7 @@ export default function StoreOrdersPage() {
   const ordersRef = useRef<StoreOrder[]>([]);
   const repeatAlertTimersRef = useRef<number[]>([]);
   const selectedStoreIdRef = useRef("");
-  const refreshInFlightRef = useRef(false);
+  const receivedOrdersRef = useRef(new Map<string, { order: StoreOrder; receivedAt: number }>());
 
   useEffect(() => {
     ordersRef.current = orders;
@@ -519,63 +529,78 @@ export default function StoreOrdersPage() {
     queueNextAlert();
   };
 
-  const refresh = async () => {
-    if (refreshInFlightRef.current) return;
+  const refreshStats = () => {
+    if (!access?.canViewSalesStats || !selectedStoreId) return;
+    const params = new URLSearchParams({ storeId: selectedStoreId, days: String(statsDays) });
+    return statsRead.run(`${selectedStoreId}:${statsDays}`, signal => readJson<StoreOrderStats>(`/api/store/order-stats?${params}`, signal), setStats);
+  };
+  const refreshHistory = () => {
+    if (!historyMode || !selectedStoreId) return;
+    const params = new URLSearchParams({ storeId: selectedStoreId, view: "history", status, q: query, pageSize: "50" });
+    if (historyCursor) params.set("cursor", historyCursor);
+    return historyRead.run(`${selectedStoreId}:${status}:${query}:${historyCursor ?? ""}`, signal => readJson<{ orders: StoreOrder[]; nextCursor?: string | null }>(`/api/store/orders?${params}`, signal), body => {
+      setHistoryOrders(body.orders);
+      setHistoryHasNext(body.nextCursor ?? null);
+    });
+  };
+  useEffect(() => {
+    setStats(null);
+    if (!access?.canViewSalesStats) return;
+    void refreshStats();
+    const timer = window.setInterval(() => void refreshStats(), 60000);
+    return () => { clearInterval(timer); statsRead.cancel(); };
+  }, [selectedStoreId, statsDays, access?.canViewSalesStats, statsRead.run, statsRead.cancel]);
+  useEffect(() => {
+    setHistoryOrders([]);
+    setHistoryHasNext(null);
+    if (!historyMode) return;
+    const timer = window.setTimeout(() => void refreshHistory(), 250);
+    return () => { clearTimeout(timer); historyRead.cancel(); };
+  }, [selectedStoreId, status, query, historyCursor, historyMode, historyRead.run, historyRead.cancel]);
 
-    refreshInFlightRef.current = true;
-    setIsRefreshing(true);
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 15000);
-    let retryWithoutStore = false;
-
-    try {
-      const params = new URLSearchParams();
-      const requestedStoreId = selectedStoreIdRef.current;
+  const refresh = () => {
+    const requestedStoreId = selectedStoreIdRef.current;
+    return queueRead.run(requestedStoreId, async signal => {
+      const startedAt = Date.now();
+      const params = new URLSearchParams({ view: "active", pageSize: "100" });
       if (requestedStoreId) params.set("storeId", requestedStoreId);
-      params.set("ts", String(Date.now()));
-      const response = await fetch(`/api/store/orders${params.size ? `?${params.toString()}` : ""}`, {
-        cache: "no-store",
-        signal: controller.signal
-      });
-      if (!response.ok) {
-        if (response.status === 403 && requestedStoreId) {
-          selectedStoreIdRef.current = "";
-          setSelectedStoreId("");
-          clearStoredStoreSelection();
-          retryWithoutStore = true;
-          return;
-        }
-        throw new Error(`orders refresh failed: ${response.status}`);
+      let response = await fetch(`/api/store/orders?${params}`, { cache: "no-store", signal });
+      // A saved selection can outlive its permission. Ask the API for the first allowed store.
+      if (response.status === 403 && requestedStoreId) {
+        params.delete("storeId");
+        response = await fetch(`/api/store/orders?${params}`, { cache: "no-store", signal });
       }
+      if (!response.ok) throw new Error(`Orders read failed: ${response.status}`);
       const body = await response.json();
+      if (body.selectedStoreId) params.set("storeId", body.selectedStoreId);
+      const nextOrders: StoreOrder[] = [...(body.orders ?? [])];
+      let cursor: string | null = body.nextCursor ?? null;
+      const seenCursors = new Set<string>();
+      while (cursor) {
+        if (seenCursors.has(cursor)) throw new Error("Repeated order page");
+        seenCursors.add(cursor);
+        params.set("cursor", cursor);
+        const page = await readJson<{ orders: StoreOrder[]; nextCursor?: string | null }>(`/api/store/orders?${params}`, signal);
+        nextOrders.push(...page.orders);
+        cursor = page.nextCursor ?? null;
+      }
+      return { ...body, orders: nextOrders, startedAt };
+    }, body => {
       const nextAccess = body.access as StoreOrderAccess | undefined;
       const responseStoreId = String(body.selectedStoreId || requestedStoreId || nextAccess?.stores[0]?.id || "");
-      const currentStoreId = selectedStoreIdRef.current;
-      if (currentStoreId && responseStoreId && currentStoreId !== responseStoreId) return;
-      if (nextAccess) {
-        setAccess(nextAccess);
-        rememberStoreBusinessHours(nextAccess.stores);
-        if (!selectedStoreIdRef.current && responseStoreId) {
-          selectedStoreIdRef.current = responseStoreId;
-          setSelectedStoreId(responseStoreId);
-          setStoredStoreSelection(responseStoreId);
-        }
+      if (nextAccess) { setAccess(nextAccess); rememberStoreBusinessHours(nextAccess.stores); }
+      if (responseStoreId && responseStoreId !== selectedStoreIdRef.current) {
+        selectedStoreIdRef.current = responseStoreId;
+        setSelectedStoreId(responseStoreId);
       }
-      if (responseStoreId && responseStoreId !== "__forbidden__") setStoredStoreSelection(responseStoreId);
-      if (nextAccess?.canViewSalesStats) {
-        const statsParams = new URLSearchParams({ days: String(statsDays) });
-        const statsStoreId = selectedStoreIdRef.current || responseStoreId;
-        if (statsStoreId) statsParams.set("storeId", statsStoreId);
-        statsParams.set("ts", String(Date.now()));
-        const statsResponse = await fetch(`/api/store/order-stats?${statsParams.toString()}`, {
-          cache: "no-store",
-          signal: controller.signal
-        });
-        if (statsResponse.ok) setStats(await statsResponse.json());
-      } else {
-        setStats(null);
+      if (responseStoreId) setStoredStoreSelection(responseStoreId);
+      // A realtime update received during pagination is newer than the fetched page.
+      const rows = new Map<string, StoreOrder>(body.orders.map((order: StoreOrder) => [order.id, order]));
+      for (const [id, event] of receivedOrdersRef.current) {
+        if (event.order.storeId === responseStoreId && event.receivedAt >= body.startedAt) rows.set(id, event.order);
+        else receivedOrdersRef.current.delete(id);
       }
-      const nextOrders = body.orders ?? [];
+      const nextOrders = [...rows.values()];
       setOrders((current) => {
         const currentById = new Map(current.map((order) => [order.id, order]));
         const incomingIds = nextOrders
@@ -601,19 +626,7 @@ export default function StoreOrdersPage() {
           second: "2-digit"
         }).format(new Date())
       );
-      setLoading(false);
-      setError("");
-    } catch {
-      setError("注文を読み込めませんでした。");
-      setLoading(false);
-    } finally {
-      window.clearTimeout(timeout);
-      refreshInFlightRef.current = false;
-      setIsRefreshing(false);
-      if (retryWithoutStore) {
-        void refresh();
-      }
-    }
+    });
   };
 
   useEffect(() => {
@@ -626,7 +639,7 @@ export default function StoreOrdersPage() {
     return () => {
       poller.stop();
     };
-  }, [realtimeStatus, statsDays, selectedStoreId]);
+  }, [realtimeStatus, selectedStoreId]);
 
   useEffect(() => {
     void loadOperation(selectedStoreId);
@@ -650,6 +663,9 @@ export default function StoreOrdersPage() {
       };
     }
     const upsertOrder = ({ order }: { order: StoreOrder }) => {
+      if (!active || order.storeId !== selectedStoreId) return;
+      receivedOrdersRef.current.set(order.id, { order, receivedAt: Date.now() });
+      setHistoryOrders(current => current.map(item => item.id === order.id ? order : item));
       setOrders((current) => {
         if (selectedStoreId && order.storeId !== selectedStoreId) return current;
         const previousOrder = current.find((item) => item.id === order.id);
@@ -726,7 +742,7 @@ export default function StoreOrdersPage() {
     };
   }, [soundEnabled, selectedStoreId, storeSettings.orderAlerts.repeatUntilHandled, storeSettings.orderAlerts.sound]);
 
-  const visibleOrders = useMemo(() => orders
+  const visibleOrders = useMemo(() => (historyMode ? historyOrders : orders)
     .filter((order) => {
       const matchesQuery = `${order.pickupCode} ${order.drink} ${order.customerName} ${order.customerPhone}`.toLowerCase().includes(query.toLowerCase());
       if (!matchesQuery) return false;
@@ -738,7 +754,7 @@ export default function StoreOrdersPage() {
       }
       return order.status === status;
     })
-    .sort(sortStoreOrders), [orders, query, status]);
+    .sort(sortStoreOrders), [orders, historyOrders, historyMode, query, status]);
   const checkoutRequests = useMemo(() => {
     const groups = new Map<string, {
       id: string;
@@ -809,6 +825,7 @@ export default function StoreOrdersPage() {
     });
     if (response.ok) {
       await refresh();
+      await refreshHistory();
       return true;
     }
     return false;
@@ -849,9 +866,11 @@ export default function StoreOrdersPage() {
       });
       if (!response.ok) {
         await refresh();
+        await refreshHistory();
         return;
       }
       await refresh();
+      await refreshHistory();
     } finally {
       setAlertAcknowledgingId("");
     }
@@ -915,6 +934,7 @@ export default function StoreOrdersPage() {
         ? "代替内容を制作データへ反映しました。"
         : `返金処理を完了しました${Number(body.refundAmount) > 0 ? `（¥${Number(body.refundAmount).toLocaleString("ja-JP")}）` : ""}。`);
       await refresh();
+      await refreshHistory();
     } finally {
       setShortageSaving(false);
     }
@@ -957,7 +977,7 @@ export default function StoreOrdersPage() {
         <aside className="panel store-orders-list">
           <div className="store-orders-toolbar">
             <h2>注文ワーク台</h2>
-            <button type="button" className="secondary-button" onClick={refresh}>
+            <button type="button" className="secondary-button" onClick={() => { void refresh(); void refreshStats(); void refreshHistory(); }}>
               {isRefreshing ? "更新中..." : "更新"}
             </button>
           </div>
@@ -966,9 +986,9 @@ export default function StoreOrdersPage() {
               aria-label="注文を検索"
               placeholder="番号・商品・お客様"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => { setQuery(event.target.value); setHistoryCursor(null); setHistoryPages([]); setHistoryHasNext(null); }}
             />
-            <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="表示状態">
+            <select value={status} onChange={(event) => { setStatus(event.target.value); setHistoryCursor(null); setHistoryPages([]); setHistoryHasNext(null); }} aria-label="表示状態">
               <option value="active">対応中</option>
               <option value="pending_payment">未決済</option>
               <option value="new">新規</option>
@@ -989,18 +1009,19 @@ export default function StoreOrdersPage() {
                   <option value={31}>31日</option>
                 </select>
               </div>
+              <ReadStatusNotice state={statsRead} onRetry={() => void refreshStats()} />
               <section className="store-order-performance" aria-label="注文実績">
                 <article>
                   <span>売上</span>
-                  <strong>¥{Number(summary?.grossSales ?? 0).toLocaleString("ja-JP")}</strong>
+                  <strong>{summary ? `¥${Number(summary.grossSales ?? 0).toLocaleString("ja-JP")}` : "—"}</strong>
                 </article>
                 <article>
                   <span>支払済み</span>
-                  <strong>{summary?.paidOrders ?? 0}</strong>
+                  <strong>{summary ? summary.paidOrders ?? 0 : "—"}</strong>
                 </article>
                 <article>
                   <span>完了</span>
-                  <strong>{summary?.completedOrders ?? 0}</strong>
+                  <strong>{summary ? summary.completedOrders ?? 0 : "—"}</strong>
                 </article>
                 <article>
                   <span>平均完了</span>
@@ -1195,8 +1216,9 @@ export default function StoreOrdersPage() {
             {lastUpdatedAt ? ` · ${lastUpdatedAt}` : ""}
           </p>
           {loading ? <p className="muted-text">読み込み中...</p> : null}
-          {error ? <p className="form-error">{error}</p> : null}
+          <ReadStatusNotice state={queueRead} onRetry={() => void refresh()} />
           {cancelNotice ? <p className="store-order-payment-note">{cancelNotice}</p> : null}
+          {historyMode ? <ReadStatusNotice state={historyRead} onRetry={() => void refreshHistory()} /> : null}
           <div className="store-order-cards">
             {visibleOrders.map((order) => (
               <button
@@ -1242,6 +1264,11 @@ export default function StoreOrdersPage() {
             ))}
             {!visibleOrders.length && !loading ? <p className="muted-text">表示する注文はありません。</p> : null}
           </div>
+          {historyMode ? <nav className="store-history-pagination" aria-label="履歴ページ">
+            <button className="secondary-button" type="button" disabled={!historyPages.length || historyRead.refreshing} onClick={() => { setHistoryCursor(historyPages.at(-1) ?? null); setHistoryPages(pages => pages.slice(0, -1)); }}>前のページ</button>
+            <span>{historyPages.length + 1}{historyRead.refreshing ? " · 更新中..." : ""}</span>
+            <button className="secondary-button" type="button" disabled={!historyHasNext || historyRead.refreshing} onClick={() => { setHistoryPages(pages => [...pages, historyCursor]); setHistoryCursor(historyHasNext); }}>次のページ</button>
+          </nav> : null}
         </aside>
 
         <section ref={detailDialogRef} className="panel store-order-detail" role={mobileDetailOpen ? "dialog" : undefined} aria-modal={mobileDetailOpen || undefined} aria-label="注文詳細">

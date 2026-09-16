@@ -1,7 +1,10 @@
 "use client";
 
+import { useReadRequest, readJson } from "../../../components/useReadRequest";
+import { ReadStatusNotice } from "../../../components/ReadStatusNotice";
+
 import { CheckCircle2, ChevronDown, ChevronUp, Clock3, LoaderCircle, RefreshCw, TimerOff, XCircle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import { getStoredStoreSelection, setStoredStoreSelection, storeSelectionEventName } from "./store-selection";
 
@@ -245,6 +248,8 @@ export function StoreInventorySyncStatus() {
   const { language } = useOsTranslation();
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [runs, setRuns] = useState<StoreInventorySyncRun[]>([]);
+  const readState = useReadRequest();
+  const refreshRunsRef = useRef<() => void>(() => {});
   const [isOpen, setIsOpen] = useState(false);
   const [retryingCommandIds, setRetryingCommandIds] = useState<Set<string>>(() => new Set());
   const [retryErrors, setRetryErrors] = useState<Record<string, string>>({});
@@ -303,18 +308,14 @@ export function StoreInventorySyncStatus() {
     let pusher: SharedPusher | null = null;
     let channel: SharedPusherChannel | null = null;
 
-    const refreshRuns = async () => {
-      try {
-        const response = await fetch(`/api/store/menu-sync-runs?storeId=${encodeURIComponent(selectedStoreId)}`, { cache: "no-store" });
-        if (!response.ok) return;
-        const body = await response.json() as { runs?: unknown[] };
+    const refreshRuns = () => readState.run(selectedStoreId,
+      signal => readJson<{ runs?: unknown[] }>(`/api/store/menu-sync-runs?storeId=${encodeURIComponent(selectedStoreId)}`, signal),
+      body => {
         if (!active) return;
         const nextRuns = (body.runs ?? []).map(normalizeRun).filter((run): run is StoreInventorySyncRun => Boolean(run));
         setRuns(nextRuns);
-      } catch {
-        // Realtime updates remain active if a recovery poll temporarily fails.
-      }
-    };
+      });
+    refreshRunsRef.current = () => void refreshRuns();
 
     const handleSyncStarted = (event: { run?: unknown }) => {
       const run = normalizeRun(event?.run);
@@ -366,12 +367,14 @@ export function StoreInventorySyncStatus() {
 
     return () => {
       active = false;
+      readState.cancel();
+      refreshRunsRef.current = () => {};
       window.clearInterval(pollingTimer);
       channel?.unbind("bridge.inventory.sync.started", handleSyncStarted);
       channel?.unbind("bridge.command.updated", handleCommandUpdated);
       pusher?.disconnect();
     };
-  }, [selectedStoreId]);
+  }, [selectedStoreId, readState.run]);
 
   const retryPlatform = async (platform: InventorySyncPlatform) => {
     if (!selectedStoreId || retryingCommandIds.has(platform.commandId)) return;
@@ -426,7 +429,7 @@ export function StoreInventorySyncStatus() {
     }
   };
 
-  if (!runs.length) return null;
+  if (!runs.length && !readState.failed) return null;
   const copy = syncCopy(language);
   return (
     <aside
@@ -443,13 +446,14 @@ export function StoreInventorySyncStatus() {
         <span className={`store-menu-sync-dock-dot${pendingCount ? " is-pending" : failedCount ? " is-failed" : " is-complete"}`} />
         <span className="store-menu-sync-dock-title">
           <strong>{copy.title}</strong>
-          <small>{syncSummaryText(language, pendingCount, failedCount, runs.length)}</small>
+          <small>{readState.failed ? (language === "ja" ? "更新失敗・再取得中" : language === "zh-Hant" ? "更新失敗，重試中" : "更新失败，重试中") : syncSummaryText(language, pendingCount, failedCount, runs.length)}</small>
         </span>
         <span className="store-menu-sync-dock-toggle">
           {isOpen ? copy.collapse : copy.expand}
           {isOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
         </span>
       </button>
+      <ReadStatusNotice state={readState} onRetry={() => refreshRunsRef.current()} language={language} />
       {isOpen ? (
         <div className="store-menu-sync-dock-body">
           {runs.map((run) => (

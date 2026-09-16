@@ -1,5 +1,8 @@
 "use client";
 
+import { useReadRequest, readJson } from "../../../../components/useReadRequest";
+import { ReadStatusNotice } from "../../../../components/ReadStatusNotice";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Menu } from "lucide-react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
@@ -282,6 +285,7 @@ export default function StoreKitchenPage() {
   const [savingId, setSavingId] = useState("");
   const [reprintQueuedId, setReprintQueuedId] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+  const readState = useReadRequest();
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const [bridgePresence, setBridgePresence] = useState<"connecting" | "online" | "offline">("connecting");
@@ -305,7 +309,6 @@ export default function StoreKitchenPage() {
   const [now, setNow] = useState(() => Date.now());
   const selectedStoreIdRef = useRef(selectedStoreId);
   const serverOffsetRef = useRef(0);
-  const loadSequenceRef = useRef(0);
   const autoStartingTaskIdsRef = useRef<Set<string>>(new Set());
   const bridgeMemberIdsRef = useRef<Set<string>>(new Set());
   const inventoryPointerRef = useRef<{ lineKey: string; x: number; y: number; handled: boolean } | null>(null);
@@ -402,55 +405,49 @@ export default function StoreKitchenPage() {
   }
 
   async function load(storeId = selectedStoreIdRef.current, area = selectedArea, dayOffset = businessDayOffset) {
-    const loadSequence = ++loadSequenceRef.current;
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
     if (area) params.set("area", area);
     if (dayOffset === -1) params.set("dayOffset", "-1");
     params.set("ts", String(Date.now()));
-    const response = await fetch(`/api/store/display/kitchen?${params.toString()}`, { cache: "no-store" });
-    if (!response.ok) {
-      if (loadSequence === loadSequenceRef.current) setLoading(false);
-      return;
-    }
-    const body = await response.json();
-    if (loadSequence !== loadSequenceRef.current) return;
-    syncServerTime(body.serverNow);
-    const nextStoreId = String(body.selectedStoreId || storeId || "");
-    setStores(body.access?.stores ?? []);
-    rememberStoreBusinessHours(body.access?.stores);
-    setSelectedStoreId(nextStoreId);
-    selectedStoreIdRef.current = nextStoreId;
-    if (nextStoreId) setStoredStoreSelection(nextStoreId);
-    const nextTasks = (body.tasks ?? []) as KitchenTask[];
-    announceNewOrders(nextTasks);
-    setTasks(nextTasks);
-    setAreas(body.areas ?? []);
-    setDisplayedBusinessDate(String(body.businessDay?.businessDate ?? ""));
-    setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
-    setKitchenDisplayMode(
-      body.kitchenDisplayMode === "order_only" || body.kitchenDisplayMode === "simple"
-        ? body.kitchenDisplayMode
-        : "detailed"
-    );
-    setBridgeStatus(body.bridgeStatus ?? null);
-    setCheckedLineKeys((current) => {
-      const validKeys = new Set<string>();
-      for (const task of (body.tasks ?? []) as KitchenTask[]) {
-        task.itemGroups?.forEach((group, groupIndex) => {
-          validKeys.add(`${task.id}:order:${groupIndex}:product`);
-          group.options.forEach((_, optionIndex) => {
-            validKeys.add(`${task.id}:order:${groupIndex}:option:${optionIndex}`);
+    return readState.run(`${storeId}:${area}:${dayOffset}`, (signal) => readJson(`/api/store/display/kitchen?${params.toString()}`, signal), (body) => {
+      syncServerTime(body.serverNow);
+      const nextStoreId = String(body.selectedStoreId || storeId || "");
+      setStores(body.access?.stores ?? []);
+      rememberStoreBusinessHours(body.access?.stores);
+      setSelectedStoreId(nextStoreId);
+      selectedStoreIdRef.current = nextStoreId;
+      if (nextStoreId) setStoredStoreSelection(nextStoreId);
+      const nextTasks = (body.tasks ?? []) as KitchenTask[];
+      announceNewOrders(nextTasks);
+      setTasks(nextTasks);
+      setAreas(body.areas ?? []);
+      setDisplayedBusinessDate(String(body.businessDay?.businessDate ?? ""));
+      setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
+      setKitchenDisplayMode(
+        body.kitchenDisplayMode === "order_only" || body.kitchenDisplayMode === "simple"
+          ? body.kitchenDisplayMode
+          : "detailed"
+      );
+      setBridgeStatus(body.bridgeStatus ?? null);
+      setCheckedLineKeys((current) => {
+        const validKeys = new Set<string>();
+        for (const task of (body.tasks ?? []) as KitchenTask[]) {
+          task.itemGroups?.forEach((group, groupIndex) => {
+            validKeys.add(`${task.id}:order:${groupIndex}:product`);
+            group.options.forEach((_, optionIndex) => {
+              validKeys.add(`${task.id}:order:${groupIndex}:option:${optionIndex}`);
+            });
+            group.productionLines.forEach((_, lineIndex) => {
+              validKeys.add(`${task.id}:${groupIndex}:${lineIndex}`);
+            });
           });
-          group.productionLines.forEach((_, lineIndex) => {
-            validKeys.add(`${task.id}:${groupIndex}:${lineIndex}`);
-          });
-        });
-      }
-      return new Set(Array.from(current).filter((key) => validKeys.has(key)));
-    });
-    setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()));
-    setLoading(false);
+        }
+        return new Set(Array.from(current).filter((key) => validKeys.has(key)));
+      });
+      setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()));
+      setLoading(false);
+    }).then(() => setLoading(false));
   }
 
   useVisibleRefresh(() => {
@@ -1029,6 +1026,7 @@ export default function StoreKitchenPage() {
 
   return (
     <main className="store-kitchen-display store-kitchen-page">
+      <ReadStatusNotice state={readState} onRetry={() => void load()} language={displayLanguage} />
       <button
         className="store-display-menu-button"
         type="button"
@@ -1046,6 +1044,8 @@ export default function StoreKitchenPage() {
               <span>{isChinese ? "显示门店" : "表示店舗"}</span>
               <select value={selectedStoreId} onChange={(event) => {
                 const storeId = event.target.value;
+                setTasks([]);
+                setLastUpdatedAt("");
                 resetNewOrderBaseline();
                 setSelectedStoreId(storeId);
                 selectedStoreIdRef.current = storeId;
@@ -1121,7 +1121,7 @@ export default function StoreKitchenPage() {
           </button>
           <small>{businessDayOffset === -1
             ? (isChinese ? "历史查看模式" : "履歴表示モード")
-            : realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
+            : readState.failed ? (isChinese ? "更新失败，重试中" : "更新失敗・再取得中") : realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
           <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>

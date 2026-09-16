@@ -1,0 +1,14 @@
+.read-status-notice { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; margin-block: 8px; border: 1px solid var(--line, #ddd); border-radius: 8px; background: var(--amber-soft, #fff8e8); color: var(--ink, #262626); font-size: 13px; line-height: 1.5; min-width: 0; }
+.read-status-notice strong { font-weight: 500; }
+.read-status-notice small { display: block; color: var(--muted, #666); }
+.read-status-notice button { flex-shrink: 0; white-space: nowrap; }
+/* Keep warnings in the layout so order numbers and controls remain visible. */
+.store-pickup-display-shell.store-pickup-display-page:has(> .read-status-notice),
+.store-kitchen-display.store-kitchen-page:has(> .read-status-notice) { height: 100dvh; grid-template-rows: auto minmax(0, 1fr); }
+.store-pickup-display-shell.store-pickup-display-page:has(> .read-status-notice) > .store-pickup-board,
+.store-kitchen-display.store-kitchen-page:has(> .read-status-notice) > .store-kitchen-board { height: 100%; margin-top: 0; }
+.store-kitchen-display.store-kitchen-page:has(> .read-status-notice) { padding-top: 58px; }
+.store-courier-display:has(> .read-status-notice) { grid-template-rows: auto auto minmax(0, var(--courier-ready-size, 1.75fr)) minmax(0, var(--courier-work-size, 1.75fr)); }
+.store-pickup-display-page > .read-status-notice,
+.store-courier-display > .read-status-notice { margin-right: 40px; }
+@media (max-width: 480px) { .read-status-notice { flex-wrap: wrap; } }

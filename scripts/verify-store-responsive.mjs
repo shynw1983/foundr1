@@ -39,18 +39,44 @@ const fixtures = {
   '/api/store/display/kitchen': { access, selectedStoreId: stores[0].id, tasks: [], areas: [] }
 };
 
+fixtures['/api/menus'] = { selectedStoreId: stores[0].id, brands, stores: stores.map(s => ({ ...s, brandIds: [brands[0].id] })), sources: [], categories: [], items: [], groups: [], options: [], itemOptionGroups: [], externalPlatforms: [], syncTasks: [{ id: 'task', brandId: brands[0].id, storeId: stores[0].id, status: 'processing', targetLabel: 'Test', platformName: 'Uber', createdAt: now }], availabilityLinks: [], platformTargetSettings: [], publishBatches: [], platformImportCandidates: [] };
+fixtures['/api/menus/progress'] = Object.fromEntries(['externalPlatforms','syncTasks','availabilityLinks','platformTargetSettings','publishBatches','platformImportCandidates'].map(key => [key, fixtures['/api/menus'][key]]));
+fixtures['/api/store/menu-sync-runs'] = { runs: [{ id: 'run', itemLabel: 'テスト商品', isAvailable: true, source: 'store', createdAt: now, platforms: [{ commandId: 'command', platform: 'uber_eats', status: 'processing', phase: 'locating', updatedAt: now }] }] };
 const entry = `import React from 'react';import {createRoot} from 'react-dom/client';
 import Home from './app/store/page';import Orders from './app/store/orders/page';import Pos from './app/store/pos/page';import Availability from './app/store/menu/page';import History from './app/store/menu/inventory-history/page';import Timecard from './app/store/timecard/page';import Receiving from './app/store/receiving/page';import Procedures from './app/store/procedures/page';import Seats from './app/store/seats/page';import Pickup from './app/store/display/pickup/page';import Kitchen from './app/store/display/kitchen/page';import Courier from './app/store/display/courier/page';
+import MenuAdmin from './app/os/menus/page';import {StoreInventorySyncStatus} from './app/store/components/StoreInventorySyncStatus';
 import {OsTranslationProvider} from './app/os/components/OsTranslationProvider';import {FloatingFeedbackButton} from './components/feedback/FloatingFeedbackButton';import {defaultStoreModuleSettings} from './lib/module-setting-defaults';
 if(new URLSearchParams(location.search).get('role')==='store_terminal'){window.__fixtures['/api/auth/me'].employee.role='store_terminal';window.__fixtures['/api/os/store-context'].canSelectStore=false;window.__fixtures['/api/timecard'].currentEmployeeRole='store_terminal';}
 if(new URLSearchParams(location.search).get('reception')==='force_closed'){window.__fixtures['/api/store/operations'].operation.acceptanceMode='force_closed';}
-const nativeFetch=window.fetch; window.__requests=[];window.fetch=async(input,init)=>{const url=new URL(String(input),location.href);if(!url.pathname.startsWith('/api/'))return nativeFetch(input,init);window.__requests.push({path:url.pathname,method:init?.method||'GET',body:init?.body});if(init?.method&&init.method!=='GET')return Response.json({error:'Fixture does not persist operations'},{status:409});if(url.pathname==='/api/settings')return Response.json({settings:defaultStoreModuleSettings});return Response.json(window.__fixtures[url.pathname]||{});};
-const pages={'/store':Home,'/store/orders':Orders,'/store/pos':Pos,'/store/menu':Availability,'/store/menu/inventory-history':History,'/store/timecard':Timecard,'/store/receiving':Receiving,'/store/procedures':Procedures,'/store/seats':Seats,'/store/display/pickup':Pickup,'/store/display/kitchen':Kitchen,'/store/display/courier':Courier};const Page=pages[location.pathname]||Home; createRoot(document.getElementById('root')).render(<OsTranslationProvider><Page/><FloatingFeedbackButton/></OsTranslationProvider>);`;
-const compiler = await context({ stdin: { contents: entry, resolveDir: root, loader: 'tsx' }, bundle: true, write: false, jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' }, plugins: [{ name: 'fixture-navigation', setup(b) { b.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: 'navigation', namespace: 'fixture' })); b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export const usePathname=()=>location.pathname; export const useRouter=()=>({push:(p)=>location.assign(p),replace:(p)=>location.replace(p)});', loader: 'js' })); } }] });
+const nativeFetch=window.fetch; window.__requests=[];
+window.__readTest={failPath:new URLSearchParams(location.search).get('fail')||'',hangPath:'',delays:{}};
+window.fetch=async(input,init={})=>{
+ const url=new URL(String(input),location.href);if(!url.pathname.startsWith('/api/'))return nativeFetch(input,init);
+ window.__requests.push({path:url.pathname,query:url.search,method:init.method||'GET',body:init.body});
+ if(init.method&&init.method!=='GET')return Response.json({error:'Fixture does not persist operations'},{status:409});
+ const state=window.__readTest;
+ if(state.hangPath===url.pathname)await new Promise((resolve,reject)=>{if(init.signal?.aborted)reject(new DOMException('Aborted','AbortError'));else init.signal?.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true});});
+ const delay=state.delays[url.searchParams.get('storeId')]||0;if(delay)await new Promise(r=>setTimeout(r,delay));
+ if(state.failPath===url.pathname)return new Response('Read failed',{status:500});
+ if(url.pathname==='/api/settings')return Response.json({settings:defaultStoreModuleSettings});
+ if(url.pathname==='/api/os/quick-dashboard')return new Response('Not part of this fixture',{status:404});
+ const fixture=window.__fixtures[url.pathname]||{};
+ if(url.pathname==='/api/store/orders'){
+  let rows=fixture.orders;const q=(url.searchParams.get('q')||'').toLowerCase();
+  if(q)rows=rows.filter(o=>(o.pickupCode+' '+o.drink+' '+o.customerName+' '+o.customerPhone).toLowerCase().includes(q));
+  if(url.searchParams.get('status')==='completed')rows=rows.filter(o=>o.status==='completed');
+  const offset=Number(url.searchParams.get('cursor')||0),limit=Number(url.searchParams.get('pageSize')||50);
+  return Response.json({...fixture,orders:rows.slice(offset,offset+limit),nextCursor:offset+limit<rows.length?String(offset+limit):null});
+ }
+ if(url.pathname.startsWith('/api/store/display/')&&url.searchParams.get('storeId')==='test-store-2')return Response.json({...fixture,selectedStoreId:'test-store-2',preparing:[],ready:[],orders:[],tasks:[]});
+ return Response.json(fixture);
+};
+const pages={'/os/menus':MenuAdmin,'/sync':StoreInventorySyncStatus,'/store':Home,'/store/orders':Orders,'/store/pos':Pos,'/store/menu':Availability,'/store/menu/inventory-history':History,'/store/timecard':Timecard,'/store/receiving':Receiving,'/store/procedures':Procedures,'/store/seats':Seats,'/store/display/pickup':Pickup,'/store/display/kitchen':Kitchen,'/store/display/courier':Courier};const Page=pages[location.pathname]||Home; createRoot(document.getElementById('root')).render(<OsTranslationProvider><Page/><FloatingFeedbackButton/></OsTranslationProvider>);`;
+const compiler = await context({ stdin: { contents: entry, resolveDir: root, loader: 'tsx' }, bundle: true, write: false, outdir: '/private/tmp/store-ui-fixture', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' }, plugins: [{ name: 'fixture-navigation', setup(b) { b.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: 'navigation', namespace: 'fixture' })); b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export const usePathname=()=>location.pathname; export const useRouter=()=>({push:(p)=>location.assign(p),replace:(p)=>location.replace(p)});', loader: 'js' })); } }] });
 const server = createServer(async (req, res) => {
   const path = new URL(req.url, 'http://localhost').pathname;
-  if (path === '/fixture.js') { const bundle = await compiler.rebuild(); res.setHeader('Content-Type', 'text/javascript'); res.end(bundle.outputFiles[0].text); return; }
-  if (path === '/fixture.css') { res.setHeader('Content-Type', 'text/css'); res.end(`${await readFile('app/globals.css', 'utf8')}\n${await readFile('app/store/store-responsive.css', 'utf8')}`); return; }
+  if (path === '/fixture.js') { const bundle = await compiler.rebuild(); res.setHeader('Content-Type', 'text/javascript'); res.end(bundle.outputFiles.find(f => f.path.endsWith('.js')).text); return; }
+  if (path === '/fixture.css') { res.setHeader('Content-Type', 'text/css'); res.end(`${await readFile('app/globals.css', 'utf8')}\n${await readFile('app/store/store-responsive.css', 'utf8')}\n${(await compiler.rebuild()).outputFiles.filter(f => f.path.endsWith('.css')).map(f => f.text).join('\n')}`); return; }
   if (path.startsWith('/locales/') || path.endsWith('.svg')) { try { const content = await readFile(resolve(root, 'public', path.slice(1))); res.setHeader('Content-Type', path.endsWith('.svg') ? 'image/svg+xml' : 'application/json'); res.end(content); } catch { res.writeHead(404).end(); } return; }
   if (path.startsWith('/api/')) { res.writeHead(403).end('Fixture only'); return; }
   res.setHeader('Content-Type', 'text/html; charset=utf-8');

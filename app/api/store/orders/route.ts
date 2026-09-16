@@ -9,6 +9,7 @@ import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
 import { canChangeOrderStatus, getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 import { acknowledgePreparationDueAlert, cancelPendingStoreOrderAlerts } from "../../../../lib/store-order-alert-events";
+import { parseStoreOrderCursor, encodeStoreOrderCursor } from "../../../../lib/store-order-pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -23,9 +24,17 @@ export async function GET(request: Request) {
     ? getScopedStoreFilter(access, params.get("storeId"))
     : getScopedStoreFilter(access, params.get("storeId")) ?? access.stores[0]?.id ?? null;
   if (storeFilter === "__forbidden__") return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const view = params.get("view") === "history" ? "history" : "active";
+  const status = ["completed", "pending_payment"].includes(params.get("status") ?? "") ? params.get("status")! : "all";
+  const query = (params.get("q") ?? "").trim().toLowerCase().slice(0, 200);
+  const pageSize = Math.max(1, Math.min(100, Math.trunc(Number(params.get("pageSize")) || 50)));
+  let cursor;
+  try { cursor = parseStoreOrderCursor(params.get("cursor") ?? ""); }
+  catch { return Response.json({ error: "ページ情報が不正です。再読み込みしてください。" }, { status: 400 }); }
   const orders = await sql`
     select
       store_customer_orders.id::text,
+      jsonb_build_object('createdAt', store_customer_orders.created_at::text, 'id', store_customer_orders.id::text) as "pageCursor",
       coalesce(store_customer_orders.store_id::text, '') as "storeId",
       coalesce(stores.name, '') as "storeName",
       store_customer_orders.order_source as "orderSource",
@@ -101,11 +110,29 @@ export async function GET(request: Request) {
     where (${access.allStores} or store_customer_orders.store_id::text = any(${access.storeIds}))
       and (${storeFilter}::text is null or store_customer_orders.store_id::text = ${storeFilter})
       and store_customer_orders.created_at > now() - interval '14 days'
-    order by store_customer_orders.pickup_date desc, store_customer_orders.pickup_time desc, store_customer_orders.created_at desc
+      and (
+        (${view} = 'active' and (store_customer_orders.status in ('new', 'preparing', 'ready')
+          or (store_customer_orders.status = 'pending_payment' and store_customer_orders.created_at > now() - interval '30 minutes')
+          or (store_customer_orders.order_source = 'table_qr' and store_customer_orders.customer_summary->>'checkoutStatus' = 'requested'
+            and store_customer_orders.payment_status <> 'paid' and store_customer_orders.status <> 'cancelled')))
+        or (${view} = 'history' and (${status} = 'all'
+          or (${status} = 'completed' and store_customer_orders.status = 'completed')
+          or (${status} = 'pending_payment' and (store_customer_orders.status = 'pending_payment' or store_customer_orders.payment_status <> 'paid'))))
+      )
+      and (${query} = '' or position(${query} in lower(concat_ws(' ', store_customer_orders.pickup_code, store_customer_orders.drink,
+        coalesce(store_customer_orders.customer_summary #>> '{customer,name}', store_customer_orders.customer_summary->>'name'),
+        coalesce(store_customer_orders.customer_summary #>> '{customer,phone}', store_customer_orders.customer_summary->>'phone')))) > 0)
+      and (${!cursor} or (store_customer_orders.created_at, store_customer_orders.id) < (${cursor?.createdAt ?? null}::timestamptz, ${cursor?.id ?? null}::uuid))
+    order by store_customer_orders.created_at desc, store_customer_orders.id desc
+    limit ${pageSize + 1}
   `;
 
+  const page = orders.slice(0, pageSize);
+  const nextCursor = orders.length > pageSize ? encodeStoreOrderCursor(page[page.length - 1].pageCursor) : null;
+
   return Response.json({
-    orders,
+    orders: page.map(({ pageCursor, ...order }) => order),
+    nextCursor,
     access: { ...access, canUseAllStoreView: false },
     selectedStoreId: storeFilter
   }, { headers: { "Cache-Control": "no-store" } });

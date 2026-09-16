@@ -48,12 +48,25 @@ export async function GET(request: Request) {
   }
 
   const rows = await sql`
+    with recent_runs as (
+      select payload->>'syncRunId' as run_id, max(created_at) as created_at
+      from local_bridge_commands
+      where store_id::text = ${storeId}
+        and command_type = 'set_inventory_availability'
+        and created_at > now() - interval '30 minutes'
+        and coalesce(payload->>'syncRunId', '') <> ''
+      group by payload->>'syncRunId'
+      order by max(created_at) desc
+      limit 4
+    )
     select
       id::text,
       platform,
       status,
-      payload,
-      result,
+      jsonb_build_object('syncRunId', payload->'syncRunId', 'feedbackLabel', payload->'feedbackLabel',
+        'ingredientLabel', payload->'ingredientLabel', 'isAvailable', payload->'isAvailable', 'syncSource', payload->'syncSource') as payload,
+      jsonb_build_object('progress', jsonb_build_object('phase', result->'progress'->'phase',
+        'attempt', result->'progress'->'attempt', 'maxAttempts', result->'progress'->'maxAttempts')) as result,
       last_error as "lastError",
       attempts,
       created_at::text as "createdAt",
@@ -61,10 +74,8 @@ export async function GET(request: Request) {
     from local_bridge_commands
     where store_id::text = ${storeId}
       and command_type = 'set_inventory_availability'
-      and created_at > now() - interval '30 minutes'
-      and coalesce(payload->>'syncRunId', '') <> ''
+      and payload->>'syncRunId' in (select run_id from recent_runs)
     order by created_at desc
-    limit 60
   ` as CommandRow[];
 
   const grouped = new Map<string, {

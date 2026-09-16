@@ -1,5 +1,8 @@
 "use client";
 
+import { useReadRequest, readJson } from "../../../../components/useReadRequest";
+import { ReadStatusNotice } from "../../../../components/ReadStatusNotice";
+
 import { useEffect, useRef, useState } from "react";
 import { Menu } from "lucide-react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
@@ -37,6 +40,7 @@ export default function StorePickupDisplayPage() {
   const [preparing, setPreparing] = useState<PickupOrder[]>([]);
   const [ready, setReady] = useState<PickupOrder[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+  const readState = useReadRequest();
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [menuOpen, setMenuOpen] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
@@ -55,31 +59,30 @@ export default function StorePickupDisplayPage() {
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
     params.set("ts", String(Date.now()));
-    const response = await fetch(`/api/store/display/pickup?${params.toString()}`, { cache: "no-store" });
-    if (!response.ok) return;
-    const body = await response.json();
-    const nextStoreId = String(body.selectedStoreId || storeId || "");
-    setStores(body.access?.stores ?? []);
-    rememberStoreBusinessHours(body.access?.stores);
-    setSelectedStoreId(nextStoreId);
-    selectedStoreIdRef.current = nextStoreId;
-    if (nextStoreId) setStoredStoreSelection(nextStoreId);
-    setPreparing(body.preparing ?? []);
-    const nextReady = (body.ready ?? []) as PickupOrder[];
-    const nextReadyCodes = new Set(nextReady.map((order) => order.pickupCode));
-    if (hasInitializedReadyCodesRef.current && voiceEnabledRef.current && typeof window !== "undefined" && "speechSynthesis" in window) {
-      const newCodes = Array.from(nextReadyCodes).filter((code) => !knownReadyCodesRef.current.has(code));
-      for (const code of newCodes) {
-        const utterance = new SpeechSynthesisUtterance(getSpeechText(code));
-        utterance.lang = "ja-JP";
-        utterance.rate = 0.92;
-        window.speechSynthesis.speak(utterance);
+    return readState.run(storeId, (signal) => readJson(`/api/store/display/pickup?${params.toString()}`, signal), (body) => {
+      const nextStoreId = String(body.selectedStoreId || storeId || "");
+      setStores(body.access?.stores ?? []);
+      rememberStoreBusinessHours(body.access?.stores);
+      setSelectedStoreId(nextStoreId);
+      selectedStoreIdRef.current = nextStoreId;
+      if (nextStoreId) setStoredStoreSelection(nextStoreId);
+      setPreparing(body.preparing ?? []);
+      const nextReady = (body.ready ?? []) as PickupOrder[];
+      const nextReadyCodes = new Set(nextReady.map((order) => order.pickupCode));
+      if (hasInitializedReadyCodesRef.current && voiceEnabledRef.current && typeof window !== "undefined" && "speechSynthesis" in window) {
+        const newCodes = Array.from(nextReadyCodes).filter((code) => !knownReadyCodesRef.current.has(code));
+        for (const code of newCodes) {
+          const utterance = new SpeechSynthesisUtterance(getSpeechText(code));
+          utterance.lang = "ja-JP";
+          utterance.rate = 0.92;
+          window.speechSynthesis.speak(utterance);
+        }
       }
-    }
-    knownReadyCodesRef.current = nextReadyCodes;
-    hasInitializedReadyCodesRef.current = true;
-    setReady(nextReady);
-    setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit" }).format(new Date()));
+      knownReadyCodesRef.current = nextReadyCodes;
+      hasInitializedReadyCodesRef.current = true;
+      setReady(nextReady);
+      setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit" }).format(new Date()));
+    });
   }
 
   useVisibleRefresh(() => {
@@ -205,6 +208,7 @@ export default function StorePickupDisplayPage() {
 
   return (
     <main className="store-pickup-display-shell store-pickup-display-page">
+      <ReadStatusNotice state={readState} onRetry={() => void load()} />
       <button
         className="store-display-menu-button"
         type="button"
@@ -222,6 +226,8 @@ export default function StorePickupDisplayPage() {
               <span>表示店舗</span>
               <select value={selectedStoreId} onChange={(event) => {
                 const storeId = event.target.value;
+                setPreparing([]); setReady([]);
+                setLastUpdatedAt("");
                 setSelectedStoreId(storeId);
                 selectedStoreIdRef.current = storeId;
                 setStoredStoreSelection(storeId);
@@ -246,7 +252,7 @@ export default function StorePickupDisplayPage() {
           <button className="secondary-button" type="button" onClick={testVoice} disabled={!speechSupported}>
             音声テスト
           </button>
-          <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
+          <small>{readState.failed ? "更新失敗・再取得中" : realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
           <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
           {!speechSupported ? <small>このブラウザは音声案内に対応していません。</small> : null}
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>

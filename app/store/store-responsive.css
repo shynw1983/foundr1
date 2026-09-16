@@ -134,6 +134,7 @@
 .store-display-menu-button:not(.customer-display-menu-button) { width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.94); color: var(--ink); }
 .store-display-menu-button:not(.customer-display-menu-button)::after { display: none; }
 .store-display-menu { max-height: calc(100dvh - 72px); overflow-y: auto; }
+.store-pickup-display-page .store-display-menu, .store-kitchen-page .store-display-menu, .store-courier-display .store-display-menu { top: 52px; }
 .store-pickup-display-shell .store-pickup-board { min-height: 0; height: calc(100dvh - 28px); }
 .store-pickup-display-shell .store-pickup-column { min-height: 0; min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; align-content: stretch; }
 .store-pickup-display-shell .store-pickup-column h2 { font-size: clamp(24px, 3vw, 42px); margin: 0; padding-right: 42px; }
