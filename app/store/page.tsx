@@ -1,9 +1,16 @@
 "use client";
 
-import { BookOpen, Clock3, ClipboardList, MessageSquareWarning, PackageCheck, ShoppingCart, Tags, Users } from "lucide-react";
+import { BellRing, BookOpen, Clock3, ClipboardList, MessageSquareWarning, PackageCheck, ShoppingCart, Tags, Users } from "lucide-react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
 const storeModules = [
+  {
+    title: "注文通知",
+    description: "指定ユーザーの離店中の注文通知と、スマートフォンの通知設定を管理します。",
+    href: "/store/notifications",
+    icon: BellRing,
+    status: "利用可能"
+  },
   {
     title: "客席管理",
     description: "入口で客席を割り当て、選菜中、制作中、食事中、清掃待ちまで店舗設定に合わせて管理します。",

@@ -133,6 +133,7 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new Foundr1NotificationBridge(), "Foundr1NativeNotifications");
         webView.addJavascriptInterface(new Foundr1CalendarBridge(), "Foundr1Calendar");
         webView.addJavascriptInterface(new Foundr1DownloadsBridge(), "Foundr1Downloads");
+        invokeStoreOrderPush("attach", new Class<?>[] { android.app.Activity.class, WebView.class }, this, webView);
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -152,6 +153,14 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 persistWebSession();
+                if (url != null) {
+                    Uri page = Uri.parse(url);
+                    String path = page.getPath();
+                    boolean trusted = "https".equals(page.getScheme()) && ("www.foundr1.jp".equals(page.getHost()) || "foundr1.jp".equals(page.getHost()));
+                    if (trusted && ("/store/login".equals(path) || "/store/logout".equals(path) || "/os/login".equals(path) || "/os/logout".equals(path))) {
+                        invokeStoreOrderPush("clearBinding", new Class<?>[] { android.content.Context.class }, MainActivity.this);
+                    }
+                }
             }
         });
         webView.setWebChromeClient(new WebChromeClient() {
@@ -199,10 +208,20 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (webView != null) webView.onResume();
+        invokeStoreOrderPush("refresh", new Class<?>[] { android.content.Context.class }, this);
         if (pendingApkDownloadId >= 0 && canInstallUnknownApps()) {
             installDownloadedApk(pendingApkDownloadId);
         }
         checkNativeAppUpdateIfNeeded(true);
+    }
+
+    private void invokeStoreOrderPush(String method, Class<?>[] types, Object... args) {
+        if (!"jp.foundr1.store".equals(getPackageName())) return;
+        try {
+            Class.forName("jp.foundr1.store.StoreOrderPush").getMethod(method, types).invoke(null, args);
+        } catch (ReflectiveOperationException ignored) {
+            // Other app flavors do not include the phone notification module.
+        }
     }
 
     @Override

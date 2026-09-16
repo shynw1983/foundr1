@@ -29,6 +29,7 @@ function harness(authorized = true, dashboardImport = false) {
     "customer-orders": {findCustomerOrderById: async () => ({id: "order"})},
     "order-production": {ensureProductionTasksForOrder: async (id: string) => downstream.push(`kitchen:${id}`)},
     "order-realtime": {publishCustomerOrderEvent: async () => downstream.push("realtime")},
+    "store-order-push-scheduler": {scheduleBridgeOrderPush: async () => downstream.push("phone-alert")},
     "sales-orders": {syncWebReservationToSalesOrder: async (id: string) => downstream.push(`sales:${id}`)},
     "order-note-translation": {translateOrderNoteToChinese: async () => ""},
     "menu-display-name-matcher": {findMenuDisplayNameCandidate: () => null},
@@ -69,7 +70,7 @@ test("accepted detail persists correct time, amount and four modifiers before ki
   const item = h.writes.find((write) => write.text.includes("insert into store_customer_order_items"))!;
   assert.ok(item.values.some((value) => Array.isArray(value) && value.length === 4 && value.every((label) => typeof label === "string")));
   assert.ok(item.values.includes(3605));
-  assert.deepEqual(h.downstream, ["sales:order", "kitchen:order", "realtime"]);
+  assert.deepEqual(h.downstream, ["sales:order", "kitchen:order", "phone-alert", "realtime"]);
 });
 
 test("real details can replace a dashboard import despite its inflated completeness", async () => {

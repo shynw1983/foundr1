@@ -77,6 +77,10 @@ android {
 }
 
 dependencies {
+    storeImplementation "com.google.firebase:firebase-messaging:24.1.2"
+    storeImplementation "com.google.android.gms:play-services-location:21.3.0"
+    storeImplementation "androidx.work:work-runtime:2.9.1"
+    storeImplementation "androidx.webkit:webkit:1.12.1"
     implementation "com.pusher:pusher-java-client:2.4.4"
     implementation "com.starmicronics:stario10:1.12.1"
     implementation "com.google.zxing:core:3.5.3"

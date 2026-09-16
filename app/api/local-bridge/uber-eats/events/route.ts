@@ -3,6 +3,7 @@ import { sql } from "../../../../../lib/db";
 import { authorizeLocalBridge } from "../../../../../lib/local-bridge-auth";
 import { ensureProductionTasksForOrder } from "../../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
+import { scheduleBridgeOrderPush } from "../../../../../lib/store-order-push-scheduler";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import { translateOrderNoteToChinese } from "../../../../../lib/order-note-translation";
 import {
@@ -378,6 +379,9 @@ async function upsertOperationalOrder(input: {
     `;
   }
   await ensureProductionTasksForOrder(orderId);
+  await scheduleBridgeOrderPush(orderId, input.capturedAt).catch(() => {
+    console.error("Bridge order notification scheduling failed", { orderId });
+  });
   if (shouldPublishOrderEvent) {
     await publishCustomerOrderEvent(
       existing ? "order.updated" : "order.created",
