@@ -1,6 +1,7 @@
 "use client";
 
 import { useReadRequest, readJson } from "../../../components/useReadRequest";
+import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import { ReadStatusNotice } from "../../../components/ReadStatusNotice";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -295,6 +296,7 @@ function PickupTimeChip({ order, detail = false }: { order: Pick<StoreOrder, "pi
 }
 
 export default function StoreOrdersPage() {
+  const { t } = useOsTranslation();
   const [orders, setOrders] = useState<StoreOrder[]>([]);
   const [historyOrders, setHistoryOrders] = useState<StoreOrder[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
@@ -433,7 +435,7 @@ export default function StoreOrdersPage() {
       const warning = acceptanceMode === "force_open"
         ? "スタッフが打刻していない場合、シフト時間外、臨時休業中でもWeb予約を優先して受け付けます。この状態は自動では解除されません。"
         : "Web予約を直ちに停止します。この状態は自動では解除されません。";
-      if (!window.confirm(`${modeLabel}に切り替えますか？\n\n${warning}`)) return;
+      if (!window.confirm(t("{mode}に切り替えますか？\n\n{warning}", { mode: t(modeLabel), warning: t(warning) }))) return;
     }
     const reservationsEnabled = acceptanceMode !== "force_closed";
     void saveOperationSettings(
@@ -905,9 +907,9 @@ export default function StoreOrdersPage() {
         setShortageMessage("同類の代替商品名を入力してください。");
         return;
       }
-      const confirmed = window.confirm(`「${candidate.name}」を「${shortageReplacement.trim()}」へ変更します。\n\n原材料・アレルゲン・宗教上の制限を含め、安全に同類と判断できることを確認しましたか？`);
+      const confirmed = window.confirm(t("「{item}」を「{replacement}」へ変更します。\n\n原材料・アレルゲン・宗教上の制限を含め、安全に同類と判断できることを確認しましたか？", { item: candidate.name, replacement: shortageReplacement.trim() }));
       if (!confirmed) return;
-    } else if (!window.confirm(`「${candidate.name}」を提供せず、返金処理を実行しますか？`)) {
+    } else if (!window.confirm(t("「{item}」を提供せず、返金処理を実行しますか？", { item: candidate.name }))) {
       return;
     }
     setShortageSaving(true);
@@ -951,7 +953,7 @@ export default function StoreOrdersPage() {
         "会員ポイントは返金または正式な返金連動後に取り消されます。",
         "",
         "注文をキャンセルしますか？"
-      ].join("\n"));
+      ].map(line => t(line)).join("\n"));
       if (!confirmed) return;
     }
     const ok = await updateStatus(order.id, "cancelled");
@@ -1206,7 +1208,7 @@ export default function StoreOrdersPage() {
               再生
             </button>
             <span>
-              {soundEnabled && soundReady ? `${storeOrderAlertSoundOptions.find((option) => option.value === storeSettings.orderAlerts.sound)?.label ?? "通知音"} で通知します` : "通知音を有効にできます"}
+              {soundEnabled && soundReady ? t("{sound}で通知します", { sound: t(storeOrderAlertSoundOptions.find((option) => option.value === storeSettings.orderAlerts.sound)?.label ?? "通知音") }) : "通知音を有効にできます"}
               {storeSettings.orderAlerts.repeatUntilHandled ? " / 未対応は30秒ごとに再通知" : " / 新規注文時に2回通知"}
             </span>
           </div>

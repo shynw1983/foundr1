@@ -8,12 +8,12 @@ type OsDictionary = Record<string, string>;
 type OsTranslationContextValue = {
   language: OsLanguage;
   setLanguage: (language: OsLanguage) => void;
-  t: (value: string) => string;
+  t: (value: string, values?: Record<string, string | number>) => string;
 };
 
 const languageStorageKey = "foundr1-os-language";
 const languagePreferenceStorageKey = "foundr1-os-language-preference";
-const localeCacheVersion = "20260916-store-order-push-v56";
+const localeCacheVersion = "20260916-store-ui-v57";
 const languageMeta: Record<OsLanguage, { htmlLang: string }> = {
   ja: { htmlLang: "ja" },
   "zh-Hans": { htmlLang: "zh-Hans" },
@@ -237,7 +237,10 @@ export function OsTranslationProvider({ children }: { children: React.ReactNode 
   const value = useMemo(() => ({
     language,
     setLanguage,
-    t: (text: string) => language === "ja" ? text : translateText(text, dictionary)
+    t: (text: string, values?: Record<string, string | number>) => {
+      const translated = language === "ja" ? text : translateText(text, dictionary);
+      return values ? translated.replace(/\{(\w+)\}/g, (token, key: string) => String(values[key] ?? token)) : translated;
+    }
   }), [dictionary, language, setLanguage]);
 
   return <OsTranslationContext.Provider value={value}>{children}</OsTranslationContext.Provider>;

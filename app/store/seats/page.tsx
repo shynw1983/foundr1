@@ -1,5 +1,7 @@
 "use client";
 
+import { useOsTranslation } from "../../os/components/OsTranslationProvider";
+
 import { ArrowLeft, Check, Clock3, RotateCcw, Sparkles, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../lib/store-polling-client";
@@ -67,6 +69,7 @@ const statusMeta: Record<SeatStatus, { label: string; action?: string; source: "
 };
 
 export default function StoreSeatsPage() {
+  const { t } = useOsTranslation();
   const [seats, setSeats] = useState<Seat[]>(initialSeats);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [showMap, setShowMap] = useState(false);
@@ -245,7 +248,7 @@ export default function StoreSeatsPage() {
 
   async function toggleSharedMode(table: "A" | "B", enabled: boolean) {
     if (saving) return;
-    if (enabled && !window.confirm(`${table}テーブルを相席モードにしますか？\n椅子ごとに別のお客様をご案内できます。`)) return;
+    if (enabled && !window.confirm(t("{table}テーブルを相席モードにしますか？\n椅子ごとに別のお客様をご案内できます。", { table }))) return;
     setSaving(true);
     setError("");
     try {
@@ -401,7 +404,7 @@ export default function StoreSeatsPage() {
                 key={table}
                 style={{ left: `${((table === "A" ? 513 : 619) / 800) * 100}%` }}
                 onClick={() => selectTarget({ type: "table", id: table })}
-                aria-label={`${table}テーブルを選択`}
+                aria-label={t("{table}テーブルを選択", { table })}
               >{table}</button>
             ))}
             <button
@@ -450,7 +453,7 @@ export default function StoreSeatsPage() {
             </div>
             {selectedStatus === "available" ? (
               <>
-                <div className="seat-action-note"><Users size={18} /><span>{selection.type === "table" ? `${selection.id}テーブル` : "この席"}を{partySizeDraft}名で確保します</span></div>
+                <div className="seat-action-note"><Users size={18} /><span>{t("{seat}を{count}名で確保します", { seat: selection.type === "table" ? t("{table}テーブル", { table: selection.id }) : t("この席"), count: partySizeDraft })}</span></div>
                 {selection.type === "table" ? (
                   <div className="seat-party-size" aria-label="ご利用人数">
                     {Array.from({ length: selection.id === "A+B" ? 4 : 2 }, (_, index) => index + 1).map((size) => (

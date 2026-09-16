@@ -596,6 +596,10 @@ const maamaaZhPhraseReplacements: Array<[string, string]> = [
   ["豆苗", "豆苗"],
   ["パクチー", "香菜"],
   ["板春雨", "宽粉"],
+  ["7個くらい", "约7个"],
+  ["1パック", "1包"],
+  ["1セット", "1份"],
+  ["1ショット", "1份"],
   ["ヶ", "个"]
 ];
 
@@ -606,11 +610,11 @@ const maamaaZhPhraseReplacementsByLength: Array<[string, string]> = [
   .filter(([from, to]) => from !== to)
   .sort(([left], [right]) => right.length - left.length);
 
-export function translateMaamaaReferenceText(value: string | undefined, language: MaamaaReferenceLanguage) {
+export function translateMaamaaReferenceText(value: string | undefined, language: MaamaaReferenceLanguage, localize: (text: string) => string = text => text) {
   if (!value || language === "ja") return value ?? "";
-  let translated = maamaaZhExactText[value] ?? value;
+  let translated = localize(maamaaZhExactText[value] ?? value);
   for (const [from, to] of maamaaZhPhraseReplacementsByLength) {
-    translated = translated.replaceAll(from, to);
+    translated = translated.replaceAll(from, localize(to));
   }
   return translated;
 }

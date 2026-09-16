@@ -4,6 +4,7 @@ import { useReadRequest, readJson } from "../../../../components/useReadRequest"
 import { ReadStatusNotice } from "../../../../components/ReadStatusNotice";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useOsTranslation } from "../../../os/components/OsTranslationProvider";
 import { Menu } from "lucide-react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
@@ -119,21 +120,10 @@ type BridgeStatus = {
   deviceName?: string;
 };
 
-function bridgeAttentionLabel(problem: string | undefined, isChinese: boolean) {
-  const platformLabels: Record<string, { ja: string; zh: string }> = {
-    uber_eats: { ja: "Uber Eats", zh: "Uber Eats" },
-    rocket_now: { ja: "ロケットナウ", zh: "火箭" },
-    demae_can: { ja: "出前館", zh: "出前馆" }
-  };
-  const loginPlatforms = Array.from(
-    String(problem ?? "").matchAll(/(?:^|;\s*)(uber_eats|rocket_now|demae_can): login required(?=;|$)/g),
-    (match) => match[1]
-  );
-  if (!loginPlatforms.length) return isChinese ? "Bridge 检查中" : "Bridge 確認中";
-  const names = loginPlatforms.map((platform) => platformLabels[platform][isChinese ? "zh" : "ja"]);
-  return isChinese
-    ? `${names.join("、")}需要重新登录`
-    : `${names.join("・")}に再ログインが必要`;
+function bridgeAttentionLabel(problem: string | undefined, t: (text: string, values?: Record<string, string | number>) => string) {
+  const labels: Record<string, string> = { uber_eats: "Uber Eats", rocket_now: "Rocket Now", demae_can: "出前館" };
+  const platforms = Array.from(String(problem ?? "").matchAll(/(?:^|;\s*)(uber_eats|rocket_now|demae_can): login required(?=;|$)/g), match => labels[match[1]]);
+  return platforms.length ? t("{platforms}に再ログインが必要", { platforms: platforms.join(" / ") }) : t("Bridge 確認中");
 }
 
 type NewOrderNotice = {
@@ -270,11 +260,11 @@ function getCountdownLabel(estimatedReadyAt: string, now: number, language: "ja"
 }
 
 export default function StoreKitchenPage() {
+  const { t } = useOsTranslation();
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [tasks, setTasks] = useState<KitchenTask[]>([]);
   const [areas, setAreas] = useState<Array<{ value: string; label: string }>>([]);
-  const [displayLanguage, setDisplayLanguage] = useState<"ja" | "zh">("ja");
   const [kitchenDisplayMode, setKitchenDisplayMode] = useState<KitchenDisplayMode>("detailed");
   const [statusFilter, setStatusFilter] = useState<KitchenStatusFilter>("active");
   const [selectedTaskId, setSelectedTaskId] = useState("");
@@ -423,7 +413,6 @@ export default function StoreKitchenPage() {
       setTasks(nextTasks);
       setAreas(body.areas ?? []);
       setDisplayedBusinessDate(String(body.businessDay?.businessDate ?? ""));
-      setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
       setKitchenDisplayMode(
         body.kitchenDisplayMode === "order_only" || body.kitchenDisplayMode === "simple"
           ? body.kitchenDisplayMode
@@ -646,7 +635,7 @@ export default function StoreKitchenPage() {
     if (response.ok) {
       setUnavailableInventory(Array.isArray(body.items) ? body.items : []);
     } else {
-      setInventoryListError(String(body.error ?? (displayLanguage === "zh" ? "无法读取缺货项目。" : "売り切れ項目を読み込めませんでした。")));
+      setInventoryListError(String(body.error ?? (t("売り切れ項目を読み込めませんでした。"))));
     }
     setInventoryListLoading(false);
   }
@@ -675,7 +664,7 @@ export default function StoreKitchenPage() {
         [inventoryKey]: registerInventoryCommands(body, inventoryKey)
       }));
     } else {
-      setInventoryListError(String(body.error ?? (isChinese ? "无法发送恢复销售操作。" : "販売再開を送信できませんでした。")));
+      setInventoryListError(String(body.error ?? (t("販売再開を送信できませんでした。"))));
     }
     setInventoryRestoringKey("");
   }
@@ -696,7 +685,6 @@ export default function StoreKitchenPage() {
       syncServerTime(body.serverNow);
       setTasks(body.tasks ?? []);
       setAreas(body.areas ?? areas);
-      setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
     } else {
       await load();
     }
@@ -730,7 +718,6 @@ export default function StoreKitchenPage() {
       syncServerTime(body.serverNow);
       setTasks(body.tasks ?? []);
       setAreas(body.areas ?? areas);
-      setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
     } else {
       await load();
     }
@@ -754,7 +741,6 @@ export default function StoreKitchenPage() {
       syncServerTime(body.serverNow);
       setTasks(body.tasks ?? []);
       setAreas(body.areas ?? areas);
-      setDisplayLanguage(body.displayLanguage === "zh" ? "zh" : "ja");
     } else {
       await load();
     }
@@ -1009,7 +995,6 @@ export default function StoreKitchenPage() {
       : task.status === statusFilter
   )), [businessDayOffset, statusFilter, tasks]);
   const selectedTask = filteredTasks.find((task) => task.id === selectedTaskId) ?? filteredTasks[0] ?? null;
-  const isChinese = displayLanguage === "zh";
   const bridgeOnline = bridgeStatus?.recentlyOnline === true;
   const bridgeLevel = !bridgeOnline
     ? "error"
@@ -1019,14 +1004,14 @@ export default function StoreKitchenPage() {
         ? "attention"
         : "healthy";
   const bridgeLabel = bridgeLevel === "healthy"
-    ? (isChinese ? "Bridge 正常" : "Bridge 正常")
+    ? (t("Bridge 正常"))
     : bridgeLevel === "attention"
-      ? bridgeAttentionLabel(bridgeStatus?.problem, isChinese)
-      : (isChinese ? "Bridge 异常" : "Bridge 異常");
+      ? bridgeAttentionLabel(bridgeStatus?.problem, t)
+      : (t("Bridge 異常"));
 
   return (
     <main className="store-kitchen-display store-kitchen-page">
-      <ReadStatusNotice state={readState} onRetry={() => void load()} language={displayLanguage} />
+      <ReadStatusNotice state={readState} onRetry={() => void load()} />
       <button
         className="store-display-menu-button"
         type="button"
@@ -1038,10 +1023,10 @@ export default function StoreKitchenPage() {
       ><Menu size={20} /></button>
       {menuOpen ? (
         <div className="store-display-menu">
-          <strong>{isChinese ? "厨房" : "キッチン"}</strong>
+          <strong>{t("キッチン")}</strong>
           {stores.length > 1 ? (
             <label className="store-context-selector is-store is-compact">
-              <span>{isChinese ? "显示门店" : "表示店舗"}</span>
+              <span>{t("表示店舗")}</span>
               <select value={selectedStoreId} onChange={(event) => {
                 const storeId = event.target.value;
                 setTasks([]);
@@ -1060,23 +1045,23 @@ export default function StoreKitchenPage() {
             resetNewOrderBaseline();
             setSelectedArea(event.target.value);
           }} aria-label="制作区">
-            <option value="">{isChinese ? "全部" : "全部"}</option>
-            {areas.map((area) => <option key={area.value} value={area.value}>{isChinese && area.label === "調理" ? "烹饪" : area.label}</option>)}
+            <option value="">{t("全部")}</option>
+            {areas.map((area) => <option key={area.value} value={area.value}>{area.label === "調理" ? t("調理") : area.label}</option>)}
           </select>
           <label className="store-context-selector is-compact">
-            <span>{isChinese ? "营业日" : "営業日"}</span>
+            <span>{t("営業日")}</span>
             <select value={businessDayOffset} onChange={(event) => {
               const nextOffset = event.target.value === "-1" ? -1 : 0;
               resetNewOrderBaseline();
               setStatusFilter("active");
               setBusinessDayOffset(nextOffset);
             }}>
-              <option value="0">{isChinese ? "当前营业日" : "現在の営業日"}</option>
-              <option value="-1">{isChinese ? "上一个营业日（只读）" : "前の営業日（閲覧のみ）"}</option>
+              <option value="0">{t("現在の営業日")}</option>
+              <option value="-1">{t("前の営業日（閲覧のみ）")}</option>
             </select>
           </label>
           <label className="store-context-selector is-compact">
-            <span>{isChinese ? "内容显示" : "内容表示"}</span>
+            <span>{t("内容表示")}</span>
             <select
               value={kitchenDisplayMode}
               onChange={(event) => {
@@ -1086,22 +1071,22 @@ export default function StoreKitchenPage() {
                 );
               }}
             >
-              <option value="order_only">{isChinese ? "仅下单内容（熟练员工）" : "注文内容のみ（熟練者向け）"}</option>
-              <option value="simple">{isChinese ? "下单内容＋食材名称" : "注文内容＋食材名"}</option>
-              <option value="detailed">{isChinese ? "下单内容＋食材・操作说明" : "注文内容＋食材・作業説明"}</option>
+              <option value="order_only">{t("注文内容のみ（熟練者向け）")}</option>
+              <option value="simple">{t("注文内容＋食材名")}</option>
+              <option value="detailed">{t("注文内容＋食材・作業説明")}</option>
             </select>
           </label>
-          <button className="secondary-button" type="button" onClick={() => void load()}>{loading ? (isChinese ? "加载中" : "読み込み中") : (isChinese ? "刷新" : "更新")}</button>
+          <button className="secondary-button" type="button" onClick={() => void load()}>{loading ? (t("読み込み中")) : (t("更新"))}</button>
           <button className="store-kitchen-inventory-manager-button" type="button" onClick={() => {
             setMenuOpen(false);
             setInventoryManagerOpen(true);
             void loadUnavailableInventory();
           }}>
-            <span>{isChinese ? "缺货管理" : "売切管理"}</span>
+            <span>{t("売切管理")}</span>
             {unavailableInventory.length ? <b>{unavailableInventory.length}</b> : null}
           </button>
           <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
-            {isChinese ? "全屏・保持亮屏 ON" : "全画面・常時点灯 ON"}
+            {t("全画面・常時点灯 ON")}
           </button>
           <button
             className="secondary-button"
@@ -1116,12 +1101,12 @@ export default function StoreKitchenPage() {
             }}
           >
             {soundEnabled && soundReady
-              ? (isChinese ? "新订单提示音 ON" : "新規注文音 ON")
-              : (isChinese ? "开启新订单提示音" : "新規注文音を有効にする")}
+              ? (t("新規注文音 ON"))
+              : (t("新規注文音を有効にする"))}
           </button>
           <small>{businessDayOffset === -1
-            ? (isChinese ? "历史查看模式" : "履歴表示モード")
-            : readState.failed ? (isChinese ? "更新失败，重试中" : "更新失敗・再取得中") : realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
+            ? (t("履歴表示モード"))
+            : readState.failed ? (t("更新失敗・再取得中")) : realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
           <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>
@@ -1133,7 +1118,7 @@ export default function StoreKitchenPage() {
         <span aria-hidden="true" />
         <b>{bridgeLabel}</b>
         {Number(bridgeStatus?.pendingCount ?? 0) > 0 ? (
-          <small>{isChinese ? `待发送 ${bridgeStatus?.pendingCount}` : `未送信 ${bridgeStatus?.pendingCount}`}</small>
+          <small>{t("未送信 {count}", { count: bridgeStatus?.pendingCount ?? 0 })}</small>
         ) : null}
       </div>
 
@@ -1151,23 +1136,23 @@ export default function StoreKitchenPage() {
           }}
         >
           <span aria-hidden="true">!</span>
-          <strong>{isChinese ? "新订单" : "新規注文"}</strong>
+          <strong>{t("新規注文")}</strong>
           <b>{newOrderNotice.orderCount > 1
-            ? (isChinese ? `${newOrderNotice.orderCount} 单` : `${newOrderNotice.orderCount}件`)
+            ? (t("{count}件", { count: newOrderNotice.orderCount ?? 0 }))
             : `#${newOrderNotice.pickupCode}`}</b>
           {newOrderNotice.orderCount === 1 ? (
-            <small>{isChinese ? `共 ${newOrderNotice.itemCount} 件商品` : `商品 合計${newOrderNotice.itemCount}点`}</small>
+            <small>{t("商品 合計{count}点", { count: newOrderNotice.itemCount ?? 0 })}</small>
           ) : null}
         </button>
       ) : null}
 
       <section className="store-kitchen-board">
-        <nav className="store-kitchen-status-tabs" aria-label={isChinese ? "按状态筛选" : "状態で絞り込み"}>
+        <nav className="store-kitchen-status-tabs" aria-label={t("状態で絞り込み")}>
           {([
-            ["active", businessDayOffset === -1 ? (isChinese ? "全部" : "すべて") : (isChinese ? "进行中" : "進行中")],
-            ["new", isChinese ? "待制作" : "制作待ち"],
-            ["preparing", isChinese ? "制作中" : "制作中"],
-            ["ready", isChinese ? "已完成" : "完成"]
+            ["active", businessDayOffset === -1 ? (t("すべて")) : (t("進行中"))],
+            ["new", t("制作待ち")],
+            ["preparing", t("制作中")],
+            ["ready", t("完成")]
           ] as Array<[KitchenStatusFilter, string]>).map(([value, label]) => (
             <button
               className={statusFilter === value ? "is-active" : ""}
@@ -1183,11 +1168,11 @@ export default function StoreKitchenPage() {
         </nav>
 
         <div className="store-kitchen-workspace">
-          <aside className="store-kitchen-queue" aria-label={isChinese ? "订单队列" : "注文キュー"}>
+          <aside className="store-kitchen-queue" aria-label={t("注文キュー")}>
             <header>
               <div>
-                <small>{displayedBusinessDate ? `${displayedBusinessDate} · ` : ""}{isChinese ? "按时间排序" : "時刻順"}</small>
-                <strong>{isChinese ? "订单队列" : "注文キュー"}</strong>
+                <small>{displayedBusinessDate ? `${displayedBusinessDate} · ` : ""}{t("時刻順")}</small>
+                <strong>{t("注文キュー")}</strong>
               </div>
               <b>{filteredTasks.length}</b>
             </header>
@@ -1208,7 +1193,7 @@ export default function StoreKitchenPage() {
                       <em>{statusLabels[task.kitchenLanguage][task.status]}</em>
                     </span>
                     <span className="store-kitchen-queue-items">
-                      {(task.itemGroups ?? []).map((group) => group.itemName).filter(Boolean).join(" / ") || (isChinese ? "内容未登记" : "内容未登録")}
+                      {(task.itemGroups ?? []).map((group) => group.itemName).filter(Boolean).join(" / ") || (t("内容未登録"))}
                     </span>
                   </span>
                   <span className="store-kitchen-queue-side">
@@ -1224,7 +1209,7 @@ export default function StoreKitchenPage() {
               ))}
               {!filteredTasks.length ? (
                 <p className="store-kitchen-empty">
-                  {isChinese ? "当前筛选条件下没有订单。" : "この状態の注文はありません。"}
+                  {t("この状態の注文はありません。")}
                 </p>
               ) : null}
             </div>
@@ -1234,7 +1219,7 @@ export default function StoreKitchenPage() {
             {selectedTask ? (() => {
               const task = selectedTask;
               return (
-              <article className={`store-kitchen-task is-${task.status}${task.isHistorical ? " is-historical" : ""}`} key={task.id}>
+              <article className={`store-kitchen-task is-${task.status}${task.isHistorical ? " is-historical" : ""}`} key={task.id} data-i18n-ignore>
                 {task.isHistorical ? (
                   <p className="store-kitchen-note">
                     {task.kitchenLanguage === "zh" ? "历史订单 · 仅供查看，不会更改制作状态" : "過去の注文 · 閲覧のみ（制作状態は変更されません）"}
@@ -1510,27 +1495,27 @@ export default function StoreKitchenPage() {
                 {!task.isHistorical ? <div className="store-kitchen-actions">
                   <button className="secondary-button store-kitchen-reprint-button" type="button" disabled={savingId === task.id} onClick={() => void requestReprint(task)}>
                     {reprintQueuedId === task.id
-                      ? (task.kitchenLanguage === "zh" ? "已加入补打队列" : "再印刷を予約しました")
-                      : (task.kitchenLanguage === "zh" ? "补打一张" : "再印刷")}
+                      ? (t("再印刷を予約しました"))
+                      : (t("再印刷"))}
                   </button>
                   {task.status === "new" ? (
-                    <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "preparing")}>{task.kitchenLanguage === "zh" ? "开始制作" : "制作開始"}</button>
+                    <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "preparing")}>{t("制作開始")}</button>
                   ) : null}
                   {task.status === "preparing" ? (
                     <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => void rollbackTask(task, "new")}>
-                      {task.kitchenLanguage === "zh" ? "撤销开始" : "開始を取り消す"}
+                      {t("開始を取り消す")}
                     </button>
                   ) : null}
                   {task.status === "ready" ? (
                     <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => void rollbackTask(task, "preparing")}>
-                      {task.kitchenLanguage === "zh" ? "返回制作中" : "制作中に戻す"}
+                      {t("制作中に戻す")}
                     </button>
                   ) : (
-                    <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "ready")}>{task.kitchenLanguage === "zh" ? (task.orderType === "eat_in" ? "出餐完成" : "完成") : (task.orderType === "eat_in" ? "提供完了" : "完成")}</button>
+                    <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "ready")}>{task.orderType === "eat_in" ? t("提供完了") : t("完成")}</button>
                   )}
                   {task.status === "ready" && tasks.every((candidate) => candidate.orderId !== task.orderId || candidate.status === "ready") ? (
                     <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => void completeHandoff(task)}>
-                      {task.kitchenLanguage === "zh" ? "交付完成" : "受渡完了"}
+                      {t("受渡完了")}
                     </button>
                   ) : null}
                 </div> : null}
@@ -1538,8 +1523,8 @@ export default function StoreKitchenPage() {
               );
             })() : (
               <div className="store-kitchen-detail-empty">
-                <strong>{isChinese ? "请选择订单" : "注文を選択してください"}</strong>
-                <p>{isChinese ? "当前筛选条件下没有可显示的订单。" : "この状態の注文はありません。"}</p>
+                <strong>{t("注文を選択してください")}</strong>
+                <p>{t("この状態の注文はありません。")}</p>
               </div>
             )}
           </div>
@@ -1605,39 +1590,37 @@ export default function StoreKitchenPage() {
           <section className="store-kitchen-inventory-modal store-kitchen-inventory-manager" role="dialog" aria-modal="true" aria-labelledby="inventory-manager-title">
             <header>
               <span>Foundr1 × Delivery Bridge</span>
-              <button type="button" aria-label={isChinese ? "关闭" : "閉じる"} disabled={Boolean(inventoryRestoringKey)} onClick={() => setInventoryManagerOpen(false)}>×</button>
+              <button type="button" aria-label={t("閉じる")} disabled={Boolean(inventoryRestoringKey)} onClick={() => setInventoryManagerOpen(false)}>×</button>
             </header>
             <div className="store-kitchen-inventory-manager-heading">
               <div>
-                <h2 id="inventory-manager-title">{isChinese ? "缺货管理" : "売切管理"}</h2>
-                <p>{isChinese ? "补充库存后，在这里恢复销售。Uber 与 Rocket 会分别同步。" : "補充後はここから販売を再開します。Uber と Rocket へ個別に同期します。"}</p>
+                <h2 id="inventory-manager-title">{t("売切管理")}</h2>
+                <p>{t("補充後はここから販売を再開します。Uber と Rocket へ個別に同期します。")}</p>
               </div>
               <div className="store-kitchen-inventory-manager-heading-actions">
                 <button className="secondary-button" type="button" disabled={inventoryAudit?.status === "pending"} onClick={() => void startInventoryAudit()}>
                   {inventoryAudit?.status === "pending"
-                    ? (isChinese ? `完整检查中 · ${inventoryAudit.targetCount}项` : `完全チェック中 · ${inventoryAudit.targetCount}件`)
-                    : (isChinese ? "以 Uber 同步整店" : "Uber 基準で全店同期")}
+                    ? (t("完全チェック中 · {count}件", { count: inventoryAudit.targetCount ?? 0 }))
+                    : (t("Uber 基準で全店同期"))}
                 </button>
                 <strong>{unavailableInventory.length}</strong>
               </div>
             </div>
             {inventoryAudit?.status === "succeeded" ? (
               <p className="store-kitchen-inventory-audit-result">
-                {isChinese
-                  ? `Uber 读取完成：${inventoryAudit.checkedCount} 项。其他平台的结果请查看销售状态的同步履历。`
-                  : `Uber 読取完了：${inventoryAudit.checkedCount}件。連携先の結果は販売状態の同期履歴で確認してください。`}
+                {t("Uber 読取完了：{count}件。連携先の結果は販売状態の同期履歴で確認してください。", { count: inventoryAudit.checkedCount ?? 0 })}
               </p>
             ) : inventoryAudit?.status === "failed" ? (
-              <p className="is-error">{inventoryAudit.error || (isChinese ? "完整检查失败，请重试。" : "完全チェックに失敗しました。再実行してください。")}</p>
+              <p className="is-error">{inventoryAudit.error || (t("完全チェックに失敗しました。再実行してください。"))}</p>
             ) : null}
             {!bridgeOnline ? (
               <p className="store-kitchen-inventory-manager-warning">
-                {isChinese ? "Bridge 当前离线。恢复操作可以发送，但会在 Bridge 重新在线后执行。" : "Bridge は現在オフラインです。再開操作は送信され、オンライン復帰後に実行されます。"}
+                {t("Bridge は現在オフラインです。再開操作は送信され、オンライン復帰後に実行されます。")}
               </p>
             ) : null}
             {inventoryListError ? <p className="is-error">{inventoryListError}</p> : null}
             {inventoryListLoading ? (
-              <div className="store-kitchen-inventory-manager-empty">{isChinese ? "正在读取缺货项目…" : "売り切れ項目を読み込み中…"}</div>
+              <div className="store-kitchen-inventory-manager-empty">{t("売り切れ項目を読み込み中…")}</div>
             ) : unavailableInventory.length ? (
               <div className="store-kitchen-inventory-manager-list">
                 {unavailableInventory.map((item) => {
@@ -1646,14 +1629,14 @@ export default function StoreKitchenPage() {
                   return (
                     <article key={`${item.brandId}:${item.targetKind}:${item.inventoryKey}`}>
                       <div className="store-kitchen-inventory-manager-copy">
-                        <small>{item.targetKind === "item" ? (isChinese ? "商品" : "商品") : (isChinese ? "选项" : "選択肢")}</small>
+                        <small>{item.targetKind === "item" ? (t("商品")) : (t("選択肢"))}</small>
                         <strong>{item.ingredientLabel}</strong>
                         <div>
                           {item.targets.map((target) => (
                             <span key={target.targetId}>{target.label}</span>
                           ))}
                         </div>
-                        {sync?.status === "failed" ? <em>{sync.error || (isChinese ? "Uber 恢复失败，请重试。" : "Uber の再開に失敗しました。再試行してください。")}</em> : null}
+                        {sync?.status === "failed" ? <em>{sync.error || (t("Uber の再開に失敗しました。再試行してください。"))}</em> : null}
                       </div>
                       <button
                         className="primary-button"
@@ -1662,10 +1645,10 @@ export default function StoreKitchenPage() {
                         onClick={() => void restoreInventoryItem(item)}
                       >
                         {pending
-                          ? (isChinese ? "正在同步…" : "同期中…")
+                          ? (t("同期中…"))
                           : inventoryRestoringKey === item.inventoryKey
-                            ? (isChinese ? "正在发送…" : "送信中…")
-                            : (isChinese ? "恢复销售" : "販売を再開")}
+                            ? (t("送信中…"))
+                            : (t("販売を再開"))}
                       </button>
                     </article>
                   );
@@ -1673,8 +1656,8 @@ export default function StoreKitchenPage() {
               </div>
             ) : (
               <div className="store-kitchen-inventory-manager-empty">
-                <strong>{isChinese ? "目前没有缺货项目" : "現在、売り切れはありません"}</strong>
-                <span>{isChinese ? "所有商品和选项都可以销售。" : "すべての商品・選択肢を販売できます。"}</span>
+                <strong>{t("現在、売り切れはありません")}</strong>
+                <span>{t("すべての商品・選択肢を販売できます。")}</span>
               </div>
             )}
           </section>
