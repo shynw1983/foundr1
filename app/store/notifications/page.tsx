@@ -1,17 +1,18 @@
 "use client";
 
 import { BellRing, Check, MapPin, Settings, Smartphone } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import { nativeOrderPush, type NativeOrderPushStatus } from "../../../lib/store-order-push-client";
 
 type Rule = { storeId: string; storeName: string; key: string; enterRadius: number; exitRadius: number };
+type Preference = { employeeId: string; employeeName: string; storeId: string; storeName: string; enabled: boolean; enterRadius: number; exitRadius: number; updatedAt: string };
 type Data = {
   config: { enabled: boolean; fcm: boolean; firebase: Record<string, string> | null };
   ready: boolean; canManage: boolean; stores: Array<{ id: string; name: string }>;
   employees?: Array<{ id: string; name: string }>;
-  preferences?: Array<{ employeeId: string; storeId: string; enabled: boolean; enterRadius: number; exitRadius: number }>;
+  preferences?: Preference[];
   rules: Rule[]; device: { id: string; lastSuccessAt: string | null; lastError: string; revokedAt: string | null; presence: Array<{ storeId: string; ruleKey: string; state: string }> } | null;
   alerts: Array<{ id: string; orderId: string; storeId: string; storeName: string; source: string; pickupCode: string; amount: number; createdAt: string; lastError: string }>;
 };
@@ -24,13 +25,22 @@ export default function StoreNotificationsPage() {
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [employeeId, setEmployeeId] = useState(""), [storeId, setStoreId] = useState("");
   const [exitRadius, setExitRadius] = useState(500), [enterRadius, setEnterRadius] = useState(300), [enabled, setEnabled] = useState(false);
-  const load = useCallback(async () => {
-    let deviceId = "";
-    if (window.Foundr1OrderPush) { const state = await nativeOrderPush("status"); setNative(state); deviceId = state.deviceId; }
+  const [savingRule, setSavingRule] = useState(false);
+  const [ruleFeedback, setRuleFeedback] = useState<{ error: boolean; message: string } | null>(null);
+  const savingRuleRef = useRef(false), loadVersion = useRef(0), deviceIdRef = useRef("");
+  const ruleFormRef = useRef<HTMLFormElement>(null);
+  const load = useCallback(async (refreshNative = true) => {
+    if (savingRuleRef.current) return;
+    const version = ++loadVersion.current;
+    if (refreshNative && window.Foundr1OrderPush) {
+      try { const state = await nativeOrderPush("status"); setNative(state); deviceIdRef.current = state.deviceId; }
+      catch { /* Account settings remain usable when the native bridge is unavailable. */ }
+    }
+    const deviceId = deviceIdRef.current;
     const response = await fetch(`/api/store/order-notifications?deviceId=${encodeURIComponent(deviceId)}`, { cache: "no-store" });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "通知を取得できませんでした。");
-    setData(body);
+    if (version === loadVersion.current && !savingRuleRef.current) setData(body);
   }, []);
   useEffect(() => {
     void load().catch((error: Error) => setError(error.message));
@@ -46,20 +56,48 @@ export default function StoreNotificationsPage() {
     return () => clearInterval(timer);
   }, [native?.alarmVersion]);
   function selectRule(nextEmployeeId: string, nextStoreId: string) {
-    setEmployeeId(nextEmployeeId); setStoreId(nextStoreId);
+    setRuleFeedback(null); setEmployeeId(nextEmployeeId); setStoreId(nextStoreId);
     const rule = data?.preferences?.find((item) => item.employeeId === nextEmployeeId && item.storeId === nextStoreId);
     setEnabled(rule?.enabled ?? false); setExitRadius(rule?.exitRadius ?? 500); setEnterRadius(rule?.enterRadius ?? 300);
   }
   async function post(body: Record<string, unknown>) {
-    const response = await fetch("/api/store/order-notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "通知設定を保存できませんでした。");
-    return result;
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const response = await fetch("/api/store/order-notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result) throw new Error(result?.error || "通知設定を保存できませんでした。");
+      return result;
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error("通信がタイムアウトしました。設定を再読み込みして保存結果を確認してください。");
+      if (error instanceof TypeError) throw new Error("通信できませんでした。通信状態を確認し、設定を再読み込みしてください。");
+      throw error;
+    } finally { clearTimeout(timer); }
   }
   async function run(action: () => Promise<void>) {
     setBusy(true); setError(""); setNotice("");
     try { await action(); await load(); } catch (error) { setError(error instanceof Error ? error.message : "通知設定を確認してください。"); }
     finally { setBusy(false); }
+  }
+  async function saveRule() {
+    if (savingRuleRef.current || busy) return;
+    setRuleFeedback(null);
+    const invalid = !employeeId || !storeId ? "ユーザーと店舗を選択してください。"
+      : !Number.isInteger(exitRadius) || exitRadius < 150 || exitRadius > 10000 ? "離店距離は150〜10000mの整数で入力してください。"
+      : !Number.isInteger(enterRadius) || enterRadius < 100 || enterRadius >= exitRadius ? "帰店距離は100m以上、離店距離より小さい整数で入力してください。" : "";
+    if (invalid) { setRuleFeedback({ error: true, message: invalid }); return; }
+    savingRuleRef.current = true; loadVersion.current++; setSavingRule(true); setBusy(true);
+    try {
+      const result = await post({ action: "save_rule", employeeId, storeId, enabled, exitRadius, enterRadius });
+      const saved = result.preference as Preference | undefined;
+      if (!saved || saved.employeeId !== employeeId || saved.storeId !== storeId) throw new Error("保存結果を確認できませんでした。設定を再読み込みしてください。");
+      setData((current) => current ? { ...current, preferences: [saved, ...(current.preferences ?? []).filter((item) => item.employeeId !== saved.employeeId || item.storeId !== saved.storeId)] } : current);
+      setRuleFeedback({ error: false, message: saved.enabled ? "保存しました。離店通知は有効です。" : "保存しました。離店通知は無効です。有効にする場合はチェックを入れて保存してください。" });
+    } catch (error) {
+      setRuleFeedback({ error: true, message: error instanceof Error ? error.message : "通知設定を保存できませんでした。" });
+    } finally {
+      savingRuleRef.current = false; setSavingRule(false); setBusy(false);
+      void load(false).catch(() => {});
+    }
   }
   async function enablePhone() {
     if (!data?.config.firebase) return;
@@ -160,16 +198,25 @@ export default function StoreNotificationsPage() {
         </section>
         {data.canManage ? <section className="store-push-section"><h2><Settings size={20} />{t("対象ユーザーと距離")}</h2>
           <p>{t("指定したユーザーだけが離店通知を利用できます。設定変更後は、対象のスマートフォンでアプリを開いてください。")}</p>
-          <form onSubmit={(event) => { event.preventDefault(); void run(async () => { await post({ action: "save_rule", employeeId, storeId, enabled, exitRadius, enterRadius }); setNotice("通知設定を保存しました。"); }); }}>
+          <form ref={ruleFormRef} noValidate aria-busy={savingRule} onSubmit={(event) => { event.preventDefault(); void saveRule(); }}>
             <div className="store-push-fields">
-              <label>{t("ユーザー")}<select required value={employeeId} onChange={(event) => selectRule(event.target.value, storeId)}><option value="">{t("選択してください")}</option>{data.employees?.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select></label>
-              <label>{t("店舗")}<select required value={storeId} onChange={(event) => selectRule(employeeId, event.target.value)}><option value="">{t("選択してください")}</option>{data.stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></label>
-              <label>{t("離店と判定する距離（m）")}<input type="number" min={150} max={10000} required value={exitRadius} onChange={(event) => setExitRadius(Number(event.target.value))} /></label>
-              <label>{t("帰店と判定する距離（m）")}<input type="number" min={100} max={exitRadius - 1} required value={enterRadius} onChange={(event) => setEnterRadius(Number(event.target.value))} /></label>
+              <label>{t("ユーザー")}<select required disabled={busy} value={employeeId} onChange={(event) => selectRule(event.target.value, storeId)}><option value="">{t("選択してください")}</option>{data.employees?.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select></label>
+              <label>{t("店舗")}<select required disabled={busy} value={storeId} onChange={(event) => selectRule(employeeId, event.target.value)}><option value="">{t("選択してください")}</option>{data.stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></label>
+              <label>{t("離店と判定する距離（m）")}<input type="number" min={150} max={10000} required disabled={busy} value={exitRadius} onChange={(event) => { setRuleFeedback(null); setExitRadius(Number(event.target.value)); }} /></label>
+              <label>{t("帰店と判定する距離（m）")}<input type="number" min={100} max={exitRadius - 1} required disabled={busy} value={enterRadius} onChange={(event) => { setRuleFeedback(null); setEnterRadius(Number(event.target.value)); }} /></label>
             </div>
-            <label className="store-push-checkbox"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{t("このユーザーの離店通知を有効にする")}</label>
-            <button className="primary-button" disabled={busy || !data.ready || !employeeId || !storeId}>{t("設定を保存")}</button>
+            <label className="store-push-checkbox"><input type="checkbox" disabled={busy} checked={enabled} onChange={(event) => { setRuleFeedback(null); setEnabled(event.target.checked); }} />{t("このユーザーの離店通知を有効にする")}</label>
+            {ruleFeedback ? <p className={`store-push-message${ruleFeedback.error ? " is-error" : ""}`} role={ruleFeedback.error ? "alert" : "status"}>{t(ruleFeedback.message)}</p> : null}
+            {!data.ready ? <p className="store-push-message">{t("通知機能は準備中です。まだ設定を保存できません。")}</p> : null}
+            <button className="primary-button" disabled={busy || !data.ready}>{t(savingRule ? "保存中…" : "設定を保存")}</button>
           </form>
+          <div className="store-push-saved-rules">
+            <h3>{t("保存済みの通知設定")}</h3>
+            {!data.preferences?.length ? <p className="store-push-help">{t("保存済みの通知設定はありません。")}</p> : data.preferences.map((preference) => <article className="store-push-rule" key={`${preference.employeeId}:${preference.storeId}`}>
+              <div><strong>{preference.employeeName} · {preference.storeName}</strong><p>{t("離店")}: {preference.exitRadius} m / {t("帰店")}: {preference.enterRadius} m</p><p className="store-push-help">{t("最終保存")}: {new Date(preference.updatedAt).toLocaleString(language === "ja" ? "ja-JP" : language === "zh-Hant" ? "zh-TW" : "zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</p></div>
+              <div className="store-push-actions"><span className={`status-pill${preference.enabled ? " is-active" : ""}`}>{t(preference.enabled ? "通知オン" : "通知オフ")}</span><button className="secondary-button" type="button" disabled={busy || !data.employees?.some((item) => item.id === preference.employeeId) || !data.stores.some((item) => item.id === preference.storeId)} onClick={() => { selectRule(preference.employeeId, preference.storeId); ruleFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); ruleFormRef.current?.querySelector("select")?.focus({ preventScroll: true }); }}>{t("編集")}</button></div>
+            </article>)}
+          </div>
         </section> : null}
       </>}
     </div>

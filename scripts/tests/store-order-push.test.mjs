@@ -161,8 +161,52 @@ test('stale order or absent kitchen task never generates an alert; settings vali
     assert.equal(await h.service.ensureBridgeOrderPushEvent(h.ids.order, new Date()), null);
     const body = { action: 'save_rule', employeeId: h.ids.employee, storeId: h.ids.store, exitRadius: 500, enterRadius: 300, enabled: true };
     assert.equal((await h.post({ ...body, enterRadius: 600 })).status, 400);
-    await h.db.exec('update stores set attendance_latitude=null'); assert.equal((await h.post(body)).status, 400);
+    await h.db.exec('update stores set attendance_latitude=null');
+    const missingLocation = await h.post(body); assert.equal(missingLocation.status, 400);
+    assert.match((await missingLocation.json()).error, /打刻用の位置情報がありません/);
     assert.equal((await h.post({ ...body, enabled: false })).status, 200);
+  } finally { await h.db.close(); }
+});
+
+test('saving a rule returns persisted values; readback lists enabled and disabled records without duplicates', async () => {
+  const h = await fixture();
+  try {
+    await h.db.exec('delete from store_order_push_preferences');
+    const body = { action: 'save_rule', employeeId: h.ids.employee, storeId: h.ids.store, enabled: true, exitRadius: 650, enterRadius: 250 };
+    const response = await h.post(body); assert.equal(response.status, 200);
+    const { preference } = await response.json();
+    assert.equal(preference.employeeName, 'Test owner'); assert.equal(preference.storeName, 'Test store');
+    assert.equal(preference.exitRadius, 650); assert.equal(preference.enterRadius, 250); assert.equal(preference.enabled, true);
+    assert.ok(Number.isFinite(Date.parse(preference.updatedAt)));
+    const get = () => h.api.GET(new Request('https://test.invalid/api/store/order-notifications')).then((r) => r.json());
+    let data = await get(); assert.equal(data.preferences.length, 1); assert.equal(data.rules.length, 1);
+    assert.equal(data.preferences[0].employeeName, preference.employeeName); assert.equal(data.preferences[0].updatedAt, preference.updatedAt);
+    const disabled = await h.post({ ...body, enabled: false, enterRadius: 300 }); assert.equal(disabled.status, 200);
+    assert.equal((await disabled.json()).preference.enabled, false);
+    data = await get(); assert.equal(data.preferences.length, 1); assert.equal(data.preferences[0].enabled, false);
+    assert.equal(data.preferences[0].enterRadius, 300); assert.equal(data.rules.length, 0);
+    assert.equal((await h.db.query('select count(*)::int n from store_order_push_preferences')).rows[0].n, 1);
+    assert.equal((await h.db.query('select status from store_customer_orders')).rows[0].status, 'preparing');
+  } finally { await h.db.close(); }
+});
+
+test('saved rule listing and writes enforce manager ownership and store scope', async () => {
+  const h = await fixture();
+  try {
+    const managerId = randomUUID();
+    await h.db.query("insert into employees(id,name,role) values ($1,'Test manager','manager')", [managerId]);
+    h.setSession({ id: managerId, role: 'manager', sessionId: h.ids.session });
+    const body = { action: 'save_rule', employeeId: h.ids.employee, storeId: h.ids.store, enabled: true, exitRadius: 700, enterRadius: 300 };
+    assert.equal((await h.post(body)).status, 400);
+    let data = await (await h.api.GET(new Request('https://test.invalid/api/store/order-notifications'))).json();
+    assert.equal(data.preferences.length, 0);
+    assert.equal((await h.post({ ...body, employeeId: managerId })).status, 200);
+    data = await (await h.api.GET(new Request('https://test.invalid/api/store/order-notifications'))).json();
+    assert.equal(data.preferences.length, 1); assert.equal(data.preferences[0].employeeId, managerId);
+    h.setAllowed(false);
+    assert.equal((await h.post({ ...body, employeeId: managerId })).status, 403);
+    data = await (await h.api.GET(new Request('https://test.invalid/api/store/order-notifications'))).json();
+    assert.equal(data.preferences.length, 0);
   } finally { await h.db.close(); }
 });
 

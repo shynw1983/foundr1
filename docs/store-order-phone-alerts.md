@@ -2,6 +2,12 @@
 
 ## Scope and current rollout
 
+### Rule save feedback update (2026-09-16)
+
+The management form now shows saving, success and validation/server/network errors beside its save button. Empty selections and invalid distance values produce explicit feedback instead of a disabled button with no explanation. Saving a disabled rule clearly says notifications remain off. The page lists all saved rules within the manager's permitted scope, including disabled rules, with user/store names, distances, last-save time and an edit action. Managers do not receive owner-account rules.
+
+`save_rule` returns the persisted row so the list updates immediately without waiting for a native status round trip. Reload reads the same records from the server. Stale background refreshes cannot overwrite an in-flight save; failed saves preserve existing records. A store missing attendance coordinates returns a specific message. No live rule is changed by this repair, and no APK upgrade or schema change is required. Validation covers SQL persistence/readback, disabled rules, ownership/scope enforcement, mobile feedback, reload/edit and error states.
+
 ### Continuous alarm update (2026-09-16)
 
 STORE 0.2.10 (code 22) adds an opt-in setting on each phone: keep ringing and vibrating until an order alert is acknowledged. Two original synthesized tones, urgent order bells and a two-tone alert, are bundled in the APK. They are not recordings from delivery apps. Playback uses the phone's **alarm volume**, with a direct volume-settings button and a ten-second preview that can be stopped immediately. The preview uses a monotonic clock and is not restored after process restart. Ordinary system notification tones remain available when continuous mode is off.

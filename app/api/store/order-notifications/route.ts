@@ -53,9 +53,11 @@ export async function GET(request: Request) {
       )) order by e.name
   ` : [];
   const preferences = canManage ? await sql`
-    select employee_id::text as "employeeId", store_id::text as "storeId", enabled,
-      exit_radius_m as "exitRadius", enter_radius_m as "enterRadius"
-    from store_order_push_preferences where (${access.allStores} or store_id::text = any(${access.storeIds}))
+    select p.employee_id::text as "employeeId", e.name as "employeeName", p.store_id::text as "storeId", s.name as "storeName", p.enabled,
+      p.exit_radius_m as "exitRadius", p.enter_radius_m as "enterRadius", p.updated_at as "updatedAt"
+    from store_order_push_preferences p join employees e on e.id = p.employee_id join stores s on s.id = p.store_id
+    where (${access.allStores} or p.store_id::text = any(${access.storeIds})) and (${session.role === "owner"} or e.role <> 'owner')
+    order by p.updated_at desc, e.name, s.name
   ` : [];
   return Response.json({ config, ready, canManage, stores: access.stores, employees, preferences, rules, alerts, device: devices[0] ? { ...devices[0], presence } : null }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -74,19 +76,23 @@ export async function POST(request: Request) {
       || !Number.isInteger(exitRadius) || !Number.isInteger(enterRadius) || exitRadius < 150 || exitRadius > 10000 || enterRadius < 100 || enterRadius >= exitRadius) return fail("通知設定を確認してください。");
     if (!await canAccessStore(session, storeId)) return fail("権限がありません。", 403);
     const target = await sql`
-      select e.id from employees e join stores s on s.id::text = ${storeId} and s.status = 'active'
+      select e.id, e.name as "employeeName", s.name as "storeName",
+        s.attendance_latitude is not null and s.attendance_longitude is not null as "locationReady"
+      from employees e join stores s on s.id::text = ${storeId} and s.status = 'active'
       where e.id::text = ${employeeId} and e.status = 'active' and e.role in ('owner', 'manager', 'store_terminal') and (${session.role === "owner"} or e.role <> 'owner')
         and (e.role in ('owner', 'manager') or exists (select 1 from employee_scopes sc where sc.employee_id = e.id and sc.scope_type = 'store' and sc.store_id = s.id))
-        and (${!enabled} or (s.attendance_latitude is not null and s.attendance_longitude is not null))
     `;
-    if (!target.length) return fail("対象ユーザーの店舗権限と、店舗の打刻用位置情報を確認してください。");
-    await sql`
+    if (!target.length) return fail("対象ユーザーの店舗権限を確認してください。");
+    if (enabled && !target[0].locationReady) return fail("この店舗には打刻用の位置情報がありません。店舗設定で位置情報を登録してください。");
+    const saved = await sql`
       insert into store_order_push_preferences (employee_id, store_id, enabled, exit_radius_m, enter_radius_m)
       values (${employeeId}, ${storeId}, ${enabled}, ${exitRadius}, ${enterRadius})
       on conflict (employee_id, store_id) do update set enabled = excluded.enabled, exit_radius_m = excluded.exit_radius_m,
         enter_radius_m = excluded.enter_radius_m, rule_version = gen_random_uuid(), updated_at = now()
+      returning employee_id::text as "employeeId", store_id::text as "storeId", enabled,
+        exit_radius_m as "exitRadius", enter_radius_m as "enterRadius", updated_at as "updatedAt"
     `;
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, preference: { ...saved[0], employeeName: target[0].employeeName, storeName: target[0].storeName } });
   }
   if (body.action === "acknowledge") {
     if (!uuid.test(body.eventId || "")) return fail("通知を確認してください。");

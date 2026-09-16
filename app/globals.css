@@ -40,6 +40,9 @@
 .store-push-fields input, .store-push-fields select { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--panel); color: var(--ink); font: inherit; min-height: 42px; }
 .store-push-checkbox { display: flex; align-items: center; gap: 8px; margin: 16px 0; font-size: 14px; }
 .store-push-checkbox input { width: 18px; height: 18px; flex: 0 0 18px; }
+.store-push-saved-rules { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 18px; }
+.store-push-saved-rules h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+.store-push-saved-rules .store-push-rule > div:first-child { min-width: 0; overflow-wrap: anywhere; }
 .store-push-alarm-settings { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 16px 0; margin: 16px 0; }
 .store-push-alarm-settings h3 { margin: 0; font-size: 16px; font-weight: 600; }
 .store-push-alarm-settings .store-push-message { margin-top: 12px; }
