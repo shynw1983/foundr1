@@ -4,7 +4,7 @@
   grid-template-columns: minmax(160px, 1fr) auto minmax(340px, auto);
 }
 .store-user-tools { width: auto; max-width: 100%; }
-.store-user-tools .user-panel { display: flex; flex-wrap: nowrap; width: 100%; min-width: 0; gap: 8px; }
+.store-user-tools .user-panel { display: flex; flex-wrap: nowrap; align-items: flex-end; width: 100%; min-width: 0; gap: 8px; }
 .store-user-tools .os-global-store-picker { flex: 1 1 180px; width: 180px; min-width: 0; max-width: 240px; }
 .store-user-tools .os-global-store-picker select { width: 100%; min-width: 0; text-overflow: ellipsis; }
 .store-user-tools .os-language-picker { flex: 0 0 110px; width: 110px; min-width: 0; }
