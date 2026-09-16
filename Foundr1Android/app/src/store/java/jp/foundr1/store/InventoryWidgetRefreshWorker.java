@@ -36,6 +36,7 @@ public class InventoryWidgetRefreshWorker extends Worker {
             boolean refreshInventory = getRunAttemptCount() == 0
                 || !InventoryWidgetPolicy.fresh(InventoryApiClient.cacheCheckedAt(context, store), System.currentTimeMillis());
             InventoryWidgetData.refreshStore(context, store, refreshInventory, this::isStopped);
+            if (!isStopped()) StoreWidgetControlsData.refresh(context, store, this::isStopped);
         }
         if (isStopped()) return Result.success();
         boolean pending = false;

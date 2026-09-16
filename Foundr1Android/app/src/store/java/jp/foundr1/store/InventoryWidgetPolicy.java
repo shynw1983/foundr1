@@ -10,7 +10,7 @@ final class InventoryWidgetPolicy {
     static final int DENSE = 3;
     static final int MINIMAL = 4;
     static final int SUMMARY_WIDTH = 250;
-    static final int SUMMARY_HEIGHT = 164;
+    static final int SUMMARY_HEIGHT = 148;
     static final int EXPANDED_HEIGHT = 208;
     static final long FRESH_MILLIS = 5 * 60 * 1000L;
 

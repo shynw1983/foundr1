@@ -14,6 +14,7 @@ public class StorePushSyncWorker extends Worker {
         Context context = getApplicationContext();
         String secret = StoreOrderPush.prefs(context).getString("presenceToken", "");
         if (secret.isEmpty()) return Result.success();
+        long rulesGeneration = StoreWidgetControlsData.rulesGeneration();
         HttpURLConnection connection = null;
         try {
             android.app.NotificationManager manager = (android.app.NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -37,7 +38,7 @@ public class StorePushSyncWorker extends Worker {
             }
             JSONObject response = new JSONObject(text.toString());
             if (!secret.equals(StoreOrderPush.prefs(context).getString("presenceToken", ""))) return Result.success();
-            StoreOrderPush.updateRules(context, response.getJSONArray("rules"));
+            if (!StoreWidgetControlsData.acceptPresenceRules(context, rulesGeneration, response.getJSONArray("rules"))) return Result.retry();
             StoreOrderPush.prefs(context).edit().putLong("lastSyncAt", System.currentTimeMillis()).putString("syncError", "").apply();
             return Result.success();
         } catch (Exception error) {

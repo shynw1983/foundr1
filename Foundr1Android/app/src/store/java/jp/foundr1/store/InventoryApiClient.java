@@ -23,6 +23,49 @@ final class InventoryApiClient {
 
     private InventoryApiClient() {}
 
+    // Do not persist a session cookie. Its fingerprint only partitions display snapshots after account changes.
+    static String sessionKey() {
+        return sessionKey(CookieManager.getInstance().getCookie(BASE_URL));
+    }
+    private static String sessionKey(String cookies) {
+        if (cookies == null) return "";
+        for (String cookie : cookies.split(";")) {
+            String entry = cookie.trim();
+            if (!entry.startsWith("foundr1_os_session=")) continue;
+            try {
+                byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(entry.getBytes(StandardCharsets.UTF_8));
+                StringBuilder result = new StringBuilder();
+                for (byte value : digest) result.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
+                return result.toString();
+            } catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
+        }
+        return "";
+    }
+
+    static JSONObject loadOperation(String storeId) throws Exception {
+        JSONObject body = request("GET", BASE_URL + "/api/store/operations?storeId=" + URLEncoder.encode(storeId, "UTF-8"), null);
+        if (!storeId.equals(body.optString("selectedStoreId")) || body.optJSONObject("operation") == null
+            || !storeId.equals(body.getJSONObject("operation").optString("id"))) throw new java.io.IOException("Invalid store operation");
+        return body.getJSONObject("operation");
+    }
+
+    static void setReception(String storeId, String mode, String session) throws Exception {
+        if (!StoreWidgetControlsPolicy.validMode(mode)) throw new IllegalArgumentException("Invalid reception mode");
+        JSONObject body = new JSONObject().put("storeId", storeId).put("acceptanceMode", mode)
+            .put("reservationsEnabled", !"force_closed".equals(mode))
+            .put("statusNote", "force_open".equals(mode) ? "手動受付中" : "force_closed".equals(mode) ? "手動停止中" : "");
+        request("PATCH", BASE_URL + "/api/store/operations", body.toString(), session);
+    }
+
+    static JSONObject loadNotificationPreference(String storeId) throws Exception {
+        return request("GET", BASE_URL + "/api/store/order-notifications/preference?storeId=" + URLEncoder.encode(storeId, "UTF-8"), null);
+    }
+
+    static JSONObject setNotificationPreference(String storeId, boolean enabled, String version, String session) throws Exception {
+        return request("POST", BASE_URL + "/api/store/order-notifications/preference", new JSONObject()
+            .put("storeId", storeId).put("enabled", enabled).put("expectedVersion", version).toString(), session);
+    }
+
     static final class ApiException extends java.io.IOException {
         final int status;
         ApiException(int status, String message) { super(message); this.status = status; }
@@ -188,6 +231,10 @@ final class InventoryApiClient {
     }
 
     private static JSONObject request(String method, String endpoint, String payload) throws Exception {
+        return request(method, endpoint, payload, null);
+    }
+
+    private static JSONObject request(String method, String endpoint, String payload, String expectedSession) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(endpoint).openConnection();
         try {
             connection.setConnectTimeout(10000);
@@ -196,6 +243,9 @@ final class InventoryApiClient {
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("X-Foundr1-Native-Surface", "store-widget");
             String cookies = CookieManager.getInstance().getCookie(BASE_URL);
+            if (expectedSession != null && (expectedSession.isEmpty() || !expectedSession.equals(sessionKey(cookies)))) {
+                throw new ApiException(409, "ログインが変更されました。再読み込みしてください。");
+            }
             if (cookies != null && !cookies.trim().isEmpty()) {
                 connection.setRequestProperty("Cookie", cookies);
             }

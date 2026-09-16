@@ -42,6 +42,8 @@ public class InventoryWidgetConfigActivity extends Activity {
     private Spinner languageSpinner;
     private Spinner storeSpinner;
     private Spinner brandSpinner;
+    private Spinner leftShortcut, rightShortcut;
+    private final List<Choice> shortcuts = new ArrayList<>();
     private TextView scopeSummary;
     private TextView status;
     private ProgressBar loading;
@@ -110,6 +112,22 @@ public class InventoryWidgetConfigActivity extends Activity {
         storeSpinner.setEnabled(false);
         brandSpinner.setEnabled(false);
 
+        TextView shortcutHelp = new TextView(this);
+        shortcutHelp.setText("大尺寸的两个快捷项 / 大きいウィジェットのショートカット\n网络预约控制整家店；离店提醒控制当前账号。\nWeb予約は店舗全体、離店通知はログイン中のアカウントに適用されます。");
+        shortcutHelp.setTextSize(14);
+        shortcutHelp.setTextColor(Color.rgb(82, 106, 95));
+        shortcutHelp.setPadding(0, dp(14), 0, dp(6));
+        root.addView(shortcutHelp);
+        for (String key : StoreWidgetControlsPolicy.CHOICES) shortcuts.add(new Choice(key,
+            StoreWidgetControlsPolicy.title(key, true) + " / " + StoreWidgetControlsPolicy.title(key, false)));
+        leftShortcut = addField(root, "左侧 / 左");
+        rightShortcut = addField(root, "右侧 / 右");
+        leftShortcut.setAdapter(adapter(shortcuts));
+        rightShortcut.setAdapter(adapter(shortcuts));
+        String[] savedShortcuts = InventoryWidgetProvider.shortcuts(this, widgetId);
+        leftShortcut.setSelection(indexOf(shortcuts, savedShortcuts[0]));
+        rightShortcut.setSelection(indexOf(shortcuts, savedShortcuts[1]));
+
         scopeSummary = new TextView(this);
         scopeSummary.setText("—");
         scopeSummary.setTextColor(Color.rgb(19, 78, 58));
@@ -134,7 +152,7 @@ public class InventoryWidgetConfigActivity extends Activity {
         root.addView(loading, loadingParams);
 
         saveButton = new Button(this);
-        saveButton.setText("保存并添加 / 保存して追加");
+        saveButton.setText("保存 / 保存する");
         saveButton.setTextColor(Color.WHITE);
         saveButton.setTextSize(16);
         saveButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -154,6 +172,8 @@ public class InventoryWidgetConfigActivity extends Activity {
             else clearBrands();
         }));
         brandSpinner.setOnItemSelectedListener(simpleSelection(this::updateScopeSummary));
+        leftShortcut.setOnItemSelectedListener(simpleSelection(this::updateScopeSummary));
+        rightShortcut.setOnItemSelectedListener(simpleSelection(this::updateScopeSummary));
         return scroll;
     }
 
@@ -289,7 +309,11 @@ public class InventoryWidgetConfigActivity extends Activity {
         String storeLabel = store == null || store.id.isEmpty() ? (chinese ? "未选择门店" : "店舗未選択") : store.name;
         String brandLabel = brand == null || brand.id.isEmpty() ? allBrands : brand.name;
         if (scopeSummary != null) scopeSummary.setText(storeLabel + "  ·  " + brandLabel);
-        boolean ready = brandsLoaded && store != null && !store.id.isEmpty();
+        boolean duplicate = leftShortcut != null && rightShortcut != null
+            && leftShortcut.getSelectedItemPosition() == rightShortcut.getSelectedItemPosition();
+        if (duplicate && status != null) status.setText(chinese ? "请选择两个不同的快捷项。" : "異なるショートカットを選択してください。");
+        else if (brandsLoaded && status != null) status.setText(chinese ? "点击小组件门店名，可随时调整。" : "ウィジェットの店舗名からいつでも変更できます。");
+        boolean ready = brandsLoaded && store != null && !store.id.isEmpty() && !duplicate;
         if (saveButton != null) {
             saveButton.setEnabled(ready);
             saveButton.setAlpha(ready ? 1f : 0.45f);
@@ -301,6 +325,8 @@ public class InventoryWidgetConfigActivity extends Activity {
         Choice store = selected(storeSpinner, stores);
         Choice brand = selected(brandSpinner, brands);
         if (!brandsLoaded || store == null || store.id.isEmpty()) return;
+        Choice left = selected(leftShortcut, shortcuts), right = selected(rightShortcut, shortcuts);
+        if (left == null || right == null || left.id.equals(right.id)) return;
         InventoryWidgetProvider.saveConfiguration(
             this,
             widgetId,
@@ -310,6 +336,7 @@ public class InventoryWidgetConfigActivity extends Activity {
             brand == null ? "" : brand.id,
             brand == null || brand.id.isEmpty() ? "" : brand.name
         );
+        InventoryWidgetProvider.saveShortcuts(this, widgetId, left.id, right.id);
         InventoryWidgetProvider.refreshWidget(this, widgetId);
         Intent result = new Intent();
         result.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);

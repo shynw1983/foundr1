@@ -20,6 +20,9 @@
             android:exported="false"
             android:theme="@style/QuickInventoryTheme" />
 
+        <activity android:name=".StoreWidgetControlActivity" android:exported="false"
+            android:excludeFromRecents="true" android:theme="@style/QuickInventoryTheme" />
+
         <activity
             android:name=".InventoryWidgetConfigActivity"
             android:exported="true"

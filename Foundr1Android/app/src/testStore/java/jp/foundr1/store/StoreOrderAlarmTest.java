@@ -81,6 +81,21 @@ public class StoreOrderAlarmTest {
         assertFalse(StoreOrderAlarmState.wasAcknowledged(context, "one"));
         assertEquals("pulse", StoreOrderAlarmService.tone(context));
     }
+    @Test public void disablingOneStoreStopsItsAlarmAndPreservesOtherStoresAndAcknowledgements() throws Exception {
+        JSONObject otherRule = new JSONObject().put("key", "other-rule").put("storeId", "other-store");
+        StoreOrderPush.prefs(context).edit().putString("rules", new JSONArray()
+            .put(new JSONObject().put("key", "rule").put("storeId", "store")).put(otherRule).toString())
+            .putString("state:other-rule", "outside").commit();
+        StoreOrderAlarmState.add(context, event("disabled-store"));
+        StoreOrderAlarmState.add(context, event("other-store-order").put("storeId", "other-store").put("ruleKey", "other-rule"));
+        StoreOrderAlarmState.acknowledge(context, new JSONArray().put("already-acknowledged"));
+        assertTrue(StoreOrderPush.applyRuleSnapshot(context, new JSONArray().put(otherRule)));
+        assertEquals("outside", StoreOrderPush.prefs(context).getString("state:other-rule", ""));
+        assertEquals(1, StoreOrderAlarmState.events(context).length());
+        assertEquals("other-store-order", StoreOrderAlarmState.events(context).getJSONObject(0).getString("eventId"));
+        assertTrue(StoreOrderAlarmState.wasAcknowledged(context, "already-acknowledged"));
+        assertFalse(StoreOrderAlarmState.wasAcknowledged(context, "disabled-store"));
+    }
     @Test public void downgradedFcmNeverStartsForegroundServiceAndBlockedChannelIsRespected() throws Exception {
         StoreOrderAlarmService.configure(context, true, "urgent");
         assertFalse(StoreOrderAlarmService.receive(context, event("one"), false));

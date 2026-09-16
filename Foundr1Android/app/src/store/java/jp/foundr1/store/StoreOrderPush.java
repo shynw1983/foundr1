@@ -180,10 +180,25 @@ public final class StoreOrderPush {
         return result;
     }
     static void updateRules(Context context, JSONArray next) {
-        if (rules(context).toString().equals(next.toString())) return;
+        if (applyRuleSnapshot(context, next)) installGeofences(context);
+    }
+    static boolean applyRuleSnapshot(Context context, JSONArray next) {
+        if (rules(context).toString().equals(next.toString())) return false;
+        java.util.Set<String> previousKeys = new java.util.HashSet<>();
+        JSONArray previous = rules(context);
+        for (int i = 0; i < previous.length(); i++) {
+            JSONObject rule = previous.optJSONObject(i);
+            if (rule != null) previousKeys.add(rule.optString("key"));
+        }
         prefs(context).edit().putString("rules", next.toString()).apply();
-        markUnknown(context);
-        installGeofences(context);
+        // A switch for one store must not silence unchanged rules for other stores.
+        for (int i = 0; i < next.length(); i++) {
+            JSONObject rule = next.optJSONObject(i);
+            if (rule != null && !previousKeys.contains(rule.optString("key"))) setPresence(context, rule.optString("key"), "unknown");
+        }
+        StoreOrderAlarmState.pruneLocal(context);
+        StoreOrderAlarmService.signal();
+        return true;
     }
     private static PendingIntent geofenceIntent(Context context) {
         return PendingIntent.getBroadcast(context, 72, new Intent(context, StoreGeofenceReceiver.class),
@@ -207,15 +222,27 @@ public final class StoreOrderPush {
                 .setExpirationDuration(Geofence.NEVER_EXPIRE).setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER).setNotificationResponsiveness(30_000).build());
         }
         LocationServices.getGeofencingClient(context).removeGeofences(geofenceIntent(context)).addOnCompleteListener(removed -> {
+            if (!regions.toString().equals(rules(context).toString())) {
+                installing = false; installGeofences(context); return;
+            }
             try {
                 LocationServices.getGeofencingClient(context).addGeofences(new GeofencingRequest.Builder()
                     .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER | GeofencingRequest.INITIAL_TRIGGER_EXIT).addGeofences(fences).build(), geofenceIntent(context))
-                    .addOnSuccessListener(unused -> { installing = false; prefs(context).edit().putString("geoError", "").apply(); })
-                    .addOnFailureListener(error -> { installing = false; markUnknown(context); prefs(context).edit().putString("geoError", "GEOFENCE_REGISTRATION_FAILED").apply(); enqueueSync(context); });
+                    .addOnSuccessListener(unused -> {
+                        installing = false;
+                        if (!regions.toString().equals(rules(context).toString())) { installGeofences(context); return; }
+                        prefs(context).edit().putString("geoError", "").apply();
+                    })
+                    .addOnFailureListener(error -> {
+                        installing = false;
+                        if (!regions.toString().equals(rules(context).toString())) { installGeofences(context); return; }
+                        markUnknown(context); prefs(context).edit().putString("geoError", "GEOFENCE_REGISTRATION_FAILED").apply(); enqueueSync(context);
+                    });
             } catch (Exception error) { installing = false; markUnknown(context); }
         });
     }
     public static void refresh(Context context) {
+        InventoryWidgetProvider.refreshWidgets(context);
         if (prefs(context).getString("presenceToken", "").isEmpty()) return;
         if (!hasLocationPermission(context) || !locationEnabled(context)) { markUnknown(context); enqueueSync(context); return; }
         installGeofences(context);
@@ -228,6 +255,9 @@ public final class StoreOrderPush {
         } catch (SecurityException error) { markUnknown(context); enqueueSync(context); }
         WorkManager.getInstance(context).enqueueUniquePeriodicWork("foundr1-push-presence-refresh", ExistingPeriodicWorkPolicy.KEEP,
             new PeriodicWorkRequest.Builder(StorePushSyncWorker.class, 15, TimeUnit.MINUTES).setConstraints(networkConstraints()).build());
+    }
+    public static void refreshWidgets(Context context) {
+        InventoryWidgetProvider.refreshWidgets(context);
     }
     static void updateLocation(Context context, Location location) {
         if (!location.hasAccuracy() || location.getAccuracy() > 100 || System.currentTimeMillis() - location.getTime() > 120_000) return;

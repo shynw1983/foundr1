@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@android:id/background"
     android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:padding="12dp" android:background="@drawable/inventory_widget_background">
+    android:orientation="vertical" android:paddingHorizontal="14dp" android:paddingTop="10dp" android:paddingBottom="14dp" android:background="@drawable/inventory_widget_background">
     <TextView android:id="@+id/inventory_widget_title" style="@style/InventoryWidgetText"
         android:layout_width="match_parent" android:layout_height="18dp"
         android:text="Foundr1 Store" android:textColor="@color/widget_muted" android:textSize="11sp" />

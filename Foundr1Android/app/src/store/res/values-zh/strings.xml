@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="inventory_widget_description">缺货列表和最近操作的平台同步结果</string>
+    <string name="inventory_widget_description">自选网络预约、离店提醒等常用操作</string>
     <string name="inventory_widget_name">销售状态 4×2</string>
     <string name="inventory_quick_widget_name">缺货・恢复销售 2×1</string>
     <string name="inventory_quick_widget_description">设置缺货和恢复销售的紧凑入口</string>

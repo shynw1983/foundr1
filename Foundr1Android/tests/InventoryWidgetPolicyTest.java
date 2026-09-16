@@ -54,7 +54,8 @@ public class InventoryWidgetPolicyTest {
         check(InventoryWidgetPolicy.layout(176, 88) == InventoryWidgetPolicy.COMPACT, "2x1 entry has room around the controls");
         check(InventoryWidgetPolicy.layout(330, 164) == InventoryWidgetPolicy.SUMMARY, "4x2 entry shows summary");
         check(InventoryWidgetPolicy.layout(250, 110) == InventoryWidgetPolicy.DENSE, "short 4x2 launchers still show status, not just two buttons");
-        check(InventoryWidgetPolicy.layout(330, 236) == InventoryWidgetPolicy.EXPANDED, "taller widgets show more shortages");
+        check(InventoryWidgetPolicy.layout(330, 148) == InventoryWidgetPolicy.SUMMARY, "short 4x2 allocations retain full-size custom controls");
+        check(InventoryWidgetPolicy.layout(330, 236) == InventoryWidgetPolicy.EXPANDED, "taller widgets add control and sync details");
         check(InventoryWidgetPolicy.layout(180, 300) == InventoryWidgetPolicy.COMPACT, "narrow tall widgets do not clip wide rows");
         System.out.println("Inventory widget policy: " + assertions + " checks passed");
     }

@@ -56,12 +56,13 @@ async function fixture() {
   const api = load('app/api/store/order-notifications/route.ts');
   const presenceApi = load('app/api/store/order-notifications/presence/route.ts');
   const alarmApi = load('app/api/store/order-notifications/alarm/route.ts');
+  const preferenceApi = load('app/api/store/order-notifications/preference/route.ts');
   async function outside() {
     const [rule] = await service.getOrderPushRules(ids.employee);
     await db.query("insert into store_order_push_presence(device_id,store_id,rule_key,state,observed_at) values ($1,$2,$3,'outside',now()) on conflict(device_id,store_id) do update set state='outside',rule_key=excluded.rule_key", [ids.device, ids.store, rule.key]);
   }
   const post = (body) => api.POST(new Request('https://test.invalid/api/store/order-notifications', { method: 'POST', body: JSON.stringify(body) }));
-  return { db, ids, service, api, presenceApi, alarmApi, outside, sends, post, setAllowed: (value) => { allowed = value; }, setSession: (value) => { currentSession = value; }, setFail: (value) => { failSend = value; } };
+  return { db, ids, service, api, presenceApi, alarmApi, preferenceApi, outside, sends, post, setAllowed: (value) => { allowed = value; }, setSession: (value) => { currentSession = value; }, setFail: (value) => { failSend = value; } };
 }
 
 test('accepted preparing order with kitchen task creates exactly one alert; replay/history does not create another', async () => {
@@ -267,5 +268,75 @@ test('alarm device token cannot acknowledge another recipient, lost scope or rev
     assert.equal((await h.request({ action: 'acknowledge', eventIds: [h.event] })).status, 403);
     await h.db.exec('update employee_sessions set revoked_at=now()');
     assert.equal((await h.request({ action: 'status', eventIds: [h.event] })).status, 401);
+  } finally { await h.db.close(); }
+});
+
+const widgetGet = (h) => h.preferenceApi.GET(new Request('https://test.invalid/api/store/order-notifications/preference?storeId=' + h.ids.store));
+const widgetSet = (h, body, origin) => h.preferenceApi.POST(new Request('https://test.invalid/api/store/order-notifications/preference',
+  { method: 'POST', headers: origin ? { origin } : {}, body: JSON.stringify(body) }));
+
+test('widget toggles only the viewer rule, preserves radii and invalidates old presence', async () => {
+  const h = await fixture();
+  try {
+    const other = randomUUID();
+    await h.db.query("insert into employees(id,name,role) values ($1,'Other user','owner')", [other]);
+    await h.db.query("insert into store_order_push_preferences(employee_id,store_id,enabled,exit_radius_m,enter_radius_m) values ($1,$2,true,700,350)", [other,h.ids.store]);
+    await h.outside();
+    let view = await (await widgetGet(h)).json();
+    assert.equal(view.canManage,true); assert.equal(view.preference.enabled,true); assert.equal(view.preference.storeId,h.ids.store);
+    const before = { ...view.preference };
+    let response = await widgetSet(h,{storeId:h.ids.store,enabled:false,expectedVersion:before.version});
+    assert.equal(response.status,200);
+    const saved = await response.json();
+    assert.equal(saved.preference.enabled,false);
+    assert.equal(saved.preference.exitRadius,before.exitRadius); assert.equal(saved.preference.enterRadius,before.enterRadius);
+    assert.notEqual(saved.preference.version,before.version); assert.equal(saved.rules.length,0);
+    assert.equal((await h.db.query('select enabled from store_order_push_preferences where employee_id=$1',[other])).rows[0].enabled,true);
+    // A repeated tap cannot reverse or overwrite the successful write.
+    assert.equal((await widgetSet(h,{storeId:h.ids.store,enabled:false,expectedVersion:before.version})).status,409);
+    response = await widgetSet(h,{storeId:h.ids.store,enabled:true,expectedVersion:saved.preference.version});
+    assert.equal(response.status,200);
+    const reopened = await response.json();
+    assert.equal(reopened.preference.enabled,true); assert.equal(reopened.rules.length,1);
+    const presence = (await h.db.query('select rule_key from store_order_push_presence')).rows[0];
+    assert.notEqual(presence.rule_key,reopened.rules[0].key);
+  } finally { await h.db.close(); }
+});
+
+test('widget cannot change another account, forbidden stores, roles or cross-origin requests', async () => {
+  const h = await fixture();
+  try {
+    const view = await (await widgetGet(h)).json();
+    const body = {storeId:h.ids.store,enabled:false,expectedVersion:view.preference.version};
+    assert.equal((await widgetSet(h,{...body,employeeId:randomUUID()})).status,400);
+    assert.equal((await widgetSet(h,body,'https://untrusted.invalid')).status,403);
+    h.setAllowed(false);
+    assert.equal((await widgetGet(h)).status,403); assert.equal((await widgetSet(h,body)).status,403);
+    h.setAllowed(true); h.setSession({id:h.ids.employee,role:'store_terminal',sessionId:h.ids.session});
+    assert.equal((await (await widgetGet(h)).json()).canManage,false);
+    assert.equal((await widgetSet(h,body)).status,403);
+    h.setSession(null);
+    assert.equal((await widgetGet(h)).status,401); assert.equal((await widgetSet(h,body)).status,401);
+    assert.equal((await h.db.query('select enabled from store_order_push_preferences')).rows[0].enabled,true);
+  } finally { await h.db.close(); }
+});
+
+test('widget refuses absent rules, missing coordinates and stale edits instead of inventing defaults', async () => {
+  const h = await fixture();
+  try {
+    let view = await (await widgetGet(h)).json();
+    const oldVersion = view.preference.version;
+    await h.db.exec("update store_order_push_preferences set exit_radius_m=800,rule_version=gen_random_uuid()");
+    assert.equal((await widgetSet(h,{storeId:h.ids.store,enabled:false,expectedVersion:oldVersion})).status,409);
+    view = await (await widgetGet(h)).json();
+    assert.equal(view.preference.exitRadius,800);
+    let saved = await (await widgetSet(h,{storeId:h.ids.store,enabled:false,expectedVersion:view.preference.version})).json();
+    await h.db.exec('update stores set attendance_latitude=null');
+    assert.equal((await widgetSet(h,{storeId:h.ids.store,enabled:true,expectedVersion:saved.preference.version})).status,409);
+    assert.equal((await h.db.query('select enabled from store_order_push_preferences')).rows[0].enabled,false);
+    await h.db.exec('delete from store_order_push_preferences');
+    assert.equal((await (await widgetGet(h)).json()).preference,null);
+    assert.equal((await widgetSet(h,{storeId:h.ids.store,enabled:true,expectedVersion:saved.preference.version})).status,409);
+    assert.equal((await h.db.query('select count(*)::int n from store_order_push_preferences')).rows[0].n,0);
   } finally { await h.db.close(); }
 });

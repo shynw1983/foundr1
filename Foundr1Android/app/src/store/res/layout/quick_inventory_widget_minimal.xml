@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@android:id/background"
     android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:padding="6dp" android:background="@drawable/inventory_widget_background">
+    android:orientation="vertical" android:padding="8dp" android:background="@drawable/inventory_widget_background">
     <TextView android:id="@+id/inventory_widget_title" style="@style/InventoryWidgetText"
         android:layout_width="match_parent" android:layout_height="14dp"
         android:text="Foundr1 Store" android:textColor="@color/widget_muted" android:textSize="10sp"
@@ -10,10 +10,12 @@
     <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
         android:layout_marginTop="4dp">
         <Button android:id="@+id/inventory_widget_shortage" style="@style/InventoryWidgetButton"
+            android:autoSizeTextType="uniform" android:autoSizeMinTextSize="10sp" android:autoSizeMaxTextSize="13sp"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
             android:layout_marginEnd="3dp" android:background="@drawable/inventory_widget_secondary"
             android:text="@string/inventory_widget_shortage_short" />
         <Button android:id="@+id/inventory_widget_restore" style="@style/InventoryWidgetButton"
+            android:autoSizeTextType="uniform" android:autoSizeMinTextSize="10sp" android:autoSizeMaxTextSize="13sp"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
             android:layout_marginStart="3dp" android:background="@drawable/inventory_widget_primary"
             android:text="@string/inventory_widget_restore_short" android:textColor="@color/widget_surface" />

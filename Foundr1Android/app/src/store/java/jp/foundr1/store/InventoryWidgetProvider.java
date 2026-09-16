@@ -29,6 +29,18 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
     private static final String STORE_NAME_PREFIX = "store_name_";
     private static final String BRAND_ID_PREFIX = "brand_id_";
     private static final String BRAND_NAME_PREFIX = "brand_name_";
+    private static final String LEFT_PREFIX = "shortcut_left_", RIGHT_PREFIX = "shortcut_right_";
+
+    static String[] shortcuts(Context context, int widgetId) {
+        return StoreWidgetControlsPolicy.normalize(preference(context, LEFT_PREFIX, widgetId, StoreWidgetControlsPolicy.RECEPTION),
+            preference(context, RIGHT_PREFIX, widgetId, StoreWidgetControlsPolicy.AWAY));
+    }
+
+    static void saveShortcuts(Context context, int widgetId, String left, String right) {
+        String[] choices = StoreWidgetControlsPolicy.normalize(left, right);
+        context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).edit()
+            .putString(LEFT_PREFIX + widgetId, choices[0]).putString(RIGHT_PREFIX + widgetId, choices[1]).apply();
+    }
 
     static void saveConfiguration(
         Context context,
@@ -99,7 +111,7 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
-    private static PendingIntent configurationIntent(Context context, int widgetId) {
+    static PendingIntent configurationIntent(Context context, int widgetId) {
         Intent intent = new Intent(context, InventoryWidgetConfigActivity.class);
         intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);
         intent.setData(Uri.parse("foundr1://inventory-widget/" + widgetId + "/configure"));
@@ -117,7 +129,7 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
-    private static PendingIntent detailIntent(Context context, int widgetId) {
+    static PendingIntent detailIntent(Context context, int widgetId) {
         Intent intent = new Intent(context, InventoryWidgetSyncActivity.class);
         intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);
         intent.setData(Uri.parse("foundr1://inventory-widget/" + widgetId + "/sync"));
@@ -144,7 +156,7 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
     @Override public void onDeleted(Context context, int[] widgetIds) {
         android.content.SharedPreferences.Editor editor = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).edit();
         for (int id : widgetIds) {
-            for (String prefix : new String[] { LANGUAGE_PREFIX, STORE_ID_PREFIX, STORE_NAME_PREFIX, BRAND_ID_PREFIX, BRAND_NAME_PREFIX }) {
+            for (String prefix : new String[] { LANGUAGE_PREFIX, STORE_ID_PREFIX, STORE_NAME_PREFIX, BRAND_ID_PREFIX, BRAND_NAME_PREFIX, LEFT_PREFIX, RIGHT_PREFIX }) {
                 editor.remove(prefix + id);
             }
         }
@@ -210,67 +222,9 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
             ? actionIntent(context, id, QuickInventoryActivity.MODE_RESTORE, null) : configurationIntent(context, id));
         if (compact) return views;
 
-        String error = InventoryWidgetData.denied(data.syncError) ? data.syncError : data.inventoryError;
-        views.setTextViewText(R.id.inventory_widget_count, data.hasInventory ? String.valueOf(data.shortages.size()) : "—");
-        views.setTextViewText(R.id.inventory_widget_status, zh ? "缺货 ›" : "欠品 ›");
-        views.setContentDescription(R.id.inventory_widget_metric, data.hasInventory
-            ? (zh ? "缺货 " + data.shortages.size() + " 项，查看全部" : "欠品 " + data.shortages.size() + "件、すべて表示")
-            : errorText(error, zh));
-        views.setOnClickPendingIntent(R.id.inventory_widget_metric, configured
-            ? actionIntent(context, id, QuickInventoryActivity.MODE_RESTORE, null) : configurationIntent(context, id));
-        long checked = data.inventoryCheckedAt;
-        if (data.syncCheckedAt > 0 && checked > 0) checked = Math.min(checked, data.syncCheckedAt);
-        String stamp = checked > 0 ? shortTime(checked) : (zh ? "刷新" : "更新");
-        if (!data.inventoryError.isEmpty() || !data.syncError.isEmpty()) {
-            stamp = checked > 0 ? (zh ? "缓存 " : "保存 ") + shortTime(checked) : (zh ? "重试" : "再読込");
-        }
-        views.setTextViewText(R.id.inventory_widget_refresh, stamp + " ↻");
-        views.setContentDescription(R.id.inventory_widget_refresh, (zh ? "刷新，数据更新于 " : "再読込、更新時刻 ") + time(checked));
-        views.setOnClickPendingIntent(R.id.inventory_widget_refresh, refreshIntent(context, id));
-        views.removeAllViews(R.id.inventory_widget_items);
-        int visible = size == InventoryWidgetPolicy.EXPANDED ? 4 : size == InventoryWidgetPolicy.DENSE ? 1 : 2;
-        for (int i = 0; i < Math.min(visible, data.shortages.size()); i++) {
-            JSONObject item = data.shortages.get(i);
-            RemoteViews row = new RemoteViews(context.getPackageName(), R.layout.inventory_widget_item);
-            String label = InventoryWidgetData.itemLabel(item, language(context, id));
-            String description = label + " · " + item.optString("brandName") + " · " + item.optString("groupName");
-            row.setTextViewText(R.id.inventory_widget_item, label);
-            row.setContentDescription(R.id.inventory_widget_item_link, description + (zh ? "，恢复销售" : "、販売再開"));
-            row.setOnClickPendingIntent(R.id.inventory_widget_item_link, actionIntent(context, id, QuickInventoryActivity.MODE_RESTORE, item));
-            views.addView(R.id.inventory_widget_items, row);
-        }
-        if (data.shortages.isEmpty()) {
-            RemoteViews message = new RemoteViews(context.getPackageName(), R.layout.inventory_widget_message);
-            message.setTextViewText(R.id.inventory_widget_item, !configured ? (zh ? "点击门店名称进行设置" : "店舗名をタップして設定")
-                : !data.hasInventory ? errorText(error, zh) : (zh ? "全部商品销售中" : "すべて販売中"));
-            views.addView(R.id.inventory_widget_items, message);
-        }
-        String operation = "";
-        String operationDescription = "";
-        CharSequence platforms = zh ? "暂无最近操作" : "直近の操作なし";
-        if (data.latestRun != null) {
-            String action = "available".equals(data.latestRun.optString("action")) ? (zh ? "恢复" : "販売再開") : (zh ? "缺货" : "欠品登録");
-            operation = (zh ? "最近 · " : "直近 · ") + action + " ›";
-            operationDescription = InventoryWidgetData.runLabel(data.latestRun, language(context, id)) + " → " + action;
-            platforms = syncSummary(data, zh);
-        }
-        if (!data.syncError.isEmpty() || !error.isEmpty()) {
-            platforms = errorText(data.syncError.isEmpty() ? error : data.syncError, zh)
-                + (data.latestRun != null ? (zh ? " · 显示上次结果" : " · 前回の結果") : "");
-        } else if (data.syncCheckedAt == 0) {
-            platforms = zh ? "同步结果确认中…" : "同期結果を確認中…";
-        }
-        if (!configured) {
-            operation = "";
-            platforms = zh ? "选择这个小组件的门店和品牌" : "このウィジェットの店舗・ブランドを選択";
-        }
-        views.setTextViewText(R.id.inventory_widget_operation, operation);
-        views.setViewVisibility(R.id.inventory_widget_operation, size == InventoryWidgetPolicy.DENSE ? android.view.View.GONE : android.view.View.VISIBLE);
-        views.setTextViewText(R.id.inventory_widget_platforms, platforms);
-        views.setTextColor(R.id.inventory_widget_platforms, context.getColor(!data.syncError.isEmpty() || !error.isEmpty() || data.failed()
-            ? R.color.widget_error : data.pending() ? R.color.widget_warning : R.color.widget_muted));
-        views.setContentDescription(R.id.inventory_widget_sync, operationDescription + "。" + platforms + "。" + platformSummary(data, zh));
-        views.setOnClickPendingIntent(R.id.inventory_widget_sync, configured ? detailIntent(context, id) : configurationIntent(context, id));
+        StoreWidgetControlsRenderer.bind(context, views, id, size, data,
+            configured ? actionIntent(context, id, QuickInventoryActivity.MODE_RESTORE, null) : configurationIntent(context, id),
+            refreshIntent(context, id));
         return views;
     }
 

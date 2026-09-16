@@ -11,6 +11,7 @@ import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.junit.Before;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
@@ -23,6 +24,15 @@ import org.robolectric.annotation.GraphicsMode;
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class InventoryWidgetLayoutTest {
     private float fontScale = 1f;
+    @Before public void controls() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        android.webkit.CookieManager.getInstance().setCookie(InventoryApiClient.BASE_URL, "foundr1_os_session=layout-test");
+        String session = InventoryApiClient.sessionKey();
+        StoreWidgetControlsData.save(context, "store", session, "reception", new JSONObject().put("acceptanceMode", "auto"));
+        StoreWidgetControlsData.save(context, "store", session, "away", new JSONObject().put("ready", true).put("canManage", true)
+            .put("deliveryReady", true).put("sessionId", "layout-session").put("preference", new JSONObject()
+                .put("enabled", false).put("exitRadius", 500).put("enterRadius", 300).put("version", "version")));
+    }
     private InventoryWidgetData sample() throws Exception {
         InventoryWidgetData data = new InventoryWidgetData();
         data.hasInventory = true;
@@ -52,13 +62,19 @@ public class InventoryWidgetLayoutTest {
         parent.addView(view, new FrameLayout.LayoutParams(w, h));
         parent.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
         parent.layout(0, 0, w, h);
-        for (int id : new int[]{R.id.inventory_widget_title, R.id.inventory_widget_shortage, R.id.inventory_widget_restore}) {
+        for (int id : new int[]{R.id.inventory_widget_title, R.id.inventory_widget_shortage, R.id.inventory_widget_restore,
+            R.id.inventory_widget_left_value, R.id.inventory_widget_right_value}) {
             TextView target = view.findViewById(id);
+            if (target == null) continue;
             Rect box = new Rect();
             target.getDrawingRect(box);
             parent.offsetDescendantRectToMyCoords(target, box);
             assertTrue(name + ": control clipped " + id, box.left >= 0 && box.right <= w && box.top >= 0 && box.bottom <= h);
             assertTrue(name + ": text clipped " + id, target.getHeight() - target.getPaddingTop() - target.getPaddingBottom() >= target.getLineHeight());
+            if (id == R.id.inventory_widget_shortage || id == R.id.inventory_widget_restore) {
+                float inset = (width >= 250 ? 12 : width >= 160 ? 14 : 6) * density;
+                assertTrue(name + ": action too close to shell", box.left >= inset && w - box.right >= inset && h - box.bottom >= inset);
+            }
         }
         String output = System.getenv("FOUNDR1_WIDGET_PREVIEW_DIR");
         if (output != null) {
@@ -74,7 +90,7 @@ public class InventoryWidgetLayoutTest {
     }
 
     @Test public void renderLauncherSizesAndLongNames() throws Exception {
-        for (int[] size : new int[][]{{110,56},{176,88},{250,110},{360,164},{360,208},{360,280}}) {
+        for (int[] size : new int[][]{{110,56},{176,88},{250,110},{250,148},{360,156},{360,164},{360,208},{360,280}}) {
             View view = render("widget-" + size[0] + "x" + size[1], size[0], size[1], "ja", sample());
             if (size[0] >= 250) assertEquals("57", ((TextView)view.findViewById(R.id.inventory_widget_count)).getText().toString());
         }
@@ -97,7 +113,21 @@ public class InventoryWidgetLayoutTest {
 
     @Test public void increasedSystemTextSizeKeepsActionsVisible() throws Exception {
         fontScale = 1.3f;
-        for (int[] size : new int[][]{{110,56},{176,88},{250,110},{360,164}})
+        for (int[] size : new int[][]{{110,56},{176,88},{250,110},{250,148},{360,156},{360,164}})
             render("widget-large-text-" + size[0], size[0], size[1], "ja", sample());
+    }
+    @Test public void customSlotsRenderTheirOwnActionAndActualSyncResult() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        InventoryWidgetProvider.saveShortcuts(context, 7, "orders", "sync");
+        View custom = render("widget-custom", 360, 164, "zh", sample());
+        assertEquals("订单列表", ((TextView) custom.findViewById(R.id.inventory_widget_left_title)).getText().toString());
+        assertEquals("全部完成", ((TextView) custom.findViewById(R.id.inventory_widget_right_value)).getText().toString());
+        InventoryWidgetData data = sample();
+        data.latestRun.getJSONArray("platforms").getJSONObject(0).put("succeeded", 0);
+        View uncertain = render("widget-custom-unconfirmed", 360, 164, "zh", data);
+        assertEquals("待确认", ((TextView) uncertain.findViewById(R.id.inventory_widget_right_value)).getText().toString());
+        InventoryWidgetProvider.saveShortcuts(context, 7, "away", "reception");
+        View swapped = render("widget-swapped", 360, 164, "zh", sample());
+        assertEquals("离店提醒", ((TextView) swapped.findViewById(R.id.inventory_widget_left_title)).getText().toString());
     }
 }

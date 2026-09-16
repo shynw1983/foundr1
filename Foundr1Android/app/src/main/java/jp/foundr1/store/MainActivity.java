@@ -228,6 +228,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         persistWebSession();
         if (webView != null) webView.onPause();
+        invokeStoreOrderPush("refreshWidgets", new Class<?>[] { android.content.Context.class }, this);
         super.onPause();
     }
 

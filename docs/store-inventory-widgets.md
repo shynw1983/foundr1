@@ -6,11 +6,12 @@ brand and language settings:
 - **2×1 shortcuts:** shortage registration and sales resumption, with the scope
   above the buttons. Tap the scope to reconfigure. The standard shortcut layout
   starts at 160 x 88 dp; a separate minimum layout supports 110 x 56 dp.
-- **4×2 sales status:** unavailable item/option count, two named shortcuts,
-  a count that opens the full unavailable list, and a compact summary of the
-  latest operation. Tap the summary for the full product name and each platform
-  outcome. Dense layouts start at 110 dp with one product, regular layouts at
-  164 dp with two, and expanded layouts at 208 dp with four.
+- **4×2 controls:** the unavailable count opens the full list. Two configurable
+  slots default to Web reservations and away-order notifications; either can be
+  replaced with the store's order list or sync results. Inventory registration
+  and resumption stay fixed at the bottom. Full control blocks start at 148 dp,
+  and 208 dp layouts add explanatory status and sync details. The 110 dp layout
+  keeps the same four actions using one-line control labels.
 
 Cell counts are launcher targets. Android 12+ selects responsive RemoteViews by
 available width/height; older launchers use portrait/landscape options. Existing
@@ -24,11 +25,20 @@ Inventory reads the existing `/api/store/menu-settings` contract through
 back to English, then the Japanese/source name. No menu translations are copied
 into widget UI strings.
 
-Named shortcuts carry store, brand, item/option kind and UUID. The native sheet
-reloads current availability before selecting the item and showing confirmation.
-A stale shortcut cannot select a different same-name item or restore one that
-has already become available. Ordinary registration/resumption buttons keep the
-existing searchable selection flow and shared inventory mutation API.
+Product names no longer occupy the widget's middle area. Registration/resumption
+keep the existing searchable selection flow, exact item/option UUIDs and shared
+inventory mutation API. Brand scope applies to inventory. Reservation controls
+apply to the whole store; away notifications apply to the current account at that
+store. Tap the widget title to change its two slots independently of other widgets.
+
+Reservations reuse GET/PATCH `/api/store/operations` and provide Auto, Manual Open
+and Manual Closed choices in a native sheet. Changing modes preserves pickup times.
+Away notifications use `/api/store/order-notifications/preference`: the widget may
+only toggle the viewer's existing rule, under the same owner/manager permissions
+as the settings page. There is no recipient/radius input or implicit rule creation.
+An atomic rule-version comparison rejects stale/duplicate taps and concurrent
+distance edits. Confirmed changes update the phone's rules and stop any affected
+ongoing alarm without acknowledging orders or changing other stores' rules.
 
 Sync results come from `/api/store/inventory-history?days=1`, using the existing
 bounded history response (up to 200 recent runs). The widget selects the latest
@@ -46,7 +56,7 @@ The widget does not equate saving OS inventory with external platform completion
 ## Refresh and failure handling
 
 The provider renders saved state immediately and queues WorkManager reads.
-Manual refresh, widget creation/configuration, and local inventory operations
+Manual refresh, widget creation/configuration, returning to the Store app, and local inventory operations
 start a fresh read. After an operation, unfinished platform results cause at most
 six follow-up attempts with linear backoff starting at ten seconds. Android may
 defer background work; this is not a real-time guarantee. The existing 30-minute
@@ -59,8 +69,13 @@ failures hide and clear that store's cached inventory/history. Cancelled workers
 check their state before publishing results. Changing a widget's store cannot be
 saved until the corresponding brand choices finish loading.
 
-No new server endpoints, database migrations, live data writes, or brand-website
-changes are needed for the widget implementation.
+Control snapshots are partitioned by a one-way login-cookie fingerprint. Missing,
+expired, failed or other-account snapshots do not show an actionable switch.
+Mutations are not queued for later execution; failed or uncertain saves remain
+unconfirmed until reloaded. Older widget/presence reads cannot undo a confirmed
+toggle. The preference endpoint and Android update must ship together.
+No database migration is required. Development checks use local fixtures, not
+live reservation changes, push notifications or physical phones.
 
 ## Local verification
 
