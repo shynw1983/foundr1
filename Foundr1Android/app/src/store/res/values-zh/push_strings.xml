@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="push_channel_name">离店新订单</string>
+    <string name="push_channel_description">离开店铺时的新订单通知</string>
+    <string name="push_choose_sound">选择订单通知铃声</string>
+    <string name="push_sound_silent">静音</string>
+    <string name="push_sound_original">Foundr1 订单铃声</string>
+    <string name="push_sound_unavailable">请检查通知铃声</string>
+    <string name="push_test_title">Foundr1 STORE · 通知测试</string>
+    <string name="push_test_body">请确认声音、振动和横幅。这是本机测试，不会创建订单。</string>
+</resources>

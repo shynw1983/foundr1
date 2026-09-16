@@ -74,9 +74,14 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
+    testOptions {
+        unitTests.includeAndroidResources = true
+    }
 }
 
 dependencies {
+    testStoreImplementation "junit:junit:4.13.2"
+    testStoreImplementation "org.robolectric:robolectric:4.14.1"
     storeImplementation "com.google.firebase:firebase-messaging:24.1.2"
     storeImplementation "com.google.android.gms:play-services-location:21.3.0"
     storeImplementation "androidx.work:work-runtime:2.9.1"

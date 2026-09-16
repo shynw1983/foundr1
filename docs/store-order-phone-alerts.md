@@ -2,9 +2,23 @@
 
 ## Scope and current rollout
 
+### Notification presentation update (2026-09-16)
+
+STORE 0.2.8 (code 20) adds an Android system ringtone picker, separate app-wide and order-category notification settings, and an on-device preview using the same channel and builder as received orders. The preview creates no order, changes no presence state and does not update the last FCM receipt timestamp. `VIBRATE` is now declared in the STORE manifest; the previous APK omitted it.
+
+New installs use the system default notification sound on a high-importance channel. Upgrades keep the existing channel and user preferences. Android channel sound is immutable: an explicit ringtone selection replaces the channel while retaining importance (including blocked/low), vibration and lock-screen preferences. Unread notifications retain their old channel until dismissed. Sound preferences are separate from account/geofence preferences and survive re-registration/sign-out. A user's cancellation of the picker makes no change. No DND bypass, full-screen intent or overlay permission is introduced.
+
+The page reports the actual channel importance, selected tone, notification volume, ringer mode and DND state. High importance is not proof that ColorOS allows banners: users must also check app-wide banner/lock-screen permissions. Older APKs see an upgrade link instead of unsupported controls. Settings/picker return refreshes status on focus, visibility changes and the existing periodic refresh.
+
+Validation: eight Robolectric Android channel/picker/settings/preview tests, seven isolated PostgreSQL notification flow tests, signed release build and Next.js production build. Browser checks cover 390, 768 and 1440 px, Chinese labels, mute/DND warnings and old-APK fallback. Actual OPPO sound/banner presentation remains to be verified on the user's phone; only the Uber tablet was connected during preparation.
+
+References: [Android notification channels](https://developer.android.com/develop/ui/views/notifications/channels), [ringtone picker](https://developer.android.com/reference/android/media/RingtoneManager#ACTION_RINGTONE_PICKER), [app notification settings](https://developer.android.com/reference/android/provider/Settings#ACTION_APP_NOTIFICATION_SETTINGS).
+
+### Initial push rollout (2026-09-16)
+
 The requested primary device is an OPPO Find N6 with working Google Play services. This implementation uses Firebase Cloud Messaging (FCM) in **Foundr1 STORE**, package `jp.foundr1.store`. It does not add push SDKs or background location permission to OS, Bridge, Member or Staff app flavors.
 
-The production release was authorized on 2026-09-16. Firebase and Vercel setup was completed on 2026-09-15 as described below; the additive notification migration has now been applied and verified, and the production feature flag is enabled for this release. The signed public STORE APK is version 0.2.7 (code 19), using the existing release certificate. No phone or employee rule has been activated. The target employee and preferred distances are selected in the app before activation. The settings editor starts with a proposed 500 m exit / 300 m return rule; these are editable defaults, not an approved live employee rule.
+The production release was authorized on 2026-09-16. Firebase and Vercel setup was completed on 2026-09-15 as described below; the additive notification migration has now been applied and verified, and the production feature flag is enabled for this release. The initial signed public STORE APK was version 0.2.7 (code 19), using the existing release certificate. No phone or employee rule was activated by that rollout. The target employee and preferred distances are selected in the app before activation. The settings editor starts with a proposed 500 m exit / 300 m return rule; these are editable defaults, not an approved live employee rule.
 
 The iPhone/browser version can view and acknowledge alerts, but cannot enable automatic background departure detection. This version therefore does not enroll those browsers in away-only push. An iOS native implementation is a separate requirement if automatic location-based alerts are needed there.
 

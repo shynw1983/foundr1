@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="push_channel_name">離店中の新規注文</string>
+    <string name="push_channel_description">店舗から離れているときの注文通知</string>
+    <string name="push_choose_sound">注文通知の音を選ぶ</string>
+    <string name="push_sound_silent">サイレント</string>
+    <string name="push_sound_original">Foundr1 注文ベル</string>
+    <string name="push_sound_unavailable">通知音を確認してください</string>
+    <string name="push_test_title">Foundr1 STORE · 通知テスト</string>
+    <string name="push_test_body">音・振動・バナーを確認してください。これは端末内のテストで、注文は作成しません。</string>
+</resources>

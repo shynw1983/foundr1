@@ -2,6 +2,9 @@ export type NativeOrderPushStatus = {
   ok: boolean; googlePlayAvailable: boolean; notificationsAllowed: boolean; soundEnabled: boolean;
   locationAllowed: boolean; locationEnabled: boolean; token: string; deviceId: string; bound: boolean;
   error: string; geoError: string; syncError: string; lastSyncAt: number; lastReceivedAt: number;
+  // Optional while the hosted UI is also serving STORE 0.2.7 and earlier.
+  presentationVersion?: number; soundName?: string; soundError?: string; highImportance?: boolean;
+  notificationVolume?: number; notificationVolumeMax?: number; ringerNormal?: boolean; doNotDisturb?: boolean;
   presence: Array<{ storeId: string; ruleKey: string; state: "inside" | "outside" | "unknown"; observedAt: number }>;
 };
 declare global {

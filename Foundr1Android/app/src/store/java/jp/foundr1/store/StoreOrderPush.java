@@ -3,7 +3,6 @@ package jp.foundr1.store;
 import android.Manifest;
 import android.app.Activity;
 import android.app.Notification;
-import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -12,7 +11,6 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
-import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
@@ -44,7 +42,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public final class StoreOrderPush {
-    private static final String CHANNEL = "foundr1_remote_orders_v1";
     private static volatile boolean installing = false;
     private StoreOrderPush() {}
     static SharedPreferences prefs(Context context) { return context.getSharedPreferences("foundr1_order_push", Context.MODE_PRIVATE); }
@@ -52,7 +49,7 @@ public final class StoreOrderPush {
         try { return new JSONArray(prefs(context).getString("rules", "[]")); } catch (Exception error) { return new JSONArray(); }
     }
     public static void initialize(Context context) {
-        createChannel(context);
+        StorePushNotifications.channel(context);
         try {
             String saved = prefs(context).getString("firebase", "");
             if (!saved.isEmpty() && FirebaseApp.getApps(context).isEmpty()) {
@@ -94,9 +91,13 @@ public final class StoreOrderPush {
                     } else if (action.equals("disable")) {
                         clearBinding(activity);
                     } else if (action.equals("settings")) {
-                        Intent intent = new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
-                            .putExtra(Settings.EXTRA_APP_PACKAGE, activity.getPackageName()).putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL);
-                        activity.startActivity(intent);
+                        StorePushNotifications.openSettings(activity, false);
+                    } else if (action.equals("channelSettings")) {
+                        StorePushNotifications.openSettings(activity, true);
+                    } else if (action.equals("chooseSound")) {
+                        StorePushNotifications.chooseSound(activity);
+                    } else if (action.equals("preview")) {
+                        StorePushNotifications.preview(activity);
                     } else if (action.equals("locationSettings")) {
                         activity.startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + activity.getPackageName())));
                     } else if (action.equals("refresh")) {
@@ -118,18 +119,19 @@ public final class StoreOrderPush {
         return manager != null && (Build.VERSION.SDK_INT < 28 || manager.isLocationEnabled());
     }
     private static JSONObject status(Context context) throws Exception {
-        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        NotificationChannel channel = manager == null ? null : manager.getNotificationChannel(CHANNEL);
         SharedPreferences saved = prefs(context);
-        return new JSONObject().put("googlePlayAvailable", GoogleApiAvailabilityLight.getInstance().isGooglePlayServicesAvailable(context) == 0)
-            .put("notificationsAllowed", manager != null && manager.areNotificationsEnabled() && channel != null && channel.getImportance() > 0)
-            .put("soundEnabled", channel != null && channel.getSound() != null && channel.getImportance() >= NotificationManager.IMPORTANCE_DEFAULT)
+        JSONObject result = new JSONObject().put("googlePlayAvailable", GoogleApiAvailabilityLight.getInstance().isGooglePlayServicesAvailable(context) == 0)
             .put("locationAllowed", hasLocationPermission(context)).put("locationEnabled", locationEnabled(context))
             .put("token", saved.getString("fcmToken", "")).put("deviceId", saved.getString("deviceId", ""))
             .put("bound", !saved.getString("presenceToken", "").isEmpty()).put("error", saved.getString("error", ""))
             .put("geoError", saved.getString("geoError", "")).put("syncError", saved.getString("syncError", ""))
             .put("lastSyncAt", saved.getLong("lastSyncAt", 0)).put("lastReceivedAt", saved.getLong("lastReceivedAt", 0))
             .put("presence", presenceArray(context));
+        StorePushNotifications.addStatus(context, result);
+        return result;
+    }
+    public static void onActivityResult(Context context, int requestCode, int resultCode, Intent data) {
+        StorePushNotifications.soundResult(context, requestCode, resultCode, data);
     }
     static synchronized void setPresence(Context context, String ruleKey, String state) {
         JSONArray regions = rules(context);
@@ -236,17 +238,8 @@ public final class StoreOrderPush {
         WorkManager.getInstance(context).cancelUniqueWork("foundr1-push-presence-refresh");
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) for (android.service.notification.StatusBarNotification notification : manager.getActiveNotifications()) {
-            if (CHANNEL.equals(notification.getNotification().getChannelId())) manager.cancel(notification.getTag(), notification.getId());
+            if (StorePushNotifications.ownsChannel(notification.getNotification().getChannelId())) manager.cancel(notification.getTag(), notification.getId());
         }
-    }
-    private static void createChannel(Context context) {
-        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager == null) return;
-        NotificationChannel channel = new NotificationChannel(CHANNEL, "離店中の新規注文", NotificationManager.IMPORTANCE_HIGH);
-        channel.setDescription("店舗から離れているときの注文通知");
-        channel.enableVibration(true); channel.setVibrationPattern(new long[] { 0, 450, 180, 450, 180, 700 });
-        channel.setSound(Uri.parse("android.resource://" + context.getPackageName() + "/raw/store_order_push"), new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build());
-        manager.createNotificationChannel(channel);
     }
     static synchronized void display(Context context, JSONObject data) {
         SharedPreferences saved = prefs(context);
@@ -269,18 +262,16 @@ public final class StoreOrderPush {
         for (int i = 0; i < seen.length(); i++) if (deliveryKey.equals(seen.optString(i))) return;
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null || !manager.areNotificationsEnabled()) { markUnknown(context); enqueueSync(context); return; }
-        createChannel(context);
+        StorePushNotifications.channel(context);
         if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
         String eventId = data.optString("eventId");
         String href = !test && eventId.matches("[0-9a-fA-F-]{36}") ? "/store/notifications?eventId=" + eventId : "/store/notifications";
         Intent open = new Intent(context, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("foundr1_href", href);
         PendingIntent pending = PendingIntent.getActivity(context, eventId.hashCode(), open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         android.os.Bundle extras = new android.os.Bundle(); extras.putString("foundr1_store_id", data.optString("storeId"));
-        Notification notification = new Notification.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle(data.optString("title", "Foundr1 STORE")).setContentText(data.optString("body"))
-            .setStyle(new Notification.BigTextStyle().bigText(data.optString("body"))).setContentIntent(pending)
-            .setCategory(Notification.CATEGORY_EVENT).setAutoCancel(true).setTimeoutAfter(5 * 60_000).addExtras(extras).build();
+        Notification notification = StorePushNotifications.build(context, data.optString("title", "Foundr1 STORE"), data.optString("body"), pending, extras);
         manager.notify("store-order:" + eventId, 73, notification);
+        StorePushNotifications.pruneUnusedChannels(context);
         JSONArray nextSeen = new JSONArray(); for (int i = Math.max(0, seen.length() - 63); i < seen.length(); i++) nextSeen.put(seen.optString(i)); nextSeen.put(deliveryKey);
         saved.edit().putString("seen", nextSeen.toString()).putLong("lastReceivedAt", System.currentTimeMillis()).apply();
     }

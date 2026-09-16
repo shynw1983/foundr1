@@ -35,8 +35,8 @@ export default function StoreNotificationsPage() {
   useEffect(() => {
     void load().catch((error: Error) => setError(error.message));
     const refresh = () => { if (!document.hidden) void load().catch((error: Error) => setError(error.message)); };
-    const timer = setInterval(refresh, 15_000); document.addEventListener("visibilitychange", refresh);
-    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
+    const timer = setInterval(refresh, 15_000); document.addEventListener("visibilitychange", refresh); window.addEventListener("focus", refresh);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); window.removeEventListener("focus", refresh); };
   }, [load]);
   function selectRule(nextEmployeeId: string, nextStoreId: string) {
     setEmployeeId(nextEmployeeId); setStoreId(nextStoreId);
@@ -69,6 +69,7 @@ export default function StoreNotificationsPage() {
   }
   const available = Boolean(data?.ready && data.config.enabled && data.config.fcm);
   const registered = Boolean(native?.bound && data?.device && !data.device.revokedAt);
+  const presentationReady = (native?.presentationVersion ?? 0) >= 2;
   return <main className="store-workbench-shell">
     <header className="store-workbench-topbar"><a className="brand-block" href="/store"><div className="brand-mark">F1</div><div><p className="eyebrow">Foundr1 STORE</p><h1>{t("離店中の注文通知")}</h1></div></a><StoreNavTabs active="notifications" /></header>
     <div className="store-phone-notifications">
@@ -81,15 +82,32 @@ export default function StoreNotificationsPage() {
           {!native ? <p className="store-push-message">{t("自動の離店判定は、対応する STORE Android アプリで利用できます。iPhone・ブラウザでは利用できません。")}</p> : <>
             <dl className="store-push-status">
               <div><dt>{t("通知の許可")}</dt><dd>{t(native.notificationsAllowed ? "許可済み" : "許可が必要です")}</dd></div>
-              <div><dt>{t("通知音")}</dt><dd>{t(native.soundEnabled ? "有効" : "設定を確認してください")}</dd></div>
+              <div><dt>{t("通知音")}</dt><dd>{presentationReady ? native.soundName : t(native.soundEnabled ? "有効" : "設定を確認してください")}</dd></div>
+              {presentationReady ? <>
+                <div><dt>{t("バナー通知の優先度")}</dt><dd>{t(native.highImportance ? "高（端末側の表示許可も必要です）" : "通知カテゴリの設定を確認してください")}</dd></div>
+                <div><dt>{t("端末の通知音量")}</dt><dd>{native.notificationVolume != null && native.notificationVolume >= 0 ? `${native.notificationVolume} / ${native.notificationVolumeMax}` : t("未確認")}{native.ringerNormal === false ? ` · ${t("マナーモード・サイレント")}` : ""}</dd></div>
+              </> : null}
               <div><dt>{t("バックグラウンドの位置情報")}</dt><dd>{t(native.locationAllowed && native.locationEnabled ? "許可済み" : "常に許可が必要です")}</dd></div>
               <div><dt>{t("端末登録")}</dt><dd>{t(registered ? "登録済み" : "未登録")}</dd></div>
               <div><dt>{t("この端末で最後に受信")}</dt><dd>{native.lastReceivedAt ? new Date(native.lastReceivedAt).toLocaleString("ja-JP") : t("未確認")}</dd></div>
             </dl>
             {(native.error || native.geoError || native.syncError || data.device?.lastError) ? <p className="store-push-message is-error">{t("通知または位置の同期に失敗しています。設定と通信状態を確認してください。")}</p> : null}
+            {presentationReady && (!native.soundEnabled || native.notificationVolume === 0 || native.ringerNormal === false) ? <p className="store-push-message">{t("音が鳴らない設定です。通知音を選び、通知音量・マナーモード・通知カテゴリのサイレント設定を確認してください。")}</p> : null}
+            {presentationReady && native.doNotDisturb ? <p className="store-push-message">{t("おやすみモードがオンです。音やバナーが制限される場合があります。")}</p> : null}
+            {native.soundError ? <p className="store-push-message is-error">{t("通知音を保存できませんでした。もう一度選ぶか、通知カテゴリ設定で変更してください。")}</p> : null}
+            {presentationReady ? <>
+              <div className="store-push-actions">
+                <button className="secondary-button" disabled={busy} onClick={() => void run(async () => { await nativeOrderPush("chooseSound"); })}>{t("通知音を選ぶ")}</button>
+                <button className="secondary-button" disabled={busy} onClick={() => void run(async () => { await nativeOrderPush("settings"); })}>{t("アプリ全体の通知設定")}</button>
+                <button className="secondary-button" disabled={busy} onClick={() => void run(async () => { await nativeOrderPush("channelSettings"); })}>{t("注文通知のカテゴリ設定")}</button>
+                <button className="secondary-button" disabled={busy || !native.notificationsAllowed} onClick={() => void run(async () => { await nativeOrderPush("preview"); setNotice("この端末にテスト通知を表示しました。音・振動・バナーを確認してください。配信テストとは別の端末内テストです。"); })}>{t("この端末で通知を試す")}</button>
+              </div>
+              <p className="store-push-help">{t("OPPOでは、アプリ全体の通知設定でバナー・ロック画面の表示を確認し、注文通知カテゴリでサイレントを解除してください。スイッチだけが表示される場合は、端末の設定アプリから STORE の通知管理を開いてください。")}</p>
+              <p className="store-push-help">{t("バナーの実際の表示許可は端末側で設定します。優先度が高くても、端末の制限で表示されない場合があります。")}</p>
+            </> : <p className="store-push-message">{t("通知音の選択・詳しい通知設定には STORE アプリの更新が必要です。")}{" "}<a href="/downloads/store/latest.apk">{t("最新版をダウンロード")}</a></p>}
             <div className="store-push-actions">
               <button className="primary-button" disabled={busy || !available || !data.rules.length} onClick={() => void run(enablePhone)}>{t(registered ? "この端末を再登録" : "この端末を登録")}</button>
-              <button className="secondary-button" disabled={busy} onClick={() => void run(async () => { await nativeOrderPush("settings"); })}>{t("通知設定")}</button>
+              {!presentationReady ? <button className="secondary-button" disabled={busy} onClick={() => void run(async () => { await nativeOrderPush("settings"); })}>{t("通知設定")}</button> : null}
               <button className="secondary-button" disabled={busy} onClick={() => void run(async () => { await nativeOrderPush("locationSettings"); })}>{t("位置情報の設定")}</button>
               <button className="secondary-button" disabled={busy || !registered || !available} onClick={() => void run(async () => { await post({ action: "test", deviceId: native.deviceId }); setNotice("テスト通知を送信しました。端末で音と通知を確認してください。このテストは店内でも届きます。"); })}><BellRing size={16} />{t("通知テスト")}</button>
               {registered ? <button className="secondary-button" disabled={busy} onClick={() => void run(async () => { await post({ action: "disable_device", deviceId: native.deviceId }); await nativeOrderPush("disable"); })}>{t("この端末の通知を停止")}</button> : null}
