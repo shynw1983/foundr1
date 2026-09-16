@@ -98,6 +98,20 @@ public final class StoreOrderPush {
                         StorePushNotifications.chooseSound(activity);
                     } else if (action.equals("preview")) {
                         StorePushNotifications.preview(activity);
+                    } else if (action.equals("alarmConfigure")) {
+                        StoreOrderAlarmService.configure(activity, request.getBoolean("enabled"), request.getString("tone"));
+                    } else if (action.equals("alarmPreview")) {
+                        StoreOrderAlarmService.preview(activity);
+                    } else if (action.equals("alarmStopPreview")) {
+                        StoreOrderAlarmService.stopPreview(activity);
+                    } else if (action.equals("alarmAcknowledge")) {
+                        StoreOrderAlarmService.acknowledge(activity, request.getJSONArray("eventIds"));
+                    } else if (action.equals("alarmSettings")) {
+                        StoreOrderAlarmService.channel(activity);
+                        activity.startActivity(new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, activity.getPackageName()).putExtra(Settings.EXTRA_CHANNEL_ID, StoreOrderAlarmService.CHANNEL));
+                    } else if (action.equals("soundSettings")) {
+                        activity.startActivity(new Intent(Settings.ACTION_SOUND_SETTINGS));
                     } else if (action.equals("locationSettings")) {
                         activity.startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + activity.getPackageName())));
                     } else if (action.equals("refresh")) {
@@ -128,6 +142,7 @@ public final class StoreOrderPush {
             .put("lastSyncAt", saved.getLong("lastSyncAt", 0)).put("lastReceivedAt", saved.getLong("lastReceivedAt", 0))
             .put("presence", presenceArray(context));
         StorePushNotifications.addStatus(context, result);
+        StoreOrderAlarmService.addStatus(context, result);
         return result;
     }
     public static void onActivityResult(Context context, int requestCode, int resultCode, Intent data) {
@@ -139,6 +154,7 @@ public final class StoreOrderPush {
             JSONObject rule = regions.optJSONObject(i);
             if (rule != null && ruleKey.equals(rule.optString("key"))) {
                 prefs(context).edit().putString("state:" + ruleKey, state).putLong("observed:" + ruleKey, System.currentTimeMillis()).apply();
+                StoreOrderAlarmService.signal();
                 if (state.equals("inside")) {
                     NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
                     if (manager != null) for (android.service.notification.StatusBarNotification notification : manager.getActiveNotifications()) {
@@ -231,6 +247,8 @@ public final class StoreOrderPush {
             new OneTimeWorkRequest.Builder(StorePushSyncWorker.class).setConstraints(networkConstraints()).setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS).build());
     }
     public static void clearBinding(Context context) {
+        StoreOrderAlarmService.clear(context);
+        WorkManager.getInstance(context).cancelAllWorkByTag("foundr1-order-alarm-ack");
         String config = prefs(context).getString("firebase", ""), token = prefs(context).getString("fcmToken", "");
         prefs(context).edit().clear().putString("firebase", config).putString("fcmToken", token).apply();
         LocationServices.getGeofencingClient(context).removeGeofences(geofenceIntent(context));
@@ -241,7 +259,7 @@ public final class StoreOrderPush {
             if (StorePushNotifications.ownsChannel(notification.getNotification().getChannelId())) manager.cancel(notification.getTag(), notification.getId());
         }
     }
-    static synchronized void display(Context context, JSONObject data) {
+    static synchronized void display(Context context, JSONObject data, boolean highPriority) {
         SharedPreferences saved = prefs(context);
         if (saved.getString("presenceToken", "").isEmpty() || !saved.getString("sessionId", "").equals(data.optString("sessionId"))) return;
         if (data.optLong("expiresAt", 0) < System.currentTimeMillis()) return;
@@ -256,6 +274,7 @@ public final class StoreOrderPush {
         if (!test && !currentRule) return;
         if (!test && (!hasLocationPermission(context) || !locationEnabled(context))) { markUnknown(context); enqueueSync(context); return; }
         if (!test && !"outside".equals(saved.getString("state:" + ruleKey, "unknown"))) { enqueueSync(context); return; }
+        if (!test && StoreOrderAlarmState.wasAcknowledged(context, data.optString("eventId"))) return;
         String deliveryKey = data.optString("deliveryKey");
         JSONArray seen;
         try { seen = new JSONArray(saved.getString("seen", "[]")); } catch (Exception error) { seen = new JSONArray(); }
@@ -269,8 +288,16 @@ public final class StoreOrderPush {
         Intent open = new Intent(context, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("foundr1_href", href);
         PendingIntent pending = PendingIntent.getActivity(context, eventId.hashCode(), open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         android.os.Bundle extras = new android.os.Bundle(); extras.putString("foundr1_store_id", data.optString("storeId"));
-        Notification notification = StorePushNotifications.build(context, data.optString("title", "Foundr1 STORE"), data.optString("body"), pending, extras);
-        manager.notify("store-order:" + eventId, 73, notification);
+        boolean alarmStarted = false;
+        if (StoreOrderAlarmService.enabled(context)) {
+            if (test && highPriority && StoreOrderAlarmService.allowed(context)) {
+                alarmStarted = StoreOrderAlarmService.preview(context);
+            } else if (!test) alarmStarted = StoreOrderAlarmService.receive(context, data, highPriority);
+        }
+        if (!alarmStarted) {
+            Notification notification = StorePushNotifications.build(context, data.optString("title", "Foundr1 STORE"), data.optString("body"), pending, extras);
+            manager.notify("store-order:" + eventId, 73, notification);
+        }
         StorePushNotifications.pruneUnusedChannels(context);
         JSONArray nextSeen = new JSONArray(); for (int i = Math.max(0, seen.length() - 63); i < seen.length(); i++) nextSeen.put(seen.optString(i)); nextSeen.put(deliveryKey);
         saved.edit().putString("seen", nextSeen.toString()).putLong("lastReceivedAt", System.currentTimeMillis()).apply();

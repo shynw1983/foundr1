@@ -5,6 +5,8 @@ export type NativeOrderPushStatus = {
   // Optional while the hosted UI is also serving STORE 0.2.7 and earlier.
   presentationVersion?: number; soundName?: string; soundError?: string; highImportance?: boolean;
   notificationVolume?: number; notificationVolumeMax?: number; ringerNormal?: boolean; doNotDisturb?: boolean;
+  alarmVersion?: number; alarmEnabled?: boolean; alarmTone?: "urgent" | "pulse"; alarmAllowed?: boolean;
+  alarmVolume?: number; alarmVolumeMax?: number; alarmActiveIds?: string[]; alarmPreview?: boolean; alarmError?: string;
   presence: Array<{ storeId: string; ruleKey: string; state: "inside" | "outside" | "unknown"; observedAt: number }>;
 };
 declare global {

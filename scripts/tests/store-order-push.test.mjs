@@ -55,12 +55,13 @@ async function fixture() {
   const service = load('lib/store-order-push.ts');
   const api = load('app/api/store/order-notifications/route.ts');
   const presenceApi = load('app/api/store/order-notifications/presence/route.ts');
+  const alarmApi = load('app/api/store/order-notifications/alarm/route.ts');
   async function outside() {
     const [rule] = await service.getOrderPushRules(ids.employee);
     await db.query("insert into store_order_push_presence(device_id,store_id,rule_key,state,observed_at) values ($1,$2,$3,'outside',now()) on conflict(device_id,store_id) do update set state='outside',rule_key=excluded.rule_key", [ids.device, ids.store, rule.key]);
   }
   const post = (body) => api.POST(new Request('https://test.invalid/api/store/order-notifications', { method: 'POST', body: JSON.stringify(body) }));
-  return { db, ids, service, api, presenceApi, outside, sends, post, setAllowed: (value) => { allowed = value; }, setSession: (value) => { currentSession = value; }, setFail: (value) => { failSend = value; } };
+  return { db, ids, service, api, presenceApi, alarmApi, outside, sends, post, setAllowed: (value) => { allowed = value; }, setSession: (value) => { currentSession = value; }, setFail: (value) => { failSend = value; } };
 }
 
 test('accepted preparing order with kitchen task creates exactly one alert; replay/history does not create another', async () => {
@@ -162,5 +163,65 @@ test('stale order or absent kitchen task never generates an alert; settings vali
     assert.equal((await h.post({ ...body, enterRadius: 600 })).status, 400);
     await h.db.exec('update stores set attendance_latitude=null'); assert.equal((await h.post(body)).status, 400);
     assert.equal((await h.post({ ...body, enabled: false })).status, 200);
+  } finally { await h.db.close(); }
+});
+
+async function alarmFixture() {
+  const h = await fixture();
+  const registration = await h.post({ action: 'register', deviceId: h.ids.device, token: 'alarm-test-device-token-123456', language: 'zh-Hans' });
+  const binding = await registration.json();
+  await h.outside();
+  const event = await h.service.ensureBridgeOrderPushEvent(h.ids.order, new Date());
+  await h.service.dispatchBridgeOrderPush(event, 0);
+  const request = (body, secret = binding.presenceToken) => h.alarmApi.POST(new Request('https://test.invalid/api/store/order-notifications/alarm', {
+    method: 'POST', headers: { authorization: `Bearer ${secret}` }, body: JSON.stringify(body)
+  }));
+  return { ...h, event, request };
+}
+
+test('continuous alarm remains active after FCM delivery window and acknowledgement changes only alert state', async () => {
+  const h = await alarmFixture();
+  try {
+    await h.db.exec("update store_order_alert_events set due_at=now()-interval '30 minutes', status='cancelled'");
+    const status = await h.request({ action: 'status', eventIds: [h.event] });
+    assert.equal(status.status, 200); assert.deepEqual((await status.json()).activeIds, [h.event]);
+    assert.equal((await h.request({ action: 'acknowledge', eventIds: [h.event] })).status, 200);
+    assert.deepEqual((await (await h.request({ action: 'status', eventIds: [h.event] })).json()).activeIds, []);
+    assert.equal((await h.db.query('select status from store_customer_orders')).rows[0].status, 'preparing');
+    assert.equal((await h.db.query('select status from order_production_tasks')).rows[0].status, 'new');
+    assert.equal((await h.request({ action: 'acknowledge', eventIds: [h.event] })).status, 200);
+  } finally { await h.db.close(); }
+});
+
+test('continuous alarm stops for web acknowledgement, cancelled order, started kitchen task, return to store or changed rule', async () => {
+  const h = await alarmFixture();
+  const active = async () => (await (await h.request({ action: 'status', eventIds: [h.event] })).json()).activeIds;
+  try {
+    assert.deepEqual(await active(), [h.event]);
+    await h.post({ action: 'acknowledge', eventId: h.event }); assert.deepEqual(await active(), []);
+    await h.db.exec('update store_order_alert_events set acknowledged_at=null');
+    await h.db.exec("update store_customer_orders set status='cancelled'"); assert.deepEqual(await active(), []);
+    await h.db.exec("update store_customer_orders set status='preparing'; update order_production_tasks set status='preparing'"); assert.deepEqual(await active(), []);
+    await h.db.exec("update order_production_tasks set status='new'; update store_order_push_presence set state='inside'"); assert.deepEqual(await active(), []);
+    await h.outside(); assert.deepEqual(await active(), [h.event]);
+    await h.db.exec('update store_order_push_preferences set rule_version=gen_random_uuid()'); assert.deepEqual(await active(), []);
+  } finally { await h.db.close(); }
+});
+
+test('alarm device token cannot acknowledge another recipient, lost scope or revoked login; invalid payload fails closed', async () => {
+  const h = await alarmFixture();
+  try {
+    assert.equal((await h.request({ action: 'status', eventIds: [h.event] }, 'invalid')).status, 401);
+    assert.equal((await h.request({ action: 'acknowledge', eventIds: [h.event, randomUUID()] })).status, 403);
+    assert.equal((await h.db.query('select acknowledged_at from store_order_alert_events')).rows[0].acknowledged_at, null);
+    assert.equal((await h.request({ action: 'status', eventIds: ["not-a-uuid"] })).status, 400);
+    assert.equal((await h.request({ action: 'status', eventIds: Array(51).fill(h.event) })).status, 400);
+    await h.db.exec('delete from store_order_push_deliveries');
+    assert.deepEqual((await (await h.request({ action: 'status', eventIds: [h.event] })).json()).activeIds, []);
+    assert.equal((await h.request({ action: 'acknowledge', eventIds: [h.event] })).status, 403);
+    await h.db.exec("update employees set role='store_terminal'");
+    assert.equal((await h.request({ action: 'acknowledge', eventIds: [h.event] })).status, 403);
+    await h.db.exec('update employee_sessions set revoked_at=now()');
+    assert.equal((await h.request({ action: 'status', eventIds: [h.event] })).status, 401);
   } finally { await h.db.close(); }
 });

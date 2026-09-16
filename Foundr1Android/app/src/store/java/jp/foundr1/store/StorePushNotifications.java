@@ -148,12 +148,17 @@ final class StorePushNotifications {
                 && manager.getCurrentInterruptionFilter() != NotificationManager.INTERRUPTION_FILTER_UNKNOWN);
     }
     static Notification build(Context context, String title, String body, PendingIntent pending, android.os.Bundle extras) {
-        return new Notification.Builder(context, channel(context).getId()).setSmallIcon(R.drawable.ic_launcher)
+        // Reached only when no looping alarm was started. Preserve the ordinary audible
+        // notification as a fallback, but never bypass an explicitly blocked alarm channel.
+        String channelId = StoreOrderAlarmService.enabled(context) && !StoreOrderAlarmService.allowed(context)
+            ? StoreOrderAlarmService.channel(context).getId() : channel(context).getId();
+        return new Notification.Builder(context, channelId).setSmallIcon(R.drawable.ic_launcher)
             .setContentTitle(title).setContentText(body).setStyle(new Notification.BigTextStyle().bigText(body))
             .setContentIntent(pending).setCategory(Notification.CATEGORY_EVENT).setAutoCancel(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE).setOnlyAlertOnce(false).setTimeoutAfter(5 * 60_000).addExtras(extras).build();
     }
     static void preview(Context context) {
+        if (StoreOrderAlarmService.enabled(context)) { StoreOrderAlarmService.preview(context); return; }
         Intent open = new Intent(context, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP)
             .putExtra("foundr1_href", "/store/notifications");
         PendingIntent pending = PendingIntent.getActivity(context, 18773, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);

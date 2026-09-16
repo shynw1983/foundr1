@@ -10,6 +10,6 @@ public class StorePushMessagingService extends FirebaseMessagingService {
         StoreOrderPush.enqueueSync(this);
     }
     @Override public void onMessageReceived(RemoteMessage message) {
-        StoreOrderPush.display(this, new JSONObject(message.getData()));
+        StoreOrderPush.display(this, new JSONObject(message.getData()), message.getPriority() == RemoteMessage.PRIORITY_HIGH);
     }
 }

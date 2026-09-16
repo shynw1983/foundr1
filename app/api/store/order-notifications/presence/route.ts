@@ -1,20 +1,12 @@
 import { sql } from "../../../../../lib/db";
 import { getOrderPushRules, hashPushValue } from "../../../../../lib/store-order-push";
 import { getOrderPushConfig } from "../../../../../lib/store-order-push-transport";
+import { authenticateOrderPushDevice } from "../../../../../lib/store-order-push-device-auth";
 
 export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   if (!getOrderPushConfig().enabled) return Response.json({ error: "disabled" }, { status: 503 });
-  const secret = request.headers.get("authorization")?.replace(/^Bearer /, "") || "";
-  if (!/^[A-Za-z0-9_-]{43}$/.test(secret)) return Response.json({ error: "unauthorized" }, { status: 401 });
-  const devices = await sql`
-    select d.id::text, d.employee_id::text as "employeeId" from store_order_push_devices d
-    join employees e on e.id = d.employee_id and e.status = 'active'
-    join employee_sessions es on es.id = d.session_id and es.employee_id = e.id
-      and es.session_version = e.session_version and es.revoked_at is null and es.expires_at > now()
-    where d.presence_token_hash = ${hashPushValue(secret)} and d.revoked_at is null
-  `;
-  const device = devices[0];
+  const device = await authenticateOrderPushDevice(request);
   if (!device) return Response.json({ error: "unauthorized" }, { status: 401 });
   const rules = await getOrderPushRules(String(device.employeeId));
   const body = await request.json().catch(() => ({}));

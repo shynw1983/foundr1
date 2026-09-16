@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="alarm_channel_name">注文の連続アラーム</string>
+    <string name="alarm_channel_description">確認するまで繰り返す注文アラーム（端末のアラーム音量）</string>
+    <string name="alarm_tone_urgent">急ぎの注文ベル</string>
+    <string name="alarm_tone_pulse">二音のアラート</string>
+    <string name="alarm_preview_title">Foundr1 STORE · アラーム試聴</string>
+    <string name="alarm_preview_body">10秒間の試聴です。停止ボタンでいつでも止められます。</string>
+    <string name="alarm_title">未確認の注文 %1$d件 · 確認まで繰り返します</string>
+    <string name="alarm_stop_preview">試聴を停止</string>
+    <string name="alarm_acknowledge">確認してアラームを停止</string>
+</resources>

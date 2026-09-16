@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="alarm_channel_name">訂單持續響鈴</string>
+    <string name="alarm_channel_description">訂單確認前持續提醒（使用手機鬧鐘音量）</string>
+    <string name="alarm_tone_urgent">急促接單鈴</string>
+    <string name="alarm_tone_pulse">雙音催單鈴</string>
+    <string name="alarm_preview_title">Foundr1 STORE · 鈴聲試聽</string>
+    <string name="alarm_preview_body">試聽 10 秒，可隨時點停止。</string>
+    <string name="alarm_title">%1$d 筆訂單未確認 · 持續提醒中</string>
+    <string name="alarm_stop_preview">停止試聽</string>
+    <string name="alarm_acknowledge">確認並停止提醒</string>
+</resources>
