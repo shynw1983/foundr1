@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer-core';
 
 const root = process.cwd();
-const output = resolve(root, 'outputs/os-responsive-review-20260917/after');
+const output = resolve(root, 'outputs/os-interface-polish-20260917');
 const stores = [{ id: 'test-store', name: '清水店（検証用）' }, { id: 'test-store-2', name: '桜並木店（検証用）' }];
 const access = { role: 'owner', stores, canUseAllStoreView: true, canViewSalesStats: true, canCancelOrders: true };
 const brands = [{ id: 'brand-test', name: 'まぁ麻' }];
@@ -46,13 +46,15 @@ fixtures['/api/dashboard']={stores,products:[],suppliers:[],orders:[],purchaseOr
 fixtures['/api/os/loyalty']={summary:{memberCount:6,availableCoupons:9}};
 fixtures['/api/sales/summary']={month:'2026-09',stores,selectedStoreId:stores[0].id,totals:{orderCount:10,sales:1000,estimatedFee:0,estimatedDeposit:1000,deliveryShare:0,averageOrderValue:100,salesPostedDayCount:2,workTrackedDayCount:1}};
 fixtures['/api/settings/payroll-allowances']={rules:[],stores,employees:[]};
-const entry = `import OsHome from './app/os/page';import Analytics from './app/os/analytics/page';import Settings from './app/os/settings/page';
+const entry = `import OsPos from './app/os/pos/page';import {canonicalNavItems} from './app/os/components/OsNavList';import OsLayout from './app/os/layout';import OsHome from './app/os/page';import Analytics from './app/os/analytics/page';import Settings from './app/os/settings/page';
 import React from 'react';import {createRoot} from 'react-dom/client';
 import Home from './app/store/page';import Orders from './app/store/orders/page';import Pos from './app/store/pos/page';import Availability from './app/store/menu/page';import History from './app/store/menu/inventory-history/page';import Timecard from './app/store/timecard/page';import Receiving from './app/store/receiving/page';import Procedures from './app/store/procedures/page';import Seats from './app/store/seats/page';import Pickup from './app/store/display/pickup/page';import Kitchen from './app/store/display/kitchen/page';import Courier from './app/store/display/courier/page';
 import MenuAdmin from './app/os/menus/page';import {StoreInventorySyncStatus} from './app/store/components/StoreInventorySyncStatus';
 import {OsTranslationProvider} from './app/os/components/OsTranslationProvider';import {FloatingFeedbackButton} from './components/feedback/FloatingFeedbackButton';import {defaultStoreModuleSettings} from './lib/module-setting-defaults';
 if(new URLSearchParams(location.search).get('role')==='store_terminal'){window.__fixtures['/api/auth/me'].employee.role='store_terminal';window.__fixtures['/api/os/store-context'].canSelectStore=false;window.__fixtures['/api/timecard'].currentEmployeeRole='store_terminal';}
 if(new URLSearchParams(location.search).get('reception')==='force_closed'){window.__fixtures['/api/store/operations'].operation.acceptanceMode='force_closed';}
+window.__fixtures['/api/auth/me'].employee.permittedNavPaths=canonicalNavItems.map(item=>item.href);
+window.__fixtures['/api/os/pos/settings']={access:{canManagePosSettings:true},settings:{}};
 const daysCase=new URLSearchParams(location.search).get('days');if(daysCase==='missing')delete window.__fixtures['/api/sales/summary'].totals.salesPostedDayCount;else if(daysCase==='zero')window.__fixtures['/api/sales/summary'].totals.salesPostedDayCount=0;
 const nativeFetch=window.fetch; window.__requests=[];
 window.__readTest={failPath:new URLSearchParams(location.search).get('fail')||'',hangPath:'',delays:{}};
@@ -78,7 +80,7 @@ window.fetch=async(input,init={})=>{
  if(url.pathname.startsWith('/api/store/display/')&&url.searchParams.get('storeId')==='test-store-2')return Response.json({...fixture,selectedStoreId:'test-store-2',preparing:[],ready:[],orders:[],tasks:[]});
  return Response.json(fixture);
 };
-const pages={'/os':OsHome,'/os/analytics':Analytics,'/os/settings':Settings,'/os/menus':MenuAdmin,'/sync':StoreInventorySyncStatus,'/store':Home,'/store/orders':Orders,'/store/pos':Pos,'/store/menu':Availability,'/store/menu/inventory-history':History,'/store/timecard':Timecard,'/store/receiving':Receiving,'/store/procedures':Procedures,'/store/seats':Seats,'/store/display/pickup':Pickup,'/store/display/kitchen':Kitchen,'/store/display/courier':Courier};const Page=pages[location.pathname]||Home; createRoot(document.getElementById('root')).render(<OsTranslationProvider><Page/><FloatingFeedbackButton/></OsTranslationProvider>);`;
+const pages={'/os/pos':OsPos,'/os':OsHome,'/os/analytics':Analytics,'/os/settings':Settings,'/os/menus':MenuAdmin,'/sync':StoreInventorySyncStatus,'/store':Home,'/store/orders':Orders,'/store/pos':Pos,'/store/menu':Availability,'/store/menu/inventory-history':History,'/store/timecard':Timecard,'/store/receiving':Receiving,'/store/procedures':Procedures,'/store/seats':Seats,'/store/display/pickup':Pickup,'/store/display/kitchen':Kitchen,'/store/display/courier':Courier};const Page=pages[location.pathname]||Home; createRoot(document.getElementById('root')).render(<OsTranslationProvider>{location.pathname.startsWith('/os')?<OsLayout><Page/></OsLayout>:<Page/>}<FloatingFeedbackButton/></OsTranslationProvider>);`;
 const compiler = await context({ stdin: { contents: entry, resolveDir: root, loader: 'tsx' }, bundle: true, write: false, outdir: '/private/tmp/store-ui-fixture', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' }, plugins: [{ name: 'fixture-navigation', setup(b) { b.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: 'navigation', namespace: 'fixture' })); b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export const usePathname=()=>location.pathname; export const useRouter=()=>({push:(p)=>location.assign(p),replace:(p)=>location.replace(p)});', loader: 'js' })); } }] });
 const server = createServer(async (req, res) => {
   const path = new URL(req.url, 'http://localhost').pathname;
@@ -97,9 +99,9 @@ await mkdir(output,{recursive:true});
 const browser=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
 const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
 try {
- for(const width of [1440,1024,768,390,360]) {
+ for(const width of process.argv.includes('--interactions') ? [] : [1440,1024,768,390,360]) {
   await page.setViewport({width,height:900});
-  for(const route of ['/os','/os/analytics','/os/settings','/store']) {
+  for(const route of ['/os','/os/analytics','/os/settings','/os/menus','/os/pos','/store']) {
    await page.goto('http://127.0.0.1:4179'+route,{waitUntil:'networkidle0'});
    assert.ok(await page.$('main'),'No main '+route);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Overflow '+route+' '+width);
@@ -119,12 +121,23 @@ try {
    }
    await page.screenshot({path:output+'/'+route.replaceAll('/','-')+'-'+width+'.png'});
   }
-  console.log('PASS '+width+'px / 4 routes / 3 languages');
+  console.log('PASS '+width+'px / 6 routes / 3 languages');
  }
  for(const [days,expected] of [['missing','未取得'],['zero','売上計上 0日']]) {
   await page.goto('http://127.0.0.1:4179/os/analytics?days='+days,{waitUntil:'networkidle0'});
   await page.select('.os-language-picker select','ja');
   await page.waitForFunction(value=>document.querySelector('.metric-card p')?.textContent.includes(value),{},expected);
  }
+ await page.setViewport({width:1440,height:900});
+ await page.goto('http://127.0.0.1:4179/os/settings',{waitUntil:'networkidle0'});
+ await page.select('.os-language-picker select','ja');
+ await page.click('.nav-item[aria-label="マスタ・設定"]');
+ assert.ok(await page.$('.nav-shell.is-expanded'));
+ assert.equal(await page.$eval('.sidebar-user .os-language-picker select',e=>getComputedStyle(e).color),'rgb(32, 43, 42)');
+ await page.waitForFunction(()=>document.querySelector('.sidebar-user .os-quick-drawer-trigger')?.getBoundingClientRect().width>150,{timeout:3000});
+ await page.screenshot({path:output+'/navigation-expanded.png'});
+ await page.focus('.sidebar-user .os-quick-drawer-trigger');
+ assert.equal(await page.$eval('.sidebar-user .os-quick-drawer-trigger',e=>e.getAttribute('aria-label')),'クイック操作を開く');
+ console.log('PASS expanded navigation and accessible quick-action control');
  assert.deepEqual(errors,[]);
 } finally {await browser.close();server.close();await compiler.dispose();}

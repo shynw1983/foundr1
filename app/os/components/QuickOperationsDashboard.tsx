@@ -395,7 +395,7 @@ export function QuickOperationsDashboard() {
 
   return (
     <>
-      <button type="button" className="os-quick-drawer-trigger" aria-expanded={isOpen} aria-controls={drawerId} title="クイック操作を開く" onClick={openDrawer}>
+      <button type="button" className="os-quick-drawer-trigger" aria-expanded={isOpen} aria-controls={drawerId} title="クイック操作を開く" aria-label="クイック操作を開く" onClick={openDrawer}>
         <PanelRightOpen size={18} aria-hidden="true" />
         <span>クイック操作</span>
         {!isLoading && (lowItems.length || Number(dashboard?.metrics.activeOrders ?? 0)) ? <b>{lowItems.length + Number(dashboard?.metrics.activeOrders ?? 0)}</b> : null}
