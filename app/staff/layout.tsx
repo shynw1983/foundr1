@@ -1,3 +1,4 @@
+import "./staff-interface.css";
 import type { Metadata, Viewport } from "next";
 import { getAppVersion, getShortAppVersion } from "../../lib/app-version";
 import { AppVersionNotice } from "../os/components/AppVersionNotice";
@@ -36,10 +37,10 @@ export default function StaffLayout({
 }>) {
   const version = getAppVersion();
   return (
-    <>
+    <div className="staff-interface">
       <AppVersionNotice appName="Staff" initialVersion={version} initialShortVersion={getShortAppVersion(version)} pathPrefixes={["/staff"]} />
       <PrivacyConsentGate />
       {children}
-    </>
+    </div>
   );
 }

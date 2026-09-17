@@ -12,7 +12,6 @@ import {
   Home,
   LogIn,
   LogOut,
-  MapPin,
   RefreshCw,
   Send,
   UserRound,
@@ -577,7 +576,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
           </span>
         </a>
         <div className="staff-user-tools">
-          <UserBadge showNotifications={false} showLanguagePicker={false} logoutHref="/staff/logout" />
+          <UserBadge showNotifications={false} showLanguagePicker={false} showStorePicker={false} logoutHref="/staff/logout" />
         </div>
       </header>
 
@@ -585,7 +584,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
-            <a className={view === item.view ? "is-active" : ""} href={item.href} key={item.href}>
+            <a className={view === item.view ? "is-active" : ""} href={item.href} aria-current={view === item.view ? "page" : undefined} key={item.href}>
               <Icon size={17} />
               <span>{item.label}</span>
             </a>
@@ -599,7 +598,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
           <h1>{statusLabel}</h1>
           <p>{latestPunch?.punchedAt ? `${formatJstDateTime(latestPunch.punchedAt)} に最終打刻` : loading ? "読み込み中" : "本日の打刻を開始できます"}</p>
         </div>
-        <button className="secondary-button" type="button" onClick={() => loadTimecard(selectedStoreId)}>
+        <button className="secondary-button" type="button" disabled={loading} aria-busy={loading} onClick={() => loadTimecard(selectedStoreId)}>
           <RefreshCw size={16} />
           更新
         </button>
@@ -607,15 +606,8 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
 
       {timecard && timecard.stores.length > 1 ? (
         <section className="staff-store-select" aria-label="勤務店舗">
-          <div className="staff-store-select-heading">
-            <MapPin aria-hidden="true" />
-            <div>
-              <span>現在の勤務店舗</span>
-              <strong>{selectedStore?.name ?? "店舗未設定"}</strong>
-            </div>
-          </div>
           <label className="staff-store-select-control">
-            <span>店舗を切り替え</span>
+            <span>勤務店舗</span>
             <select value={selectedStoreId} onChange={(event) => {
               const nextStoreId = event.target.value;
               setSelectedStoreId(nextStoreId);
@@ -955,10 +947,10 @@ function RequestsView({
                 出勤希望
               </label>
               <div className="store-shift-request-times">
-                <input type="time" value={draft.availableStart} disabled={!draft.wantsWork} onChange={(event) => onUpdateAvailability(draft.workDate, { availableStart: event.target.value })} />
-                <input type="time" value={draft.availableEnd} disabled={!draft.wantsWork} onChange={(event) => onUpdateAvailability(draft.workDate, { availableEnd: event.target.value })} />
+                <input type="time" aria-label={`${formatDate(draft.workDate)} 開始時刻`} value={draft.availableStart} disabled={!draft.wantsWork} onChange={(event) => onUpdateAvailability(draft.workDate, { availableStart: event.target.value })} />
+                <input type="time" aria-label={`${formatDate(draft.workDate)} 終了時刻`} value={draft.availableEnd} disabled={!draft.wantsWork} onChange={(event) => onUpdateAvailability(draft.workDate, { availableEnd: event.target.value })} />
               </div>
-              <input value={draft.note} placeholder="メモ" disabled={!draft.wantsWork} onChange={(event) => onUpdateAvailability(draft.workDate, { note: event.target.value })} />
+              <input aria-label={`${formatDate(draft.workDate)} メモ`} value={draft.note} placeholder="メモ" disabled={!draft.wantsWork} onChange={(event) => onUpdateAvailability(draft.workDate, { note: event.target.value })} />
             </article>
           ))}
           {!availabilityDrafts.length ? <p className="empty-state-text">提出期間を読み込めませんでした。</p> : null}
@@ -978,12 +970,12 @@ function RequestsView({
           </div>
         </div>
         <div className="staff-form-row">
-          <select value={swapTargetShiftId} onChange={(event) => onChangeSwapTarget(event.target.value)}>
+          <select aria-label="交代を募集するシフト" value={swapTargetShiftId} onChange={(event) => onChangeSwapTarget(event.target.value)}>
             {myShifts.map((shift) => (
               <option value={shift.id} key={shift.id}>{getShiftDisplayParts(shift).compactLabel}</option>
             ))}
           </select>
-          <input value={swapNote} placeholder="メモ" onChange={(event) => onChangeSwapNote(event.target.value)} />
+          <input aria-label="交代募集のメモ" value={swapNote} placeholder="メモ" onChange={(event) => onChangeSwapNote(event.target.value)} />
           <button className="secondary-button" type="button" onClick={onSubmitSwap}>募集</button>
         </div>
       </article>

@@ -27,11 +27,13 @@ export function UserBadge({
   showNotifications = true,
   showLanguagePicker = true,
   showQuickActions = true,
+  showStorePicker = true,
   logoutHref = "/os/logout"
 }: {
   showNotifications?: boolean;
   showLanguagePicker?: boolean;
   showQuickActions?: boolean;
+  showStorePicker?: boolean;
   logoutHref?: string;
 }) {
   const [employee, setEmployee] = useState<CurrentEmployee | null>(() => getCachedCurrentEmployee());
@@ -76,7 +78,7 @@ export function UserBadge({
 
   return (
     <div className="user-panel">
-      <OsStoreContextPicker />
+      {showStorePicker ? <OsStoreContextPicker /> : null}
       {showQuickActions && isOsSurface && ["owner", "manager", "store_owner", "store_manager"].includes(employee.role)
         ? <QuickOperationsDashboard />
         : null}
