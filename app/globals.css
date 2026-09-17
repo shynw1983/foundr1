@@ -45284,3 +45284,64 @@ a:focus-visible {
 @media (prefers-reduced-motion: reduce) { .inventory-read-spinner { animation: none; } }
 @media (max-width: 650px) { .inventory-read-progress .inventory-read-row { grid-template-columns: minmax(0,1fr) auto; gap: 8px; } .inventory-read-detail { grid-column: 1 / -1; } .inventory-read-row > button { grid-column: 1 / -1; justify-self: start; } }
 @media (max-width: 850px) { .inventory-comparison-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .inventory-comparison-name { grid-column: 1 / -1; } }
+
+/* OS responsive repair: keep header tools and section forms within their own grid. */
+.os-home-topbar > .os-home-user > .user-panel { align-items: flex-end; }
+.settings-grid.settings-section-content { grid-template-columns: minmax(0, 1fr); }
+.settings-section-content > .panel,
+.settings-allowance-panel,
+.settings-allowance-form > * { min-width: 0; }
+.settings-allowance-form { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); }
+.shell :is(.procurement-calendar-panel, .pos-admin-tax-settings, .analytics-control-row) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not([type="range"]):not([type="hidden"]), select, textarea) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+.shell :is(.settings-section-content, .pos-admin-tax-settings, .procurement-calendar-panel) :is(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--green);
+}
+@media (min-width: 761px) and (max-width: 1120px) {
+  .shell > .sidebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 48px;
+    align-items: center;
+    gap: 10px;
+    height: auto;
+    max-height: none;
+  }
+  .shell > .sidebar > .brand-block { grid-column: 1; grid-row: 1; min-width: 0; }
+  .shell > .sidebar > .mobile-nav-actions { grid-column: 2; grid-row: 1; margin: 0; }
+  .shell > .sidebar > .sidebar-user { grid-column: 1 / -1; grid-row: 2; width: 100%; min-width: 0; }
+  .shell > .sidebar > .sidebar-user > .user-panel { width: 100%; min-width: 0; display: flex; align-items: flex-end; gap: 8px; }
+  .shell > .sidebar > .sidebar-user .os-global-store-picker { flex: 1 1 160px; width: auto; min-width: 120px; }
+  .shell > .sidebar > .sidebar-user :is(.account-menu, .notification-menu, .os-language-picker, .os-quick-drawer-trigger) { flex-shrink: 0; }
+  .shell > .sidebar > .sidebar-user .os-quick-drawer-trigger { width: auto; min-width: 48px; padding: 0 11px; white-space: nowrap; }
+  .shell > .sidebar > .sidebar-user .os-quick-drawer-trigger > span { display: inline; }
+  .shell > .sidebar > .sidebar-user .os-quick-drawer-trigger > b { display: inline-grid; }
+  .shell > .sidebar > .brand-block h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .os-home-shell .os-home-topbar { display: grid; grid-template-columns: minmax(0, 1fr) 48px; gap: 10px; }
+  .os-home-shell .os-home-topbar > .brand-block { grid-column: 1; grid-row: 1; }
+  .os-home-shell .os-home-user { display: contents; }
+  .os-home-shell .os-home-user > .mobile-nav-actions { grid-column: 2; grid-row: 1; margin: 0; }
+  .os-home-shell .os-home-user > .user-panel { grid-column: 1 / -1; grid-row: 2; display: flex; width: 100%; align-items: flex-end; }
+  .os-home-topbar > .os-home-user > .user-panel .os-global-store-picker { display: grid; flex: 1 1 160px; width: auto; min-width: 120px; }
+  .os-home-topbar > .os-home-user > .user-panel > :not(.os-global-store-picker) { flex-shrink: 0; }
+}
+@media (max-width: 760px) {
+  .settings-allowance-form { grid-template-columns: minmax(0, 1fr); }
+  .os-home-shell .os-home-hero { min-height: 0; padding: 16px; }
+  .os-home-shell .os-home-hero h2 { font-size: 24px; }
+  .os-home-shell .os-home-user > .user-panel { gap: 6px; }
+  .modal-backdrop[aria-labelledby="product-edit-title"] .product-photo-preview { width: 120px; height: 120px; min-height: 0; }
+}
+@media (min-width: 761px) and (max-width: 1120px) {
+  .settings-manual-rate-card { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .settings-manual-rate-card > div { grid-column: 1 / -1; }
+}

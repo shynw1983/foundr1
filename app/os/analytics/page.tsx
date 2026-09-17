@@ -8,6 +8,7 @@ import {
   WalletCards
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useOsTranslation } from "../components/OsTranslationProvider";
 import { AnalyticsShell } from "./components/AnalyticsShell";
 
 type StoreOption = { id: string; name: string };
@@ -24,7 +25,7 @@ type SalesSummary = {
     estimatedDeposit: number;
     deliveryShare: number;
     averageOrderValue: number;
-    activeDayCount: number;
+    salesPostedDayCount?: number;
   };
 };
 type PayrollTotals = {
@@ -137,6 +138,7 @@ function storeAnalyticsSelection(nextMonth: string, nextStoreId: string) {
 }
 
 export default function AnalyticsPage() {
+  const { t } = useOsTranslation();
   const [month, setMonth] = useState(getStoredAnalyticsMonth);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [stores, setStores] = useState<StoreOption[]>([]);
@@ -247,7 +249,7 @@ export default function AnalyticsPage() {
           <article className="metric-card">
             <span>当月売上</span>
             <strong>{formatMoney(salesAmount)}</strong>
-            <p>{salesTotals ? `${salesTotals.orderCount}件 / 稼働${salesTotals.activeDayCount}日` : "売上分析から取得"}</p>
+            <p>{salesTotals ? t("{orders}件 / 売上計上 {days}日", { orders: salesTotals.orderCount, days: Number.isFinite(salesTotals.salesPostedDayCount) ? salesTotals.salesPostedDayCount! : t("未取得") }) : "売上分析から取得"}</p>
           </article>
           <article className="metric-card">
             <span>入金見込み</span>

@@ -645,7 +645,7 @@ export default function OsSettingsPage() {
           ))}
         </section>
 
-        <section className="settings-grid">
+        <section className="settings-grid settings-section-content">
           {activeSection === "permissions" ? (
           <section className="panel settings-role-permissions-panel">
             <div className="panel-title">

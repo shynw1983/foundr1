@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useOsTranslation } from "./components/OsTranslationProvider";
 import { MobileNavMenu } from "./components/MobileNavMenu";
 import { UserBadge } from "./components/UserBadge";
 import { canonicalNavItems, type OsNavModuleWithChildren, usePermittedNavModules } from "./components/OsNavList";
@@ -108,7 +109,7 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("ja-JP").format(value);
 }
 
-function buildHomeMetrics(dashboard: DashboardData | null, salesStats: SalesStats | null, loyalty: LoyaltyData | null): HomeMetric[] {
+function buildHomeMetrics(dashboard: DashboardData | null, salesStats: SalesStats | null, loyalty: LoyaltyData | null, t: ReturnType<typeof useOsTranslation>["t"]): HomeMetric[] {
   const orders = dashboard?.orders ?? [];
   const items = dashboard?.purchaseOrderItems ?? [];
   const fulfillments = dashboard?.supplierFulfillments ?? [];
@@ -125,14 +126,14 @@ function buildHomeMetrics(dashboard: DashboardData | null, salesStats: SalesStat
     {
       label: "本日売上",
       value: `¥${formatNumber(grossSales)}`,
-      note: paidOrders ? `会計 ${formatNumber(paidOrders)} 件 / 対応中 ${formatNumber(activeCustomerOrders)} 件` : "本日の会計はまだありません",
+      note: paidOrders ? t("会計 {paid} 件 / 対応中 {active} 件", { paid: formatNumber(paidOrders), active: formatNumber(activeCustomerOrders) }) : "本日の会計はまだありません",
       href: "/os/analytics/sales",
       icon: CircleDollarSign
     },
     {
       label: "会員",
       value: formatNumber(memberCount),
-      note: loyalty ? `利用可能クーポン ${formatNumber(Number(loyalty.summary?.availableCoupons ?? 0))} 件` : "権限がある場合に会員状況を表示します",
+      note: loyalty ? t("利用可能クーポン {count} 件", { count: formatNumber(Number(loyalty.summary?.availableCoupons ?? 0)) }) : "権限がある場合に会員状況を表示します",
       href: "/os/loyalty",
       icon: UserRound
     },
@@ -170,7 +171,7 @@ function buildHomeMetrics(dashboard: DashboardData | null, salesStats: SalesStat
     {
       label: "商品・マスタ",
       value: formatNumber(dashboard?.products?.length ?? 0),
-      note: `店舗 ${formatNumber(dashboard?.stores?.length ?? 0)} / 発注先 ${formatNumber(dashboard?.suppliers?.length ?? 0)}`,
+      note: t("店舗 {stores} / 発注先 {suppliers}", { stores: formatNumber(dashboard?.stores?.length ?? 0), suppliers: formatNumber(dashboard?.suppliers?.length ?? 0) }),
       href: "/os/products",
       icon: MenuSquare
     }
@@ -203,7 +204,8 @@ function OsHomeDashboard({
   loyalty: LoyaltyData | null;
   isLoading: boolean;
 }) {
-  const metrics = buildHomeMetrics(dashboard, salesStats, loyalty);
+  const { t } = useOsTranslation();
+  const metrics = buildHomeMetrics(dashboard, salesStats, loyalty, t);
   const orders = (dashboard?.orders ?? []).filter((order) => order.status !== "完了").slice(0, 5);
   const missingReceipts = (dashboard?.supplierFulfillments ?? [])
     .filter((fulfillment) => fulfillment.status !== "not_started" && !fulfillment.receiptPhotoUrl)
@@ -211,17 +213,17 @@ function OsHomeDashboard({
   const operationalAlerts = [
     ...(Number(salesStats?.summary?.activeOrders ?? 0) > 0 ? [{
       title: "Web予約・POS 対応中",
-      detail: `${formatNumber(Number(salesStats?.summary?.activeOrders ?? 0))} 件の注文が進行中です。`,
+      detail: t("{count} 件の注文が進行中です。", { count: formatNumber(Number(salesStats?.summary?.activeOrders ?? 0)) }),
       href: "/os/pos"
     }] : []),
     ...(dashboard?.priceSignals?.length ? [{
       title: "価格変動",
-      detail: `${formatNumber(dashboard.priceSignals.length)} 件の価格変動候補があります。`,
+      detail: t("{count} 件の価格変動候補があります。", { count: formatNumber(dashboard.priceSignals.length) }),
       href: "/os/analytics/cost"
     }] : []),
     ...(missingReceipts.length ? [{
       title: "証憑確認",
-      detail: `${formatNumber(missingReceipts.length)} 件のレシート未アップロードがあります。`,
+      detail: t("{count} 件のレシート未アップロードがあります。", { count: formatNumber(missingReceipts.length) }),
       href: "/os/history"
     }] : [])
   ].slice(0, 5);
@@ -293,6 +295,7 @@ function OsHomeDashboard({
 }
 
 function OsHomeModuleCard({ module }: { module: OsNavModuleWithChildren }) {
+  const { t } = useOsTranslation();
   const Icon = module.icon;
   const mainHref = module.href ?? module.children[0]?.href ?? "/os";
   const directChild = module.href ? module.children.find((child) => child.href === module.href) : null;
@@ -305,7 +308,7 @@ function OsHomeModuleCard({ module }: { module: OsNavModuleWithChildren }) {
         <span className="os-home-module-icon">
           <Icon size={24} />
         </span>
-        <span className="os-home-module-kicker">{itemCount} 入口</span>
+        <span className="os-home-module-kicker">{t("{count} 入口", { count: itemCount })}</span>
       </span>
       <span className="os-home-module-title">
         <span>

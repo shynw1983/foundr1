@@ -261,7 +261,7 @@ export default function SystemUsagePage() {
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Thresholds</p>
-                <h3>付费阈值の近さ</h3>
+                <h3>有料枠への近さ</h3>
               </div>
               <AlertTriangle size={18} />
             </div>

@@ -4,6 +4,7 @@ import { BriefcaseBusiness, CalendarDays, CalendarPlus, ChevronDown, ChevronLeft
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { CSSProperties, FormEvent, MouseEvent } from "react";
+import { useOsTranslation } from "../components/OsTranslationProvider";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -1455,6 +1456,11 @@ export function TimecardPage({
   initialScheduleView?: TimecardScheduleView;
   initialPayrollView?: TimecardPayrollView;
 }) {
+  const { t } = useOsTranslation();
+  const formatUiDuration = (minutes: number) => {
+    const total = Math.max(0, Math.round(minutes));
+    return t("{hours}時間{minutes}分", { hours: Math.floor(total / 60), minutes: String(total % 60).padStart(2, "0") });
+  };
   const [data, setData] = useState<TimecardPayload | null>(null);
   const [month, setMonth] = useState(getStoredTimecardMonth);
   const [selectedStoreId, setSelectedStoreId] = useState("");
@@ -2632,12 +2638,12 @@ export function TimecardPage({
 
         {mainView !== "payroll" ? (
         <section className="metric-grid">
-              <MetricCard label="勤務日数" value={`${canViewPayroll ? totals.workDays : attendanceTotals.workDays}日`} note={`${canViewPayroll ? totals.punchCount : attendanceTotals.punchCount}件の実績`} />
-              <MetricCard label="勤務時間" value={formatDuration(canViewPayroll ? totals.workMinutes : attendanceTotals.workMinutes)} note={`時間外 ${formatDuration(canViewPayroll ? totals.overtimeMinutes ?? 0 : 0)} / 深夜 ${formatDuration(canViewPayroll ? totals.nightMinutes : attendanceTotals.nightMinutes)}`} />
+              <MetricCard label="勤務日数" value={t("{count}日", { count: canViewPayroll ? totals.workDays : attendanceTotals.workDays })} note={t("{count}件の実績", { count: canViewPayroll ? totals.punchCount : attendanceTotals.punchCount })} />
+              <MetricCard label="勤務時間" value={formatUiDuration(canViewPayroll ? totals.workMinutes : attendanceTotals.workMinutes)} note={t("時間外 {overtime} / 深夜 {night}", { overtime: formatUiDuration(canViewPayroll ? totals.overtimeMinutes ?? 0 : 0), night: formatUiDuration(canViewPayroll ? totals.nightMinutes : attendanceTotals.nightMinutes) })} />
               {canViewPayroll ? (
                 <>
-              <MetricCard label="人件費" value={formatMoney(displayedPayrollTotals.laborCost + displayedPayrollTotals.commuteAllowance)} note={`給与 ${formatMoney(displayedPayrollTotals.laborCost)} / 交通費 ${formatMoney(displayedPayrollTotals.commuteAllowance)}`} />
-              <MetricCard label="差引支給額" value={formatMoney(displayedPayrollTotals.totalPay)} note={`控除 ${formatMoney((displayedPayrollTotals.socialInsurance ?? 0) + (displayedPayrollTotals.employmentInsurance ?? 0) + (displayedPayrollTotals.incomeTax ?? 0) + (displayedPayrollTotals.residentTax ?? 0))}${payrollConfirmation ? " / 確定済み" : ""}`} />
+              <MetricCard label="人件費" value={formatMoney(displayedPayrollTotals.laborCost + displayedPayrollTotals.commuteAllowance)} note={t("給与 {pay} / 交通費 {commute}", { pay: formatMoney(displayedPayrollTotals.laborCost), commute: formatMoney(displayedPayrollTotals.commuteAllowance) })} />
+              <MetricCard label="差引支給額" value={formatMoney(displayedPayrollTotals.totalPay)} note={`${t("控除")} ${formatMoney((displayedPayrollTotals.socialInsurance ?? 0) + (displayedPayrollTotals.employmentInsurance ?? 0) + (displayedPayrollTotals.incomeTax ?? 0) + (displayedPayrollTotals.residentTax ?? 0))}${payrollConfirmation ? ` / ${t("確定済み")}` : ""}`} />
             </>
           ) : null}
         </section>
