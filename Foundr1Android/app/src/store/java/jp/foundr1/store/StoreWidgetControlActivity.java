@@ -50,15 +50,12 @@ public class StoreWidgetControlActivity extends Activity {
         content.setPadding(dp(22), dp(18), dp(22), dp(18)); sheet.addView(content);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(Math.min(dp(420), getResources().getDisplayMetrics().widthPixels - dp(36)), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
         backdrop.addView(sheet, params); setContentView(backdrop);
-        // A restored activity must never replay an uncertain write after process death or rotation.
+        // Opening or restoring a widget sheet only displays a choice. Legacy tap intents
+        // may still carry a desired state, but only the confirmation button can apply it.
         StoreWidgetControlsData cached = StoreWidgetControlsData.read(this, store);
-        if (state == null && StoreWidgetControlsPolicy.AWAY.equals(control) && getIntent().hasExtra(EXTRA_ENABLED)
-            && session.equals(getIntent().getStringExtra(EXTRA_SESSION)) && cached.canToggle()
-            && cached.preference().optString("version").equals(getIntent().getStringExtra(EXTRA_VERSION))) {
-            toggle(getIntent().getBooleanExtra(EXTRA_ENABLED, false), getIntent().getStringExtra(EXTRA_VERSION));
-        } else load();
+        if (StoreWidgetControlsPolicy.AWAY.equals(control) && cached.canToggle()) show(cached);
+        else load();
     }
-    @Override protected void onSaveInstanceState(Bundle state) { state.putBoolean("opened", true); super.onSaveInstanceState(state); }
     private boolean alive() { return !isFinishing() && !isDestroyed(); }
     private void header() {
         content.removeAllViews();
@@ -70,7 +67,7 @@ public class StoreWidgetControlActivity extends Activity {
         busy = true; header();
         text(saving ? (zh ? "正在保存…" : "保存中…") : (zh ? "正在读取当前状态…" : "現在の状態を確認中…"), 17, false, 0xFF173F35);
     }
-    private void load() {
+    void load() {
         loading(false);
         Context context = getApplicationContext();
         new Thread(() -> {
@@ -99,15 +96,20 @@ public class StoreWidgetControlActivity extends Activity {
             if (pref == null || !data.notification.optBoolean("ready")) text(zh ? "请先在 App 中设置当前账号的离店距离。" : "アプリでこのアカウントの離店距離を設定してください。", 16, false, 0xFF173F35);
             else {
                 boolean enabled = pref.optBoolean("enabled");
-                text(enabled ? (zh ? "离店提醒已开启" : "離店通知はオンです") : (zh ? "离店提醒已关闭" : "離店通知はオフです"), 18, true, 0xFF173F35);
+                text(data.canToggle()
+                    ? (enabled ? (zh ? "关闭离店提醒？" : "離店通知をオフにしますか？") : (zh ? "开启离店提醒？" : "離店通知をオンにしますか？"))
+                    : (enabled ? (zh ? "离店提醒已开启" : "離店通知はオンです") : (zh ? "离店提醒已关闭" : "離店通知はオフです")), 18, true, 0xFF173F35);
+                if (data.canToggle()) text(enabled
+                    ? (zh ? "关闭后，当前账号在这家店的离店订单提醒将停止。" : "このアカウントへの、この店舗の離店後の注文通知を停止します。")
+                    : (zh ? "开启后，离店超过设定距离时，新订单将按原有设置提醒。" : "設定した距離を離れると、新しい注文を保存済みの設定で通知します。"), 14, false, 0xFF526A5F);
                 text((zh ? "离店 " : "離店 ") + pref.optInt("exitRadius") + " m  /  " + (zh ? "回店 " : "帰店 ") + pref.optInt("enterRadius") + " m", 14, false, 0xFF526A5F);
-                if (data.canToggle()) button(enabled ? (zh ? "关闭离店提醒" : "離店通知をオフ") : (zh ? "开启离店提醒" : "離店通知をオン"), true,
+                if (data.canToggle()) button(enabled ? (zh ? "确认关闭" : "オフにする") : (zh ? "确认开启" : "オンにする"), true,
                     () -> toggle(!enabled, pref.optString("version")));
                 else text(zh ? "当前账号没有修改通知规则的权限。" : "このアカウントには通知設定の変更権限がありません。", 14, false, 0xFF526A5F);
             }
             button(zh ? "通知与距离设置" : "通知・距離の設定", false, this::openApp);
         }
-        button(zh ? "关闭" : "閉じる", false, this::finish);
+        button(StoreWidgetControlsPolicy.AWAY.equals(control) ? (zh ? "取消" : "キャンセル") : (zh ? "关闭" : "閉じる"), false, this::finish);
     }
     private interface Change { void run(Context context) throws Exception; }
     private void mutate(Change change) {
@@ -146,7 +148,7 @@ public class StoreWidgetControlActivity extends Activity {
             StoreWidgetControlsData.save(context, store, session, "reception", saved);
         });
     }
-    private void toggle(boolean enabled, String version) {
+    void toggle(boolean enabled, String version) {
         mutate(context -> {
             JSONObject saved = InventoryApiClient.setNotificationPreference(store, enabled, version, session);
             JSONObject pref = saved.optJSONObject("preference");

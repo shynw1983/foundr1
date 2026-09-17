@@ -36,6 +36,10 @@ and Manual Closed choices in a native sheet. Changing modes preserves pickup tim
 Away notifications use `/api/store/order-notifications/preference`: the widget may
 only toggle the viewer's existing rule, under the same owner/manager permissions
 as the settings page. There is no recipient/radius input or implicit rule creation.
+Tapping the away-notification tile first opens a confirmation sheet showing the
+store, account scope, intended change and existing distances. Only its explicit
+confirm button saves the change; cancelling, going back or recreating the sheet
+does not toggle the rule, including for tap intents created by older app versions.
 An atomic rule-version comparison rejects stale/duplicate taps and concurrent
 distance edits. Confirmed changes update the phone's rules and stop any affected
 ongoing alarm without acknowledging orders or changing other stores' rules.
