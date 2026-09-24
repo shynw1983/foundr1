@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
+import { inventoryTargetOverlapSql, newerInventoryOperationSql } from "../../../../../lib/inventory-command-supersession";
 import { withInventoryOperationLock } from "../../../../../lib/inventory-operation-lock";
 import {
   publishBridgeCommandAvailable,
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
       maxAttempts: 3
     }
   };
-  const rows = await sql`
+  const rows = await sql.query(`
     update local_bridge_commands as target
     set
       status = 'pending',
@@ -71,11 +72,11 @@ export async function POST(request: Request) {
       claim_expires_at = null,
       completed_at = null,
       payload = target.payload || jsonb_build_object('manualRetryAt', now()),
-      result = ${JSON.stringify(progress)}::jsonb,
+      result = $3::jsonb,
       last_error = '',
       updated_at = now()
-    where target.id::text = ${commandId}
-      and target.store_id::text = ${storeId}
+    where target.id::text = $1
+      and target.store_id::text = $2
       and target.command_type = 'set_inventory_availability'
       and target.status = 'failed'
       and coalesce(target.payload->>'mappingBlocked','false') <> 'true'
@@ -87,23 +88,16 @@ export async function POST(request: Request) {
       and not exists (
         select 1
         from local_bridge_commands as newer
-        where newer.store_id = target.store_id
-          and newer.platform = target.platform
-          and newer.command_type = target.command_type
-          and newer.created_at > target.created_at
-          and (
-            newer.payload->>'inventoryKey' = target.payload->>'inventoryKey'
-            or exists (
+        where ${newerInventoryOperationSql("target")}
+          and exists (
               select 1
               from jsonb_array_elements(coalesce(newer.payload->'targets', '[]'::jsonb)) newer_target
               join jsonb_array_elements(coalesce(target.payload->'targets', '[]'::jsonb)) old_target
-                on newer_target->>'kind' = old_target->>'kind'
-                and newer_target->>'targetId' = old_target->>'targetId'
+                on ${inventoryTargetOverlapSql}
             )
-          )
       )
     returning target.id::text, target.platform
-  `;
+  `, [commandId, storeId, JSON.stringify(progress)]);
   if (!rows[0]) {
     return Response.json({ error: "This task cannot be retried because it is no longer failed or a newer task exists." }, { status: 409 });
   }

@@ -12920,6 +12920,27 @@ body :where(
   color: var(--green);
 }
 
+.store-inventory-history-status.is-superseded,
+.store-inventory-history-platforms > span.is-superseded,
+.store-menu-sync-platform.is-superseded {
+  background: var(--surface);
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+.store-inventory-history-platforms > span.is-superseded {
+  flex-wrap: wrap;
+}
+
+.store-menu-sync-platform.is-superseded .store-menu-sync-state {
+  flex-wrap: wrap;
+}
+
+.store-menu-sync-platform.is-superseded .store-menu-sync-state small {
+  margin-left: 0;
+  white-space: normal;
+}
+
 .store-inventory-history-status.is-processing {
   background: var(--amber-soft);
   color: var(--amber);

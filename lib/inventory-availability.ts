@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {selectInventoryIdentity} from './inventory-target-identity';
 import { assertNoWholeStoreSync, withInventoryOperationLock } from "./inventory-operation-lock";
 import { sql } from "./db";
+import { reconcileInventoryCommandsSql } from "./inventory-command-supersession";
 import {
   publishBridgeCommandAvailable,
   publishBridgeInventorySyncStarted
@@ -378,66 +379,6 @@ async function applyInventoryAvailabilityUnlocked(input: {
       resolution.targets,
       externalIdMappings
     );
-    const projectedTargetIds = JSON.stringify(projectedTargets.map((target) => ({ targetId: target.targetId })));
-    // A manual change made while the 08:00 reconciliation is still queued must
-    // win. Remove the affected targets from pending scheduled batches; the new
-    // manual command below then becomes the final desired state.
-    await sql`
-      update local_bridge_commands scheduled
-      set
-        payload = jsonb_set(
-          scheduled.payload,
-          '{targets}',
-          coalesce((
-            select jsonb_agg(target)
-            from jsonb_array_elements(coalesce(scheduled.payload->'targets', '[]'::jsonb)) target
-            where not exists (
-              select 1
-              from jsonb_array_elements(${projectedTargetIds}::jsonb) changed
-              where changed->>'targetId' = target->>'targetId'
-            )
-          ), '[]'::jsonb),
-          true
-        ),
-        updated_at = now()
-      where scheduled.store_id::text = ${storeId}
-        and scheduled.platform = ${platform}
-        and scheduled.command_type = 'set_inventory_availability'
-        and scheduled.status = 'pending'
-        and scheduled.payload->>'syncSource' = 'scheduled'
-    `;
-    await sql`
-      update local_bridge_commands
-      set
-        status = 'succeeded',
-        completed_at = now(),
-        result = jsonb_build_object('outcome', 'superseded_by_manual_change', 'changed', 0),
-        last_error = '',
-        updated_at = now()
-      where store_id::text = ${storeId}
-        and platform = ${platform}
-        and command_type = 'set_inventory_availability'
-        and status = 'pending'
-        and payload->>'syncSource' = 'scheduled'
-        and jsonb_array_length(coalesce(payload->'targets', '[]'::jsonb)) = 0
-    `;
-    await sql`
-      update local_bridge_commands
-      set
-        status = 'failed',
-        claimed_by_device_id = null,
-        claimed_at = null,
-        claim_expires_at = null,
-        completed_at = coalesce(completed_at, now()),
-        result = jsonb_build_object('outcome', 'superseded'),
-        last_error = 'Superseded by a newer inventory command.',
-        updated_at = now()
-      where store_id::text = ${storeId}
-        and platform = ${platform}
-        and command_type = 'set_inventory_availability'
-        and status = 'pending'
-        and payload->>'inventoryKey' = ${resolution.inventoryKey}
-    `;
     const requestedAvailable = input.platformStates?.[platform as InventoryPlatform] ?? isAvailable;
     const groups = new Map<string, typeof projectedTargets>();
     for (const target of projectedTargets) {
@@ -514,6 +455,9 @@ async function applyInventoryAvailabilityUnlocked(input: {
       `;
       commandRows.push({ id: String(rows[0]?.id ?? platformCommandId), platform, status: "pending", error: "" });
     }
+    // Reconcile only after the replacement commands exist; never discard work
+    // on the promise of a later INSERT that might fail.
+    await sql.query(reconcileInventoryCommandsSql, [storeId, [platform]]);
   }
   const historyAction = input.platformOverride
     ? "platform_override"

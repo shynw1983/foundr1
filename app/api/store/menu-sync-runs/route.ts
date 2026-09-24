@@ -18,6 +18,7 @@ type CommandRow = {
 };
 
 function commandStatus(row: CommandRow) {
+  if (row.status === "cancelled") return "superseded" as const;
   if (row.status === "succeeded") return "succeeded" as const;
   if (row.status === "failed") {
     return /timeout|timed out|waiting failed|waiting for selector|超时/i.test(row.lastError)
@@ -87,7 +88,7 @@ export async function GET(request: Request) {
     platforms: Array<{
       commandId: string;
       platform: string;
-      status: "queued" | "processing" | "retrying" | "timed_out" | "succeeded" | "failed";
+      status: "queued" | "processing" | "retrying" | "timed_out" | "succeeded" | "failed" | "superseded";
       error: string;
       phase: string;
       attempt: number;

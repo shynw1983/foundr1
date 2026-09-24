@@ -11,6 +11,7 @@ type PlatformReport = {
   platform: string;
   total: number;
   succeeded: number;
+  superseded?: number;
   failed: number;
   timedOut: number;
   processing: number;
@@ -26,7 +27,7 @@ type InventoryReport = {
   source: string;
   actorName: string;
   createdAt: string;
-  status: "succeeded" | "processing" | "failed" | "awaiting_confirmation" | "expired";
+  status: "succeeded" | "processing" | "failed" | "awaiting_confirmation" | "expired" | "superseded";
   details: Record<string, unknown>;
   platforms: PlatformReport[];
   failedCommands: Array<{
@@ -60,6 +61,7 @@ function copy(language: Language) {
     override: "单独平台设置",
     fullSync: "全平台、全商品同步",
     succeeded: "完成",
+    superseded: "已被新操作替代",
     processing: "执行中",
     failed: "需要确认",
     successCount: "成功",
@@ -100,6 +102,7 @@ function copy(language: Language) {
     override: "單獨平台設定",
     fullSync: "全平台、全商品同步",
     succeeded: "完成",
+    superseded: "已被新操作取代",
     processing: "執行中",
     failed: "需要確認",
     successCount: "成功",
@@ -140,6 +143,7 @@ function copy(language: Language) {
     override: "個別プラットフォーム設定",
     fullSync: "全プラットフォーム・全商品同期",
     succeeded: "完了",
+    superseded: "新しい操作に置換済み",
     processing: "実行中",
     failed: "要確認",
     successCount: "成功",
@@ -359,15 +363,16 @@ export default function InventoryHistoryPage() {
                     const pending = platform.processing + platform.queued;
                     const unapplied = platform.platform === 'foundr1' && ['expired','awaiting_confirmation'].includes(report.status);
                     return (
-                      <span className={failed ? "is-failed" : pending ? "is-processing" : "is-succeeded"} key={platform.platform}>
+                      <span className={failed ? "is-failed" : pending ? "is-processing" : platform.superseded ? "is-superseded" : "is-succeeded"} key={platform.platform}>
                         <strong>{platformName(platform.platform, language)}</strong>
                         <small>{unapplied ? (language==='ja'?'未適用':language==='zh-Hant'?'未套用':'未应用') : failed ? `${labels.failureCount} ${failed}/${platform.total}` : pending ? `${labels.pendingCount} ${pending}/${platform.total}` : `${labels.successCount} ${platform.succeeded}/${platform.total}`}</small>
+                        {platform.superseded ? <small>{labels.superseded} {platform.superseded}/{platform.total}</small> : null}
                       </span>
                     );
                   })}
                 </div>
                 <span className={`store-inventory-history-status is-${report.status}`} data-i18n-ignore>
-                  {report.status === "succeeded" ? <CheckCircle2 size={15} /> : report.status === "processing" ? <Clock3 size={15} /> : <XCircle size={15} />}
+                  {report.status === "succeeded" ? <CheckCircle2 size={15} /> : report.status === "superseded" ? <RefreshCw size={15} /> : report.status === "processing" ? <Clock3 size={15} /> : <XCircle size={15} />}
                   {stateLabel}
                 </span>
                 {report.status === "failed" ? (

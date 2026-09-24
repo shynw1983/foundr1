@@ -11,7 +11,7 @@ import { getStoredStoreSelection, setStoredStoreSelection, storeSelectionEventNa
 type SharedPusher = ReturnType<(typeof import("../../../lib/shared-pusher-client"))["acquireSharedPusher"]>;
 type SharedPusherChannel = ReturnType<SharedPusher["subscribe"]>;
 type StoreMenuLanguage = "ja" | "zh-Hans" | "zh-Hant";
-type InventorySyncStatus = "queued" | "processing" | "retrying" | "timed_out" | "succeeded" | "failed";
+type InventorySyncStatus = "queued" | "processing" | "retrying" | "timed_out" | "succeeded" | "failed" | "superseded";
 
 type InventorySyncPlatform = {
   commandId: string;
@@ -59,6 +59,7 @@ function syncCopy(language: StoreMenuLanguage) {
       timed_out: "超时",
       succeeded: "成功",
       failed: "失败",
+      superseded: "已被新操作替代",
       title: "平台同步状态",
       login: "需要重新登录该平台。",
       target: "找不到对应的商品或选项。",
@@ -89,6 +90,7 @@ function syncCopy(language: StoreMenuLanguage) {
       timed_out: "逾時",
       succeeded: "成功",
       failed: "失敗",
+      superseded: "已被新操作取代",
       title: "平台同步狀態",
       login: "需要重新登入該平台。",
       target: "找不到對應的商品或選項。",
@@ -118,6 +120,7 @@ function syncCopy(language: StoreMenuLanguage) {
     timed_out: "タイムアウト",
     succeeded: "成功",
     failed: "失敗",
+    superseded: "新しい操作に置換済み",
     title: "プラットフォーム同期状況",
     login: "このプラットフォームへの再ログインが必要です。",
     target: "対応する商品・オプションが見つかりません。",
@@ -167,6 +170,7 @@ function readableSyncError(error: string, language: StoreMenuLanguage) {
 }
 
 function normalizeStatus(value: unknown, error = ""): InventorySyncStatus {
+  if (value === "cancelled" || value === "superseded") return "superseded";
   if (value === "succeeded") return "succeeded";
   if (value === "timed_out" || (value === "failed" && /timeout|timed out|waiting failed|waiting for selector|超时/i.test(error))) return "timed_out";
   if (value === "failed") return "failed";

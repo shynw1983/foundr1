@@ -1,4 +1,5 @@
 import { sql } from "../../../../../lib/db";
+import { reconcileInventoryCommandsSql } from "../../../../../lib/inventory-command-supersession";
 import { applyUberAvailabilitySync } from "../../../../../lib/inventory-manual-sync";
 import { menuSyncIssue } from "../../../../../lib/menu-sync-status";
 import { mergePlatformSnapshotEntries } from "../../../../../lib/menu-platform-snapshot-merge";
@@ -372,41 +373,13 @@ export async function GET(request: Request) {
   // including a retry queued before authority mode was enabled.
   await sql`update local_bridge_commands c set status='failed',last_error='uber_authority_superseded_publication',completed_at=now(),updated_at=now() from menu_uber_sources s where c.store_id=s.store_id and c.store_id::text=${authorization.storeId} and s.enabled=true and c.payload->>'brandId'=s.brand_id::text and c.command_type='publish_menu_changes' and c.status='pending' and (c.payload->>'authoritativePublication' is distinct from 'true' or c.payload->>'revision' is distinct from s.revision::text)`;
 
-  // Inventory availability is a desired state, not a sequence of actions. Keep
-  // only the newest command that has not started. Never supersede a processing
-  // command because Rocket may already have selected rows that must be saved or
-  // explicitly finished before another page or command can safely take over.
-  await sql`
-    update local_bridge_commands as stale
-    set
-      status = 'failed',
-      claimed_by_device_id = null,
-      claimed_at = null,
-      claim_expires_at = null,
-      completed_at = coalesce(stale.completed_at, now()),
-      result = jsonb_build_object('outcome', 'superseded'),
-      last_error = 'Superseded by a newer inventory command.',
-      updated_at = now()
-    where stale.store_id::text = ${authorization.storeId}
-      and stale.command_type = 'set_inventory_availability'
-      and stale.status = 'pending'
-      and (
-        (stale.platform = 'uber_eats' and ${authorization.supportsUber})
-        or (stale.platform = 'rocket_now' and ${authorization.supportsRocket})
-        or (stale.platform = 'demae_can' and ${authorization.supportsDemae})
-      )
-      and ${authorization.isDesktop}
-      and coalesce(stale.payload->>'inventoryKey', '') <> ''
-      and exists (
-        select 1
-        from local_bridge_commands as newer
-        where newer.store_id = stale.store_id
-          and newer.platform = stale.platform
-          and newer.command_type = stale.command_type
-          and newer.payload->>'inventoryKey' = stale.payload->>'inventoryKey'
-          and newer.created_at > stale.created_at
-      )
-  `;
+  if (authorization.isDesktop) {
+    await sql.query(reconcileInventoryCommandsSql, [authorization.storeId, [
+      ...(authorization.supportsUber ? ["uber_eats"] : []),
+      ...(authorization.supportsRocket ? ["rocket_now"] : []),
+      ...(authorization.supportsDemae ? ["demae_can"] : [])
+    ]]);
+  }
   await sql`
     update menu_change_sync_tasks tasks
     set status = 'failed', phase = 'timeout', error_code = 'bridge_timeout',

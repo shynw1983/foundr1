@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function normalizedCommandStatus(status: string, error: string) {
+  if (status === "cancelled") return "superseded";
   if (status === "succeeded") return "succeeded";
   if (status === "failed") return /timeout|timed out|waiting failed|waiting for selector|超时/i.test(error)
     ? "timed_out"
@@ -169,19 +170,20 @@ export async function GET(request: Request) {
   }
 
   const reports = [...grouped.values()].map((run) => {
-    const platformMap = new Map<string, { platform: string; total: number; succeeded: number; failed: number; timedOut: number; processing: number; queued: number }>();
+    const platformMap = new Map<string, { platform: string; total: number; succeeded: number; superseded: number; failed: number; timedOut: number; processing: number; queued: number }>();
     // Web reservation reads the Store state directly, so it is complete as
     // soon as the source-of-truth change or daily reconciliation is recorded.
     const waitingForUber = (run.details as Record<string, unknown>).authority === 'uber_eats'
       && (run.details as Record<string, unknown>).osApplied !== true;
     const readFailed = waitingForUber && run.commands.some(c => c.platform === 'uber_eats' && ['failed','timed_out'].includes(String(c.status)));
-    platformMap.set("foundr1", { platform: "foundr1", total: 1, succeeded: waitingForUber ? 0 : 1, failed: readFailed ? 1 : 0, timedOut: 0, processing: 0, queued: waitingForUber && !readFailed ? 1 : 0 });
+    platformMap.set("foundr1", { platform: "foundr1", total: 1, succeeded: waitingForUber ? 0 : 1, superseded: 0, failed: readFailed ? 1 : 0, timedOut: 0, processing: 0, queued: waitingForUber && !readFailed ? 1 : 0 });
     for (const command of run.commands) {
       const platform = String(command.platform);
       const current = platformMap.get(platform) ?? {
         platform,
         total: 0,
         succeeded: 0,
+        superseded: 0,
         failed: 0,
         timedOut: 0,
         processing: 0,
@@ -189,6 +191,7 @@ export async function GET(request: Request) {
       };
       current.total += 1;
       if (command.status === "succeeded") current.succeeded += 1;
+      else if (command.status === "superseded") current.superseded += 1;
       else if (command.status === "failed") current.failed += 1;
       else if (command.status === "timed_out") current.timedOut += 1;
       else if (command.status === "processing") current.processing += 1;
@@ -203,7 +206,7 @@ export async function GET(request: Request) {
       ? "failed"
       : platforms.some((platform) => platform.processing || platform.queued)
         ? "processing"
-        : "succeeded";
+        : platforms.some(platform => platform.superseded) ? "superseded" : "succeeded";
     return {
       ...run,
       details: {...details,snapshot:undefined,comparison},
