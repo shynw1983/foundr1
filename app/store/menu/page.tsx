@@ -1,8 +1,9 @@
 "use client";
 import { WholeStoreAvailabilitySync } from "./WholeStoreAvailabilitySync";
 
-import { AlertTriangle, CheckCircle2, ChevronDown, History, RotateCcw, Search, SlidersHorizontal, XCircle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, ChevronDown, History, ListChecks, RotateCcw, Search, SlidersHorizontal, XCircle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { InventoryBulkActions, InventorySelectionRow, inventoryBulkCopy, type InventoryBatchResult } from "./InventoryBulkActions";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import {
   announceStoreInventorySync,
@@ -262,41 +263,78 @@ export default function StoreMenuPage() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
   const [message, setMessage] = useState("");
-  async function load(nextStoreId = selectedStoreId, resetFilters = false) {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (nextStoreId) params.set("storeId", nextStoreId);
-    const response = await fetch(`/api/store/menu-settings${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
-    if (!response.ok) {
-      if (response.status === 403 && nextStoreId) {
-        clearStoredStoreSelection();
-        setSelectedStoreId("");
-        void load("", true);
-        return;
-      }
-      setMessage("販売状態を読み込めませんでした。");
-      setLoading(false);
-      return;
-    }
+  const [storeName, setStoreName] = useState("");
+  const [selecting, setSelecting] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [batchProgress, setBatchProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [batchResult, setBatchResult] = useState<InventoryBatchResult | null>(null);
+  const loadedStoreId = useRef<string | null>(null);
+  const loadSequence = useRef(0);
+  const mutationPending = useRef(false);
+  const bulkCopy = inventoryBulkCopy(language);
 
-    const body = await response.json();
-    const nextAccess = body.access as StoreMenuAccess;
-    const nextBrands = body.brands as BrandOption[];
-    const nextCategories = body.categories as StoreMenuCategory[];
-    const nextItems = body.items as StoreMenuItem[];
-    const nextOptions = body.options as StoreMenuOption[];
-    if (body.settings) setSettings(body.settings as StoreMenuSettings);
-    setBrands(nextBrands ?? []);
-    setCategories(nextCategories ?? []);
-    setItems(nextItems ?? []);
-    setOptions(nextOptions ?? []);
-    const responseStoreId = body.selectedStoreId || nextAccess.stores?.[0]?.id || "";
-    setSelectedStoreId(responseStoreId);
-    if (responseStoreId) setStoredStoreSelection(responseStoreId);
-    setSelectedBrandId((current) => resetFilters ? (nextBrands?.[0]?.id || "") : (current || nextBrands?.[0]?.id || ""));
-    setSelectedCategory((current) => resetFilters ? (nextItems?.[0] ? itemCategory(nextItems[0]) : "未分類") : (current ?? (nextItems?.[0] ? itemCategory(nextItems[0]) : "未分類")));
-    setMessage("");
-    setLoading(false);
+  async function load(nextStoreId = selectedStoreId, resetFilters = false) {
+    // Menu events can arrive between writes. Refresh once the operation finishes
+    // so an older response cannot replace newer availability or reset the view.
+    if (mutationPending.current) return;
+    const sequence = ++loadSequence.current;
+    setLoading(true);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const params = new URLSearchParams();
+      if (nextStoreId) params.set("storeId", nextStoreId);
+      const response = await fetch(`/api/store/menu-settings${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store", signal: controller.signal });
+      if (sequence !== loadSequence.current || mutationPending.current) return;
+      if (!response.ok) {
+        if (response.status === 403 && nextStoreId) {
+          clearStoredStoreSelection();
+          setSelectedStoreId("");
+          void load("", true);
+          return;
+        }
+        throw new Error("load failed");
+      }
+
+      const body = await response.json();
+      if (sequence !== loadSequence.current || mutationPending.current) return;
+      const nextAccess = body.access as StoreMenuAccess;
+      const nextBrands = body.brands as BrandOption[];
+      const nextCategories = body.categories as StoreMenuCategory[];
+      const nextItems = body.items as StoreMenuItem[];
+      const nextOptions = body.options as StoreMenuOption[];
+      if (body.settings) setSettings(body.settings as StoreMenuSettings);
+      setBrands(nextBrands ?? []);
+      setCategories(nextCategories ?? []);
+      setItems(nextItems ?? []);
+      setOptions(nextOptions ?? []);
+      const responseStoreId = body.selectedStoreId || nextAccess.stores?.[0]?.id || "";
+      setSelectedStoreId(responseStoreId);
+      setStoreName(nextAccess.stores?.find(store => store.id === responseStoreId)?.name ?? "");
+      if (responseStoreId) setStoredStoreSelection(responseStoreId);
+      if (resetFilters || loadedStoreId.current !== responseStoreId) {
+        setSelectedBrandId(nextBrands?.[0]?.id || "");
+        setSelectedCategory(nextItems?.[0] ? itemCategory(nextItems[0]) : null);
+        setQuery("");
+        setStatusFilter("all");
+        setSelectedKeys(new Set());
+        setBatchResult(null);
+      } else {
+        const validKeys = new Set([
+          ...(nextItems ?? []).map(item => `item:${item.id}`),
+          ...(nextOptions ?? []).map(option => `option:${option.id}`)
+        ]);
+        setSelectedKeys(current => new Set([...current].filter(key => validKeys.has(key))));
+      }
+      loadedStoreId.current = responseStoreId;
+    } catch {
+      if (sequence === loadSequence.current && !mutationPending.current) {
+        setMessage(language === "ja" ? "販売状態を読み込めませんでした。更新ボタンで再試行してください。" : language === "zh-Hant" ? "銷售狀態讀取失敗，請點擊更新重試。" : "销售状态读取失败，请点击更新重试。");
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      if (sequence === loadSequence.current) setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -407,6 +445,75 @@ export default function StoreMenuPage() {
     ? visibleOptions.length
     : visibleItems.length + (showOptionsInItemView ? visibleOptions.length : 0);
 
+  const selectionTargets = [
+    ...items.map(item => ({ key: `item:${item.id}`, label: itemName(item, language), detail: `${item.brandName} / ${itemCategory(item)}`, kind: "item" as const, target: item })),
+    ...options.map(option => ({ key: `option:${option.id}`, label: localizedMenuName(option.name, option.displayNames, language), detail: `${option.brandName} / ${localizedMenuName(option.groupName, option.groupDisplayNames, language)}`, kind: "option" as const, target: option }))
+  ];
+  const selectedTargets = selectionTargets.filter(target => selectedKeys.has(target.key));
+  const visibleKeys = [
+    ...visibleItems.map(item => `item:${item.id}`),
+    ...(isOptionCategory || showOptionsInItemView ? visibleOptions.map(option => `option:${option.id}`) : [])
+  ];
+  const selectionBusy = Boolean(savingId) || loading;
+  function toggleSelection(keys: string[]) {
+    if (mutationPending.current) return;
+    setSelectedKeys(current => {
+      const next = new Set(current);
+      const remove = keys.every(key => next.has(key));
+      keys.forEach(key => remove ? next.delete(key) : next.add(key));
+      return next;
+    });
+  }
+
+  async function applyBatch(isAvailable: boolean) {
+    if (mutationPending.current || !selectedTargets.length) return;
+    mutationPending.current = true;
+    ++loadSequence.current;
+    setLoading(false);
+    setSavingId("batch");
+    setBatchResult(null);
+    const result: InventoryBatchResult = { succeeded: 0, failed: [] };
+    const states = new Map<string, boolean>();
+    setBatchProgress({ completed: 0, total: selectedTargets.length });
+    try {
+      // The widget uses the same serial submission. Each target keeps its own
+      // permission checks, linked-item rules, operation lock and sync history.
+      for (const selected of selectedTargets) {
+        try {
+          const applied = await applyDeliveryAvailability({
+            brandId: selected.target.brandId,
+            targetId: selected.target.id,
+            ingredientLabel: selected.target.name,
+            feedbackLabel: selected.label,
+            targetKind: selected.kind,
+            isAvailable,
+            stockStatus: isAvailable ? "available" : "unavailable",
+            platforms: ["uber_eats", "rocket_now", "demae_can"],
+            resetPlatformOverrides: true
+          });
+          applied.targetStates.forEach((state, key) => states.set(key, state.isAvailable));
+          result.succeeded += 1;
+        } catch (error) {
+          result.failed.push({ key: selected.key, label: selected.label, error: error instanceof Error ? error.message : bulkCopy.error });
+        }
+        setBatchProgress({ completed: result.succeeded + result.failed.length, total: selectedTargets.length });
+      }
+      const update = <T extends StoreMenuItem | StoreMenuOption>(entry: T, kind: "item" | "option"): T => {
+        const available = states.get(`${kind}:${entry.id}`);
+        return available === undefined ? entry : { ...entry, isAvailable: available, stockStatus: available ? "available" : "unavailable", platformAvailability: {} };
+      };
+      setItems(current => current.map(item => update(item, "item")));
+      setOptions(current => current.map(option => update(option, "option")));
+      setSelectedKeys(new Set(result.failed.map(target => target.key)));
+      setBatchResult(result);
+    } finally {
+      mutationPending.current = false;
+      setSavingId("");
+      setBatchProgress(null);
+      void load();
+    }
+  }
+
   useEffect(() => {
     if (selectedCategory === optionCategoryKey && !showOptionCategory) {
       setSelectedCategory(null);
@@ -429,39 +536,50 @@ export default function StoreMenuPage() {
     overrideAvailability?: Exclude<PlatformOverride, "hidden">;
   }) {
     const { feedbackLabel, ...requestInput } = input;
-    const response = await fetch("/api/store/display/kitchen/inventory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...requestInput,
-        feedbackLabel,
-        action: "apply",
-        source: "sales_status",
-        storeId: selectedStoreId
-      })
-    });
-    const body = await response.json().catch(() => ({})) as Record<string, unknown>;
-    if (!response.ok) throw new Error(String(body.error || "Bridge sync failed"));
-    const targetIds = new Set(
-      (Array.isArray(body.targets) ? body.targets : []).map((target) => (
-        target && typeof target === "object" ? String((target as Record<string, unknown>).targetId ?? "") : ""
-      )).filter(Boolean)
-    );
-    const targetStates = new Map<string, { kind: "item" | "option"; isAvailable: boolean }>();
-    for (const value of Array.isArray(body.targetStates) ? body.targetStates : []) {
-      if (!value || typeof value !== "object") continue;
-      const state = value as Record<string, unknown>;
-      const targetId = String(state.targetId ?? "");
-      const kind = state.kind === "item" ? "item" : state.kind === "option" ? "option" : null;
-      if (targetId && kind) targetStates.set(targetId, { kind, isAvailable: state.isAvailable === true });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 65000);
+    try {
+      const response = await fetch("/api/store/display/kitchen/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          ...requestInput,
+          feedbackLabel,
+          action: "apply",
+          source: "sales_status",
+          storeId: selectedStoreId
+        })
+      });
+      const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+      if (!response.ok) throw new Error(String(body.error || bulkCopy.error));
+      const targetIds = new Set(
+        (Array.isArray(body.targets) ? body.targets : []).map((target) => (
+          target && typeof target === "object" ? String((target as Record<string, unknown>).targetId ?? "") : ""
+        )).filter(Boolean)
+      );
+      const targetStates = new Map<string, { kind: "item" | "option"; isAvailable: boolean }>();
+      for (const value of Array.isArray(body.targetStates) ? body.targetStates : []) {
+        if (!value || typeof value !== "object") continue;
+        const state = value as Record<string, unknown>;
+        const targetId = String(state.targetId ?? "");
+        const kind = state.kind === "item" ? "item" : state.kind === "option" ? "option" : null;
+        if (targetId && kind) targetStates.set(`${kind}:${targetId}`, { kind, isAvailable: state.isAvailable === true });
+      }
+      if (body.syncRun && typeof body.syncRun === "object") {
+        announceStoreInventorySync(body.syncRun as StoreInventorySyncRun);
+      }
+      return { targetIds, targetStates };
+    } finally {
+      window.clearTimeout(timeout);
     }
-    if (body.syncRun && typeof body.syncRun === "object") {
-      announceStoreInventorySync(body.syncRun as StoreInventorySyncRun);
-    }
-    return { targetIds, targetStates };
   }
 
   async function saveItem(item: StoreMenuItem, patch: Partial<StoreMenuItem>) {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
+    ++loadSequence.current;
+    setLoading(false);
     const nextItem = { ...item, ...patch };
     setItems((current) => current.map((entry) => entry.id === item.id ? nextItem : entry));
     setSavingId(item.id);
@@ -486,7 +604,7 @@ export default function StoreMenuPage() {
           resetPlatformOverrides: patch.stockStatus !== "low_stock"
         });
         setItems((current) => current.map((entry) => {
-          const state = result.targetStates.get(entry.id);
+          const state = result.targetStates.get(`item:${entry.id}`);
           if (!state || state.kind !== "item") return entry;
           return {
             ...entry,
@@ -497,7 +615,7 @@ export default function StoreMenuPage() {
           };
         }));
         setOptions((current) => current.map((entry) => {
-          const state = result.targetStates.get(entry.id);
+          const state = result.targetStates.get(`option:${entry.id}`);
           return state?.kind === "option"
             ? { ...entry, isAvailable: state.isAvailable, stockStatus: state.isAvailable ? "available" : "unavailable" }
             : entry;
@@ -524,11 +642,17 @@ export default function StoreMenuPage() {
         ? error.message
         : "保存できませんでした。");
     } finally {
+      mutationPending.current = false;
       setSavingId("");
+      void load();
     }
   }
 
   async function saveOption(option: StoreMenuOption, patch: Partial<StoreMenuOption>) {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
+    ++loadSequence.current;
+    setLoading(false);
     const nextOption = { ...option, ...patch };
     setOptions((current) => current.map((entry) => entry.id === option.id ? nextOption : entry));
     setSavingId(option.id);
@@ -553,7 +677,7 @@ export default function StoreMenuPage() {
           resetPlatformOverrides: patch.stockStatus !== "low_stock"
         });
         setOptions((current) => current.map((entry) => {
-          const state = result.targetStates.get(entry.id);
+          const state = result.targetStates.get(`option:${entry.id}`);
           if (!state || state.kind !== "option") return entry;
           return {
             ...entry,
@@ -564,7 +688,7 @@ export default function StoreMenuPage() {
           };
         }));
         setItems((current) => current.map((entry) => {
-          const state = result.targetStates.get(entry.id);
+          const state = result.targetStates.get(`item:${entry.id}`);
           return state?.kind === "item"
             ? { ...entry, isAvailable: state.isAvailable, stockStatus: state.isAvailable ? "available" : "unavailable" }
             : entry;
@@ -591,11 +715,17 @@ export default function StoreMenuPage() {
         ? error.message
         : "保存できませんでした。");
     } finally {
+      mutationPending.current = false;
       setSavingId("");
+      void load();
     }
   }
 
   async function savePlatformOverride(target: StoreMenuItem | StoreMenuOption, targetKind: "item" | "option", platform: PlatformKey, availability: PlatformOverride) {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
+    ++loadSequence.current;
+    setLoading(false);
     const previous = target.platformAvailability;
     const previousWebsiteEnabled = targetKind === "item" ? (target as StoreMenuItem).websiteEnabled : undefined;
     const nextAvailability = { ...previous };
@@ -671,7 +801,9 @@ export default function StoreMenuPage() {
       else setOptions((current) => current.map(rollback) as StoreMenuOption[]);
       setMessage(error instanceof Error ? error.message : "保存できませんでした。");
     } finally {
+      mutationPending.current = false;
       setSavingId("");
+      void load();
     }
   }
 
@@ -688,7 +820,7 @@ export default function StoreMenuPage() {
         <StoreNavTabs active="menu" />
       </header>
 
-      <section className="store-menu-page">
+      <section className={`store-menu-page${selecting ? " is-selecting" : ""}`}>
         <div className="store-menu-head panel">
           <div>
             <p className="eyebrow">Daily Availability</p>
@@ -700,7 +832,7 @@ export default function StoreMenuPage() {
               <History size={16} />
               <span data-i18n-ignore>{language === "ja" ? "同期履歴" : language === "zh-Hant" ? "同步履歷" : "同步履历"}</span>
             </a>
-            <button className="secondary-button" type="button" onClick={() => void load(selectedStoreId)}>
+            <button className="secondary-button" type="button" disabled={selectionBusy} onClick={() => void load(selectedStoreId)}>
               <RotateCcw size={16} />
               更新
             </button>
@@ -712,9 +844,11 @@ export default function StoreMenuPage() {
         <div className="store-menu-controls panel">
           <label>
             <span>ブランド</span>
-            <select value={selectedBrandId} onChange={(event) => {
+            <select value={selectedBrandId} disabled={selectionBusy} onChange={(event) => {
               setSelectedBrandId(event.target.value);
               setSelectedCategory(null);
+              setSelectedKeys(new Set());
+              setBatchResult(null);
             }}>
               <option value="">すべて</option>
               {brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
@@ -794,8 +928,27 @@ export default function StoreMenuPage() {
           <section className="panel store-menu-items-panel">
             <div className="store-menu-list-head">
               <h2>{isOptionCategory ? "オプション・トッピング" : selectedCategory ?? "すべて"}</h2>
-              <span className="status-pill">{visibleTargetCount}件</span>
+              <div className="store-menu-list-tools">
+                <span className="status-pill">{visibleTargetCount}件</span>
+                {!selecting && <button type="button" className="secondary-button" disabled={selectionBusy} onClick={() => {
+                  setSelecting(true);
+                  setBatchResult(null);
+                }} data-i18n-ignore><ListChecks size={17} />{bulkCopy.select}</button>}
+              </div>
             </div>
+            {selecting && <InventoryBulkActions
+              language={language}
+              storeName={storeName}
+              selected={selectedTargets}
+              visibleKeys={visibleKeys}
+              disabled={selectionBusy}
+              progress={batchProgress}
+              result={batchResult}
+              onSelectAll={() => setSelectedKeys(current => new Set([...current, ...visibleKeys]))}
+              onClear={() => setSelectedKeys(new Set())}
+              onClose={() => { setSelecting(false); setSelectedKeys(new Set()); }}
+              onApply={applyBatch}
+            />}
             {isOptionCategory && showOptionCategory ? (
               <section className="store-menu-option-section store-menu-option-section-flat">
                 <div className="store-menu-option-groups">
@@ -804,6 +957,10 @@ export default function StoreMenuPage() {
                       group={group}
                       language={language}
                       savingId={savingId}
+                      selecting={selecting}
+                      selectedKeys={selectedKeys}
+                      selectionBusy={selectionBusy}
+                      onSelect={toggleSelection}
                       onSave={saveOption}
                       onPlatformChange={(option, platform, availability) => savePlatformOverride(option, "option", platform, availability)}
                       onStatusNoteChange={(optionId, statusNote) => setOptions((current) => current.map((entry) => (
@@ -829,6 +986,10 @@ export default function StoreMenuPage() {
                           group={group}
                           language={language}
                           savingId={savingId}
+                          selecting={selecting}
+                          selectedKeys={selectedKeys}
+                          selectionBusy={selectionBusy}
+                          onSelect={toggleSelection}
                           onSave={saveOption}
                           onPlatformChange={(option, platform, availability) => savePlatformOverride(option, "option", platform, availability)}
                           onStatusNoteChange={(optionId, statusNote) => setOptions((current) => current.map((entry) => (
@@ -841,7 +1002,15 @@ export default function StoreMenuPage() {
                   </section>
                 ) : null}
                 <div className="store-menu-item-list">
-                  {visibleItems.map((item) => (
+                  {visibleItems.map((item) => selecting ? <InventorySelectionRow
+                    key={item.id}
+                    target={{ key: `item:${item.id}`, label: itemName(item, language), detail: `${item.brandName} / ${itemCategory(item)}` }}
+                    status={item.stockStatus}
+                    language={language}
+                    checked={selectedKeys.has(`item:${item.id}`)}
+                    disabled={selectionBusy}
+                    onChange={() => toggleSelection([`item:${item.id}`])}
+                  /> : (
                     <article className="store-menu-item-row" key={item.id}>
                       <div className="store-menu-item-main">
                         {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <div className="store-menu-image-empty">No image</div>}
@@ -859,7 +1028,7 @@ export default function StoreMenuPage() {
                         <button
                           className={item.stockStatus === "available" ? "store-status-button is-on" : "store-status-button"}
                           type="button"
-                          disabled={savingId === item.id}
+                          disabled={Boolean(savingId)}
                           onClick={() => void saveItem(item, { isAvailable: true, stockStatus: "available" })}
                         >
                           <CheckCircle2 size={17} />
@@ -868,7 +1037,7 @@ export default function StoreMenuPage() {
                         <button
                           className={item.stockStatus === "low_stock" ? "store-status-button is-low" : "store-status-button"}
                           type="button"
-                          disabled={savingId === item.id}
+                          disabled={Boolean(savingId)}
                           onClick={() => void saveItem(item, { isAvailable: true, stockStatus: "low_stock" })}
                         >
                           <AlertTriangle size={17} />
@@ -877,7 +1046,7 @@ export default function StoreMenuPage() {
                         <button
                           className={item.stockStatus === "unavailable" ? "store-status-button is-off" : "store-status-button"}
                           type="button"
-                          disabled={savingId === item.id}
+                          disabled={Boolean(savingId)}
                           onClick={() => void saveItem(item, { isAvailable: false, stockStatus: "unavailable" })}
                         >
                           <XCircle size={17} />
@@ -894,7 +1063,7 @@ export default function StoreMenuPage() {
                           )))}
                           placeholder="例: 15分後に再開予定"
                         />
-                        <button className="secondary-button" type="button" disabled={savingId === item.id} onClick={() => void saveItem(item, {})}>
+                        <button className="secondary-button" type="button" disabled={Boolean(savingId)} onClick={() => void saveItem(item, {})}>
                           メモ保存
                         </button>
                       </div>
@@ -926,6 +1095,10 @@ function StoreOptionGroup({
   group,
   language,
   savingId,
+  selecting,
+  selectedKeys,
+  selectionBusy,
+  onSelect,
   onSave,
   onPlatformChange,
   onStatusNoteChange
@@ -933,11 +1106,18 @@ function StoreOptionGroup({
   group: StoreMenuOptionGroup;
   language: StoreMenuLanguage;
   savingId: string;
+  selecting: boolean;
+  selectedKeys: Set<string>;
+  selectionBusy: boolean;
+  onSelect: (keys: string[]) => void;
   onSave: (option: StoreMenuOption, patch: Partial<StoreMenuOption>) => Promise<void>;
   onPlatformChange: (option: StoreMenuOption, platform: PlatformKey, availability: PlatformOverride) => Promise<void>;
   onStatusNoteChange: (optionId: string, statusNote: string) => void;
 }) {
   const unavailableCount = group.options.filter((option) => !option.isAvailable).length;
+  const keys = group.options.map(option => `option:${option.id}`);
+  const selectedCount = keys.filter(key => selectedKeys.has(key)).length;
+  const copy = inventoryBulkCopy(language);
   return (
     <details className="store-menu-option-group">
       <summary>
@@ -946,6 +1126,14 @@ function StoreOptionGroup({
           <small>{group.brandName}</small>
         </span>
         <span className="store-menu-option-group-meta">
+          {selecting && <button type="button" className="text-button store-inventory-group-select" disabled={selectionBusy} onClick={event => {
+            event.preventDefault();
+            event.stopPropagation();
+            onSelect(keys);
+          }} data-i18n-ignore aria-label={`${localizedMenuName(group.name, group.displayNames, language)} · ${selectedCount === keys.length ? copy.clear : copy.selectAll}`}>
+            {selectedCount === keys.length ? copy.clear : copy.selectAll}
+            {selectedCount > 0 && <span> {selectedCount}</span>}
+          </button>}
           {unavailableCount ? <span className="store-menu-option-group-alert">{unavailableCount}件 売切</span> : null}
           <span>{group.options.length}件</span>
           <ChevronDown size={18} aria-hidden="true" />
@@ -957,6 +1145,10 @@ function StoreOptionGroup({
             option={option}
             language={language}
             savingId={savingId}
+            selecting={selecting}
+            selectedKeys={selectedKeys}
+            selectionBusy={selectionBusy}
+            onSelect={onSelect}
             onSave={onSave}
             onPlatformChange={onPlatformChange}
             onStatusNoteChange={onStatusNoteChange}
@@ -972,6 +1164,10 @@ function StoreOptionRow({
   option,
   language,
   savingId,
+  selecting,
+  selectedKeys,
+  selectionBusy,
+  onSelect,
   onSave,
   onPlatformChange,
   onStatusNoteChange
@@ -979,10 +1175,22 @@ function StoreOptionRow({
   option: StoreMenuOption;
   language: StoreMenuLanguage;
   savingId: string;
+  selecting: boolean;
+  selectedKeys: Set<string>;
+  selectionBusy: boolean;
+  onSelect: (keys: string[]) => void;
   onSave: (option: StoreMenuOption, patch: Partial<StoreMenuOption>) => Promise<void>;
   onPlatformChange: (option: StoreMenuOption, platform: PlatformKey, availability: PlatformOverride) => Promise<void>;
   onStatusNoteChange: (optionId: string, statusNote: string) => void;
 }) {
+  if (selecting) return <InventorySelectionRow
+    target={{ key: `option:${option.id}`, label: localizedMenuName(option.name, option.displayNames, language), detail: `${option.brandName} / ${localizedMenuName(option.groupName, option.groupDisplayNames, language)}` }}
+    status={option.stockStatus}
+    language={language}
+    checked={selectedKeys.has(`option:${option.id}`)}
+    disabled={selectionBusy}
+    onChange={() => onSelect([`option:${option.id}`])}
+  />;
   return (
     <article className="store-menu-item-row store-menu-option-row">
       <div className="store-menu-item-main">
@@ -997,7 +1205,7 @@ function StoreOptionRow({
         <button
           className={option.stockStatus === "available" ? "store-status-button is-on" : "store-status-button"}
           type="button"
-          disabled={savingId === option.id}
+          disabled={Boolean(savingId)}
           onClick={() => void onSave(option, { isAvailable: true, stockStatus: "available" })}
         >
           <CheckCircle2 size={17} />
@@ -1006,7 +1214,7 @@ function StoreOptionRow({
         <button
           className={option.stockStatus === "low_stock" ? "store-status-button is-low" : "store-status-button"}
           type="button"
-          disabled={savingId === option.id}
+          disabled={Boolean(savingId)}
           onClick={() => void onSave(option, { isAvailable: true, stockStatus: "low_stock" })}
         >
           <AlertTriangle size={17} />
@@ -1015,7 +1223,7 @@ function StoreOptionRow({
         <button
           className={option.stockStatus === "unavailable" ? "store-status-button is-off" : "store-status-button"}
           type="button"
-          disabled={savingId === option.id}
+          disabled={Boolean(savingId)}
           onClick={() => void onSave(option, { isAvailable: false, stockStatus: "unavailable" })}
         >
           <XCircle size={17} />
@@ -1028,7 +1236,7 @@ function StoreOptionRow({
           onChange={(event) => onStatusNoteChange(option.id, event.target.value)}
           placeholder="例: 豆乳在庫切れ"
         />
-        <button className="secondary-button" type="button" disabled={savingId === option.id} onClick={() => void onSave(option, {})}>
+        <button className="secondary-button" type="button" disabled={Boolean(savingId)} onClick={() => void onSave(option, {})}>
           メモ保存
         </button>
       </div>
@@ -1099,7 +1307,7 @@ function PlatformAvailabilityPanel({
               </span>
               <select
                 value={value}
-                disabled={savingId === `${target.id}:${platform.key}`}
+                disabled={Boolean(savingId)}
                 onChange={(event) => void onChange(platform.key, event.target.value as PlatformOverride)}
               >
                 <option value="follow" data-i18n-ignore>{labels.follow}</option>
