@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer-core';
 
 const root = process.cwd();
-const output = resolve(root, 'outputs/store-inventory-bulk-20260927');
+const output = resolve(root, process.env.INVENTORY_TEST_OUTPUT || 'outputs/store-inventory-bulk-20260927');
 const port = Number(process.env.INVENTORY_TEST_PORT || 4189);
 const base = `http://127.0.0.1:${port}`;
 const stores = [{ id: 'test-store', name: '清水店（検証用）' }];
@@ -18,7 +18,7 @@ const items = Array.from({ length: 40 }, (_, i) => ({
   id: `item-${i}`, brandId: i === 39 ? 'brand-b' : 'brand-a', brandName: i === 39 ? 'nanacha' : 'まぁ麻',
   name: `野菜マーラータン ${i + 1}`, displayNames: { zh: `蔬菜麻辣烫 ${i + 1}`, 'zh-Hant': `蔬菜麻辣燙 ${i + 1}` },
   category: categories[i % 2].name, promotionPrefix: '', promotionPrefixDisplayNames: {}, websitePresentation: {},
-  imageUrl: '', basePrice: 1000, priceOverride: null, websiteEnabled: true, posEnabled: true, deliveryEnabled: true,
+  imageUrl: '', basePrice: i === 0 ? 0 : 1000, priceOverride: null, websiteEnabled: true, posEnabled: true, deliveryEnabled: true,
   isAvailable: true, stockStatus: 'available', platformAvailability: {}, statusNote: ''
 }));
 const options = Array.from({ length: 36 }, (_, i) => ({
@@ -37,6 +37,9 @@ const params=new URLSearchParams(location.search);
 localStorage.setItem('foundr1-os-language',params.get('lang')||'ja');
 localStorage.setItem('foundr1-os-language-preference','manual');
 window.__menu=${JSON.stringify(menu)};
+window.__menu.settings={availability:{targets:{items:true,options:true},optionDisplayMode:params.get('optionMode')||'separate_category',allowStorePriceEdit:false,allowChannelToggle:false}};
+if(params.has('noOptions'))window.__menu.options=[];
+if(params.has('singleBrand'))window.__menu.brands=window.__menu.brands.slice(0,1);
 window.__writes=[]; window.__reads=0; window.__failKeys=[]; window.__inflight=0; window.__maxInflight=0; window.__runs=[];
 window.__menuEvents=[]; window.__refreshMenu=()=>window.__menuEvents.forEach(fn=>fn());
 const nativeFetch=window.fetch;
@@ -118,14 +121,17 @@ const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 const click = async selector => { await page.waitForSelector(selector); await page.$eval(selector, el => el.scrollIntoView({ block: 'center' })); await page.click(selector); };
 const pause = () => new Promise(resolve => setTimeout(resolve, 200));
-const visit = async (width = 390, lang = 'ja') => {
+const visit = async (width = 390, lang = 'ja', fixture = '') => {
   await page.setViewport({ width, height: width >= 1000 ? 900 : 844 });
-  await page.goto(`${base}/store/menu?lang=${lang}`, { waitUntil: 'networkidle0' });
+  await page.goto(`${base}/store/menu?lang=${lang}&${fixture}`, { waitUntil: 'networkidle0' });
   await page.select('.os-language-picker select', lang);
   await page.waitForFunction(language => document.documentElement.lang === language, {}, lang);
   await page.waitForFunction(() => document.querySelector('.store-menu-list-tools button')?.disabled === false);
 };
-const selectAllCategory = async () => page.evaluate(() => document.querySelector('.store-menu-category-panel button').click());
+const selectAllCategory = async () => {
+  if (await page.$('.store-menu-kind-switch')) await click('.store-menu-kind-switch button:last-child');
+  await click('.store-menu-category-panel button:first-child');
+};
 const enterSelection = async () => click('.store-menu-list-tools button');
 const checkRow = async n => click(`.store-menu-item-list > .store-inventory-selection-row:nth-child(${n})`);
 const writes = () => page.evaluate(() => window.__writes);
@@ -136,15 +142,78 @@ const apply = async available => {
   await page.waitForFunction(() => document.querySelector('.store-inventory-bulk-result') && !document.querySelector('.store-inventory-bulk-secondary button:last-child').disabled);
 };
 try {
+  await visit(360, 'zh-Hans', 'singleBrand');
+  assert.equal(await page.$eval('.store-menu-kind-switch button:first-child', el => el.getAttribute('aria-pressed')), 'true', 'First visit opens options instead of the first zero-price product');
+  assert.equal(await page.$('.store-menu-category-select'), null, 'No mobile category dropdown');
+  assert.equal(await page.$('.store-menu-brand'), null, 'A single brand needs no brand picker');
+  assert.equal(await page.$eval('.store-menu-status-filter button:first-child small', el => el.textContent), '36');
+  assert.equal(await page.$eval('.store-menu-kind-switch button:first-child', el => el.getBoundingClientRect().height >= 44), true);
+  await page.screenshot({path: `${output}/filters-options-360.png`});
+  await page.type('.store-menu-search input', '17'); await pause();
+  assert.equal(await page.$$eval('.store-menu-option-group', els => els.length), 1);
+  assert.equal(await page.$eval('.store-menu-option-group', el => el.open), true, 'Searching opens the matching group');
+  await page.screenshot({path: `${output}/filters-search-360.png`});
+  assert.equal((await writes()).length, 0, 'Browsing and search never mutate inventory');
+
+  await visit(360, 'zh-Hans'); await selectAllCategory();
+  assert.equal(await page.$eval('.store-menu-status-filter button:first-child small', el => el.textContent), '39');
+  assert.equal(await page.$eval('.store-menu-status-filter .is-available small', el => el.textContent), '39', 'Product status counts exclude options');
+  await click('.store-menu-category-panel button:last-child');
+  const category = await page.$eval('.store-menu-category-panel button[aria-pressed="true"] span', el => el.textContent);
+  await visit(360, 'zh-Hans');
+  assert.equal(await page.$eval('.store-menu-kind-switch button:last-child', el => el.getAttribute('aria-pressed')), 'true');
+  assert.equal(await page.$eval('.store-menu-category-panel button[aria-pressed="true"] span', el => el.textContent), category, 'Reopening preserves the product category');
+  await page.screenshot({path: `${output}/filters-products-360.png`});
+  await click('.store-menu-kind-switch button:first-child');
+  await page.select('.store-menu-brand select', 'brand-b');
+  assert.equal(await page.$eval('.store-menu-kind-switch button:last-child', el => el.getAttribute('aria-pressed')), 'true', 'Brands with no options open all products');
+  await page.select('.store-menu-brand select', 'brand-a');
+  assert.equal(await page.$eval('.store-menu-kind-switch button:first-child', el => el.getAttribute('aria-pressed')), 'true', 'Each brand retains its own view');
+  await page.evaluate(() => {
+    window.__menu.selectedStoreId = 'other-store';
+    window.__menu.access.stores.push({id:'other-store',name:'別店舗'});
+    localStorage.setItem('foundr1-store-inventory-category:other-store:brand-a', '');
+    window.__refreshMenu();
+  }); await pause();
+  assert.equal(await page.$eval('.store-menu-kind-switch button:last-child', el => el.getAttribute('aria-pressed')), 'true', 'A different store restores its own view');
+
+  await visit(390, 'ja', 'optionMode=hidden');
+  assert.equal(await page.$('.store-menu-kind-switch'), null, 'Hidden option configuration has no option shortcut');
+  assert.equal(await page.$('.store-menu-option-group'), null);
+  await visit(390, 'ja', 'optionMode=mixed');
+  assert.equal(await page.$('.store-menu-kind-switch'), null);
+  assert.equal(await page.$eval('.store-menu-status-filter button:first-child small', el => el.textContent), '75', 'Mixed mode still includes both target types');
+  await visit(390, 'ja', 'noOptions');
+  assert.equal(await page.$eval('.store-menu-kind-switch button:last-child', el => el.getAttribute('aria-pressed')), 'true', 'Missing options fall back to all products');
+  await page.evaluate(() => localStorage.setItem('foundr1-store-inventory-category:test-store:brand-a', 'deleted-category'));
+  await visit();
+  assert.equal(await page.$eval('.store-menu-kind-switch button:first-child', el => el.getAttribute('aria-pressed')), 'true', 'Stale categories fall back to an available view');
+  console.log('PASS: direct mobile filters, option default, search expansion, scoped counts, brand/store persistence and configured mode fallbacks');
+
+  await enterSelection();
+  await click('.store-menu-option-group:first-child .store-inventory-group-select');
+  await selectAllCategory(); await checkRow(2);
+  await click('.store-menu-kind-switch button:first-child');
+  assert.equal(await page.$$eval('.store-inventory-selection-row input:checked', nodes => nodes.length), 18, 'Switching target views retains selection');
+  await click('.store-inventory-bulk-submit button:first-child');
+  await page.waitForSelector('dialog[open]');
+  assert.equal(await page.$$eval('dialog li', nodes => nodes.length), 19, 'Confirmation includes selected products and options across views');
+  await click('.store-inventory-bulk-dialog-actions button:first-child');
+  assert.equal((await writes()).length, 0);
+  console.log('PASS: cross-view multiselect, complete confirmation and no writes on cancel');
+
   for (const width of [360, 768, 1440]) {
     await visit(width, width === 360 ? 'zh-Hans' : width === 768 ? 'zh-Hant' : 'ja');
-    await selectAllCategory(); await enterSelection(); await checkRow(1); await checkRow(16);
+    await selectAllCategory();
+    await page.screenshot({path: `${output}/filters-products-${width}.png`});
+    assert.equal(await page.$$eval('.store-menu-category-panel button', buttons => buttons.every(el => { const r=el.getBoundingClientRect(); return r.height>=44 && r.left>=0 && r.right<=innerWidth; })), true, 'Categories are tappable without a dropdown or page overflow');
+    await enterSelection(); await checkRow(1); await checkRow(16);
     const y = await page.evaluate(() => scrollY);
     assert.ok(y > 300, 'Exercise selection from below the fold');
     await page.evaluate(() => window.__refreshMenu()); await pause();
     assert.equal(await page.evaluate(() => scrollY), y, 'Realtime reload preserves scroll');
     assert.equal(await page.$$eval('.store-inventory-selection-row input:checked', nodes => nodes.length), 2);
-    assert.equal(await page.$eval('.store-menu-items-panel > .store-menu-list-head h2', el => el.textContent), width === 1440 ? 'すべて' : '全部');
+    assert.equal(await page.$eval('.store-menu-items-panel > .store-menu-list-head h2', el => el.textContent), width === 1440 ? 'すべての商品' : '全部商品');
     await page.screenshot({ path: `${output}/selection-${width}.png` });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `Overflow at ${width}`);
     assert.equal(await page.$eval('.store-inventory-bulk-submit', el => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }), true);
@@ -196,7 +265,7 @@ try {
   assert.equal(await page.$$eval('.store-inventory-selection-row input:checked', nodes => nodes.length), 0);
   console.log('PASS: filtered select-all, cross-search selection, search preservation and brand isolation');
 
-  await visit(); await page.evaluate(() => document.querySelector('.store-menu-category-panel button:last-child').click()); await enterSelection();
+  await visit(); await click('.store-menu-kind-switch button:first-child'); await enterSelection();
   await click('.store-menu-option-group:first-child .store-menu-option-group-title');
   await click('.store-menu-option-group:first-child .store-inventory-group-select');
   assert.equal(await page.$$eval('.store-menu-option-group:first-child input:checked', nodes => nodes.length), 18);

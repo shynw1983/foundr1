@@ -57,7 +57,22 @@
 .store-inventory-history-actions > * { flex-shrink: 0; white-space: nowrap; width: auto; min-width: 0; }
 .store-menu-head .store-menu-head-actions > * { width: auto; flex: 0 0 auto; }
 .store-menu-head .store-menu-head-actions { width: auto; max-width: 100%; }
-.store-menu-category-select { display: none; }
+.store-menu-controls { display: grid; grid-template-columns: minmax(150px, .45fr) minmax(0, 1fr); gap: 12px; }
+.store-menu-controls > label { min-width: 0; }
+.store-menu-controls > .store-menu-brand { order: 1; }
+.store-menu-controls > .store-menu-search { order: 2; }
+.store-menu-controls:not(:has(> .store-menu-brand)) .store-menu-search { grid-column: 1 / -1; }
+.store-menu-controls > .store-menu-status-filter { order: 3; grid-column: 1 / -1; min-width: 0; }
+.store-menu-controls :is(select, input, label > span) { font-weight: 500; }
+.store-menu-kind-switch { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: var(--color-surface-subtle); }
+.store-menu-kind-switch button { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 44px; padding: 8px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; }
+.store-menu-kind-switch button[aria-pressed="true"] { border-color: var(--green); background: var(--panel); color: var(--green); }
+.store-menu-kind-switch button span { color: inherit; font-size: 14px; font-weight: 600; }
+.store-menu-kind-switch button small { font-size: 12px; font-weight: 500; }
+.store-menu-kind-switch button:disabled { cursor: wait; opacity: .6; }
+.store-menu-kind-switch button:focus-visible,
+.store-menu-category-panel button:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.store-menu-layout.is-options { grid-template-columns: minmax(0, 1fr); }
 .store-menu-list-tools { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .store-menu-page.is-selecting { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
 .store-inventory-selection-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 8px; }
@@ -106,7 +121,6 @@ body:has(.store-menu-page.is-selecting) .store-menu-sync-feedback { bottom: calc
   .store-inventory-group-select { font-size: 12px; min-height: 36px; }
   .store-inventory-selection-row { gap: 8px; }
 }
-.store-menu-category-select select,
 .store-history-filters input,
 .store-history-filters select { width: 100%; min-width: 0; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); font: inherit; font-size: 13px; }
 .store-menu-note-disclosure { grid-column: 1 / -1; font-size: 12px; }
@@ -290,9 +304,10 @@ body:has(.store-pos-page) .floating-feedback { bottom: calc(94px + env(safe-area
   .store-timecard-actions-panel { grid-column: 1; grid-row: 3; position: static; }
   .store-timecard-actions-panel .timecard-punch-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .store-menu-layout { grid-template-columns: minmax(0, 1fr); }
-  .store-menu-category-panel { display: none; }
-  .store-menu-category-select { display: grid; gap: 4px; font-size: 12px; }
-  .store-menu-category-select select { width: 100%; min-width: 0; }
+  .store-menu-category-panel { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; border: 0; background: transparent; }
+  .store-menu-category-panel .menu-category-button { display: flex; align-items: center; gap: 8px; width: auto; max-width: 100%; min-height: 44px; padding: 8px 12px; border-radius: 8px; }
+  .store-menu-category-panel .menu-category-button span { display: block; overflow-wrap: anywhere; font-size: 13px; line-height: 1.4; }
+  .store-menu-category-panel .menu-category-button strong { flex-shrink: 0; font-size: 12px; font-weight: 500; }
 }
 @media (max-width: 760px) {
   .store-workbench-shell,
@@ -349,11 +364,8 @@ body:has(.store-pos-page) .floating-feedback { bottom: calc(94px + env(safe-area
   .store-menu-head > div:first-child { flex-basis: 100%; }
   .store-menu-head p:not(.eyebrow) { font-size: 12px; }
   .store-menu-head-actions { display: flex; }
-  .store-menu-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .store-menu-controls { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .store-menu-controls > label { width: 100%; min-width: 0; }
-  .store-menu-controls > label:first-child { grid-column: 1; grid-row: 1; }
-  .store-menu-controls > .store-menu-search { grid-column: 2; grid-row: 1; }
-  .store-menu-controls .store-menu-status-filter { grid-column: 1 / -1; grid-row: 2; }
   .store-menu-controls select { width: 100%; min-width: 0; }
   .store-menu-status-filter > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .store-menu-status-filter button { padding: 8px 3px; flex-direction: column; gap: 4px; }
@@ -464,8 +476,14 @@ body:has(.store-workbench-shell, .procedure-reader-shell, .store-inventory-histo
 .store-menu-status-filter button :is(span, small) { font-weight: 500; }
 .store-menu-list-head h2 { margin: 0; font-size: 18px; font-weight: 600; }
 .store-menu-category-panel { padding: 8px; box-shadow: none; }
-.store-menu-category-panel .menu-category-button { border-color: transparent; font-weight: 500; }
+.store-menu-category-panel .menu-category-button { min-height: 44px; border-color: transparent; font-weight: 500; }
+.store-menu-category-panel .menu-category-button :is(span, strong) { font-weight: 500; }
 .store-menu-category-panel .menu-category-button.is-active { border-color: transparent; }
+@media (max-width: 900px) {
+  .store-menu-category-panel { padding: 0; }
+  .store-menu-category-panel .menu-category-button { background: var(--panel); }
+  .store-menu-category-panel .menu-category-button.is-active { background: var(--green-soft); color: var(--green); }
+}
 .store-menu-item-list { gap: 0; }
 .store-menu-item-row { padding: 16px 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
 .store-menu-item-row:last-child { border-bottom: 0; }

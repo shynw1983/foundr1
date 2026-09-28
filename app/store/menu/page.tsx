@@ -109,6 +109,27 @@ type StoreMenuOptionGroup = {
 };
 
 const optionCategoryKey = "__store_menu_options__";
+const inventoryBrowseKey = (storeId: string, brandId: string) => `foundr1-store-inventory-category:${storeId}:${brandId || "all"}`;
+
+function preferredInventoryCategory(storeId: string, brandId: string, items: StoreMenuItem[], options: StoreMenuOption[], settings: StoreMenuSettings) {
+  const canBrowseOptions = settings.availability.targets.options
+    && settings.availability.optionDisplayMode === "separate_category"
+    && options.some(option => !brandId || option.brandId === brandId);
+  try {
+    const saved = localStorage.getItem(inventoryBrowseKey(storeId, brandId));
+    if (saved === "") return null;
+    if (saved === optionCategoryKey && canBrowseOptions) return optionCategoryKey;
+    if (saved && saved !== optionCategoryKey && items.some(item => (!brandId || item.brandId === brandId) && itemCategory(item) === saved)) return saved;
+  } catch { /* Browsing still works when device storage is unavailable. */ }
+  return canBrowseOptions ? optionCategoryKey : null;
+}
+
+const inventoryFilterCopy = {
+  ja: { target: "表示する内容", options: "具材・オプション", products: "商品", allProducts: "すべての商品", category: "商品カテゴリー", search: "検索", optionSearch: "具材・オプションを検索", productSearch: "商品を検索", mixedSearch: "商品・オプションを検索" },
+  "zh-Hans": { target: "查看内容", options: "配料／选项", products: "商品", allProducts: "全部商品", category: "商品分类", search: "搜索", optionSearch: "搜索配料或选项", productSearch: "搜索商品", mixedSearch: "搜索商品或选项" },
+  "zh-Hant": { target: "查看內容", options: "配料／選項", products: "商品", allProducts: "全部商品", category: "商品分類", search: "搜尋", optionSearch: "搜尋配料或選項", productSearch: "搜尋商品", mixedSearch: "搜尋商品或選項" }
+};
+
 type StockStatus = "available" | "low_stock" | "unavailable";
 type StockStatusFilter = "all" | StockStatus;
 type PlatformKey = "foundr1" | "uber_eats" | "rocket_now" | "demae_can";
@@ -272,6 +293,14 @@ export default function StoreMenuPage() {
   const loadSequence = useRef(0);
   const mutationPending = useRef(false);
   const bulkCopy = inventoryBulkCopy(language);
+  const filterCopy = inventoryFilterCopy[language];
+
+  function selectCategory(category: string | null) {
+    setSelectedCategory(category);
+    try {
+      localStorage.setItem(inventoryBrowseKey(selectedStoreId, selectedBrandId), category ?? "");
+    } catch { /* The current selection does not depend on persistence. */ }
+  }
 
   async function load(nextStoreId = selectedStoreId, resetFilters = false) {
     // Menu events can arrive between writes. Refresh once the operation finishes
@@ -313,8 +342,9 @@ export default function StoreMenuPage() {
       setStoreName(nextAccess.stores?.find(store => store.id === responseStoreId)?.name ?? "");
       if (responseStoreId) setStoredStoreSelection(responseStoreId);
       if (resetFilters || loadedStoreId.current !== responseStoreId) {
-        setSelectedBrandId(nextBrands?.[0]?.id || "");
-        setSelectedCategory(nextItems?.[0] ? itemCategory(nextItems[0]) : null);
+        const brandId = nextBrands?.[0]?.id || "";
+        setSelectedBrandId(brandId);
+        setSelectedCategory(preferredInventoryCategory(responseStoreId, brandId, nextItems ?? [], nextOptions ?? [], body.settings ?? settings));
         setQuery("");
         setStatusFilter("all");
         setSelectedKeys(new Set());
@@ -420,16 +450,11 @@ export default function StoreMenuPage() {
   const isOptionCategory = selectedCategory === optionCategoryKey;
   const showOptionCategory = settings.availability.targets.options && settings.availability.optionDisplayMode === "separate_category";
   const showMixedOptions = settings.availability.targets.options && settings.availability.optionDisplayMode === "mixed";
-  const showSeparateOptionsForStatusFilter = showOptionCategory
-    && selectedCategory === null
-    && statusFilter !== "all";
-  const showOptionsInItemView = showMixedOptions || showSeparateOptionsForStatusFilter;
+  const showOptionsInItemView = showMixedOptions;
   const categoryStatusTargets = selectedCategory === null
     ? categoryItems
     : categoryItems.filter((item) => itemCategory(item) === selectedCategory);
-  const includeOptionsInStatusCounts = isOptionCategory
-    || showMixedOptions
-    || (showOptionCategory && selectedCategory === null);
+  const includeOptionsInStatusCounts = isOptionCategory || showMixedOptions;
   const statusFilterTargets = isOptionCategory
     ? optionItems
     : includeOptionsInStatusCounts
@@ -842,18 +867,26 @@ export default function StoreMenuPage() {
         <WholeStoreAvailabilitySync storeId={selectedStoreId} language={language} disabled={Boolean(savingId)||loading} onApplied={()=>void load(selectedStoreId)} />
 
         <div className="store-menu-controls panel">
-          <label>
+          {showOptionCategory && <div className="store-menu-kind-switch" role="group" aria-label={filterCopy.target} data-i18n-ignore>
+            <button type="button" aria-pressed={isOptionCategory} disabled={selectionBusy} onClick={() => selectCategory(optionCategoryKey)}>
+              <span>{filterCopy.options}</span><small>{optionItems.length}</small>
+            </button>
+            <button type="button" aria-pressed={!isOptionCategory} disabled={selectionBusy} onClick={() => selectCategory(null)}>
+              <span>{filterCopy.products}</span><small>{categoryItems.length}</small>
+            </button>
+          </div>}
+          {brands.length > 1 && <label className="store-menu-brand">
             <span>ブランド</span>
             <select value={selectedBrandId} disabled={selectionBusy} onChange={(event) => {
               setSelectedBrandId(event.target.value);
-              setSelectedCategory(null);
+              setSelectedCategory(preferredInventoryCategory(selectedStoreId, event.target.value, items, options, settings));
               setSelectedKeys(new Set());
               setBatchResult(null);
             }}>
               <option value="">すべて</option>
               {brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
             </select>
-          </label>
+          </label>}
           <fieldset className="store-menu-status-filter">
             <legend data-i18n-ignore>{language === "ja" ? "販売状態" : language === "zh-Hant" ? "銷售狀態" : "销售状态"}</legend>
             <div>
@@ -871,33 +904,26 @@ export default function StoreMenuPage() {
               ))}
             </div>
           </fieldset>
-          <label className="store-menu-search">
-            <span>検索</span>
+          <label className="store-menu-search" data-i18n-ignore>
+            <span>{filterCopy.search}</span>
             <div>
               <Search size={16} />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="商品名" />
+              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={isOptionCategory ? filterCopy.optionSearch : showMixedOptions ? filterCopy.mixedSearch : filterCopy.productSearch} />
             </div>
           </label>
         </div>
 
         {message ? <div className="inline-alert">{message}</div> : null}
 
-        <div className="store-menu-layout">
-          <label className="store-menu-category-select">
-            <span>カテゴリー</span>
-            <select value={selectedCategory ?? ""} onChange={(event) => setSelectedCategory(event.target.value || null)}>
-              <option value="">すべて</option>
-              {categorySummaries.map((category) => <option key={category.name} value={category.name}>{category.name} ({category.count})</option>)}
-              {showOptionCategory ? <option value={optionCategoryKey}>オプション</option> : null}
-            </select>
-          </label>
-          <aside className="panel store-menu-category-panel">
+        <div className={`store-menu-layout${isOptionCategory ? " is-options" : ""}`}>
+          {!isOptionCategory && <aside className="panel store-menu-category-panel" aria-label={filterCopy.category}>
             <button
               className={selectedCategory === null ? "menu-category-button is-active" : "menu-category-button"}
               type="button"
-              onClick={() => setSelectedCategory(null)}
+              aria-pressed={selectedCategory === null}
+              onClick={() => selectCategory(null)}
             >
-              <span>すべて</span>
+              <span data-i18n-ignore>{showMixedOptions ? statusFilterText(language, "all") : filterCopy.allProducts}</span>
               <strong>{categoryItems.length}</strong>
             </button>
             {categorySummaries.map((category) => {
@@ -905,7 +931,8 @@ export default function StoreMenuPage() {
                 <button
                   className={selectedCategory === category.name ? "menu-category-button is-active" : "menu-category-button"}
                   type="button"
-                  onClick={() => setSelectedCategory(category.name)}
+                  aria-pressed={selectedCategory === category.name}
+                  onClick={() => selectCategory(category.name)}
                   key={category.name}
                 >
                   <span>{category.name}</span>
@@ -913,21 +940,11 @@ export default function StoreMenuPage() {
                 </button>
               );
             })}
-            {showOptionCategory ? (
-              <button
-                className={isOptionCategory ? "menu-category-button is-active is-settings" : "menu-category-button is-settings"}
-                type="button"
-                onClick={() => setSelectedCategory(optionCategoryKey)}
-              >
-                <span>オプション・トッピング</span>
-                <strong>{optionItems.length}</strong>
-              </button>
-            ) : null}
-          </aside>
+          </aside>}
 
           <section className="panel store-menu-items-panel">
             <div className="store-menu-list-head">
-              <h2>{isOptionCategory ? "オプション・トッピング" : selectedCategory ?? "すべて"}</h2>
+              <h2 data-i18n-ignore>{isOptionCategory ? filterCopy.options : selectedCategory ?? (showMixedOptions ? statusFilterText(language, "all") : filterCopy.allProducts)}</h2>
               <div className="store-menu-list-tools">
                 <span className="status-pill">{visibleTargetCount}件</span>
                 {!selecting && <button type="button" className="secondary-button" disabled={selectionBusy} onClick={() => {
@@ -955,6 +972,7 @@ export default function StoreMenuPage() {
                   {visibleOptionGroups.map((group) => (
                     <StoreOptionGroup
                       group={group}
+                      expandMatches={Boolean(query.trim()) || statusFilter !== "all"}
                       language={language}
                       savingId={savingId}
                       selecting={selecting}
@@ -984,6 +1002,7 @@ export default function StoreMenuPage() {
                       {visibleOptionGroups.map((group) => (
                         <StoreOptionGroup
                           group={group}
+                          expandMatches={Boolean(query.trim()) || statusFilter !== "all"}
                           language={language}
                           savingId={savingId}
                           selecting={selecting}
@@ -1093,6 +1112,7 @@ export default function StoreMenuPage() {
 
 function StoreOptionGroup({
   group,
+  expandMatches,
   language,
   savingId,
   selecting,
@@ -1104,6 +1124,7 @@ function StoreOptionGroup({
   onStatusNoteChange
 }: {
   group: StoreMenuOptionGroup;
+  expandMatches: boolean;
   language: StoreMenuLanguage;
   savingId: string;
   selecting: boolean;
@@ -1118,8 +1139,12 @@ function StoreOptionGroup({
   const keys = group.options.map(option => `option:${option.id}`);
   const selectedCount = keys.filter(key => selectedKeys.has(key)).length;
   const copy = inventoryBulkCopy(language);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (expandMatches && detailsRef.current) detailsRef.current.open = true;
+  }, [expandMatches]);
   return (
-    <details className="store-menu-option-group">
+    <details className="store-menu-option-group" ref={detailsRef}>
       <summary>
         <span className="store-menu-option-group-title">
           <strong data-i18n-ignore>{localizedMenuName(group.name, group.displayNames, language)}</strong>
