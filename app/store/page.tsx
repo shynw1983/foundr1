@@ -1,9 +1,16 @@
 "use client";
 
-import { BellRing, BookOpen, Clock3, ClipboardList, MessageSquareWarning, PackageCheck, ShoppingCart, Tags, Users } from "lucide-react";
+import { BellRing, BookOpen, Clock3, ClipboardList, Lightbulb, MessageSquareWarning, PackageCheck, ShoppingCart, Tags, Users } from "lucide-react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
 const storeModules = [
+  {
+    title: "店舗設備",
+    description: "室内照明の明るさと状態を確認し、スイッチを操作します。",
+    href: "/store/devices",
+    icon: Lightbulb,
+    status: "利用可能"
+  },
   {
     title: "注文通知",
     description: "指定ユーザーの離店中の注文通知と、スマートフォンの通知設定を管理します。",

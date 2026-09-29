@@ -20,6 +20,68 @@
   --font-cjk-tc: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Noto Sans CJK TC", "Source Han Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
 }
 
+.store-light-panel { max-width: 900px; margin: 20px auto; color: var(--ink); }
+.store-light-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.store-light-toolbar p { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0; font-size: 15px; font-weight: 600; }
+.store-light-toolbar p span { color: var(--muted); font-size: 12px; font-weight: 400; }
+.store-light-panel button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; font-size: 14px; font-weight: 500; cursor: pointer; }
+.store-light-panel button:disabled { opacity: .5; cursor: not-allowed; }
+.store-light-panel button:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.store-light-device { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 24px; }
+.store-light-device-header, .store-light-device-header > div { display: flex; align-items: center; gap: 9px; }
+.store-light-device-header { justify-content: space-between; flex-wrap: wrap; }
+.store-light-device-header h2 { font-size: 18px; font-weight: 600; margin: 0; }
+.store-light-source { color: var(--muted); font-size: 12px; }
+.store-light-main { padding: 26px 0 22px; }
+.store-light-state { margin: 0 0 8px; font-size: 26px; line-height: 1.45; font-weight: 600; }
+.store-light-main.is-on .store-light-state { color: var(--green); }
+.store-light-main.is-unknown .store-light-state { color: var(--muted); font-size: 22px; }
+.store-light-explanation, .store-light-calibration { color: var(--muted); font-size: 13px; line-height: 1.65; margin: 0; }
+.store-light-meter { border-top: 1px solid var(--line); padding-top: 18px; }
+.store-light-meter-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.store-light-meter-heading > span { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.store-light-meter-heading strong { font-size: 23px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.store-light-meter-heading small { font-size: 13px; font-weight: 400; color: var(--muted); }
+.store-light-scale { display: grid; grid-template-columns: repeat(20, minmax(0, 1fr)); gap: 4px; }
+.store-light-scale i { height: 9px; background: var(--line); border-radius: 2px; position: relative; }
+.store-light-scale i[data-zone="unknown"] { background: var(--amber-soft); }
+.store-light-scale i[data-zone="on"] { background: var(--green-soft); }
+.store-light-scale i[data-current="true"] { background: var(--ink); }
+.store-light-scale i[data-current="true"]::after { content: ""; position: absolute; width: 0; height: 0; left: 50%; bottom: 13px; transform: translateX(-50%); border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--ink); }
+.store-light-scale-labels { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 11px; margin-top: 9px; }
+.store-light-details { display: flex; flex-wrap: wrap; gap: 20px 42px; margin: 24px 0; }
+.store-light-details > div { display: grid; gap: 5px; }
+.store-light-details dt { font-size: 12px; color: var(--muted); }
+.store-light-details dd { margin: 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.store-light-notice { padding: 12px 14px; border-radius: 8px; background: var(--amber-soft); color: var(--amber); font-size: 13px; line-height: 1.65; margin: 12px 0; overflow-wrap: anywhere; }
+.store-light-notice.is-error { color: var(--red); background: var(--red-soft); }
+.store-light-notice.is-success { color: var(--green); background: var(--green-soft); }
+.store-light-actions { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; border-top: 1px solid var(--line); padding-top: 20px; }
+.store-light-actions p { font-size: 13px; margin: 0 0 5px; }
+.store-light-actions span { font-size: 12px; color: var(--muted); }
+.store-light-actions .primary-button { min-width: 178px; min-height: 44px; }
+.store-light-calibration { margin: 14px 2px; font-size: 12px; }
+.store-light-empty { text-align: center; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 36px 20px; }
+.store-light-empty h2 { font-size: 17px; font-weight: 500; }
+.store-light-empty p { font-size: 13px; color: var(--muted); }
+.store-light-loading, .store-light-page-error { max-width: 900px; margin: 24px auto; font-size: 14px; }
+.store-light-page-error { color: var(--red); }
+.store-light-dialog { position: fixed; inset: 0; width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 40px); margin: auto; padding: 26px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--panel); box-shadow: var(--shadow); }
+.store-light-dialog::backdrop { background: rgba(29, 36, 48, .38); }
+.store-light-dialog h2 { font-size: 20px; font-weight: 600; margin: 0 24px 8px 0; }
+.store-light-dialog p { font-size: 14px; line-height: 1.65; }
+.store-light-dialog .store-light-confirm-store { color: var(--muted); margin: 0 0 18px; }
+.store-light-dialog .store-light-dialog-close { position: absolute; top: 12px; right: 12px; width: 32px; min-height: 32px; padding: 0; background: transparent; border: 0; color: var(--muted); }
+.store-light-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .store-light-panel { margin-top: 14px; }
+  .store-light-device { padding: 18px 16px; }
+  .store-light-main { padding-top: 22px; }
+  .store-light-actions > div, .store-light-actions .primary-button { width: 100%; }
+  .store-light-dialog { padding: 22px 18px; }
+  .store-light-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; }
+}
+
 .store-phone-notifications { display: grid; gap: 16px; max-width: 1040px; margin: 20px auto; min-width: 0; }
 .store-push-section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; min-width: 0; }
 .store-push-section h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 18px; font-weight: 600; }

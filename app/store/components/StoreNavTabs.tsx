@@ -1,6 +1,6 @@
 "use client";
 
-import { BellRing, BookOpen, ChefHat, ChevronDown, Clock3, ClipboardList, Home, Menu, MessageSquareWarning, Monitor, PackageCheck, Settings, ShoppingCart, Store, Tags, Users } from "lucide-react";
+import { BellRing, BookOpen, ChefHat, ChevronDown, Clock3, ClipboardList, Home, Lightbulb, Menu, MessageSquareWarning, Monitor, PackageCheck, Settings, ShoppingCart, Store, Tags, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
 import { useCloseOnOutside } from "../../os/components/useCloseOnOutside";
@@ -23,6 +23,7 @@ const tabs = [
   { label: "注文", href: "/store/orders", icon: ClipboardList },
   { label: "注文通知", href: "/store/notifications", icon: BellRing },
   { label: "販売状態", href: "/store/menu", icon: Tags },
+  { label: "店舗設備", href: "/store/devices", icon: Lightbulb },
   { label: "POS", href: "/store/pos", icon: ShoppingCart },
   { label: "納品確認", href: "/store/receiving", icon: PackageCheck },
   { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
@@ -55,7 +56,7 @@ function formatStoreClock(date: Date) {
   return { dateText, timeText };
 }
 
-export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" | "notifications" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "receiving" | "feedback" }) {
+export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" | "notifications" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "receiving" | "feedback" | "devices" }) {
   const activeHref = active === "home"
     ? "/store"
     : active === "kitchen"
