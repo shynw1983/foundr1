@@ -102,18 +102,34 @@ export function validateDeviceAction(device: SwitchBotDevice, sample: DeviceSamp
   if (action === "setPosition") {
     if (!/^(100|[1-9]?\d)$/.test(parameter)) throw new SwitchBotError("invalid_position");
     if (!sample.calibrated || sample.position === null) throw new SwitchBotError("not_calibrated");
-    return sample.position === Number(parameter) && !sample.moving;
+    return;
   }
   if (parameter !== "default") throw new SwitchBotError("invalid_parameter");
   if (device.kind === "lock") {
     if (!sample.calibrated || !["locked", "unlocked"].includes(sample.lockState || "")) throw new SwitchBotError("lock_unavailable");
     if (action === "lock" && sample.doorState !== "closed") throw new SwitchBotError("door_not_closed");
-    return action === "lock" && sample.lockState === "locked" || action === "unlock" && sample.lockState === "unlocked";
   }
-  return action === "turnOn" && sample.power === "on" || action === "turnOff" && sample.power === "off";
+  // A freshly fetched cloud value can still describe an older physical state.
+  // Validate safety here; do not discard a deliberate user command based on it.
+}
+
+function assertDeviceCommandResult(body: Record<string, unknown>, deviceId: string) {
+  // HTTP/envelope success does not imply the nested device result succeeded.
+  // Older API responses have an empty body and only acknowledge acceptance.
+  let code: unknown;
+  if (Object.hasOwn(body, "items")) {
+    if (!Array.isArray(body.items)) throw new SwitchBotError("invalid_device_result", true);
+    const matches = body.items.filter(item => item && typeof item === "object" && String(item.deviceID ?? item.deviceId).toUpperCase() === deviceId);
+    if (matches.length !== 1) throw new SwitchBotError("device_result_missing", true);
+    code = matches[0].code;
+  } else if (Object.hasOwn(body, "code")) code = body.code;
+  else return;
+  if (typeof code !== "number" || !Number.isInteger(code)) throw new SwitchBotError("invalid_device_result", true);
+  if (code !== 100) throw new SwitchBotError(`api_${code}`, ![151, 152, 160, 161, 171, 190].includes(code));
 }
 
 export async function sendStoreDeviceCommand(config: IndoorLightConfig, device: SwitchBotDevice, action: DeviceAction, parameter: string) {
   // Called only after typed command validation and a durable device claim.
-  await switchBotRequest(config, `devices/${device.id}/commands`, { command: action, parameter, commandType: "command" });
+  const body = await switchBotRequest(config, `devices/${device.id}/commands`, { command: action, parameter, commandType: "command" });
+  assertDeviceCommandResult(body, device.id);
 }

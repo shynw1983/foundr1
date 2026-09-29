@@ -24,7 +24,7 @@ function fakeVendor(onPost=async()=>{}) {
    control.posts.push({url,body:JSON.parse(init.body)});await onPost();
    if(control.postMode==='timeout')throw Error('lost response');
    if(control.postMode==='offline')return Response.json({statusCode:161});
-   return Response.json({statusCode:100,body:{}});
+   return Response.json({statusCode:100,body:{items:[{deviceID:url.split('/').at(-2),code:100,status:{}}]}});
   }
   control.reads.push(url);if(control.failReads || control.failStatuses && url.endsWith('/status'))throw Error('offline');
   if(url.endsWith('/devices'))return Response.json({statusCode:100,body:{deviceList:types.map(([deviceId,deviceType])=>({deviceId,deviceType,deviceName:deviceType,hubDeviceId:deviceId===foreignId?foreignId:hubId,enableCloudService:true,group:false,master:true,keyList:[{password:'DO-NOT-EXPOSE'}]})),infraredRemoteList:[]}});
@@ -92,25 +92,25 @@ test('on-demand reads, additive migration, actual SQL claims, device safety and 
   vendor.postMode='timeout';const unknown=await send(botId);assert.equal(unknown.command.result,'unknown');await send(botId,'press','default',unknown.command.id);assert.equal(vendor.posts.length,2,'unknown commands never retried');
   await expire();vendor.postMode='offline';assert.equal((await send(botId)).command.result,'rejected');assert.equal(vendor.posts.length,3);
   vendor.postMode='ok';await expire();vendor.mode='switchMode';assert.equal((await send(botId)).command.result,'rejected');assert.equal(vendor.posts.length,3,'fresh mode preflight rejects old press intent');
-  await expire();assert.equal((await send(outdoorId,'turnOn')).command.reason,'already_in_state');assert.equal(vendor.posts.length,3);
+  await expire();assert.equal((await send(outdoorId,'turnOn')).command.result,'accepted');assert.equal(vendor.posts.length,4,'explicit on still sent when cloud already says on');
   await expire();await send(outdoorId,'turnOff');assert.deepEqual(vendor.posts.at(-1).body,{command:'turnOff',parameter:'default',commandType:'command'});
-  vendor.mode='pressMode';await expire();vendor.calibrated=false;assert.equal((await send(shadeId,'setPosition','37')).command.reason,'not_calibrated');assert.equal(vendor.posts.length,4);
+  vendor.mode='pressMode';await expire();vendor.calibrated=false;assert.equal((await send(shadeId,'setPosition','37')).command.reason,'not_calibrated');assert.equal(vendor.posts.length,5);
   vendor.calibrated=true;await expire();await send(shadeId,'setPosition','37');assert.deepEqual(vendor.posts.at(-1).body,{command:'setPosition',parameter:'37',commandType:'command'});
-  await expire();vendor.doorState='open';assert.equal((await send(lockId,'lock')).command.reason,'door_not_closed');assert.equal(vendor.posts.length,5);
-  vendor.doorState='close';vendor.lockState='unlock';await expire();assert.equal((await send(lockId,'unlock')).command.reason,'already_in_state');assert.equal(vendor.posts.length,5);
+  await expire();vendor.doorState='open';assert.equal((await send(lockId,'lock')).command.reason,'door_not_closed');assert.equal(vendor.posts.length,6);
+  vendor.doorState='close';vendor.lockState='unlock';await expire();assert.equal((await send(lockId,'unlock')).command.result,'accepted');assert.equal(vendor.posts.length,7,'explicit unlock not skipped based on stale cloud state');
   await expire();await send(lockId,'lock');assert.equal(vendor.posts.at(-1).body.command,'lock');
-  await expire();vendor.lockState='jammed';assert.equal((await send(lockId,'unlock')).command.reason,'lock_unavailable');assert.equal(vendor.posts.length,6);
+  await expire();vendor.lockState='jammed';assert.equal((await send(lockId,'unlock')).command.reason,'lock_unavailable');assert.equal(vendor.posts.length,8);
   vendor.lockState='unlocked';vendor.failStatuses=true;await expire();assert.equal((await legacy.getIndoorLight(storeId)).readError,true);
-  assert.equal((await send(botId)).command.result,'rejected');assert.equal(vendor.posts.length,6,'failed preflight sends nothing');
+  assert.equal((await send(botId)).command.result,'rejected');assert.equal(vendor.posts.length,8,'failed preflight sends nothing');
   vendor.failStatuses=false;await expire();
   let release;holdPost=new Promise(resolve=>{release=resolve;});const inFlight=send(botId);const started=Date.now();
-  while(vendor.posts.length<7){if(Date.now()-started>2000)throw Error('command not started');await new Promise(r=>setTimeout(r,5));}
+  while(vendor.posts.length<9){if(Date.now()-started>2000)throw Error('command not started');await new Promise(r=>setTimeout(r,5));}
   const lease=(await db.query('select extract(epoch from(blocked_until-now())) as seconds from store_light_runtime where device_id=$1',[botId])).rows[0];
   assert.ok(Number(lease.seconds)>55,'in-flight lease outlasts normal 10-second cooldown');
-  await assert.rejects(()=>send(botId),e=>e.status===409);release();await inFlight;holdPost=null;assert.equal(vendor.posts.length,7);
+  await assert.rejects(()=>send(botId),e=>e.status===409);release();await inFlight;holdPost=null;assert.equal(vendor.posts.length,9);
   await expire();vendor.level=2;assert.equal((await legacy.getIndoorLight(storeId)).estimate,'off');
   const staleId=crypto.randomUUID();await db.query("insert into store_light_commands(id,store_id,device_id,result,requested_at) values($1,$2,$3,'pending',now()-interval '2 minutes')",[staleId,storeId,botId]);
-  assert.equal((await send(botId,'press','default',staleId)).command.result,'unknown');assert.equal(vendor.posts.length,7,'orphaned commands are never resumed');
+  assert.equal((await send(botId,'press','default',staleId)).command.result,'unknown');assert.equal(vendor.posts.length,9,'orphaned commands are never resumed');
   const getQueriesStart=queries.length;await service.getStoreDevices(storeId);assert.ok(queries.slice(getQueriesStart).every(q=>/^select /i.test(q.trim())));
   t.diagnostic('Eight devices; read-only status; preserved history; 10-second completion cooldown; in-flight protection; shared legacy lock; guarded shade/lock controls; no command retries.');
  }finally{await db.close();}
@@ -135,4 +135,28 @@ test('route enforces session, role, active store, origin, confirmation and typed
  assert.equal((await post({},'https://other.example')).status,403);assert.equal(calls.length,0,'denied requests never touch devices');
  actor=null;assert.equal((await get()).status,401);assert.equal(calls.length,0);
  actor={id:actorId,role:'owner'};assert.equal((await post({action:'setPosition',position:37})).status,200);assert.equal(calls.at(-1).at(-1),'37');
+});
+
+test('nested device results override an outer success and never trigger a resend',async()=>{
+ const device={id:shadeId,type:'Roller Shade',kind:'shade',cloud:true},config={storeId,botId,hubId,token:env.SWITCHBOT_TOKEN,secret:env.SWITCHBOT_SECRET,controlEnabled:true};
+ for(const [body,code,uncertain] of [
+  [{items:[{deviceID:shadeId,code:100,status:{}}]},null,false],
+  [{items:[{deviceId:shadeId.toLowerCase(),code:100}]},null,false],
+  [{},null,false],
+  [{items:[{deviceID:shadeId,code:190,message:'invalid command format'}]},'api_190',false],
+  [{items:[{deviceID:shadeId,code:160}]},'api_160',false],
+  [{items:[{deviceID:shadeId,code:161}]},'api_161',false],
+  [{items:[{deviceID:shadeId,code:171}]},'api_171',false],
+  [{code:190},'api_190',false],
+  [{items:[{deviceID:shadeId,code:500}]},'api_500',true],
+  [{items:[{deviceID:botId,code:100}]},'device_result_missing',true],
+  [{items:[]},'device_result_missing',true],
+  [{items:'invalid'},'invalid_device_result',true],
+  [{items:[{deviceID:shadeId,code:'100'}]},'invalid_device_result',true]
+ ]){
+  let posts=0;const adapter=load('lib/switchbot.ts',{}, {fetch:async(url,init)=>{posts++;assert.equal(init.method,'POST');assert.equal(url,`https://api.switch-bot.com/v1.1/devices/${shadeId}/commands`);assert.deepEqual(JSON.parse(init.body),{command:'setPosition',parameter:'43',commandType:'command'});return Response.json({statusCode:100,body,message:'success'});}});
+  if(code)await assert.rejects(()=>adapter.sendStoreDeviceCommand(config,device,'setPosition','43'),e=>e.code===code&&e.uncertain===uncertain);
+  else await adapter.sendStoreDeviceCommand(config,device,'setPosition','43');
+  assert.equal(posts,1,'no automatic retry even when nested result is uncertain');
+ }
 });

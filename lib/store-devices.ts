@@ -76,15 +76,17 @@ export async function requestStoreDeviceCommand(storeId: string, actorId: string
   let result: DeviceCommand["result"] = "rejected", reason = "preflight_failed", attempted = false;
   try {
     const sample = await readStoreDevice(config, device);
-    const already = validateDeviceAction(device, sample, action, parameter);
+    validateDeviceAction(device, sample, action, parameter);
     const beforeState = device.kind === "indoorLight" ? estimateIndoorLight(sample.lightLevel, new Date().toISOString()) : "unknown";
     await sql`update store_light_commands set before_sample=${JSON.stringify(sample)}::jsonb, before_state=${beforeState}, before_level=${sample.lightLevel ?? null} where id=${requestId}::uuid`;
-    if (already) { result = "accepted"; reason = "already_in_state"; }
-    else { attempted = true; await sendStoreDeviceCommand(config, device, action, parameter); result = "accepted"; reason = ""; }
+    attempted = true;
+    await sendStoreDeviceCommand(config, device, action, parameter);
+    result = "accepted"; reason = "";
   } catch (error) {
     result = attempted && (!(error instanceof SwitchBotError) || error.uncertain) ? "unknown" : "rejected";
     reason = error instanceof SwitchBotError ? error.code : "unavailable";
   }
+  console.info("store_device_command_result", { storeId, deviceKey: key, kind: device.kind, requestId, action, parameter, attempted, result, reason });
   const rows = await sql`with completed as (
     update store_light_commands set result=${result},reason=${reason},finished_at=now() where id=${requestId}::uuid returning *
   ), released as (

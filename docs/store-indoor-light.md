@@ -51,7 +51,10 @@ This does not change unrelated Store order/notification/background traffic.
 The page displays **last fetched state and time**, not a promise of real-time
 state. The retrieval timestamp is not a physical sensor sample timestamp.
 SwitchBot cloud reports may lag devices. A successful command acknowledgement
-does not establish a physical change. Observations must be fetched at least
+does not establish a physical change. Nested `body.items[].code` device results
+are checked as well as the outer API code. A target mismatch/missing result is
+unknown; a known device rejection is surfaced with its code. Sanitized command
+outcomes are logged without credentials or raw provider payloads. Observations must be fetched at least
 four seconds after command completion and match the intended state (or indoor
 light state change). Outdoor press and latch release cannot be confirmed by
 lamp/lock status and remain explicitly unconfirmed.
@@ -79,8 +82,10 @@ results and abandoned pending records remain unknown; no worker retries them.
 Every action has an on-screen confirmation. Unlock/latch release additionally
 requires acknowledging that the door can be opened. Locking requires a closed
 door and valid lock calibration/state; shade positioning requires calibration
-and a valid position. Explicit desired states that already match are recorded
-without sending a physical command. There is no automatic unlock, PIN creation
+and a valid position. Cloud status is checked before sending but can lag the physical device.
+An explicitly confirmed lock, shade or switch command is therefore sent even
+when the fetched value already matches. Request UUID idempotency and the
+10-second cooldown still prevent accidental duplicate sends. There is no automatic unlock, PIN creation
 or automatic toggle/retry.
 
 The historical tables `store_light_runtime` and `store_light_commands` are

@@ -6,7 +6,8 @@ import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import { deviceCommandLeaseMs, deviceObservation, deviceObservationDelays, deviceStateLabel, type DeviceAction, type DeviceCommand, type StoreDevice, type StoreDevicesView } from "../../../lib/store-device-state";
 
 const labels: Record<DeviceAction, string> = { press: "スイッチを押す", turnOn: "オンにする", turnOff: "オフにする", setPosition: "位置を指定", lock: "施錠する", unlock: "解錠する", deadbolt: "ラッチを解除する" };
-const issueLabels: Record<string, string> = { sensor_unavailable: "測定値を確認できません。電池と接続を確認してください。", cloud_disabled: "SwitchBotアプリでクラウドサービスを有効にしてください。", status_unsupported: "この機器の状態取得には対応していません。", not_calibrated: "SwitchBotアプリで位置を校正してください。", door_not_closed: "ドアを閉めてから施錠してください。", lock_unavailable: "ドアとロックの状態を現地で確認してください。", unsupported_mode: "スイッチの動作モードを確認してください。" };
+const issueLabels: Record<string, string> = { sensor_unavailable: "測定値を確認できません。電池と接続を確認してください。", cloud_disabled: "SwitchBotアプリでクラウドサービスを有効にしてください。", status_unsupported: "この機器の状態取得には対応していません。", not_calibrated: "SwitchBotアプリで位置を校正してください。", door_not_closed: "ドアを閉めてから施錠してください。", lock_unavailable: "ドアとロックの状態を現地で確認してください。", unsupported_mode: "スイッチの動作モードを確認してください。",
+  api_151: "機器の種類が一致しません（151）。設定を確認してください。", api_152: "機器が見つかりません（152）。設定を確認してください。", api_160: "機器がこの操作に対応していません（160）。", api_161: "機器がオフラインです（161）。電池と接続を確認してください。", api_171: "Hubがオフラインです（171）。接続を確認してください。", api_190: "機器が操作を受け付けませんでした（190）。SwitchBotアプリで接続・状態と操作設定を確認してください。" };
 type Intent = { device: StoreDevice; action: DeviceAction; position?: number };
 type Observation = { id: string; timers: ReturnType<typeof setTimeout>[] };
 
@@ -139,6 +140,8 @@ export function StoreDevicesPanel({ storeId, storeName }: { storeId: string; sto
     {!view ? <p role="status">{t("機器を読み込んでいます。")}</p> : !view.configured ? <p className="store-device-empty">{t("この店舗の機器は未設定です。")}</p> : !view.devices.length ? <p className="store-device-empty">{t("この店舗の機器が見つかりません。")}</p> : <div className="store-device-grid">{view.devices.map(device => {
       const s = device.sample, cooldown = device.blockedUntil ? Math.max(0, Math.ceil((Date.parse(device.blockedUntil) - now) / 1000)) : 0;
       const observation = deviceObservation(device, now), position = positions[device.key] ?? s?.position ?? 50;
+      const commandError = device.command?.result === "rejected" ? issueLabels[device.command.reason] || "操作を送信できませんでした。接続と機器の設定を確認してください。" : "";
+      const deviceError = errors[device.key] || (device.issue && device.issue !== "status_unsupported" ? issueLabels[device.issue] || "機器の状態を取得できません。時間をおいて更新してください。" : commandError);
       const Icon = device.kind === "lock" ? LockKeyhole : device.kind === "shade" ? Blinds : device.kind === "indoorLight" || device.kind === "bot" ? Lightbulb : device.kind === "meter" || device.kind === "hub" ? Thermometer : Radio;
       const awaitingReading = device.command && device.command.result !== "rejected" && device.command.reason !== "already_in_state" && (!device.fetchedAt || Date.parse(device.fetchedAt) < Date.parse(device.command.finishedAt || device.command.requestedAt) + 4_000);
       const disabled = allBusy || busy[device.key] || !device.controlEnabled || cooldown > 0;
@@ -158,8 +161,8 @@ export function StoreDevicesPanel({ storeId, storeName }: { storeId: string; sto
         {device.kind === "bot" && s?.botMode === "pressMode" && <p className="store-device-help">{t("ボタンを1回押します。屋内の明るさでは点灯状態を判断しません。")}</p>}
         {device.kind === "keypad" && <p className="store-device-help">{t("解錠・施錠はロックのカードから操作できます。暗証番号の管理はSwitchBotアプリで行ってください。")}</p>}
         {device.kind === "remote" && <p className="store-device-help">{t("リモートボタンには遠隔操作の機能がありません。")}</p>}
-        {(errors[device.key] || device.issue && device.issue !== "status_unsupported") && <p role="alert" className="store-device-notice is-error">{t(errors[device.key] || issueLabels[device.issue] || "機器の状態を取得できません。時間をおいて更新してください。")}</p>}
-        {device.command && <p className={`store-device-notice${observation === "observed" ? " is-success" : ""}`} role="status">{t(observation === "observed" ? "操作後の状態を確認しました。" : observation === "rejected" ? "操作は実行されませんでした。" : observation === "waiting" ? "操作後の状態を確認しています。" : "操作後の状態は未確認です。必要に応じて更新してください。")}</p>}
+        {deviceError && <p role="alert" className="store-device-notice is-error">{t(deviceError)}</p>}
+        {device.command && <p className={`store-device-notice${observation === "observed" && device.command.reason !== "already_in_state" ? " is-success" : ""}`} role="status">{t(device.command.reason === "already_in_state" ? "取得した状態がすでに指定状態だったため、操作を送信していません。" : observation === "observed" ? "操作後の状態を確認しました。" : observation === "rejected" ? "操作は実行されませんでした。" : observation === "waiting" ? "操作後の状態を確認しています。" : "操作後の状態は未確認です。必要に応じて更新してください。")}</p>}
         {device.kind === "shade" && device.actions.length > 0 && <label className="store-device-position">{t("閉じる割合")} <output>{position}%</output><input type="range" min="0" max="100" value={position} disabled={disabled} onChange={e => setPositions(p => ({ ...p, [device.key]: Number(e.target.value) }))}/></label>}
         <div className="store-device-actions">{device.actions.flatMap(action => action === "setPosition" ? [0, 100, position].map((p, i) => <button key={i} className={i === 2 ? "primary-button" : "secondary-button"} disabled={disabled} onClick={() => void prepare(device, action, p)}>{i === 2 ? t("位置を適用") : actionName(action, p)}</button>) : <button key={action} className={action === "deadbolt" ? "secondary-button" : "primary-button"} disabled={disabled} onClick={() => void prepare(device, action)}>{actionName(action)}</button>)}
           {device.kind !== "remote" && device.kind !== "unsupported" && <button className="store-device-refresh" disabled={allBusy || busy[device.key]} onClick={() => void refreshOne(device.key)}><RefreshCw size={14}/>{t("状態を更新")}</button>}
