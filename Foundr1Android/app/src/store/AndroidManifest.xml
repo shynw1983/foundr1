@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application android:name=".StorePushApplication" android:allowBackup="false" tools:replace="android:allowBackup">
+        <activity android:name=".StoreWidgetDeviceActivity" android:exported="false"
+            android:excludeFromRecents="true" android:theme="@style/QuickInventoryTheme" />
         <activity
             android:name=".QuickInventoryActivity"
             android:excludeFromRecents="true"

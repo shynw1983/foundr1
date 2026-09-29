@@ -8,10 +8,12 @@ brand and language settings:
   starts at 160 x 88 dp; a separate minimum layout supports 110 x 56 dp.
 - **4×2 controls:** the unavailable count opens the full list. Two configurable
   slots default to Web reservations and away-order notifications; either can be
-  replaced with the store's order list or sync results. Inventory registration
-  and resumption stay fixed at the bottom. Full control blocks start at 148 dp,
-  and 208 dp layouts add explanatory status and sync details. The 110 dp layout
-  keeps the same four actions using one-line control labels.
+  replaced with the store's order list or sync results. These controls now share a
+  compact top row, followed by two independently configurable smart-device slots.
+  Inventory registration and resumption stay fixed at the bottom. Full controls
+  start at 250 x 148 dp; 208 dp layouts add last-read times and sync details.
+  Smaller layouts retain the original inventory/operational shortcuts; enlarge
+  the widget to show the two smart-device slots.
 
 Cell counts are launcher targets. Android 12+ selects responsive RemoteViews by
 available width/height; older launchers use portrait/landscape options. Existing
@@ -58,6 +60,36 @@ operation time, last checked time, per-platform outcomes and failure guidance.
 The widget does not equate saving OS inventory with external platform completion.
 
 ## Refresh and failure handling
+
+### Smart-device shortcuts
+
+Tap the widget's store title, then select Device 1 and Device 2. Each widget saves
+its own opaque device keys and labels locally. The choices come from the selected
+store's existing `/api/store/devices` API, independent of the inventory brand.
+Read-only sensors are excluded. Changing stores or deleting a widget clears its
+device bindings; other widgets keep their selections. An unsuccessful device-list
+read preserves existing selections when saving unrelated widget settings.
+
+Device taps open a native confirmation sheet and read the selected device before
+showing actions. Only an explicit named confirmation sends a command, using the
+existing authenticated POST contract, `confirmed: true`, and a fresh request UUID.
+The server retains its role/store authorization, command preflight, durable claim,
+and 10-second cooldown. Cached intents are rejected after a widget, store, or login
+change. Opening, restoring, cancelling, or double-tapping cannot resend a command.
+Lock shortcuts expose lock/unlock, and shade shortcuts expose fully open/closed;
+unsupported latch actions are not introduced. Press-mode Bots are described as
+one physical press; indoor light state remains explicitly inferred from the same
+Hub 2 thresholds as Store. API acceptance is not presented as physical completion.
+
+Widget values are labelled as last-read snapshots. Device snapshots are scoped
+by login fingerprint, store, and device; stale/failed/missing samples are not used
+for commands. Device reads occur during configuration, explicit widget refresh,
+or the confirmation sheet. An accepted command schedules one read after 10 seconds
+while the sheet remains open. Existing periodic inventory refreshes and their
+retries do **not** poll SwitchBot. No additional server endpoint or database schema
+is needed; this feature is delivered in the Android Store APK.
+
+### Inventory and operational controls
 
 The provider renders saved state immediately and queues WorkManager reads.
 Manual refresh, widget creation/configuration, returning to the Store app, and local inventory operations

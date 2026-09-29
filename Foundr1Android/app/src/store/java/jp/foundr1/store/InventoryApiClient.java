@@ -61,6 +61,22 @@ final class InventoryApiClient {
         return request("GET", BASE_URL + "/api/store/order-notifications/preference?storeId=" + URLEncoder.encode(storeId, "UTF-8"), null);
     }
 
+    static JSONObject loadDevices(String storeId, String device, String session) throws Exception {
+        String endpoint = BASE_URL + "/api/store/devices?storeId=" + URLEncoder.encode(storeId, "UTF-8");
+        if (device != null && !device.isEmpty()) endpoint += "&device=" + URLEncoder.encode(device, "UTF-8");
+        JSONObject body = request("GET", endpoint, null, session);
+        if (!storeId.equals(body.optString("storeId")) || body.optJSONArray("devices") == null)
+            throw new java.io.IOException("Invalid device scope");
+        return body;
+    }
+
+    static JSONObject commandDevice(String storeId, String device, String action, Integer position, String requestId, String session) throws Exception {
+        JSONObject body = new JSONObject().put("storeId", storeId).put("device", device)
+            .put("action", action).put("requestId", requestId).put("confirmed", true);
+        if (position != null) body.put("position", position);
+        return request("POST", BASE_URL + "/api/store/devices", body.toString(), session);
+    }
+
     static JSONObject setNotificationPreference(String storeId, boolean enabled, String version, String session) throws Exception {
         return request("POST", BASE_URL + "/api/store/order-notifications/preference", new JSONObject()
             .put("storeId", storeId).put("enabled", enabled).put("expectedVersion", version).toString(), session);

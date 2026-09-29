@@ -51,6 +51,7 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
         String brandId,
         String brandName
     ) {
+        if (!safe(storeId).equals(storeId(context, widgetId))) StoreWidgetDevicesData.delete(context, widgetId);
         context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             .edit()
             .putString(LANGUAGE_PREFIX + widgetId, LANGUAGE_ZH.equals(language) ? LANGUAGE_ZH : LANGUAGE_JA)
@@ -140,7 +141,10 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
     @Override public void onReceive(Context context, Intent intent) {
         if (ACTION_REFRESH.equals(intent.getAction())) {
             int id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID);
-            if (AppWidgetManager.getInstance(context).getAppWidgetInfo(id) != null) refreshWidget(context, id);
+            if (AppWidgetManager.getInstance(context).getAppWidgetInfo(id) != null) {
+                renderWidget(context, id);
+                InventoryWidgetRefreshWorker.enqueue(context, true);
+            }
         } else super.onReceive(context, intent);
     }
 
@@ -156,6 +160,7 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
     @Override public void onDeleted(Context context, int[] widgetIds) {
         android.content.SharedPreferences.Editor editor = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).edit();
         for (int id : widgetIds) {
+            StoreWidgetDevicesData.delete(context, id);
             for (String prefix : new String[] { LANGUAGE_PREFIX, STORE_ID_PREFIX, STORE_NAME_PREFIX, BRAND_ID_PREFIX, BRAND_NAME_PREFIX, LEFT_PREFIX, RIGHT_PREFIX }) {
                 editor.remove(prefix + id);
             }

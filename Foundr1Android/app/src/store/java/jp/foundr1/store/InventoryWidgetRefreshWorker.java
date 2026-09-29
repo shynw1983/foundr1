@@ -18,7 +18,11 @@ public class InventoryWidgetRefreshWorker extends Worker {
     public InventoryWidgetRefreshWorker(Context context, WorkerParameters parameters) { super(context, parameters); }
 
     static void enqueue(Context context) {
+        enqueue(context, false);
+    }
+    static void enqueue(Context context, boolean devices) {
         OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(InventoryWidgetRefreshWorker.class)
+            .setInputData(new androidx.work.Data.Builder().putBoolean("devices", devices).build())
             .setBackoffCriteria(BackoffPolicy.LINEAR, 10, TimeUnit.SECONDS).build();
         // A newer user action must restart the read, including when an older retry is delayed.
         WorkManager.getInstance(context).enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, request);
@@ -26,6 +30,10 @@ public class InventoryWidgetRefreshWorker extends Worker {
 
     @Override public Result doWork() {
         Context context = getApplicationContext();
+        if (getRunAttemptCount() == 0 && getInputData().getBoolean("devices", false)) {
+            StoreWidgetDevicesData.refreshSelected(context, this::isStopped);
+            if (!isStopped()) for (int id : InventoryWidgetProvider.widgetIds(context)) InventoryWidgetProvider.renderWidget(context, id);
+        }
         Set<String> stores = new HashSet<>();
         for (int id : InventoryWidgetProvider.widgetIds(context)) {
             String store = InventoryWidgetProvider.storeId(context, id);

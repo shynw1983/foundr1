@@ -36,6 +36,7 @@ final class StoreWidgetControlsRenderer {
         StoreWidgetControlsData controls = StoreWidgetControlsData.read(context, InventoryWidgetProvider.storeId(context, id));
         String[] shortcuts = InventoryWidgetProvider.shortcuts(context, id);
         for (int slot = 0; slot < 2; slot++) control(context, views, id, slot, shortcuts[slot], size, controls, data);
+        if (size == InventoryWidgetPolicy.SUMMARY || size == InventoryWidgetPolicy.EXPANDED) StoreWidgetDevicesRenderer.bind(context, views, id, size);
     }
 
     static PendingIntent action(Context context, int id, String key, StoreWidgetControlsData controls) {
@@ -138,7 +139,7 @@ final class StoreWidgetControlsRenderer {
         views.setTextViewText(label, title);
         views.setTextViewText(state, size == InventoryWidgetPolicy.DENSE ? shortTitle + " · " + denseValue : value);
         views.setTextViewText(helper, detail);
-        views.setViewVisibility(helper, size == InventoryWidgetPolicy.EXPANDED ? View.VISIBLE : View.GONE);
+        views.setViewVisibility(helper, View.GONE);
         views.setTextColor(state, context.getColor(warning ? R.color.widget_warning : R.color.widget_text));
         views.setImageViewResource(indicator, toggle ? (on ? R.drawable.inventory_widget_toggle_on : R.drawable.inventory_widget_toggle_off) : R.drawable.inventory_widget_chevron);
         views.setContentDescription(root, title + "，" + value + "，" + detail);

@@ -3,7 +3,7 @@
     android:description="@string/inventory_widget_description"
     android:configure="jp.foundr1.store.InventoryWidgetConfigActivity"
     android:initialLayout="@layout/quick_inventory_widget_dense"
-    android:minHeight="110dp"
+    android:minHeight="148dp"
     android:minResizeHeight="56dp"
     android:minResizeWidth="110dp"
     android:minWidth="250dp"

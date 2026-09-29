@@ -32,6 +32,7 @@ public class InventoryWidgetLayoutTest {
         StoreWidgetControlsData.save(context, "store", session, "away", new JSONObject().put("ready", true).put("canManage", true)
             .put("deliveryReady", true).put("sessionId", "layout-session").put("preference", new JSONObject()
                 .put("enabled", false).put("exitRadius", 500).put("enterRadius", 300).put("version", "version")));
+        StoreWidgetDevicesData.prefs(context).edit().clear().commit();
     }
     private InventoryWidgetData sample() throws Exception {
         InventoryWidgetData data = new InventoryWidgetData();
@@ -55,6 +56,18 @@ public class InventoryWidgetLayoutTest {
         configuration.fontScale = fontScale;
         context = context.createConfigurationContext(configuration);
         InventoryWidgetProvider.saveConfiguration(context, 7, language, "store", "清水店", "brand", "まぁ麻");
+        if (!name.contains("empty")) {
+            JSONObject light = new JSONObject().put("key", "111111111111111111111111").put("name", "室内照明").put("kind", "indoorLight")
+                .put("actions", new JSONArray().put("press")).put("fetchedAt", java.time.Instant.now().toString())
+                .put("sample", new JSONObject().put("lightLevel", 12).put("botMode", "pressMode"));
+            JSONObject plug = new JSONObject().put("key", "222222222222222222222222").put("name", "間接照明").put("kind", "plug")
+                .put("actions", new JSONArray().put("turnOn").put("turnOff")).put("fetchedAt", java.time.Instant.now().toString()).put("sample", new JSONObject().put("power", "on"));
+            StoreWidgetDevicesData.saveSlots(context, 7, light, plug);
+            for (JSONObject device : new JSONObject[]{light, plug}) {
+                String key = device.optString("key"), session = InventoryApiClient.sessionKey();
+                StoreWidgetDevicesData.save(context, session, "store", key, StoreWidgetDevicesData.beginRead(session, "store", key), device);
+            }
+        } else StoreWidgetDevicesData.saveSlots(context, 7, null, null);
         FrameLayout parent = new FrameLayout(context);
         View view = InventoryWidgetProvider.views(context, 7, InventoryWidgetPolicy.layout(width, height), data).apply(context, parent);
         float density = context.getResources().getDisplayMetrics().density;
@@ -63,7 +76,9 @@ public class InventoryWidgetLayoutTest {
         parent.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
         parent.layout(0, 0, w, h);
         for (int id : new int[]{R.id.inventory_widget_title, R.id.inventory_widget_shortage, R.id.inventory_widget_restore,
-            R.id.inventory_widget_left_value, R.id.inventory_widget_right_value}) {
+            R.id.inventory_widget_left_value, R.id.inventory_widget_right_value,
+            R.id.inventory_widget_device_left_title, R.id.inventory_widget_device_left_value,
+            R.id.inventory_widget_device_right_title, R.id.inventory_widget_device_right_value}) {
             TextView target = view.findViewById(id);
             if (target == null) continue;
             Rect box = new Rect();
@@ -71,6 +86,11 @@ public class InventoryWidgetLayoutTest {
             parent.offsetDescendantRectToMyCoords(target, box);
             assertTrue(name + ": control clipped " + id, box.left >= 0 && box.right <= w && box.top >= 0 && box.bottom <= h);
             assertTrue(name + ": text clipped " + id, target.getHeight() - target.getPaddingTop() - target.getPaddingBottom() >= target.getLineHeight());
+            if (id == R.id.inventory_widget_device_left_value || id == R.id.inventory_widget_device_right_value) {
+                View card = view.findViewById(id == R.id.inventory_widget_device_left_value ? R.id.inventory_widget_device_left : R.id.inventory_widget_device_right);
+                Rect cardBox = new Rect(); card.getDrawingRect(cardBox); parent.offsetDescendantRectToMyCoords(card, cardBox);
+                assertTrue(name + ": device text outside card", box.top >= cardBox.top && box.bottom <= cardBox.bottom);
+            }
             if (id == R.id.inventory_widget_shortage || id == R.id.inventory_widget_restore) {
                 float inset = (width >= 250 ? 12 : width >= 160 ? 14 : 6) * density;
                 assertTrue(name + ": action too close to shell", box.left >= inset && w - box.right >= inset && h - box.bottom >= inset);
