@@ -143,6 +143,24 @@ public class StoreWidgetDeviceTest {
         new InventoryWidgetProvider().onDeleted(context, new int[]{8});
         assertEquals("", StoreWidgetDevicesData.slot(context, 8, 0).optString("key"));
     }
+    @Test public void deviceIdentitySurvivesClearedStatusAndUpgradesExistingBindingsLocally() throws Exception {
+        fixture.put("name", "入口").put("kind", "lock");
+        StoreWidgetDevicesData.saveSlots(context, 7, fixture, null);
+        StoreWidgetDevicesData.invalidate(context, session, "store", KEY);
+        assertEquals(R.drawable.inventory_widget_device_lock, StoreWidgetDevicesRenderer.icon(StoreWidgetDevicesData.slot(context, 7, 0), null));
+
+        JSONObject oldBinding = StoreWidgetDevicesData.slot(context, 7, 0);
+        oldBinding.remove("kind");
+        StoreWidgetDevicesData.prefs(context).edit().putString("slot:7:0", oldBinding.toString()).commit();
+        fixture.put("fetchedAt", "2020-01-01T00:00:00Z");
+        StoreWidgetDevicesData.save(context, session, "store", KEY, StoreWidgetDevicesData.beginRead(session, "store", KEY), fixture);
+        assertFalse(StoreWidgetDevicePolicy.fresh(fixture, System.currentTimeMillis()));
+        assertEquals("lock", StoreWidgetDevicesData.slot(context, 7, 0).optString("kind"));
+        StoreWidgetDevicesData.invalidate(context, session, "store", KEY);
+        assertEquals(R.drawable.inventory_widget_device_lock, StoreWidgetDevicesRenderer.icon(StoreWidgetDevicesData.slot(context, 7, 0), null));
+        assertEquals(KEY, StoreWidgetDevicesData.slot(context, 7, 0).optString("key"));
+        assertNull(StoreWidgetDevicesData.read(context, "store", KEY));
+    }
     @Test public void botsNeverInventPowerAndReadOnlySensorsCannotBeSelected() throws Exception {
         fixture.put("kind", "bot").put("actions", new JSONArray().put("press")).put("sample", new JSONObject().put("botMode", "pressMode"));
         assertEquals("状态不可读", StoreWidgetDevicePolicy.state(fixture, true));

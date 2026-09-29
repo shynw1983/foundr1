@@ -11,7 +11,16 @@ final class StoreWidgetDevicesData {
     static SharedPreferences prefs(Context context) { return context.getSharedPreferences("store_widget_devices", Context.MODE_PRIVATE); }
     static JSONObject slot(Context context, int id, int slot) {
         JSONObject saved = StoreWidgetControlsData.object(prefs(context).getString("slot:" + id + ":" + slot, ""));
-        return saved != null && saved.optString("store").equals(InventoryWidgetProvider.storeId(context, id)) ? saved : new JSONObject();
+        if (saved == null || !saved.optString("store").equals(InventoryWidgetProvider.storeId(context, id))) return new JSONObject();
+        // Upgrade existing bindings from the local snapshot, without waking the device API.
+        if (saved.optString("kind").isEmpty()) {
+            JSONObject snapshot = read(context, saved.optString("store"), saved.optString("key"));
+            if (snapshot != null && !snapshot.optString("kind").isEmpty()) try {
+                saved.put("kind", snapshot.optString("kind"));
+                prefs(context).edit().putString("slot:" + id + ":" + slot, saved.toString()).apply();
+            } catch (org.json.JSONException impossible) { throw new IllegalArgumentException(impossible); }
+        }
+        return saved;
     }
     static void saveSlots(Context context, int id, JSONObject left, JSONObject right) {
         SharedPreferences.Editor edit = prefs(context).edit();
@@ -21,7 +30,8 @@ final class StoreWidgetDevicesData {
             String key = "slot:" + id + ":" + i;
             JSONObject d = devices[i];
             if (d == null || !StoreWidgetDevicePolicy.validKey(d.optString("key"))) edit.remove(key);
-            else try { edit.putString(key, new JSONObject().put("store", store).put("key", d.getString("key")).put("name", d.optString("name")).toString()); }
+            else try { edit.putString(key, new JSONObject().put("store", store).put("key", d.getString("key"))
+                .put("name", d.optString("name")).put("kind", d.optString("kind")).toString()); }
                 catch (org.json.JSONException impossible) { throw new IllegalArgumentException(impossible); }
         }
         edit.apply();

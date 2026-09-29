@@ -10,6 +10,7 @@ import android.graphics.Rect;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.ImageView;
 import android.widget.RemoteViews;
 import android.util.SizeF;
 import org.json.JSONArray;
@@ -30,6 +31,7 @@ import static org.robolectric.Shadows.shadowOf;
 public class InventoryWidgetLayoutTest {
     private float fontScale = 1f;
     private boolean responsive;
+    private boolean accessDevices;
     @Before public void controls() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         android.webkit.CookieManager.getInstance().setCookie(InventoryApiClient.BASE_URL, "foundr1_os_session=layout-test");
@@ -68,6 +70,10 @@ public class InventoryWidgetLayoutTest {
                 .put("sample", new JSONObject().put("lightLevel", 12).put("botMode", "pressMode"));
             JSONObject plug = new JSONObject().put("key", "222222222222222222222222").put("name", "間接照明").put("kind", "plug")
                 .put("actions", new JSONArray().put("turnOn").put("turnOff")).put("fetchedAt", java.time.Instant.now().toString()).put("sample", new JSONObject().put("power", "on"));
+            if (accessDevices) {
+                light.put("name", "入口ドア").put("kind", "lock").put("actions", new JSONArray().put("lock").put("unlock"));
+                plug.put("name", "ロールスクリーン").put("kind", "shade").put("actions", new JSONArray().put("setPosition"));
+            }
             StoreWidgetDevicesData.saveSlots(context, 7, light, plug);
             for (JSONObject device : new JSONObject[]{light, plug}) {
                 String key = device.optString("key"), session = InventoryApiClient.sessionKey();
@@ -111,6 +117,15 @@ public class InventoryWidgetLayoutTest {
             assertEquals(first.top, upper.top); assertEquals(first.bottom, lower.bottom);
             assertTrue(name + ": column ratio must be 2:2:1", Math.abs(first.width() - 2 * upper.width()) <= 2);
             assertTrue(name + ": controls must have equal width", Math.abs(first.width() - second.width()) <= 1);
+            for (int slot = 0; slot < 2; slot++) {
+                ImageView icon = view.findViewById(slot == 0 ? R.id.inventory_widget_device_left_icon : R.id.inventory_widget_device_right_icon);
+                assertNotNull(name + ": missing device icon", icon);
+                assertEquals(View.VISIBLE, icon.getVisibility()); assertNotNull(icon.getDrawable());
+                Rect iconBox = new Rect(); icon.getDrawingRect(iconBox); parent.offsetDescendantRectToMyCoords(icon, iconBox);
+                assertTrue(name + ": icon clipped by device button", boxes.get(slot + 2).contains(iconBox));
+                View button = view.findViewById(slot == 0 ? R.id.inventory_widget_device_left : R.id.inventory_widget_device_right);
+                assertTrue(name + ": device name missing from accessibility label", button.getContentDescription().length() > 5);
+            }
         }
         for (int id : new int[]{R.id.inventory_widget_title, R.id.inventory_widget_shortage, R.id.inventory_widget_restore,
             R.id.inventory_widget_left_title, R.id.inventory_widget_left_value,
@@ -119,6 +134,11 @@ public class InventoryWidgetLayoutTest {
             TextView target = view.findViewById(id);
             if (target == null) {
                 assertTrue(name + ": missing label " + id, layout == InventoryWidgetPolicy.COMPACT || layout == InventoryWidgetPolicy.MINIMAL);
+                continue;
+            }
+            boolean deviceLabel = id == R.id.inventory_widget_device_left_title || id == R.id.inventory_widget_device_right_title;
+            if (deviceLabel && layout == InventoryWidgetPolicy.DENSE) {
+                assertEquals(name + ": compact device button should show only its icon", View.GONE, target.getVisibility());
                 continue;
             }
             assertEquals(name + ": hidden label " + id, View.VISIBLE, target.getVisibility());
@@ -157,6 +177,9 @@ public class InventoryWidgetLayoutTest {
         }
         render("widget-zh", 360, 164, "zh", sample());
         render("widget-dense-zh", 300, 130, "zh", sample());
+        accessDevices = true;
+        render("widget-lock-shade-dense", 300, 130, "ja", sample());
+        render("widget-lock-shade", 360, 164, "ja", sample());
     }
 
     @Test public void unavailableAndFailedStatesCannotLookHealthy() throws Exception {

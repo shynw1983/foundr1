@@ -36,7 +36,7 @@ final class StoreWidgetControlsRenderer {
         StoreWidgetControlsData controls = StoreWidgetControlsData.read(context, InventoryWidgetProvider.storeId(context, id));
         String[] shortcuts = InventoryWidgetProvider.shortcuts(context, id);
         for (int slot = 0; slot < 2; slot++) control(context, views, id, slot, shortcuts[slot], size, controls, data);
-        StoreWidgetDevicesRenderer.bind(context, views, id);
+        StoreWidgetDevicesRenderer.bind(context, views, id, size);
     }
 
     static PendingIntent action(Context context, int id, String key, StoreWidgetControlsData controls) {
