@@ -16,7 +16,8 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
-      "connect-src 'self' https:",
+      "connect-src 'self' https: wss://*.pusher.com",
+      "media-src 'self' blob:",
       [
         "frame-src 'self'",
         "https://*.clerk.accounts.dev https://*.clerk.com https://clerk.com",

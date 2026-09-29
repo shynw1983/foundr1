@@ -1,0 +1,14 @@
+{
+  "name": "foundr1-camera-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.5.0" },
+  "scripts": {
+    "start": "node src/main.mjs",
+    "setup": "node src/setup.mjs",
+    "test": "node --test test/*.test.mjs",
+    "install:mac": "node macos/install.mjs"
+  },
+  "dependencies": { "@mega-yfue/eufy-sdk": "0.3.0", "pusher-js": "8.5.0" }
+}

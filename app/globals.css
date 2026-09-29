@@ -45431,6 +45431,22 @@ a:focus-visible {
 
 /* On-demand store equipment controls */
 .store-devices-panel { max-width: 1080px; margin: 24px auto; color: var(--ink); }
+.store-cameras-panel { margin-top: 28px; }
+.store-camera-card > .primary-button { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; min-height: 42px; }
+.store-camera-dialog { width: min(820px,calc(100vw - 32px)); }
+.store-camera-dialog .store-device-dialog-title h2 { display: flex; align-items: center; gap: 8px; }
+.store-camera-screen { margin-top: 18px; aspect-ratio: 16 / 9; background: var(--color-surface-muted, #edf0ee); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: grid; place-items: center; }
+.store-camera-screen video { display: block; width: 100%; height: 100%; object-fit: contain; background: #101a15; }
+.store-camera-placeholder { display: flex; width: 100%; min-width: 0; flex-direction: column; align-items: center; gap: 12px; padding: 20px; text-align: center; color: var(--muted); }
+.store-camera-placeholder p { max-width: 38em; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.store-camera-dialog .store-camera-caption { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 5px 16px; margin: 10px 0 0; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.store-camera-dialog .store-device-dialog-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+@media (max-width: 600px) {
+ .store-camera-dialog .store-camera-screen { min-height: 190px; aspect-ratio: auto; }
+ .store-camera-dialog .store-camera-screen video { aspect-ratio: 16 / 9; }
+ .store-camera-dialog .store-device-dialog-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .store-camera-dialog .store-device-dialog-actions button { min-height: 42px; }
+}
 .store-devices-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .store-devices-toolbar h2 { margin: 0; font-size: 18px; font-weight: 600; }
 .store-devices-toolbar h2 span { font-size: 13px; font-weight: 400; margin-left: 8px; color: var(--muted); }

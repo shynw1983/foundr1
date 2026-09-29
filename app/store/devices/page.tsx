@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection } from "../components/store-selection";
 import { StoreDevicesPanel } from "./StoreDevicesPanel";
+import { StoreCamerasPanel } from "./StoreCamerasPanel";
 
 export default function StoreDevicesPage() {
   const [store, setStore] = useState<{ id: string; name: string } | null>(null);
@@ -30,7 +31,7 @@ export default function StoreDevicesPage() {
         </a>
         <StoreNavTabs active="devices" />
       </header>
-      {error ? <p className="store-light-page-error" role="alert">{error}</p> : store ? <StoreDevicesPanel key={store.id} storeId={store.id} storeName={store.name} /> : <p className="store-light-loading" role="status">店舗情報を読み込んでいます。</p>}
+      {error ? <p className="store-light-page-error" role="alert">{error}</p> : store ? <div key={store.id}><StoreDevicesPanel storeId={store.id} storeName={store.name} /><StoreCamerasPanel storeId={store.id}/></div> : <p className="store-light-loading" role="status">店舗情報を読み込んでいます。</p>}
     </main>
   );
 }

@@ -1,0 +1,5 @@
+{
+  "desktopBridgeConfig": "../desktop-bridge/config.local.json",
+  "countryCode": "JP",
+  "cameraBindings": { "parking": "T8170_REPLACE_WITH_DISCOVERED_SERIAL" }
+}
