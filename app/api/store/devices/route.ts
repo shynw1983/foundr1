@@ -1,6 +1,6 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { getStoreOrderAccess } from "../../../../lib/store-order-access";
-import { getStoreDevices, requestStoreDeviceCommand, StoreDeviceError } from "../../../../lib/store-devices";
+import { getStoreDevices, requestStoreDeviceCommand, saveStoreDeviceOrder, StoreDeviceError } from "../../../../lib/store-devices";
 import type { DeviceAction } from "../../../../lib/store-device-state";
 
 export const dynamic = "force-dynamic";
@@ -42,5 +42,19 @@ export async function POST(request: Request) {
     return json(await requestStoreDeviceCommand(access.storeId!, access.session!.id, body.device, body.requestId, body.action as DeviceAction, body.action === "setPosition" ? String(body.position) : "default"));
   } catch (error) {
     return error instanceof StoreDeviceError ? json({ error: error.message }, error.status) : json({ error: "操作結果を確認できません。再操作せず、状態を更新してください。" }, 503);
+  }
+}
+
+export async function PATCH(request: Request) {
+  const origin = request.headers.get("origin");
+  if (origin && origin !== new URL(request.url).origin) return json({ error: "不正なリクエスト元です。" }, 403);
+  const body = await request.json().catch(() => null) as { storeId?: unknown; order?: unknown } | null;
+  if (!body || !Array.isArray(body.order)) return json({ error: "機器の並び順を確認してください。" }, 400);
+  try {
+    const access = await authorize(body.storeId);
+    if (access.error) return access.error;
+    return json(await saveStoreDeviceOrder(access.storeId!, access.session!.id, body.order));
+  } catch (error) {
+    return error instanceof StoreDeviceError ? json({ error: error.message }, error.status) : json({ error: "並び順を保存できません。もう一度お試しください。" }, 503);
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Blinds, Lightbulb, LockKeyhole, LockKeyholeOpen, Radio, RefreshCw, Thermometer, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Blinds, Lightbulb, LockKeyhole, LockKeyholeOpen, Power, Radio, RefreshCw, Thermometer, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import { deviceCommandLeaseMs, deviceObservation, deviceObservationDelays, deviceStateLabel, type DeviceAction, type DeviceCommand, type StoreDevice, type StoreDevicesView } from "../../../lib/store-device-state";
@@ -21,6 +21,11 @@ export function StoreDevicesPanel({ storeId, storeName }: { storeId: string; sto
   const [positions, setPositions] = useState<Record<string, number>>({});
   const [intent, setIntent] = useState<Intent | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [sortOrder, setSortOrder] = useState<string[] | null>(null);
+  const [sortSaving, setSortSaving] = useState(false);
+  const [sortError, setSortError] = useState("");
+  const [sortNotice, setSortNotice] = useState("");
+  const savingOrder = useRef(false);
   const [now, setNow] = useState(() => Date.now());
   const active = useRef(true), generation = useRef(0), allReading = useRef(false), sending = useRef(false), preparing = useRef(false);
   const busyKeys = useRef(new Set<string>()), versions = useRef(new Map<string, number>());
@@ -132,20 +137,56 @@ export function StoreDevicesPanel({ storeId, storeName }: { storeId: string; sto
       }
     }
   }
+  function moveDevice(index: number, direction: number) {
+    setSortOrder(order => {
+      if (!order || index + direction < 0 || index + direction >= order.length) return order;
+      const next = [...order]; [next[index], next[index + direction]] = [next[index + direction], next[index]]; return next;
+    });
+  }
+  async function saveOrder() {
+    if (!sortOrder || savingOrder.current) return;
+    savingOrder.current = true; setSortSaving(true); setSortError("");
+    const gen = generation.current, controller = new AbortController(); controllers.current.add(controller);
+    try {
+      const response = await fetch("/api/store/devices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ storeId, order: sortOrder }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25_000)]) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "並び順を保存できません。もう一度お試しください。");
+      if (active.current && gen === generation.current) {
+        const ranks = new Map<string, number>((body.order as string[]).map((key, index) => [key, index]));
+        setView(v => v ? { ...v, devices: [...v.devices].sort((a, b) => (ranks.get(a.key) ?? ranks.size) - (ranks.get(b.key) ?? ranks.size)) } : v);
+        setSortOrder(null); setSortNotice("並び順を保存しました。");
+      }
+    } catch (error) {
+      if (active.current && gen === generation.current) setSortError(error instanceof Error && error.message === "機器の一覧が変わりました。更新してから並び替えてください。" ? error.message : "並び順を保存できません。もう一度お試しください。");
+    } finally { controllers.current.delete(controller); savingOrder.current = false; if (active.current && gen === generation.current) setSortSaving(false); }
+  }
   const time = (value: string | null) => value ? new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : language === "zh-Hant" ? "zh-TW" : "zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Tokyo" }).format(new Date(value)) : "—";
   const actionName = (action: DeviceAction, position?: number) => action === "setPosition" ? position === 0 ? t("全開にする") : position === 100 ? t("全閉にする") : `${t("閉じる割合")} ${position}%` : t(labels[action]);
   return <section className="store-devices-panel" data-i18n-ignore>
-    <div className="store-devices-toolbar"><div><h2>{storeName} <span>{t("店舗設備")}</span></h2><p>{t("必要なときだけ状態を取得します。定期的な自動更新は行いません。")}</p></div><button className="secondary-button" onClick={() => void refreshAll()} disabled={allBusy || Object.values(busy).some(Boolean)}><RefreshCw size={16}/>{t(allBusy ? "更新中" : "すべて更新")}</button></div>
+    <div className="store-devices-toolbar"><div><h2>{storeName} <span>{t("店舗設備")}</span></h2><p>{t("必要なときだけ状態を取得します。定期的な自動更新は行いません。")}</p></div><div className="store-devices-toolbar-actions">
+      {!sortOrder && view?.configured && view.devices.length > 1 && <button className="secondary-button store-device-sort-start" disabled={allBusy || Object.values(busy).some(Boolean)} onClick={() => { setSortOrder(view.devices.map(d => d.key)); setSortError(""); setSortNotice(""); }}><ArrowUpDown size={16}/>{t("並び順を変更")}</button>}
+      <button className="secondary-button store-device-refresh-all" onClick={() => void refreshAll()} disabled={Boolean(sortOrder) || allBusy || Object.values(busy).some(Boolean)}><RefreshCw size={16}/>{t(allBusy ? "更新中" : "すべて更新")}</button></div></div>
     {error && <p className="store-device-notice is-error" role="alert">{t(error)}</p>}
-    {!view ? <p role="status">{t("機器を読み込んでいます。")}</p> : !view.configured ? <p className="store-device-empty">{t("この店舗の機器は未設定です。")}</p> : !view.devices.length ? <p className="store-device-empty">{t("この店舗の機器が見つかりません。")}</p> : <div className="store-device-grid">{view.devices.map(device => {
+    {sortNotice && <p className="store-device-notice is-success" role="status">{t(sortNotice)}</p>}
+    {!view ? <p role="status">{t("機器を読み込んでいます。")}</p> : !view.configured ? <p className="store-device-empty">{t("この店舗の機器は未設定です。")}</p> : !view.devices.length ? <p className="store-device-empty">{t("この店舗の機器が見つかりません。")}</p> : sortOrder ? <div className="store-device-sort">
+      <p>{t("店舗の端末で同じ順番を使います。")}</p>
+      <ol className="store-device-sort-list">{sortOrder.map((key, index) => { const device = view.devices.find(d => d.key === key); if (!device) return null; return <li key={key} data-sort-key={key}>
+        <span className="store-device-sort-number">{index + 1}</span><div className="store-device-sort-name">{t(device.name)}<small>{device.type}</small></div>
+        <div className="store-device-sort-buttons"><button className="secondary-button" aria-label={`${t(device.name)} ${t("上へ")}`} disabled={sortSaving || index === 0} onClick={() => moveDevice(index, -1)}><ArrowUp size={16}/></button><button className="secondary-button" aria-label={`${t(device.name)} ${t("下へ")}`} disabled={sortSaving || index === sortOrder.length - 1} onClick={() => moveDevice(index, 1)}><ArrowDown size={16}/></button></div>
+      </li>; })}</ol>
+      {sortError && <p className="store-device-notice is-error" role="alert">{t(sortError)}</p>}
+      <div className="store-device-sort-footer"><button className="secondary-button" disabled={sortSaving} onClick={() => setSortOrder(null)}>{t("キャンセル")}</button><button className="primary-button" disabled={sortSaving} onClick={() => void saveOrder()}>{t(sortSaving ? "保存中" : "並び順を保存")}</button></div>
+    </div> : <div className="store-device-grid">{view.devices.map(device => {
       const s = device.sample, cooldown = device.blockedUntil ? Math.max(0, Math.ceil((Date.parse(device.blockedUntil) - now) / 1000)) : 0;
       const observation = deviceObservation(device, now), position = positions[device.key] ?? s?.position ?? 50;
       const commandError = device.command?.result === "rejected" ? issueLabels[device.command.reason] || "操作を送信できませんでした。接続と機器の設定を確認してください。" : "";
       const deviceError = errors[device.key] || (device.issue && device.issue !== "status_unsupported" ? issueLabels[device.issue] || "機器の状態を取得できません。時間をおいて更新してください。" : commandError);
-      const Icon = device.kind === "lock" ? LockKeyhole : device.kind === "shade" ? Blinds : device.kind === "indoorLight" || device.kind === "bot" ? Lightbulb : device.kind === "meter" || device.kind === "hub" ? Thermometer : Radio;
+      const Icon = device.kind === "lock" ? LockKeyhole : device.kind === "shade" ? Blinds : device.kind === "indoorLight" || device.kind === "bot" || device.kind === "plug" ? Lightbulb : device.kind === "meter" || device.kind === "hub" ? Thermometer : Radio;
       const awaitingReading = device.command && device.command.result !== "rejected" && device.command.reason !== "already_in_state" && (!device.fetchedAt || Date.parse(device.fetchedAt) < Date.parse(device.command.finishedAt || device.command.requestedAt) + 4_000);
       const lockState = !device.readError && !awaitingReading && observation !== "waiting" ? s?.lockState : undefined;
       const primaryLockAction = lockState === "locked" ? "unlock" : lockState === "unlocked" ? "lock" : null;
+      const power = !device.readError && !awaitingReading && observation !== "waiting" ? s?.power : undefined;
+      const primaryPowerAction = power === "on" ? "turnOff" : power === "off" ? "turnOn" : null;
       const disabled = allBusy || busy[device.key] || !device.controlEnabled || cooldown > 0;
       return <article className="store-device-card" key={device.key} data-device-kind={device.kind} data-device-key={device.key}>
         <header><div><Icon size={20}/><h3>{t(device.name)}</h3></div><span>{device.type}</span></header>
@@ -169,9 +210,9 @@ export function StoreDevicesPanel({ storeId, storeName }: { storeId: string; sto
         <div className="store-device-actions">{device.actions.flatMap(action => {
           if (action === "setPosition") return [0, 100, position].map((p, i) => <button key={i} className={i === 2 ? "primary-button" : "secondary-button"} disabled={disabled} onClick={() => void prepare(device, action, p)}>{i === 2 ? t("位置を適用") : actionName(action, p)}</button>);
           const isLockAction = action === "lock" || action === "unlock";
-          const primary = isLockAction ? action === primaryLockAction : action !== "deadbolt";
+          const primary = isLockAction ? action === primaryLockAction : device.kind === "plug" ? action === primaryPowerAction : action !== "deadbolt";
           return <button key={action} data-device-action={action} className={primary ? "primary-button" : "secondary-button"} disabled={disabled} onClick={() => void prepare(device, action)}>
-            {action === "lock" ? <LockKeyhole size={16} aria-hidden="true"/> : action === "unlock" ? <LockKeyholeOpen size={16} aria-hidden="true"/> : null}{actionName(action)}
+            {action === "lock" ? <LockKeyhole size={16} aria-hidden="true"/> : action === "unlock" ? <LockKeyholeOpen size={16} aria-hidden="true"/> : device.kind === "plug" ? <Power size={16} aria-hidden="true"/> : null}{actionName(action)}
           </button>;
         })}
           {device.kind !== "remote" && device.kind !== "unsupported" && <button className="store-device-refresh" disabled={allBusy || busy[device.key]} onClick={() => void refreshOne(device.key)}><RefreshCw size={14}/>{t("状態を更新")}</button>}

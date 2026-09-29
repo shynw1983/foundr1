@@ -13,7 +13,7 @@ type OsTranslationContextValue = {
 
 const languageStorageKey = "foundr1-os-language";
 const languagePreferenceStorageKey = "foundr1-os-language-preference";
-const localeCacheVersion = "20260929-switchbot-control-v63";
+const localeCacheVersion = "20260929-switchbot-devices-v64";
 const languageMeta: Record<OsLanguage, { htmlLang: string }> = {
   ja: { htmlLang: "ja" },
   "zh-Hans": { htmlLang: "zh-Hans" },

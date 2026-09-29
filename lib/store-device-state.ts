@@ -3,7 +3,7 @@ import { estimateIndoorLight } from "./store-light-state";
 export const deviceCooldownMs = 10_000;
 export const deviceCommandLeaseMs = 60_000;
 export const deviceObservationDelays = [5_000, 15_000, 30_000] as const;
-export type DeviceKind = "indoorLight" | "bot" | "shade" | "lock" | "hub" | "meter" | "keypad" | "remote" | "unsupported";
+export type DeviceKind = "indoorLight" | "bot" | "plug" | "shade" | "lock" | "hub" | "meter" | "keypad" | "remote" | "unsupported";
 export type DeviceAction = "press" | "turnOn" | "turnOff" | "setPosition" | "lock" | "unlock" | "deadbolt";
 export type DeviceSample = {
   battery?: number | null; lightLevel?: number | null; temperature?: number | null; humidity?: number | null;
@@ -52,6 +52,7 @@ export function deviceStateLabel(device: StoreDevice): string {
     return state === "on" ? "点灯（推定）" : state === "off" ? "消灯（推定）" : "状態を判定できません";
   }
   if (device.kind === "bot") return s.botMode === "pressMode" ? "点灯状態は取得できません" : s.power === "on" ? "オン" : s.power === "off" ? "オフ" : "状態を判定できません";
+  if (device.kind === "plug") return s.power === "on" ? "オン" : s.power === "off" ? "オフ" : "状態を判定できません";
   if (device.kind === "lock") return s.lockState === "locked" ? "施錠中" : s.lockState === "unlocked" ? "解錠中" : "状態を判定できません";
   if (device.kind === "shade") return s.position == null ? "状態を判定できません" : s.moving ? "移動中" : s.position === 0 ? "全開" : s.position === 100 ? "全閉" : "途中の位置";
   return "取得済み";

@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import type { DeviceAction, DeviceKind, DeviceSample } from "./store-device-state";
 
-export type IndoorLightConfig = { storeId: string; botId: string; hubId: string; token: string; secret: string; controlEnabled: boolean };
+export type IndoorLightConfig = { storeId: string; botId: string; hubId: string; token: string; secret: string; controlEnabled: boolean; directDeviceIds?: string[] };
 export class SwitchBotError extends Error {
   readonly code: string;
   readonly uncertain: boolean;
@@ -56,11 +56,11 @@ export async function listStoreSwitchBots(config: IndoorLightConfig): Promise<Sw
   const body = await switchBotRequest(config, "devices");
   if (!Array.isArray(body.deviceList)) throw new SwitchBotError("invalid_response");
   return body.deviceList.filter((d): d is Record<string, unknown> => Boolean(d && typeof d === "object"))
-    .filter(d => d.deviceId === config.hubId || d.hubDeviceId === config.hubId)
+    .filter(d => d.deviceId === config.hubId || d.hubDeviceId === config.hubId || (d.deviceType === "Plug Mini (JP)" && config.directDeviceIds?.includes(String(d.deviceId))))
     .filter(d => typeof d.deviceId === "string" && /^[A-F0-9]{12}$/.test(d.deviceId))
     .map(d => {
       const id = String(d.deviceId), type = String(d.deviceType);
-      const kind: DeviceKind = type === "Bot" ? (id === config.botId ? "indoorLight" : "bot") : type === "Roller Shade" ? "shade" : type === "Smart Lock Pro" ? "lock" : type === "Hub 2" ? "hub" : type === "Meter" ? "meter" : type === "Keypad Vision" ? "keypad" : type === "Remote" ? "remote" : "unsupported";
+      const kind: DeviceKind = type === "Bot" ? (id === config.botId ? "indoorLight" : "bot") : type === "Plug Mini (JP)" ? "plug" : type === "Roller Shade" ? "shade" : type === "Smart Lock Pro" ? "lock" : type === "Hub 2" ? "hub" : type === "Meter" ? "meter" : type === "Keypad Vision" ? "keypad" : type === "Remote" ? "remote" : "unsupported";
       return { id, key: deviceKey(config.storeId, id), name: String(d.deviceName || type), type, kind, cloud: d.enableCloudService === true, secondary: d.group === true && d.master === false };
     });
 }
@@ -69,8 +69,14 @@ const bounded = (v: unknown, min: number, max: number) => typeof v === "number" 
 export async function readStoreDevice(config: IndoorLightConfig, device: SwitchBotDevice, hubRead?: Promise<Record<string, unknown>>): Promise<DeviceSample> {
   if (!device.cloud) throw new SwitchBotError("cloud_disabled");
   const raw = device.id === config.hubId && hubRead ? await hubRead : await readRawStatus(config, device.id);
-  if (raw.deviceId !== device.id || raw.deviceType !== device.type || raw.hubDeviceId !== config.hubId) throw new SwitchBotError("device_mismatch");
+  const directPlug = device.kind === "plug" && config.directDeviceIds?.includes(device.id);
+  const matchingHub = raw.hubDeviceId === config.hubId || (directPlug && [device.id, "", "000000000000"].includes(String(raw.hubDeviceId)));
+  if (raw.deviceId !== device.id || raw.deviceType !== device.type || !matchingHub) throw new SwitchBotError("device_mismatch");
   const battery = bounded(raw.battery, 0, 100);
+  if (device.kind === "plug") {
+    if (raw.power !== "on" && raw.power !== "off") throw new SwitchBotError("invalid_power_state");
+    return { power: raw.power };
+  }
   if (device.kind === "indoorLight" || device.kind === "bot") {
     if (!["pressMode", "switchMode"].includes(String(raw.deviceMode))) throw new SwitchBotError("unsupported_mode");
     const sample: DeviceSample = { battery, botMode: String(raw.deviceMode), ...(raw.deviceMode === "switchMode" ? { power: String(raw.power) } : {}) };
@@ -93,6 +99,7 @@ export function deviceActions(device: SwitchBotDevice, sample: DeviceSample | nu
   if (!device.cloud || device.secondary) return [];
   if (device.kind === "indoorLight" || device.kind === "bot") return sample?.botMode === "switchMode" ? ["turnOn", "turnOff"] : ["press"];
   if (device.kind === "shade") return ["setPosition"];
+  if (device.kind === "plug") return ["turnOn", "turnOff"];
   // The installed mechanical lock has no latch-retraction function.
   // A Lock Pro model name alone does not establish that capability.
   if (device.kind === "lock") return ["lock", "unlock"];

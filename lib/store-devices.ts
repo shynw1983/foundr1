@@ -12,17 +12,39 @@ function publicCommand(row: CommandRow | null | undefined): DeviceCommand | null
   if (!row) return null;
   return { id: row.id, action: row.command, parameter: row.parameter, result: row.result === "pending" && Date.now() - Date.parse(row.requested_at) >= deviceCommandLeaseMs ? "unknown" : row.result, before: row.before_sample, reason: row.reason, requestedAt: iso(row.requested_at)!, finishedAt: iso(row.finished_at) };
 }
-const priority = { indoorLight: 0, bot: 1, shade: 2, lock: 3, hub: 4, meter: 5, keypad: 6, remote: 7, unsupported: 8 };
+const priority = { indoorLight: 0, plug: 1, bot: 2, shade: 3, lock: 4, hub: 5, meter: 6, keypad: 7, remote: 8, unsupported: 9 };
+async function storeDeviceConfig(storeId: string) {
+  const config = indoorLightConfig(storeId);
+  if (!config) return null;
+  const rows = await sql`select settings from module_settings where scope_key=${`store:${storeId}`} and module_key='store_devices' limit 1`;
+  const settings = rows[0]?.settings || {};
+  const strings = (value: unknown, pattern: RegExp): string[] => Array.isArray(value) ? [...new Set(value.filter((v): v is string => typeof v === "string" && pattern.test(v)))].slice(0, 128) : [];
+  return { config: { ...config, directDeviceIds: strings(settings.directDeviceIds, /^[A-F0-9]{12}$/) }, order: strings(settings.deviceOrder, /^[a-f0-9]{24}$/) };
+}
+
+export async function saveStoreDeviceOrder(storeId: string, actorId: string, order: unknown) {
+  const configured = await storeDeviceConfig(storeId);
+  if (!configured) throw new StoreDeviceError("この店舗の機器は未設定です。", 409);
+  if (!Array.isArray(order) || order.length > 128 || order.some(key => typeof key !== "string" || !/^[a-f0-9]{24}$/.test(key)) || new Set(order).size !== order.length) throw new StoreDeviceError("機器の並び順を確認してください。", 400);
+  const devices = await listStoreSwitchBots(configured.config);
+  if (order.some(key => !devices.some(device => device.key === key))) throw new StoreDeviceError("機器の一覧が変わりました。更新してから並び替えてください。", 400);
+  await sql`insert into module_settings(scope_key,module_key,settings,updated_by,updated_at)
+    values(${`store:${storeId}`},'store_devices',${JSON.stringify({ deviceOrder: order })}::jsonb,${actorId}::uuid,now())
+    on conflict(scope_key,module_key) do update set settings=module_settings.settings || excluded.settings,updated_by=excluded.updated_by,updated_at=now()`;
+  return { order: order as string[] };
+}
 
 export async function getStoreDevices(storeId: string, key?: string): Promise<StoreDevicesView> {
-  const config = indoorLightConfig(storeId);
-  if (!config) return { configured: false, storeId, devices: [] };
+  const configured = await storeDeviceConfig(storeId);
+  if (!configured) return { configured: false, storeId, devices: [] };
+  const { config, order } = configured;
   let devices = await listStoreSwitchBots(config);
   if (key) {
     devices = devices.filter(d => d.key === key);
     if (!devices.length) throw new StoreDeviceError("この店舗の機器が見つかりません。", 404);
   }
-  devices.sort((a, b) => priority[a.kind] - priority[b.kind] || a.name.localeCompare(b.name));
+  const ranks = new Map(order.map((key, index) => [key, index]));
+  devices.sort((a, b) => (ranks.get(a.key) ?? order.length) - (ranks.get(b.key) ?? order.length) || priority[a.kind] - priority[b.kind] || a.name.localeCompare(b.name));
   // Status reads do not create/update rows or persist sensor samples.
   const runtime = await sql`select r.device_id, r.blocked_until, row_to_json(c) as command
     from store_light_runtime r left join lateral (
@@ -48,7 +70,7 @@ export async function getStoreDevices(storeId: string, key?: string): Promise<St
 }
 
 export async function requestStoreDeviceCommand(storeId: string, actorId: string, key: string, requestId: string, action: DeviceAction, parameter: string) {
-  const config = indoorLightConfig(storeId);
+  const config = (await storeDeviceConfig(storeId))?.config;
   if (!config || !config.controlEnabled) throw new StoreDeviceError("機器の操作はまだ有効になっていません。", 409);
   const device = (await listStoreSwitchBots(config)).find(d => d.key === key);
   if (!device) throw new StoreDeviceError("この店舗の機器が見つかりません。", 404);

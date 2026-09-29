@@ -8,6 +8,7 @@ const ts = require('typescript');
 const { PGlite } = require(process.env.PGLITE_MODULE_PATH || '@electric-sql/pglite');
 const storeId = '10000000-0000-4000-8000-000000000001', otherStoreId = '10000000-0000-4000-8000-000000000002', actorId = '20000000-0000-4000-8000-000000000001';
 const botId='ABCDEF123456', hubId='ABCDEF654321', outdoorId='ABCDEF123457', shadeId='ABCDEF123458', lockId='ABCDEF123459', meterId='ABCDEF123460', keypadId='ABCDEF123461', remoteId='ABCDEF123462', foreignId='ABCDEF123463';
+const plugId='ABCDEF123464',foreignPlugId='ABCDEF123465';
 const env = { SWITCHBOT_TOKEN:'test-token',SWITCHBOT_SECRET:'test-secret',SWITCHBOT_INDOOR_LIGHT_STORE_ID:storeId,SWITCHBOT_INDOOR_LIGHT_BOT_ID:botId,SWITCHBOT_INDOOR_LIGHT_HUB_ID:hubId,SWITCHBOT_CONTROL_ENABLED:'true' };
 function load(file, modules={}, globals={}) {
  const context={exports:{},Response,Request,URL,AbortSignal,Date,Buffer,process:{env},console,require:name=>Object.hasOwn(modules,name.split('/').at(-1))?modules[name.split('/').at(-1)]:require(name),...globals};
@@ -15,9 +16,9 @@ function load(file, modules={}, globals={}) {
 }
 const light=load('lib/store-light-state.ts'), state=load('lib/store-device-state.ts',{'store-light-state':light});
 const plain=v=>JSON.parse(JSON.stringify(v));
-const types=[[botId,'Bot'],[outdoorId,'Bot'],[shadeId,'Roller Shade'],[lockId,'Smart Lock Pro'],[hubId,'Hub 2'],[meterId,'Meter'],[keypadId,'Keypad Vision'],[remoteId,'Remote'],[foreignId,'Bot']];
+const types=[[botId,'Bot'],[outdoorId,'Bot'],[shadeId,'Roller Shade'],[lockId,'Smart Lock Pro'],[hubId,'Hub 2'],[meterId,'Meter'],[keypadId,'Keypad Vision'],[remoteId,'Remote'],[foreignId,'Bot'],[plugId,'Plug Mini (JP)'],[foreignPlugId,'Plug Mini (JP)']];
 function fakeVendor(onPost=async()=>{}) {
- const control={posts:[],reads:[],level:12,mode:'pressMode',position:0,moving:false,calibrated:true,lockState:'unlocked',doorState:'closed',failReads:false,postMode:'ok'};
+ const control={posts:[],reads:[],level:12,mode:'pressMode',position:0,moving:false,calibrated:true,lockState:'unlocked',doorState:'closed',failReads:false,postMode:'ok',plugPower:'on',plugHub:null};
  control.fetch=async(url,init)=>{
   assert.equal(init.redirect,'error');assert.equal(init.headers.sign,crypto.createHmac('sha256',env.SWITCHBOT_SECRET).update(env.SWITCHBOT_TOKEN+init.headers.t+init.headers.nonce).digest('base64'));
   if(init.method==='POST'){
@@ -27,9 +28,10 @@ function fakeVendor(onPost=async()=>{}) {
    return Response.json({statusCode:100,body:{items:[{deviceID:url.split('/').at(-2),code:100,status:{}}]}});
   }
   control.reads.push(url);if(control.failReads || control.failStatuses && url.endsWith('/status'))throw Error('offline');
-  if(url.endsWith('/devices'))return Response.json({statusCode:100,body:{deviceList:types.map(([deviceId,deviceType])=>({deviceId,deviceType,deviceName:deviceType,hubDeviceId:deviceId===foreignId?foreignId:hubId,enableCloudService:true,group:false,master:true,keyList:[{password:'DO-NOT-EXPOSE'}]})),infraredRemoteList:[]}});
+  if(url.endsWith('/devices'))return Response.json({statusCode:100,body:{deviceList:types.map(([deviceId,deviceType])=>({deviceId,deviceType,deviceName:deviceType,hubDeviceId:deviceType==='Plug Mini (JP)'?'':deviceId===foreignId?foreignId:hubId,enableCloudService:true,group:false,master:true,keyList:[{password:'DO-NOT-EXPOSE'}]})),infraredRemoteList:[]}});
   const id=url.split('/').at(-2),type=types.find(t=>t[0]===id)?.[1];assert.notEqual(id,foreignId);
   let body={deviceId:id,deviceType:type,hubDeviceId:hubId,battery:100};
+  if(type==='Plug Mini (JP)')Object.assign(body,{hubDeviceId:control.plugHub??id,power:control.plugPower});
   if(type==='Bot')Object.assign(body,{deviceMode:control.mode,power:'on'});
   if(type==='Hub 2')Object.assign(body,{lightLevel:control.level,temperature:22.6,humidity:66});
   if(type==='Roller Shade')Object.assign(body,{calibrate:control.calibrated,slidePosition:control.position,moving:control.moving,battery:13});
@@ -55,6 +57,8 @@ test('inferred lighting and command observations distinguish acknowledgement fro
 test('on-demand reads, additive migration, actual SQL claims, device safety and idempotency',async t=>{
  const db=new PGlite();try{
   await db.exec(`create table stores(id uuid primary key);create table employees(id uuid primary key);insert into stores values('${storeId}'),('${otherStoreId}');insert into employees values('${actorId}');`);
+  await db.exec(fs.readFileSync('db/schema.sql','utf8').match(/create table if not exists module_settings \([\s\S]*?\n\);/)[0]);
+  await db.query("insert into module_settings(scope_key,module_key,settings) values($1,'store_devices',$2::jsonb)",['store:'+storeId,JSON.stringify({directDeviceIds:[plugId],preserved:'yes'})]);
   const initial=fs.readFileSync('db/migrations/20260929-store-indoor-light.sql','utf8'),expand=fs.readFileSync('db/migrations/20260929-store-device-commands.sql','utf8');await db.exec(initial);
   const legacyId=crypto.randomUUID();await db.query("insert into store_light_commands(id,store_id,device_id,result,before_state,before_level) values($1,$2,$3,'accepted','off',2)",[legacyId,storeId,botId]);
   const before=(await db.query('select * from store_light_commands')).rows[0];await db.exec(expand);await db.exec(expand);
@@ -70,16 +74,19 @@ test('on-demand reads, additive migration, actual SQL claims, device safety and 
   const key=id=>adapter.deviceKey(storeId,id),send=(id,action='press',param='default',requestId=crypto.randomUUID())=>service.requestStoreDeviceCommand(storeId,actorId,key(id),requestId,action,param);
   const expire=()=>db.exec("update store_light_runtime set blocked_until=now()-interval '1 second'");
   let view=await service.getStoreDevices(storeId);
-  assert.equal(view.devices.length,8);assert.equal(view.devices.filter(d=>d.actions.length).length,4);
+  assert.equal(view.devices.length,9);assert.equal(view.devices.filter(d=>d.actions.length).length,5);
   assert.deepEqual(plain(view.devices.find(d=>d.kind==='lock').actions),['lock','unlock']);
   assert.equal(vendor.reads.filter(u=>u.includes(hubId+'/status')).length,1,'hub reading shared across indoor light and hub');
   assert.equal(view.devices.find(d=>d.kind==='bot').sample.power,undefined,'press-mode Bot power not exposed as lamp status');
+  assert.equal(view.devices.find(d=>d.kind==='plug').sample.power,'on');
+  assert.ok(!JSON.stringify(view).includes(plugId));
+  assert.ok(!(await adapter.listStoreSwitchBots(adapter.indoorLightConfig(storeId))).some(d=>d.kind==='plug'),'unbound Wi-Fi devices are excluded');
   assert.equal(view.devices.find(d=>d.kind==='meter').issue,'sensor_unavailable');
   assert.equal(view.devices.find(d=>d.kind==='remote').issue,'status_unsupported');
   assert.ok(!JSON.stringify(view).includes('DO-NOT-EXPOSE'));assert.ok(!JSON.stringify(view).includes(botId));assert.ok(!JSON.stringify(view).includes(env.SWITCHBOT_TOKEN));
-  const firstReads=vendor.reads.length;await service.getStoreDevices(storeId);assert.equal(vendor.reads.length,firstReads*2,'each explicit request reads provider');
+  const firstReads=vendor.reads.length;await service.getStoreDevices(storeId);assert.equal(vendor.reads.length,firstReads*2-1,'each explicit request reads provider');
   assert.ok(queries.every(q=>/^select /i.test(q.trim())),'status requests issue SELECT only');assert.equal((await db.query('select count(*)::int n from store_light_runtime')).rows[0].n,0,'no runtime created for reads');
-  assert.equal((await service.getStoreDevices(otherStoreId)).configured,false);assert.equal(vendor.reads.length,firstReads*2);
+  assert.equal((await service.getStoreDevices(otherStoreId)).configured,false);assert.equal(vendor.reads.length,firstReads*2-1);
   await assert.rejects(()=>service.getStoreDevices(storeId,key(foreignId)),e=>e.status===404);
   await assert.rejects(()=>send(remoteId),e=>e.status===400);await assert.rejects(()=>send(shadeId,'setPosition','101'),e=>e.status===400);await assert.rejects(()=>send(botId,'unlock'),e=>e.status===400);
   await assert.rejects(()=>send(lockId,'deadbolt'),e=>e.status===400,'old clients cannot retract an unsupported latch');
@@ -115,14 +122,26 @@ test('on-demand reads, additive migration, actual SQL claims, device safety and 
   const staleId=crypto.randomUUID();await db.query("insert into store_light_commands(id,store_id,device_id,result,requested_at) values($1,$2,$3,'pending',now()-interval '2 minutes')",[staleId,storeId,botId]);
   assert.equal((await send(botId,'press','default',staleId)).command.result,'unknown');assert.equal(vendor.posts.length,9,'orphaned commands are never resumed');
   const getQueriesStart=queries.length;await service.getStoreDevices(storeId);assert.ok(queries.slice(getQueriesStart).every(q=>/^select /i.test(q.trim())));
-  t.diagnostic('Eight devices; read-only status; preserved history; 10-second completion cooldown; in-flight protection; shared legacy lock; guarded shade/lock controls; no command retries.');
+  const postCount=vendor.posts.length;
+  const order=[key(lockId),key(plugId)];await service.saveStoreDeviceOrder(storeId,actorId,order);
+  const preferences=(await db.query("select settings from module_settings where scope_key=$1",['store:'+storeId])).rows[0].settings;
+  assert.deepEqual(preferences,{directDeviceIds:[plugId],preserved:'yes',deviceOrder:order},'sorting preserves private bindings and other settings');
+  assert.deepEqual(plain((await service.getStoreDevices(storeId)).devices.slice(0,2).map(d=>d.key)),order,'saved order survives a fresh service read');
+  for(const invalid of [[key(foreignId)],[key(foreignPlugId)],[key(botId),key(botId)],['bad'],Array(129).fill(key(botId))])await assert.rejects(()=>service.saveStoreDeviceOrder(storeId,actorId,invalid),e=>e.status===400);
+  await assert.rejects(()=>service.saveStoreDeviceOrder(otherStoreId,actorId,order),e=>e.status===409);
+  assert.equal(vendor.posts.length,postCount,'ordering sends no device commands');
+  await expire();await send(plugId,'turnOff');assert.deepEqual(vendor.posts.at(-1).body,{command:'turnOff',parameter:'default',commandType:'command'});assert.match(vendor.posts.at(-1).url,new RegExp(plugId));
+  await expire();await send(plugId,'turnOn');assert.equal(vendor.posts.at(-1).body.command,'turnOn','explicit on is sent even when cloud already says on');
+  vendor.plugPower='unknown';await expire();assert.equal((await send(plugId,'turnOff')).command.reason,'invalid_power_state');assert.equal(vendor.posts.length,postCount+2);
+  vendor.plugPower='off';vendor.plugHub=foreignId;assert.equal((await service.getStoreDevices(storeId,key(plugId))).devices[0].issue,'device_mismatch');
+  t.diagnostic('Nine devices; read-only status; preserved history; 10-second completion cooldown; in-flight protection; shared legacy lock; guarded shade/lock controls; no command retries.');
  }finally{await db.close();}
 });
 
 test('route enforces session, role, active store, origin, confirmation and typed input',async()=>{
  let actor={id:actorId,role:'store_terminal'},visible=[{id:storeId}],calls=[];
  class StoreDeviceError extends Error { constructor(message,status){super(message);this.status=status;} }
- const service={StoreDeviceError,getStoreDevices:async(...args)=>{calls.push(['read',...args]);return{configured:true,devices:[]};},requestStoreDeviceCommand:async(...args)=>{calls.push(['command',...args]);return{command:{result:'accepted'}};}};
+ const service={StoreDeviceError,getStoreDevices:async(...args)=>{calls.push(['read',...args]);return{configured:true,devices:[]};},saveStoreDeviceOrder:async(...args)=>{calls.push(['order',...args]);return{order:args[2]};},requestStoreDeviceCommand:async(...args)=>{calls.push(['command',...args]);return{command:{result:'accepted'}};}};
  const route=load('app/api/store/devices/route.ts',{'api-auth':{requireOsSession:async()=>actor},'store-order-access':{getStoreOrderAccess:async()=>({stores:visible})},'store-devices':service});
  const key='a'.repeat(24),post=(patch={},origin='http://test')=>route.POST(new Request('http://test/api/store/devices',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({storeId,device:key,requestId:crypto.randomUUID(),action:'press',confirmed:true,...patch})}));
  const get=()=>route.GET(new Request(`http://test/api/store/devices?storeId=${storeId}`));
@@ -138,6 +157,11 @@ test('route enforces session, role, active store, origin, confirmation and typed
  assert.equal((await post({},'https://other.example')).status,403);assert.equal(calls.length,0,'denied requests never touch devices');
  actor=null;assert.equal((await get()).status,401);assert.equal(calls.length,0);
  actor={id:actorId,role:'owner'};assert.equal((await post({action:'setPosition',position:37})).status,200);assert.equal(calls.at(-1).at(-1),'37');
+ const patch=(body={storeId,order:[key]},origin='http://test')=>route.PATCH(new Request('http://test/api/store/devices',{method:'PATCH',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify(body)}));
+ calls=[];assert.equal((await patch()).status,200);assert.deepEqual(plain(calls[0]),['order',storeId,actorId,[key]]);calls=[];
+ actor=null;assert.equal((await patch()).status,401);actor={id:actorId,role:'staff'};assert.equal((await patch()).status,403);
+ actor={id:actorId,role:'owner'};assert.equal((await patch({storeId:otherStoreId,order:[]})).status,403);assert.equal((await patch(undefined,'https://other.example')).status,403);assert.equal((await patch({storeId,order:'bad'})).status,400);assert.equal(calls.length,0);
+
 });
 
 test('nested device results override an outer success and never trigger a resend',async()=>{

@@ -1,7 +1,7 @@
 # Store SwitchBot devices
 
 The `/store/devices` page reads equipment on demand and controls the devices
-exposed by the configured store's SwitchBot Hub. The 2026-09-29 expansion adds
+exposed by the configured store's SwitchBot Hub or explicitly bound Wi-Fi devices. The 2026-09-29 expansion adds
 the outdoor sign Bot, Roller Shade and Smart Lock Pro to indoor lighting.
 The Hub 2, Meter, Keypad Vision and Remote are also listed. The Remote has no
 remote-control/status endpoint; the keypad displays battery information, while
@@ -16,9 +16,16 @@ it. Devices associated with another Hub cannot be addressed through this store.
 Adding stores requires an explicit store-to-Hub configuration; the current
 configuration supports the approved 清水店 installation only.
 
+The ambient light `間接照明` is Plug Mini (JP) `6867259B2E0E`. Its list entry
+has an empty Hub ID, and live status reports its own ID as the Hub. It is bound
+explicitly in `module_settings`, scope `store:<store UUID>`, module
+`store_devices`, `settings.directDeviceIds`. Unbound Wi-Fi devices in the same
+SwitchBot account remain excluded. This allowlist stays server-side.
+
 | Device | Implemented operations |
 | --- | --- |
 | Indoor Bot | One press, or on/off if explicitly configured in switch mode |
+| Ambient light / Plug Mini (JP) | Read reported power, explicit on/off; no inferred state from room brightness |
 | Outdoor sign Bot | One press; no inferred light state from the indoor Hub |
 | Roller Shade | Open (0), close (100), exact closed percentage (0–100) |
 | Smart Lock Pro | Lock and unlock; fresh calibration/state checks. The installed mechanical lock does not support latch retraction. |
@@ -54,6 +61,14 @@ seconds; they stop early after an observed state change. Hidden/unmounted pages
 do not make these requests. Countdown ticks are local and do not query the DB.
 This does not change unrelated Store order/notification/background traffic.
 
+The list supports a store-wide custom order. Up/down moves and cancel are local;
+the explicit save makes one authenticated `PATCH /api/store/devices` request.
+Only `settings.deviceOrder` is merged into the same `store_devices` settings row,
+preserving private device bindings and other fields. Stored values are opaque
+device keys. The server validates store scope, unique keys and current device
+membership; new devices are appended using the default type/name order.
+Opening or refreshing the page reads the saved order without writing it.
+
 The page displays **last fetched state and time**, not a promise of real-time
 state. The retrieval timestamp is not a physical sensor sample timestamp.
 SwitchBot cloud reports may lag devices. A successful command acknowledgement
@@ -85,7 +100,7 @@ cooldown on completion. A durable journal exists before any physical command.
 Replaying a request UUID never sends twice, even after expiry. Ambiguous POST
 results and abandoned pending records remain unknown; no worker retries them.
 
-Every action has an on-screen confirmation. Unlock/latch release additionally
+Every device command has an on-screen confirmation. Unlock additionally
 requires acknowledging that the door can be opened. Locking requires a closed
 door and valid lock calibration/state; shade positioning requires calibration
 and a valid position. Cloud status is checked before sending but can lag the physical device.
@@ -142,10 +157,12 @@ longer in-flight protection, duplicates, legacy compatibility, invalid commands,
 calibration/door guards, response loss and access denial. The real React page
 fixture blocks outbound HTTP and uses fake time to prove no idle polling,
 bounded command observations, confirmation/cancel, exact shade commands,
-translations and layouts at 360/768/1440px. Artifacts go to
+plug state/commands, store ordering persistence/cancel/failure, private binding
+preservation, translations and layouts at 360/768/1440px. Artifacts go to
 `outputs/store-devices-20260929`. These tests send no physical commands.
 
 Upstream references: [API](https://github.com/OpenWonderLabs/SwitchBotAPI),
 [Roller Shade](https://github.com/OpenWonderLabs/SwitchBotAPI/blob/main/devices/curtains-blinds/roller-shade.md),
 [Lock Pro](https://github.com/OpenWonderLabs/SwitchBotAPI/blob/main/devices/locks-security/lock-pro.md),
+[Plug Mini (JP)](https://github.com/OpenWonderLabs/SwitchBotAPI/blob/main/devices/plugs-switches/plug-mini-jp.md),
 [Keypad Vision](https://github.com/OpenWonderLabs/SwitchBotAPI/blob/main/devices/locks-security/keypad-vision.md).
