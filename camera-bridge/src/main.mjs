@@ -1,4 +1,4 @@
-import Pusher from 'pusher-js';
+import { Pusher } from 'pusher-js';
 import { loadConfig } from './config.mjs';
 import { keychain } from './keychain.mjs';
 import { CameraWorker } from './worker-client.mjs';
