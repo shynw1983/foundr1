@@ -2,12 +2,16 @@ package jp.foundr1.store;
 
 import static org.junit.Assert.*;
 import android.content.Context;
+import android.content.Intent;
+import android.appwidget.AppWidgetManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.RemoteViews;
+import android.util.SizeF;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -17,6 +21,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import static org.robolectric.Shadows.shadowOf;
 
 /** Host-side RemoteViews rendering: no phone, account, network, or inventory mutations. */
 @RunWith(RobolectricTestRunner.class)
@@ -24,6 +29,7 @@ import org.robolectric.annotation.GraphicsMode;
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class InventoryWidgetLayoutTest {
     private float fontScale = 1f;
+    private boolean responsive;
     @Before public void controls() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         android.webkit.CookieManager.getInstance().setCookie(InventoryApiClient.BASE_URL, "foundr1_os_session=layout-test");
@@ -69,25 +75,60 @@ public class InventoryWidgetLayoutTest {
             }
         } else StoreWidgetDevicesData.saveSlots(context, 7, null, null);
         FrameLayout parent = new FrameLayout(context);
-        View view = InventoryWidgetProvider.views(context, 7, InventoryWidgetPolicy.layout(width, height), data).apply(context, parent);
+        int layout = InventoryWidgetPolicy.layout(width, height);
+        RemoteViews remote = responsive ? InventoryWidgetProvider.responsiveViews(context, 7, data)
+            : InventoryWidgetProvider.views(context, 7, layout, data);
+        if (responsive) {
+            // Exercise Android's launcher selection instead of selecting our preferred XML directly.
+            remote = (RemoteViews) RemoteViews.class.getMethod("getRemoteViewsToApply", Context.class, SizeF.class)
+                .invoke(remote, context, new SizeF(width, height));
+        }
+        View view = remote.apply(context, parent);
         float density = context.getResources().getDisplayMetrics().density;
         int w = Math.round(width * density), h = Math.round(height * density);
         parent.addView(view, new FrameLayout.LayoutParams(w, h));
         parent.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
         parent.layout(0, 0, w, h);
+        if (layout == InventoryWidgetPolicy.DENSE || layout == InventoryWidgetPolicy.SUMMARY || layout == InventoryWidgetPolicy.EXPANDED) {
+            int[] buttons = {R.id.inventory_widget_left, R.id.inventory_widget_right,
+                R.id.inventory_widget_device_left, R.id.inventory_widget_device_right,
+                R.id.inventory_widget_shortage, R.id.inventory_widget_restore};
+            java.util.List<Rect> boxes = new java.util.ArrayList<>();
+            for (int id : buttons) {
+                View button = view.findViewById(id);
+                assertNotNull(name + ": missing button " + id, button);
+                assertEquals(name + ": hidden button " + id, View.VISIBLE, button.getVisibility());
+                assertTrue(name + ": button has no action " + id, button.hasOnClickListeners());
+                Rect box = new Rect(); button.getDrawingRect(box); parent.offsetDescendantRectToMyCoords(button, box);
+                assertTrue(name + ": button outside widget", box.left >= 0 && box.right <= w && box.top >= 0 && box.bottom <= h);
+                assertTrue(name + ": button has no usable area", box.width() >= 38 * density && box.height() >= 20 * density);
+                for (Rect previous : boxes) assertFalse(name + ": overlapping buttons", Rect.intersects(previous, box));
+                boxes.add(box);
+            }
+            Rect first = boxes.get(0), second = boxes.get(1), upper = boxes.get(2), lower = boxes.get(3);
+            assertTrue(name + ": devices must be in right column", upper.left >= second.right && second.left >= first.right);
+            assertEquals(name + ": devices must be stacked", upper.left, lower.left);
+            assertEquals(first.top, upper.top); assertEquals(first.bottom, lower.bottom);
+            assertTrue(name + ": column ratio must be 2:2:1", Math.abs(first.width() - 2 * upper.width()) <= 2);
+            assertTrue(name + ": controls must have equal width", Math.abs(first.width() - second.width()) <= 1);
+        }
         for (int id : new int[]{R.id.inventory_widget_title, R.id.inventory_widget_shortage, R.id.inventory_widget_restore,
-            R.id.inventory_widget_left_value, R.id.inventory_widget_right_value,
-            R.id.inventory_widget_device_left_title, R.id.inventory_widget_device_left_value,
-            R.id.inventory_widget_device_right_title, R.id.inventory_widget_device_right_value}) {
+            R.id.inventory_widget_left_title, R.id.inventory_widget_left_value,
+            R.id.inventory_widget_right_title, R.id.inventory_widget_right_value,
+            R.id.inventory_widget_device_left_title, R.id.inventory_widget_device_right_title}) {
             TextView target = view.findViewById(id);
-            if (target == null) continue;
+            if (target == null) {
+                assertTrue(name + ": missing label " + id, layout == InventoryWidgetPolicy.COMPACT || layout == InventoryWidgetPolicy.MINIMAL);
+                continue;
+            }
+            assertEquals(name + ": hidden label " + id, View.VISIBLE, target.getVisibility());
             Rect box = new Rect();
             target.getDrawingRect(box);
             parent.offsetDescendantRectToMyCoords(target, box);
             assertTrue(name + ": control clipped " + id, box.left >= 0 && box.right <= w && box.top >= 0 && box.bottom <= h);
             assertTrue(name + ": text clipped " + id, target.getHeight() - target.getPaddingTop() - target.getPaddingBottom() >= target.getLineHeight());
-            if (id == R.id.inventory_widget_device_left_value || id == R.id.inventory_widget_device_right_value) {
-                View card = view.findViewById(id == R.id.inventory_widget_device_left_value ? R.id.inventory_widget_device_left : R.id.inventory_widget_device_right);
+            if (id == R.id.inventory_widget_device_left_title || id == R.id.inventory_widget_device_right_title) {
+                View card = view.findViewById(id == R.id.inventory_widget_device_left_title ? R.id.inventory_widget_device_left : R.id.inventory_widget_device_right);
                 Rect cardBox = new Rect(); card.getDrawingRect(cardBox); parent.offsetDescendantRectToMyCoords(card, cardBox);
                 assertTrue(name + ": device text outside card", box.top >= cardBox.top && box.bottom <= cardBox.bottom);
             }
@@ -110,11 +151,12 @@ public class InventoryWidgetLayoutTest {
     }
 
     @Test public void renderLauncherSizesAndLongNames() throws Exception {
-        for (int[] size : new int[][]{{110,56},{176,88},{250,110},{250,148},{360,156},{360,164},{360,208},{360,280}}) {
+        for (int[] size : new int[][]{{110,56},{176,88},{250,110},{300,130},{360,147},{250,148},{360,156},{360,164},{360,208},{360,280}}) {
             View view = render("widget-" + size[0] + "x" + size[1], size[0], size[1], "ja", sample());
             if (size[0] >= 250) assertEquals("57", ((TextView)view.findViewById(R.id.inventory_widget_count)).getText().toString());
         }
         render("widget-zh", 360, 164, "zh", sample());
+        render("widget-dense-zh", 300, 130, "zh", sample());
     }
 
     @Test public void unavailableAndFailedStatesCannotLookHealthy() throws Exception {
@@ -133,8 +175,33 @@ public class InventoryWidgetLayoutTest {
 
     @Test public void increasedSystemTextSizeKeepsActionsVisible() throws Exception {
         fontScale = 1.3f;
-        for (int[] size : new int[][]{{110,56},{176,88},{250,110},{250,148},{360,156},{360,164}})
-            render("widget-large-text-" + size[0], size[0], size[1], "ja", sample());
+        for (int[] size : new int[][]{{110,56},{176,88},{250,110},{300,130},{250,148},{360,156},{360,164}})
+            render("widget-large-text-" + size[0] + "x" + size[1], size[0], size[1], "ja", sample());
+    }
+
+    @Test public void deviceButtonsOpenTheirOwnConfirmationOrConfiguration() throws Exception {
+        for (int height : new int[]{110, 148, 208}) for (boolean configured : new boolean[]{true, false}) {
+            View view = render("widget-" + (configured ? "configured" : "empty") + "-" + height, 250, height, "ja", sample());
+            for (int slot = 0; slot < 2; slot++) {
+                View button = view.findViewById(slot == 0 ? R.id.inventory_widget_device_left : R.id.inventory_widget_device_right);
+                assertTrue(button.performClick());
+                Intent intent = shadowOf(RuntimeEnvironment.getApplication()).getNextStartedActivity();
+                assertNotNull(intent);
+                assertEquals(configured ? StoreWidgetDeviceActivity.class.getName() : InventoryWidgetConfigActivity.class.getName(), intent.getComponent().getClassName());
+                assertEquals(7, intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1));
+                if (configured) {
+                    assertEquals("store", intent.getStringExtra(StoreWidgetDeviceActivity.EXTRA_STORE));
+                    assertEquals(slot, intent.getIntExtra(StoreWidgetDeviceActivity.EXTRA_SLOT, -1));
+                    assertEquals(slot == 0 ? "111111111111111111111111" : "222222222222222222222222", intent.getStringExtra(StoreWidgetDeviceActivity.EXTRA_KEY));
+                }
+            }
+        }
+    }
+
+    @Test @Config(sdk = 35) public void responsiveLauncherIncludesDevicesAcrossFoldableSizes() throws Exception {
+        responsive = true;
+        for (int[] size : new int[][]{{110,56},{176,88},{250,110},{300,130},{500,120},{250,148},{360,208}})
+            render("widget-launcher-" + size[0] + "x" + size[1], size[0], size[1], "ja", sample());
     }
     @Test public void customSlotsRenderTheirOwnActionAndActualSyncResult() throws Exception {
         Context context = RuntimeEnvironment.getApplication();

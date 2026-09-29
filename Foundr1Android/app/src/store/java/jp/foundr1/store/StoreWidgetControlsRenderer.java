@@ -36,7 +36,7 @@ final class StoreWidgetControlsRenderer {
         StoreWidgetControlsData controls = StoreWidgetControlsData.read(context, InventoryWidgetProvider.storeId(context, id));
         String[] shortcuts = InventoryWidgetProvider.shortcuts(context, id);
         for (int slot = 0; slot < 2; slot++) control(context, views, id, slot, shortcuts[slot], size, controls, data);
-        if (size == InventoryWidgetPolicy.SUMMARY || size == InventoryWidgetPolicy.EXPANDED) StoreWidgetDevicesRenderer.bind(context, views, id, size);
+        StoreWidgetDevicesRenderer.bind(context, views, id);
     }
 
     static PendingIntent action(Context context, int id, String key, StoreWidgetControlsData controls) {
@@ -136,8 +136,8 @@ final class StoreWidgetControlsRenderer {
         }
         if (StoreWidgetControlsPolicy.ORDERS.equals(key)) denseValue = zh ? "查看" : "一覧";
         if (StoreWidgetControlsPolicy.AWAY.equals(key) && warning && on) denseValue = zh ? "待设置" : "要設定";
-        views.setTextViewText(label, title);
-        views.setTextViewText(state, size == InventoryWidgetPolicy.DENSE ? shortTitle + " · " + denseValue : value);
+        views.setTextViewText(label, size == InventoryWidgetPolicy.DENSE ? shortTitle : title);
+        views.setTextViewText(state, size == InventoryWidgetPolicy.DENSE ? denseValue : value);
         views.setTextViewText(helper, detail);
         views.setViewVisibility(helper, View.GONE);
         views.setTextColor(state, context.getColor(warning ? R.color.widget_warning : R.color.widget_text));

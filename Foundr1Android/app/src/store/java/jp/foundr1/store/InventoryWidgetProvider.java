@@ -184,15 +184,7 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
         InventoryWidgetData data = InventoryWidgetData.read(context, widgetId);
         RemoteViews views;
         if (Build.VERSION.SDK_INT >= 31) {
-            Map<SizeF, RemoteViews> layouts = new java.util.LinkedHashMap<>();
-            layouts.put(new SizeF(110, 56), views(context, widgetId, InventoryWidgetPolicy.MINIMAL, data));
-            layouts.put(new SizeF(160, 88), views(context, widgetId, InventoryWidgetPolicy.COMPACT, data));
-            layouts.put(new SizeF(250, 110), views(context, widgetId, InventoryWidgetPolicy.DENSE, data));
-            layouts.put(new SizeF(InventoryWidgetPolicy.SUMMARY_WIDTH, InventoryWidgetPolicy.SUMMARY_HEIGHT),
-                views(context, widgetId, InventoryWidgetPolicy.SUMMARY, data));
-            layouts.put(new SizeF(InventoryWidgetPolicy.SUMMARY_WIDTH, InventoryWidgetPolicy.EXPANDED_HEIGHT),
-                views(context, widgetId, InventoryWidgetPolicy.EXPANDED, data));
-            views = new RemoteViews(layouts);
+            views = responsiveViews(context, widgetId, data);
         } else {
             Bundle options = manager.getAppWidgetOptions(widgetId);
             boolean quick = InventoryQuickWidgetProvider.class.getName().equals(info.provider.getClassName());
@@ -205,6 +197,19 @@ public class InventoryWidgetProvider extends AppWidgetProvider {
                 views(context, widgetId, InventoryWidgetPolicy.layout(minWidth, maxHeight), data));
         }
         manager.updateAppWidget(widgetId, views);
+    }
+
+    @android.annotation.TargetApi(31)
+    static RemoteViews responsiveViews(Context context, int widgetId, InventoryWidgetData data) {
+        Map<SizeF, RemoteViews> layouts = new java.util.LinkedHashMap<>();
+        layouts.put(new SizeF(110, 56), views(context, widgetId, InventoryWidgetPolicy.MINIMAL, data));
+        layouts.put(new SizeF(160, 88), views(context, widgetId, InventoryWidgetPolicy.COMPACT, data));
+        layouts.put(new SizeF(250, 110), views(context, widgetId, InventoryWidgetPolicy.DENSE, data));
+        layouts.put(new SizeF(InventoryWidgetPolicy.SUMMARY_WIDTH, InventoryWidgetPolicy.SUMMARY_HEIGHT),
+            views(context, widgetId, InventoryWidgetPolicy.SUMMARY, data));
+        layouts.put(new SizeF(InventoryWidgetPolicy.SUMMARY_WIDTH, InventoryWidgetPolicy.EXPANDED_HEIGHT),
+            views(context, widgetId, InventoryWidgetPolicy.EXPANDED, data));
+        return new RemoteViews(layouts);
     }
 
     static RemoteViews views(Context context, int id, int size, InventoryWidgetData data) {
