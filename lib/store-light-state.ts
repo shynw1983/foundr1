@@ -1,5 +1,5 @@
 export const lightReadingMaxAgeMs = 120_000;
-export const lightCommandCooldownMs = 90_000;
+export const lightCommandCooldownMs = 10_000;
 export type LightEstimate = "on" | "off" | "unknown";
 export type LightSample = { lightLevel: number; battery: number | null; botMode: string };
 export type LightCommand = {

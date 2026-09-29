@@ -1,125 +1,140 @@
-# Store indoor lighting pilot
+# Store SwitchBot devices
 
-## Scope and verified binding
+The `/store/devices` page reads equipment on demand and controls the devices
+exposed by the configured store's SwitchBot Hub. The 2026-09-29 expansion adds
+the outdoor sign Bot, Roller Shade and Smart Lock Pro to indoor lighting.
+The Hub 2, Meter, Keypad Vision and Remote are also listed. The Remote has no
+remote-control/status endpoint; the keypad displays battery information, while
+PIN creation/deletion remains in the SwitchBot app.
 
-The first device page is `/store/devices`. It operates the indoor light only.
-The user confirmed that the outdoor sign light is separate and out of scope.
-There are no lock, curtain, scene, or arbitrary device commands in this API.
+## Binding and capabilities
 
-Read-only discovery on 2026-09-29 verified:
+The existing server configuration binds 清水店
+(`ed6c3b1f-e68a-4cbd-92e2-06a800eb7183`) to Hub 2 `FBED88EDF334` and identifies
+indoor Bot `CE2A84C62D40`. Discovery only includes this Hub and devices linked to
+it. Devices associated with another Hub cannot be addressed through this store.
+Adding stores requires an explicit store-to-Hub configuration; the current
+configuration supports the approved 清水店 installation only.
 
-| Setting | Value |
+| Device | Implemented operations |
 | --- | --- |
-| Store | 清水店 |
-| Store ID | `ed6c3b1f-e68a-4cbd-92e2-06a800eb7183` |
-| Indoor Bot | `CE2A84C62D40` (`室内照明`, `pressMode`) |
-| Hub 2 | `FBED88EDF334` |
-| Daytime off → on → off | `2 → 12 → 2` |
+| Indoor Bot | One press, or on/off if explicitly configured in switch mode |
+| Outdoor sign Bot | One press; no inferred light state from the indoor Hub |
+| Roller Shade | Open (0), close (100), exact closed percentage (0–100) |
+| Smart Lock Pro | Lock, unlock, release latch; fresh calibration/state checks |
+| Hub 2 / Meter | Available light level, temperature, humidity, battery |
+| Keypad Vision | Battery; credentials are not returned to the client |
+| Remote | Listed with an explicit unsupported status/control message |
 
-The candidate inference is `1–3 = off`, `10–20 = on`, and `4–9 = unknown`.
-Invalid or unavailable readings, failed refreshes, and reads older than two
-minutes are unknown. The UI always labels on/off as **inferred**. It never uses
-the Bot's `power` field or assumes a successful press means the light changed.
-These daytime thresholds still need night/daylight/curtain-condition validation.
-The API retrieval time is shown; it is **not a physical sensor sample timestamp**.
-Cloud status can lag the actual device, so a fetched value alone is not proof of
-a new physical sample. No retries or automation rely on that assumption.
+Only documented commands for these discovered device types are allowed.
+Unknown types are listed without controls; this is not an arbitrary command
+proxy. Grouped secondary devices are not independently controlled.
 
-## Data flow and permissions
+Daytime indoor-light calibration was off → on → off at `2 → 12 → 2`.
+Inference is `1–3 = off`, `10–20 = on`, `4–9 = unknown`. Missing/invalid readings
+are unknown. On/off is always labelled inferred. Press-mode Bot `power` is not
+used as the lamp state. The outdoor sign light is independent of this sensor.
+Night/daylight/curtain-condition calibration remains unverified.
 
-`Store page → authenticated /api/store/indoor-light → server-held configuration
-→ SwitchBot status / one Bot press`. The route uses the existing Store roles
-(`owner`, `manager`, `store_terminal`) and requires the selected store to be in
-the session's current active store list. Device IDs and credentials are never
-accepted from the browser. A different store receives an unconfigured page.
-The new UI uses the existing Japanese/Simplified Chinese/Traditional Chinese
-translation system and Store navigation; no native APK change is needed.
+## On-demand data flow
 
-`store_light_runtime` shares the status cache and a 90-second device lock across
-serverless instances. Reads are cached for 60 seconds, shortened to five seconds
-after a command; the visible page polls every 60 seconds normally and every six
-seconds during the command window. Hidden pages stop polling. A refresh lease
-expires after 30 seconds, allowing recovery from an interrupted reader.
+`Store page → authenticated /api/store/devices → server-held configuration
+→ SwitchBot list/status/validated device command`.
 
-`store_light_commands` is the durable audit/idempotency record. It records the
-actor, store, physical target, request ID, before-reading, result, and times.
-An atomic SQL claim precedes any physical command. Replaying an ID never sends
-again, even after the cooldown. Different IDs cannot send concurrently to the
-same device. Every send rechecks Bot type, Hub linkage, and `pressMode`.
-Timeouts and ambiguous upstream failures remain `unknown`; orphaned pending
-records also become unknown on reads. No worker resumes these commands.
-The confirmation dialog explicitly describes **one press**, including a warning
-to check locally if light state is unknown. Post-command observations must be
-retrieved after the command response plus five seconds; an earlier read cannot
-be treated as a changed light. Later intentional presses require another user
-confirmation, a healthy status read, and the cooldown to expire.
+Opening the page reads once. Refresh-all, per-device refresh and operation
+confirmation read on demand. There is no regular, focus or visibility polling.
+After a user command, up to three read-only observations run at 5, 15 and 30
+seconds; they stop early after an observed state change. Hidden/unmounted pages
+do not make these requests. Countdown ticks are local and do not query the DB.
+This does not change unrelated Store order/notification/background traffic.
 
-## Activation
+The page displays **last fetched state and time**, not a promise of real-time
+state. The retrieval timestamp is not a physical sensor sample timestamp.
+SwitchBot cloud reports may lag devices. A successful command acknowledgement
+does not establish a physical change. Observations must be fetched at least
+four seconds after command completion and match the intended state (or indoor
+light state change). Outdoor press and latch release cannot be confirmed by
+lamp/lock status and remain explicitly unconfirmed.
 
-Local preparation does not activate the production integration. Before release,
-establish the deployment/database target and obtain the user's authorization.
-Apply only `db/migrations/20260929-store-indoor-light.sql` to the approved target
-(the same additive definitions are in `db/schema.sql`). It creates two new tables
-and an index, without changing existing store or device records. Test the
-migration against the target environment's isolated branch before production.
+Status reads do not create runtime rows or persist sensor values. They only
+select existing command/lock information. Auth/session handling can separately
+access the database. Operation records and concurrency locks remain durable.
 
-Configure these **server-only** variables in the approved environment:
+## Permissions and command safety
 
-The supplied credentials are staged locally in the git-ignored
-`.env.switchbot.local` with file mode `0600` and control disabled. Next.js does
-not load this staging filename automatically. Transfer the variables through
-the target's secret/environment settings; never commit or return their values.
+The API uses existing Store roles `owner`, `manager`, `store_terminal` and
+requires the selected store to be in the session's active scoped store list.
+The browser supplies only an opaque store-specific device key, not credentials
+or physical IDs. Cross-origin commands, malformed targets, unsupported actions,
+missing confirmation and invalid positions are rejected. The server discovers
+the target again, then reads fresh status before sending any command.
+
+Normal commands impose a **10-second cooldown after completion**, shared across
+clients/serverless instances. A separate 60-second in-flight lease prevents
+slow/crashed requests from overlapping. It is replaced by the 10-second
+cooldown on completion. A durable journal exists before any physical command.
+Replaying a request UUID never sends twice, even after expiry. Ambiguous POST
+results and abandoned pending records remain unknown; no worker retries them.
+
+Every action has an on-screen confirmation. Unlock/latch release additionally
+requires acknowledging that the door can be opened. Locking requires a closed
+door and valid lock calibration/state; shade positioning requires calibration
+and a valid position. Explicit desired states that already match are recorded
+without sending a physical command. There is no automatic unlock, PIN creation
+or automatic toggle/retry.
+
+The historical tables `store_light_runtime` and `store_light_commands` are
+retained to preserve history and rolling-deployment compatibility. Apply
+`20260929-store-indoor-light.sql` first, then the additive
+`20260929-store-device-commands.sql` migration (also in `db/schema.sql`). It adds
+command, parameter and before-sample fields; old records default to press/default.
+The old `/api/store/indoor-light` endpoint adapts to the same journal and lock
+for already-loaded clients. Remove that adapter only after old Store clients
+have refreshed/updated. Old already-loaded clients may retain their previous
+polling behaviour until refreshed.
+
+## Environment and release verification
+
+Server-only variables retain their existing names:
 
 ```dotenv
 SWITCHBOT_TOKEN=<secret manager value>
 SWITCHBOT_SECRET=<secret manager value>
-SWITCHBOT_INDOOR_LIGHT_STORE_ID=ed6c3b1f-e68a-4cbd-92e2-06a800eb7183
-SWITCHBOT_INDOOR_LIGHT_BOT_ID=CE2A84C62D40
-SWITCHBOT_INDOOR_LIGHT_HUB_ID=FBED88EDF334
-SWITCHBOT_CONTROL_ENABLED=false
+SWITCHBOT_INDOOR_LIGHT_STORE_ID=<approved store UUID>
+SWITCHBOT_INDOOR_LIGHT_BOT_ID=<indoor Bot ID>
+SWITCHBOT_INDOOR_LIGHT_HUB_ID=<store Hub ID>
+SWITCHBOT_CONTROL_ENABLED=true
 ```
 
-With the credentials and migration in place, verify read-only state first.
-Set `SWITCHBOT_CONTROL_ENABLED=true` only in the approved pilot environment.
-Then perform one supervised inside-light press and inspect the light change and
-command journal. A backend success is only command acceptance. Do not infer a
-physical end-to-end test from a local fixture or the earlier read-only discovery.
-Disable control by setting the flag back to `false`; retain the command journal.
-Do not reset command IDs or remove command history to retry uncertain presses.
+Credentials and original indoor control were explicitly approved and activated
+in production on 2026-09-29. The device expansion reuses that Hub binding and
+secrets. No credentials are stored in Git, documentation or browser payloads.
+Setting control enabled to false disables sends while preserving reads/history.
+Never reset command UUIDs/history to retry an uncertain action.
 
-The standard [SwitchBot API introduction](https://github.com/OpenWonderLabs/SwitchBotAPI#introduction)
-requires contacting SwitchBot for commercial product/service integration.
-Commercial permission remains a separate unresolved release prerequisite;
-the local implementation and API connectivity do not establish that permission.
+Provider documentation describes a separate commercial integration contact
+requirement. Implementation/API connectivity does not establish provider
+commercial permission; this was disclosed during initial setup.
 
-## Validation
-
-The API tests run the actual TypeScript modules with a local PGlite PostgreSQL
-engine and mocked SwitchBot responses. They cover migration reapplication/data
-preservation, durable claims, concurrent and duplicate requests, response loss,
-mode changes, stale/invalid/uncertain readings, and access-denied requests.
-Install PGlite in an isolated tooling directory, then run:
+Validation commands (PGlite can live in an isolated tooling directory):
 
 ```sh
-PGLITE_MODULE_PATH=/path/to/tooling/node_modules/@electric-sql/pglite node --test scripts/tests/store-indoor-light.test.cjs
+PGLITE_MODULE_PATH=/path/to/node_modules/@electric-sql/pglite node --test scripts/tests/store-indoor-light.test.cjs
 node scripts/tests/store-indoor-light-ui.mjs
+npm run build -- --webpack
 ```
 
-The browser fixture loads the actual page, navigation and translations, with
-all APIs replaced and outbound HTTP blocked. It checks 360/768/1440px layouts,
-three languages, confirmation/cancel, double-clicks, polling, offline/stale
-states, uncertain responses, and unconfigured stores. It never controls a real
-device. Screenshots and the report go to `outputs/store-indoor-light-20260929`.
+The historical test filenames now cover all device types, real service/route
+code and additive SQL migration with local PGlite and fake SwitchBot responses.
+Tests check preserved history, SELECT-only reads, 10-second completion lock,
+longer in-flight protection, duplicates, legacy compatibility, invalid commands,
+calibration/door guards, response loss and access denial. The real React page
+fixture blocks outbound HTTP and uses fake time to prove no idle polling,
+bounded command observations, confirmation/cancel, exact shade commands,
+translations and layouts at 360/768/1440px. Artifacts go to
+`outputs/store-devices-20260929`. These tests send no physical commands.
 
-The 2026-09-29 local validation passed the service/API/SQL tests and all UI
-fixture checks. `npm run db:check` passed for the existing connected database;
-that check does **not** assert that the unapplied new tables exist. The final
-`npm run build -- --webpack` passed in
-`/private/tmp/foundr1-switchbot-build-20260929`, using a source snapshot and local
-dependencies with an identical lock file. The original working directory has
-pre-existing duplicate `.next/types/* 2.ts` files, and its dependency reads
-stalled; neither its caches nor unrelated user changes were removed. The build
-used a dummy database URL and did not access production data.
-
-Upstream references: [Bot](https://github.com/OpenWonderLabs/SwitchBotAPI/blob/main/devices/others/bot.md),
-[Hub 2](https://github.com/OpenWonderLabs/SwitchBotAPI/blob/main/devices/hubs/hub-2.md).
+Upstream references: [API](https://github.com/OpenWonderLabs/SwitchBotAPI),
+[Roller Shade](https://github.com/OpenWonderLabs/SwitchBotAPI/blob/main/devices/curtains-blinds/roller-shade.md),
+[Lock Pro](https://github.com/OpenWonderLabs/SwitchBotAPI/blob/main/devices/locks-security/lock-pro.md),
+[Keypad Vision](https://github.com/OpenWonderLabs/SwitchBotAPI/blob/main/devices/locks-security/keypad-vision.md).
