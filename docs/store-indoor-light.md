@@ -21,7 +21,7 @@ configuration supports the approved 清水店 installation only.
 | Indoor Bot | One press, or on/off if explicitly configured in switch mode |
 | Outdoor sign Bot | One press; no inferred light state from the indoor Hub |
 | Roller Shade | Open (0), close (100), exact closed percentage (0–100) |
-| Smart Lock Pro | Lock, unlock, release latch; fresh calibration/state checks |
+| Smart Lock Pro | Lock and unlock; fresh calibration/state checks. The installed mechanical lock does not support latch retraction. |
 | Hub 2 / Meter | Available light level, temperature, humidity, battery |
 | Keypad Vision | Battery; credentials are not returned to the client |
 | Remote | Listed with an explicit unsupported status/control message |
@@ -29,6 +29,12 @@ configuration supports the approved 清水店 installation only.
 Only documented commands for these discovered device types are allowed.
 Unknown types are listed without controls; this is not an arbitrary command
 proxy. Grouped secondary devices are not independently controlled.
+
+The lock card emphasizes unlock while the reported state is locked, and lock
+while it is unlocked. The other action remains available for explicit control
+when cloud state lags. Unknown, failed or pending readings use neutral buttons.
+Both actions have distinct lock/unlock icons. Latch retraction is rejected by
+the server as well as omitted from the available actions.
 
 Daytime indoor-light calibration was off → on → off at `2 → 12 → 2`.
 Inference is `1–3 = off`, `10–20 = on`, `4–9 = unknown`. Missing/invalid readings

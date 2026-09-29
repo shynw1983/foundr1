@@ -71,6 +71,7 @@ test('on-demand reads, additive migration, actual SQL claims, device safety and 
   const expire=()=>db.exec("update store_light_runtime set blocked_until=now()-interval '1 second'");
   let view=await service.getStoreDevices(storeId);
   assert.equal(view.devices.length,8);assert.equal(view.devices.filter(d=>d.actions.length).length,4);
+  assert.deepEqual(plain(view.devices.find(d=>d.kind==='lock').actions),['lock','unlock']);
   assert.equal(vendor.reads.filter(u=>u.includes(hubId+'/status')).length,1,'hub reading shared across indoor light and hub');
   assert.equal(view.devices.find(d=>d.kind==='bot').sample.power,undefined,'press-mode Bot power not exposed as lamp status');
   assert.equal(view.devices.find(d=>d.kind==='meter').issue,'sensor_unavailable');
@@ -81,6 +82,8 @@ test('on-demand reads, additive migration, actual SQL claims, device safety and 
   assert.equal((await service.getStoreDevices(otherStoreId)).configured,false);assert.equal(vendor.reads.length,firstReads*2);
   await assert.rejects(()=>service.getStoreDevices(storeId,key(foreignId)),e=>e.status===404);
   await assert.rejects(()=>send(remoteId),e=>e.status===400);await assert.rejects(()=>send(shadeId,'setPosition','101'),e=>e.status===400);await assert.rejects(()=>send(botId,'unlock'),e=>e.status===400);
+  await assert.rejects(()=>send(lockId,'deadbolt'),e=>e.status===400,'old clients cannot retract an unsupported latch');
+  assert.equal(vendor.posts.length,0,'unsupported actions never reach the device');
   // Independent requests for the same device must result in one vendor command.
   const ids=[crypto.randomUUID(),crypto.randomUUID()];const results=await Promise.allSettled(ids.map(id=>send(botId,'press','default',id)));
   assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(vendor.posts.length,1);

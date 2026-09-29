@@ -1,6 +1,6 @@
 "use client";
 
-import { Blinds, Lightbulb, LockKeyhole, Radio, RefreshCw, Thermometer, X } from "lucide-react";
+import { Blinds, Lightbulb, LockKeyhole, LockKeyholeOpen, Radio, RefreshCw, Thermometer, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import { deviceCommandLeaseMs, deviceObservation, deviceObservationDelays, deviceStateLabel, type DeviceAction, type DeviceCommand, type StoreDevice, type StoreDevicesView } from "../../../lib/store-device-state";
@@ -144,6 +144,8 @@ export function StoreDevicesPanel({ storeId, storeName }: { storeId: string; sto
       const deviceError = errors[device.key] || (device.issue && device.issue !== "status_unsupported" ? issueLabels[device.issue] || "機器の状態を取得できません。時間をおいて更新してください。" : commandError);
       const Icon = device.kind === "lock" ? LockKeyhole : device.kind === "shade" ? Blinds : device.kind === "indoorLight" || device.kind === "bot" ? Lightbulb : device.kind === "meter" || device.kind === "hub" ? Thermometer : Radio;
       const awaitingReading = device.command && device.command.result !== "rejected" && device.command.reason !== "already_in_state" && (!device.fetchedAt || Date.parse(device.fetchedAt) < Date.parse(device.command.finishedAt || device.command.requestedAt) + 4_000);
+      const lockState = !device.readError && !awaitingReading && observation !== "waiting" ? s?.lockState : undefined;
+      const primaryLockAction = lockState === "locked" ? "unlock" : lockState === "unlocked" ? "lock" : null;
       const disabled = allBusy || busy[device.key] || !device.controlEnabled || cooldown > 0;
       return <article className="store-device-card" key={device.key} data-device-kind={device.kind} data-device-key={device.key}>
         <header><div><Icon size={20}/><h3>{t(device.name)}</h3></div><span>{device.type}</span></header>
@@ -164,7 +166,14 @@ export function StoreDevicesPanel({ storeId, storeName }: { storeId: string; sto
         {deviceError && <p role="alert" className="store-device-notice is-error">{t(deviceError)}</p>}
         {device.command && <p className={`store-device-notice${observation === "observed" && device.command.reason !== "already_in_state" ? " is-success" : ""}`} role="status">{t(device.command.reason === "already_in_state" ? "取得した状態がすでに指定状態だったため、操作を送信していません。" : observation === "observed" ? "操作後の状態を確認しました。" : observation === "rejected" ? "操作は実行されませんでした。" : observation === "waiting" ? "操作後の状態を確認しています。" : "操作後の状態は未確認です。必要に応じて更新してください。")}</p>}
         {device.kind === "shade" && device.actions.length > 0 && <label className="store-device-position">{t("閉じる割合")} <output>{position}%</output><input type="range" min="0" max="100" value={position} disabled={disabled} onChange={e => setPositions(p => ({ ...p, [device.key]: Number(e.target.value) }))}/></label>}
-        <div className="store-device-actions">{device.actions.flatMap(action => action === "setPosition" ? [0, 100, position].map((p, i) => <button key={i} className={i === 2 ? "primary-button" : "secondary-button"} disabled={disabled} onClick={() => void prepare(device, action, p)}>{i === 2 ? t("位置を適用") : actionName(action, p)}</button>) : <button key={action} className={action === "deadbolt" ? "secondary-button" : "primary-button"} disabled={disabled} onClick={() => void prepare(device, action)}>{actionName(action)}</button>)}
+        <div className="store-device-actions">{device.actions.flatMap(action => {
+          if (action === "setPosition") return [0, 100, position].map((p, i) => <button key={i} className={i === 2 ? "primary-button" : "secondary-button"} disabled={disabled} onClick={() => void prepare(device, action, p)}>{i === 2 ? t("位置を適用") : actionName(action, p)}</button>);
+          const isLockAction = action === "lock" || action === "unlock";
+          const primary = isLockAction ? action === primaryLockAction : action !== "deadbolt";
+          return <button key={action} data-device-action={action} className={primary ? "primary-button" : "secondary-button"} disabled={disabled} onClick={() => void prepare(device, action)}>
+            {action === "lock" ? <LockKeyhole size={16} aria-hidden="true"/> : action === "unlock" ? <LockKeyholeOpen size={16} aria-hidden="true"/> : null}{actionName(action)}
+          </button>;
+        })}
           {device.kind !== "remote" && device.kind !== "unsupported" && <button className="store-device-refresh" disabled={allBusy || busy[device.key]} onClick={() => void refreshOne(device.key)}><RefreshCw size={14}/>{t("状態を更新")}</button>}
         </div>
         {busy[device.key] ? <p className="store-device-help" role="status">{t("状態確認・操作を処理しています。")}</p> : cooldown > 0 ? <p className="store-device-help" role="status">{t("次の操作まで")} {cooldown} {t("秒")}</p> : device.actions.length > 0 ? <p className="store-device-help">{t("操作前に最新の状態を確認します。")}</p> : null}

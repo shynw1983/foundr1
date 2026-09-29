@@ -93,7 +93,9 @@ export function deviceActions(device: SwitchBotDevice, sample: DeviceSample | nu
   if (!device.cloud || device.secondary) return [];
   if (device.kind === "indoorLight" || device.kind === "bot") return sample?.botMode === "switchMode" ? ["turnOn", "turnOff"] : ["press"];
   if (device.kind === "shade") return ["setPosition"];
-  if (device.kind === "lock") return ["lock", "unlock", "deadbolt"];
+  // The installed mechanical lock has no latch-retraction function.
+  // A Lock Pro model name alone does not establish that capability.
+  if (device.kind === "lock") return ["lock", "unlock"];
   return [];
 }
 
