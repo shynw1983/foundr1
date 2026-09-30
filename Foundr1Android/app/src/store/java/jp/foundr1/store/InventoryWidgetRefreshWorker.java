@@ -41,6 +41,9 @@ public class InventoryWidgetRefreshWorker extends Worker {
         }
         for (String store : stores) {
             if (isStopped()) return Result.success();
+            // One read on the existing user-triggered refresh; no timer or retries for scenes.
+            if (getRunAttemptCount() == 0) StoreWidgetDevicesData.refreshScenes(context, store, this::isStopped);
+            if (isStopped()) return Result.success();
             boolean refreshInventory = getRunAttemptCount() == 0
                 || !InventoryWidgetPolicy.fresh(InventoryApiClient.cacheCheckedAt(context, store), System.currentTimeMillis());
             InventoryWidgetData.refreshStore(context, store, refreshInventory, this::isStopped);

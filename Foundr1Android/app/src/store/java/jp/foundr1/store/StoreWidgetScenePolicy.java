@@ -15,7 +15,29 @@ final class StoreWidgetScenePolicy {
     }
     static JSONObject binding(JSONObject scene) throws org.json.JSONException {
         return new JSONObject().put("targetType", "scene").put("kind", "scene")
-            .put("key", scene.getString("id")).put("name", scene.getString("name"));
+            .put("key", scene.getString("id")).put("name", scene.getString("name")).put("icon", icon(scene));
+    }
+    static String icon(JSONObject scene) {
+        String icon = scene.optString("icon");
+        if (java.util.Arrays.asList("bed", "moon", "sun", "lightbulb", "lamp", "coffee", "utensils", "door-open", "lock", "music", "sparkles", "power").contains(icon)) return icon;
+        String name = scene.optString("name").trim();
+        return name.equals("休憩モード") || name.equals("休息模式") ? "bed" : "moon";
+    }
+    static int iconResource(JSONObject scene) {
+        switch (icon(scene)) {
+            case "bed": return R.drawable.inventory_widget_scene_bed;
+            case "sun": return R.drawable.inventory_widget_scene_sun;
+            case "lightbulb": return R.drawable.inventory_widget_scene_lightbulb;
+            case "lamp": return R.drawable.inventory_widget_scene_lamp;
+            case "coffee": return R.drawable.inventory_widget_scene_coffee;
+            case "utensils": return R.drawable.inventory_widget_scene_utensils;
+            case "door-open": return R.drawable.inventory_widget_scene_door_open;
+            case "lock": return R.drawable.inventory_widget_scene_lock;
+            case "music": return R.drawable.inventory_widget_scene_music;
+            case "sparkles": return R.drawable.inventory_widget_scene_sparkles;
+            case "power": return R.drawable.inventory_widget_scene_power;
+            default: return R.drawable.inventory_widget_scene;
+        }
     }
     static JSONObject find(JSONObject body, String id) {
         JSONArray scenes = body == null ? null : body.optJSONArray("scenes");

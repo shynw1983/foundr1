@@ -25,7 +25,7 @@ final class StoreWidgetDevicesData {
         }
         return saved;
     }
-    static void saveSlots(Context context, int id, JSONObject... devices) {
+    static synchronized void saveSlots(Context context, int id, JSONObject... devices) {
         if (devices.length > SLOT_COUNT) throw new IllegalArgumentException("Too many widget shortcuts");
         SharedPreferences.Editor edit = prefs(context).edit();
         String store = InventoryWidgetProvider.storeId(context, id);
@@ -35,12 +35,13 @@ final class StoreWidgetDevicesData {
             if (!StoreWidgetScenePolicy.validBinding(d)) edit.remove(key);
             else try { edit.putString(key, new JSONObject().put("store", store).put("key", d.getString("key"))
                 .put("name", d.optString("name")).put("kind", d.optString("kind"))
+                .put("icon", StoreWidgetScenePolicy.isScene(d) ? StoreWidgetScenePolicy.icon(d) : "")
                 .put("targetType", StoreWidgetScenePolicy.isScene(d) ? "scene" : "device").toString()); }
                 catch (org.json.JSONException impossible) { throw new IllegalArgumentException(impossible); }
         }
         edit.apply();
     }
-    static void delete(Context context, int id) {
+    static synchronized void delete(Context context, int id) {
         SharedPreferences.Editor edit = prefs(context).edit();
         for (int slot = 0; slot < SLOT_COUNT; slot++) edit.remove("slot:" + id + ":" + slot);
         edit.apply();
@@ -77,6 +78,37 @@ final class StoreWidgetDevicesData {
             if (device != null && key.equals(device.optString("key"))) return device;
         }
         return null;
+    }
+    /** Only refresh metadata for existing bindings; never change targets or execute scenes. */
+    static synchronized void updateScenes(Context context, String session, String store, JSONObject catalog) {
+        if (session.isEmpty() || !session.equals(InventoryApiClient.sessionKey()) || catalog == null
+            || !store.equals(catalog.optString("storeId")) || catalog.optJSONArray("scenes") == null) return;
+        SharedPreferences.Editor edit = prefs(context).edit();
+        for (int id : InventoryWidgetProvider.widgetIds(context)) for (int slot = 0; slot < SLOT_COUNT; slot++) {
+            JSONObject binding = slot(context, id, slot);
+            if (!store.equals(binding.optString("store")) || !StoreWidgetScenePolicy.isScene(binding)) continue;
+            JSONObject scene = StoreWidgetScenePolicy.find(catalog, binding.optString("key"));
+            if (!StoreWidgetScenePolicy.validScene(scene)) continue;
+            try {
+                binding.put("name", scene.getString("name")).put("icon", StoreWidgetScenePolicy.icon(scene));
+                edit.putString("slot:" + id + ":" + slot, binding.toString());
+            } catch (org.json.JSONException impossible) { throw new IllegalArgumentException(impossible); }
+        }
+        edit.apply();
+    }
+    static void refreshScenes(Context context, String store, java.util.function.BooleanSupplier stopped) {
+        String session = InventoryApiClient.sessionKey();
+        if (session.isEmpty() || stopped.getAsBoolean()) return;
+        boolean selected = false;
+        for (int id : InventoryWidgetProvider.widgetIds(context)) for (int slot = 0; slot < SLOT_COUNT; slot++) {
+            JSONObject binding = slot(context, id, slot);
+            selected |= store.equals(binding.optString("store")) && StoreWidgetScenePolicy.isScene(binding);
+        }
+        if (!selected) return;
+        try {
+            JSONObject catalog = InventoryApiClient.loadScenes(store, session);
+            if (!stopped.getAsBoolean()) updateScenes(context, session, store, catalog);
+        } catch (Exception ignored) { /* Preserve saved icons on a failed read. */ }
     }
     static void refreshSelected(Context context, java.util.function.BooleanSupplier stopped) {
         String session = InventoryApiClient.sessionKey();

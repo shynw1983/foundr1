@@ -1,6 +1,14 @@
 # Store device scenes
 
-`/store/devices` supports per-store scenes with a name and an ordered list of device actions. Users can add, edit, reorder steps, and delete scenes. Each scene has 1–8 steps, with a device used at most once; a store can keep up to 20 scenes. Saving does not operate devices. Execution requires a separate confirmation, plus explicit acknowledgement for unlocking.
+`/store/devices` supports per-store scenes with a name, a selectable icon, and an ordered list of device actions. Users can add, edit, reorder steps, and delete scenes. Each scene has 1–8 steps, with a device used at most once; a store can keep up to 20 scenes. Saving does not operate devices. Execution requires a separate confirmation, plus explicit acknowledgement for unlocking.
+
+The editor offers 12 icons: bed, moon, sun, lightbulb, lamp, coffee, utensils,
+door, lock, music, sparkles and power. The selected stable `icon` key is stored
+with the scene in the existing settings JSON and returned to Store and Android.
+There is no schema migration or device command for icon changes. Older scenes
+without an icon keep working: the rest example defaults to bed and other scenes
+to moon without rewriting settings on a read. An older editor that omits `icon`
+preserves the saved choice when its revision is current.
 
 For stores with exactly one indoor light, one ambient-light plug, one shade and one lock, the initial list offers `休憩モード`: indoor light off, ambient light on, shade fully closed, lock. Once a store saves its own list, that list is authoritative, including an empty list.
 
@@ -37,6 +45,11 @@ The worker reads each device immediately before its action, records the outcome,
 There is no idle polling. The browser observes only an active run (initially after two seconds, then every five seconds, bounded to three minutes). On completion it waits five seconds and refreshes device state once. Leaving the page does not deliberately cancel the server worker; runtime interruptions remain visible in the run record.
 
 The Android Store widget's four right-side slots can bind a scene or a device.
+Store 0.2.20 displays the selected scene icon using the same Lucide outlines as
+the editor. Existing local bindings are retained. Scene metadata refreshes once
+per selected store on the existing widget/app refresh, and when a user opens its
+confirmation. These reads never execute scenes, never poll device status, and
+are not retried by the scene metadata refresh. Failed reads preserve saved icons.
 Scene configuration and confirmation use the same authenticated API. The scene
 list response exposes `devices: [{ key, name, kind }]` so native confirmation can
 resolve step names without fetching device states or exposing vendor IDs. Opening

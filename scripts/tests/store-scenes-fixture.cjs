@@ -9,7 +9,7 @@ function load(file,modules={},globals={}) {
  const context={exports:{},Response,Request,URL,AbortSignal,Date,Buffer,process:{env},console:{...console,info(){}},require:name=>Object.hasOwn(modules,name.split('/').at(-1))?modules[name.split('/').at(-1)]:require(name),...globals};
  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,context,{filename:file});return context.exports;
 }
-const policy=load('lib/store-scene-state.ts'),light=load('lib/store-light-state.ts'),state=load('lib/store-device-state.ts',{'store-light-state':light});
+const icons=load('lib/store-scene-icons.ts'),policy=load('lib/store-scene-state.ts',{'store-scene-icons':icons}),light=load('lib/store-light-state.ts'),state=load('lib/store-device-state.ts',{'store-light-state':light});
 async function fixture() {
  const db=new PGlite();
  await db.exec(`create table stores(id uuid primary key);create table employees(id uuid primary key);insert into stores values('${storeId}'),('${otherStoreId}');insert into employees values('${actorId}');`);
@@ -48,7 +48,7 @@ async function fixture() {
  };
  const adapter=load('lib/switchbot.ts',{}, {fetch});
  const service=load('lib/store-devices.ts',{db:{sql},switchbot:adapter,'store-device-state':state,'store-light-state':light,'store-scene-state':policy});
- const scenes=load('lib/store-device-scenes.ts',{db:{sql},'store-devices':service,switchbot:adapter,'store-scene-state':policy,'store-device-state':state});
+ const scenes=load('lib/store-device-scenes.ts',{db:{sql},'store-devices':service,switchbot:adapter,'store-scene-state':policy,'store-device-state':state,'store-scene-icons':icons});
  const auth={session:{id:actorId,role:'owner'},stores:[{id:storeId}]};
  const access=load('lib/store-device-access.ts',{'api-auth':{requireOsSession:async()=>auth.session},'store-order-access':{getStoreOrderAccess:async()=>({stores:auth.stores})},'store-scene-state':policy});
  const route=load('app/api/store/devices/scenes/route.ts',{'server':{after:fn=>jobs.push(fn)},'store-device-access':access,'store-device-scenes':scenes,'store-devices':service,'store-scene-state':policy});

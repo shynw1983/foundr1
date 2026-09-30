@@ -48,7 +48,7 @@ final class StoreWidgetDevicesRenderer {
 
     // Icons identify the device, never claim that a cached physical state is current.
     static int icon(JSONObject binding, JSONObject device) {
-        if (StoreWidgetScenePolicy.isScene(binding)) return R.drawable.inventory_widget_scene;
+        if (StoreWidgetScenePolicy.isScene(binding)) return StoreWidgetScenePolicy.iconResource(binding);
         String kind = device == null ? binding.optString("kind") : device.optString("kind", binding.optString("kind"));
         String name = binding.optString("name").toLowerCase(java.util.Locale.ROOT);
         if ("lock".equals(kind)) return R.drawable.inventory_widget_device_lock;

@@ -4,6 +4,7 @@ import { requestStoreDeviceCommand, storeDeviceConfig, StoreDeviceError } from "
 import { listStoreSwitchBots } from "./switchbot";
 import { deviceCommandSkipped } from "./store-device-state";
 import { defaultStoreScenes, sceneActions, sceneUuid, validScenes, type StoreScene, type SceneRun, type SceneStepResult, type SceneView } from "./store-scene-state";
+import { sceneIcon } from "./store-scene-icons";
 
 type RunRow = { id: string; store_id: string; scene_id: string; scene_name: string; actor_employee_id: string; status: SceneRun["status"]; steps: SceneStepResult[]; started_at: string | Date; expires_at: string | Date; finished_at: string | Date | null };
 const iso = (v: string | Date) => new Date(v).toISOString();
@@ -21,7 +22,8 @@ async function definitions(storeId: string) {
   if (!configured) return { configured: null, devices: [], revision: "", scenes: [] as StoreScene[] };
   const devices = await listStoreSwitchBots(configured.config);
   return { configured, devices, revision: typeof settings?.revision === "string" ? settings.revision : "",
-    scenes: settings ? validScenes(settings.scenes) ? settings.scenes as StoreScene[] : [] : defaultStoreScenes(devices) };
+    scenes: (settings ? validScenes(settings.scenes) ? settings.scenes as StoreScene[] : [] : defaultStoreScenes(devices))
+      .map(scene => ({ ...scene, icon: sceneIcon(scene) })) };
 }
 export async function getStoreSceneRun(storeId: string, id?: string): Promise<SceneRun | null> {
   const rows = id ? await sql`select * from store_device_scene_runs where store_id=${storeId}::uuid and id=${id}::uuid`
@@ -44,7 +46,10 @@ export async function saveStoreScenes(storeId: string, actorId: string, scenes: 
   const data = await definitions(storeId);
   if (!data.configured) throw new StoreDeviceError("この店舗の機器は未設定です。", 409);
   validateDevices(scenes, data.devices);
-  const cleaned = scenes.map(scene => ({ id: scene.id, name: scene.name.trim(), steps: scene.steps.map(step => ({ device: step.device, action: step.action, ...(step.action === "setPosition" ? { position: step.position } : {}) })) }));
+  // An older, already-open editor can omit icon. Preserve the stored choice.
+  const cleaned = scenes.map(scene => ({ id: scene.id, name: scene.name.trim(),
+    icon: sceneIcon({ name: scene.name, icon: scene.icon ?? data.scenes.find(saved => saved.id === scene.id)?.icon }),
+    steps: scene.steps.map(step => ({ device: step.device, action: step.action, ...(step.action === "setPosition" ? { position: step.position } : {}) })) }));
   const revision = randomUUID(), settings = JSON.stringify({ revision, scenes: cleaned });
   const saved = await sql`with updated as (
     update module_settings set settings=module_settings.settings || ${settings}::jsonb, updated_by=${actorId}::uuid, updated_at=now()

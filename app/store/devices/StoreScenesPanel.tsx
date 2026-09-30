@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import type { StoreDevice } from "../../../lib/store-device-state";
 import { sceneActions, sceneMaxCount, sceneMaxSteps, sceneReasonLabels, sceneRunLifetimeMs, type SceneAction, type SceneRun, type SceneStep, type SceneView, type StoreScene } from "../../../lib/store-scene-state";
+import { sceneIcon, sceneIconOptions } from "../../../lib/store-scene-icons";
+import { StoreSceneIcon } from "./StoreSceneIcon";
 
 const labels: Record<SceneAction, string> = { turnOn: "オンにする", turnOff: "オフにする", press: "スイッチを押す", setPosition: "位置を指定", lock: "施錠する", unlock: "解錠する" };
 const statuses = { waiting: "待機中", running: "状態確認・送信中", sent: "送信済み", skipped: "スキップ", failed: "未実行", unknown: "結果未確認", not_run: "未実行" };
@@ -91,7 +93,7 @@ export function StoreScenesPanel({ storeId, storeName, devices, disabled, onRunn
   function newScene() {
     const first = selectable[0]; if (!first) return;
     const action = options(first)[0];
-    setEditorError(""); setDraft({ id: crypto.randomUUID(), name: "", steps: [{ device: first.key, action, ...(action === "setPosition" ? { position: 100 } : {}) }] });
+    setEditorError(""); setDraft({ id: crypto.randomUUID(), name: "", icon: "moon", steps: [{ device: first.key, action, ...(action === "setPosition" ? { position: 100 } : {}) }] });
   }
   function updateStep(index: number, next: SceneStep) { setDraft(d => d ? { ...d, steps: d.steps.map((s, i) => i === index ? next : s) } : d); }
   function moveStep(index: number, direction: number) {
@@ -142,7 +144,7 @@ export function StoreScenesPanel({ storeId, storeName, devices, disabled, onRunn
     {!view ? <p role="status" className="store-device-help">{t(loading ? "読み込み中" : "シーンを再読込してください。")}</p> : <div className="store-scene-list">
       {!view.scenes.length && <p className="store-device-help">{t("シーンを追加して、使う機器と操作を選んでください。")}</p>}
       {view.scenes.map(scene => <article className="store-scene" key={scene.id}>
-        <div className="store-scene-title"><h4>{t(scene.name)}</h4><button className="store-scene-edit" disabled={running || disabled} aria-label={`${t(scene.name)} ${t("編集")}`} onClick={() => { setEditorError(""); setDraft(structuredClone(scene)); }}><Pencil size={16}/></button></div>
+        <div className="store-scene-title"><h4><StoreSceneIcon icon={sceneIcon(scene)}/>{t(scene.name)}</h4><button className="store-scene-edit" disabled={running || disabled} aria-label={`${t(scene.name)} ${t("編集")}`} onClick={() => { setEditorError(""); setDraft({ ...structuredClone(scene), icon: sceneIcon(scene) }); }}><Pencil size={16}/></button></div>
         <ol className="store-scene-preview">{scene.steps.map(step => <li key={step.device}><span>{t(devices.find(d => d.key === step.device)?.name || "機器が見つかりません")}</span><span>{stepLabel(step)}</span></li>)}</ol>
         <button className="primary-button store-scene-run" disabled={disabled || running || saving || !scene.steps.every(s => devices.find(d => d.key === s.device)?.controlEnabled)} onClick={() => { setAllowUnlock(false); setConfirmation({ kind: "run", scene }); }}><Play size={15}/>{t("実行")}</button>
       </article>)}
@@ -160,6 +162,13 @@ export function StoreScenesPanel({ storeId, storeName, devices, disabled, onRunn
       {draft && <form onSubmit={e => { e.preventDefault(); if (!view) return; const exists = view.scenes.some(s => s.id === draft.id); void save(exists ? view.scenes.map(s => s.id === draft.id ? draft : s) : [...view.scenes, draft]); }}>
         <div className="store-device-dialog-title"><h2 id="scene-editor-title">{t("シーンを編集")}</h2><button type="button" disabled={saving} aria-label={t("閉じる")} onClick={() => setDraft(null)}><X size={20}/></button></div>
         <label className="store-scene-name">{t("シーン名")}<input autoFocus required maxLength={40} value={draft.name} disabled={saving} placeholder={t("例：休憩モード")} onChange={e => setDraft(d => d ? { ...d, name: e.target.value } : d)}/></label>
+        <fieldset className="store-scene-icon-picker" disabled={saving}>
+          <legend>{t("シーンのアイコン")}</legend>
+          <div className="store-scene-icon-options">{sceneIconOptions.map(option => <label key={option.key} className="store-scene-icon-option">
+            <input type="radio" name="scene-icon" value={option.key} checked={sceneIcon(draft) === option.key} onChange={() => setDraft(d => d ? { ...d, icon: option.key } : d)}/>
+            <span><StoreSceneIcon icon={option.key} size={22}/><span>{t(option.label)}</span></span>
+          </label>)}</div>
+        </fieldset>
         <p className="store-device-help">{t("上から順に実行します。同じ機器は1回だけ指定できます。")}</p>
         <ol className="store-scene-editor-steps">{draft.steps.map((step, index) => {
           const device = devices.find(d => d.key === step.device);
@@ -190,7 +199,7 @@ export function StoreScenesPanel({ storeId, storeName, devices, disabled, onRunn
     </dialog>
     <dialog ref={confirmDialog} className="store-device-dialog" aria-labelledby="scene-confirm-title" onCancel={e => { if (saving) e.preventDefault(); else setConfirmation(null); }} onClose={() => setConfirmation(null)}>
       {confirmation && <><div className="store-device-dialog-title"><h2 id="scene-confirm-title">{t(confirmation.kind === "run" ? "シーンの実行を確認" : "シーンを削除")}</h2><button disabled={saving} aria-label={t("閉じる")} onClick={() => setConfirmation(null)}><X size={20}/></button></div>
-        <p className="store-device-dialog-name">{t(confirmation.scene.name)}</p><p>{storeName}</p>
+        <p className="store-device-dialog-name store-scene-confirm-name"><StoreSceneIcon icon={sceneIcon(confirmation.scene)} size={24}/>{t(confirmation.scene.name)}</p><p>{storeName}</p>
         {confirmation.kind === "run" ? <><ol className="store-scene-preview">{confirmation.scene.steps.map(step => <li key={step.device}><span>{t(devices.find(d => d.key === step.device)?.name || "機器が見つかりません")}</span><span>{stepLabel(step)}</span></li>)}</ol>
           {needsLightHelp(confirmation.scene) && <p className="store-device-help">{t(lightHelp)}</p>}
           <p>{t("失敗した操作は自動で再実行せず、次の機器へ進みます。")}</p>

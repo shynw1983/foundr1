@@ -76,14 +76,14 @@ public class InventoryWidgetLayoutTest {
                 plug.put("name", "ロールスクリーン").put("kind", "shade").put("actions", new JSONArray().put("setPosition"));
             }
             if (sceneShortcuts) {
-                light = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "1efbd558-7d9b-478c-a6bf-213d8d1f08a3").put("name", "休憩モード"));
-                plug = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "5b594eac-0920-4fc2-80e2-8b208c8dc3ec").put("name", "営業開始の照明と入口"));
+                light = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "1efbd558-7d9b-478c-a6bf-213d8d1f08a3").put("name", "休憩モード").put("icon", "bed"));
+                plug = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "5b594eac-0920-4fc2-80e2-8b208c8dc3ec").put("name", "営業開始の照明と入口").put("icon", "sun"));
             }
             JSONObject third = new JSONObject().put("key", "333333333333333333333333").put("name", "ロールスクリーン").put("kind", "shade");
             JSONObject fourth = new JSONObject().put("key", "444444444444444444444444").put("name", "入口ドア").put("kind", "lock");
             if (sceneShortcuts) {
-                third = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "2d306676-a5fb-491a-a6bb-e7206f042229").put("name", "昼休み"));
-                fourth = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "b8c4c765-a6ce-477c-959c-2d3ccf92c576").put("name", "閉店"));
+                third = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "2d306676-a5fb-491a-a6bb-e7206f042229").put("name", "昼休み").put("icon", "coffee"));
+                fourth = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "b8c4c765-a6ce-477c-959c-2d3ccf92c576").put("name", "閉店").put("icon", "lock"));
             }
             StoreWidgetDevicesData.saveSlots(context, 7, light, plug, third, fourth);
             for (JSONObject device : new JSONObject[]{light, plug, third, fourth}) {

@@ -90,6 +90,8 @@ public class StoreWidgetSceneActivity extends Activity {
         if (!bound() || body == null || !store.equals(body.optString("storeId"))) { failure(new InventoryApiClient.ApiException(409, "changed")); return; }
         scene = StoreWidgetScenePolicy.find(body, key); devices = body.optJSONArray("devices"); revision = body.optString("revision");
         if (!StoreWidgetScenePolicy.validScene(scene) || devices == null || !revision.isEmpty() && !StoreWidgetScenePolicy.uuid(revision)) { failure(new InventoryApiClient.ApiException(404, "removed")); return; }
+        StoreWidgetDevicesData.updateScenes(this, session, store, body);
+        InventoryWidgetProvider.renderWidget(this, widgetId);
         name = StoreWidgetScenePolicy.name(scene.optString("name"), zh); loadedAt = android.os.SystemClock.elapsedRealtime(); header();
         JSONObject current = body.optJSONObject("latestRun");
         if (current != null && "running".equals(current.optString("status"))) {

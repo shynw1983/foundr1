@@ -14,7 +14,7 @@ function load(file, modules={}, globals={}) {
  const context={exports:{},Response,Request,URL,AbortSignal,Date,Buffer,process:{env},console,require:name=>Object.hasOwn(modules,name.split('/').at(-1))?modules[name.split('/').at(-1)]:require(name),...globals};
  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,context,{filename:file});return context.exports;
 }
-const light=load('lib/store-light-state.ts'), state=load('lib/store-device-state.ts',{'store-light-state':light}), scenePolicy=load('lib/store-scene-state.ts');
+const light=load('lib/store-light-state.ts'), state=load('lib/store-device-state.ts',{'store-light-state':light}), scenePolicy=load('lib/store-scene-state.ts',{'store-scene-icons':load('lib/store-scene-icons.ts')});
 const plain=v=>JSON.parse(JSON.stringify(v));
 const types=[[botId,'Bot'],[outdoorId,'Bot'],[shadeId,'Roller Shade'],[lockId,'Smart Lock Pro'],[hubId,'Hub 2'],[meterId,'Meter'],[keypadId,'Keypad Vision'],[remoteId,'Remote'],[foreignId,'Bot'],[plugId,'Plug Mini (JP)'],[foreignPlugId,'Plug Mini (JP)']];
 function fakeVendor(onPost=async()=>{}) {

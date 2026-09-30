@@ -1,4 +1,5 @@
 import type { DeviceAction, DeviceKind, DeviceSample } from "./store-device-state";
+import { validSceneIcon, type SceneIcon } from "./store-scene-icons";
 
 export const sceneMaxSteps = 8;
 export const sceneMaxCount = 20;
@@ -6,7 +7,7 @@ export const sceneRunLifetimeMs = 180_000;
 export const sceneUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export type SceneAction = Exclude<DeviceAction, "deadbolt">;
 export type SceneStep = { device: string; action: SceneAction; position?: number };
-export type StoreScene = { id: string; name: string; steps: SceneStep[] };
+export type StoreScene = { id: string; name: string; icon?: SceneIcon; steps: SceneStep[] };
 export type SceneCatalogDevice = { key: string; name: string; kind: DeviceKind; cloud?: boolean; secondary?: boolean };
 export type SceneStepResult = SceneStep & { name: string; status: "waiting" | "running" | "sent" | "skipped" | "failed" | "unknown" | "not_run"; reason: string; commandId?: string };
 export type SceneRun = { id: string; sceneId: string; name: string; status: "running" | "finished" | "interrupted"; startedAt: string; expiresAt: string; finishedAt: string | null; steps: SceneStepResult[] };
@@ -27,6 +28,7 @@ export function validScenes(value: unknown): value is StoreScene[] {
   return value.every(scene => {
     if (!scene || typeof scene !== "object" || typeof scene.id !== "string" || !sceneUuid.test(scene.id) || ids.has(scene.id)
       || typeof scene.name !== "string" || !scene.name.trim() || scene.name.length > 40
+      || (scene.icon !== undefined && !validSceneIcon(scene.icon))
       || !Array.isArray(scene.steps) || !scene.steps.length || scene.steps.length > sceneMaxSteps) return false;
     ids.add(scene.id);
     const devices = new Set<string>();
@@ -46,7 +48,7 @@ export function defaultStoreScenes(devices: SceneCatalogDevice[]): StoreScene[] 
   };
   const indoor = one("indoorLight"), ambient = one("plug", d => /間接|氛围|氛圍|ambient|mood/i.test(d.name)), shade = one("shade"), lock = one("lock");
   if (!indoor || !ambient || !shade || !lock) return [];
-  return [{ id: "1efbd558-7d9b-478c-a6bf-213d8d1f08a3", name: "休憩モード", steps: [
+  return [{ id: "1efbd558-7d9b-478c-a6bf-213d8d1f08a3", name: "休憩モード", icon: "bed", steps: [
     { device: indoor.key, action: "turnOff" }, { device: ambient.key, action: "turnOn" },
     { device: shade.key, action: "setPosition", position: 100 }, { device: lock.key, action: "lock" },
   ] }];

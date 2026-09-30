@@ -64,6 +64,36 @@ test('scene definitions are store scoped, revision protected, and preserve other
  }finally{await f.db.close();}
 });
 
+test('scene icons persist through the route without device commands or losing older editors and definitions',async()=>{
+ const f=await fixture();try{
+  const initial=await f.scenes.getStoreScenes(f.storeId), scene=plain(initial.scenes[0]);
+  assert.equal(scene.icon,'bed');
+  const legacy={...scene};delete legacy.icon;
+  const legacyRevision=randomUUID();
+  await f.db.query("insert into module_settings(scope_key,module_key,settings) values($1,'store_device_scenes',$2::jsonb)",['store:'+f.storeId,JSON.stringify({revision:legacyRevision,scenes:[legacy],preserved:'keep'})]);
+  const before=(await f.db.query("select settings from module_settings where module_key='store_device_scenes'")).rows;
+  assert.equal((await f.scenes.getStoreScenes(f.storeId)).scenes[0].icon,'bed');
+  assert.deepEqual((await f.db.query("select settings from module_settings where module_key='store_device_scenes'")).rows,before,'reading a fallback icon never rewrites old settings');
+  let revision=legacyRevision;
+  for(const icon of ['bed','moon','sun','lightbulb','lamp','coffee','utensils','door-open','lock','music','sparkles','power']){
+   const response=await f.route.PATCH(f.request('PATCH',{revision,scenes:[{...scene,icon}]}));
+   assert.equal(response.status,200);const saved=await response.json();revision=saved.revision;
+   assert.equal(saved.scenes[0].icon,icon);
+   const catalog=await f.route.GET(f.request('GET'));assert.equal((await catalog.json()).scenes[0].icon,icon);
+  }
+  const older=await f.route.PATCH(f.request('PATCH',{revision,scenes:[{...legacy,name:'閉店'}]}));
+  assert.equal(older.status,200);const saved=await older.json();revision=saved.revision;
+  assert.equal(saved.scenes[0].icon,'power','an already-open older editor must not erase an explicit icon');
+  for(const icon of ['../bed','<svg/>','',null,42,{key:'bed'}]){
+   const rejected=await f.route.PATCH(f.request('PATCH',{revision,scenes:[{...scene,icon}]}));
+   assert.equal(rejected.status,400);assert.equal((await f.scenes.getStoreScenes(f.storeId)).revision,revision);
+  }
+  assert.equal((await f.db.query("select settings->>'preserved' as value from module_settings where module_key='store_device_scenes'")).rows[0].value,'keep');
+  assert.deepEqual(plain(saved.scenes[0].steps),scene.steps);
+  assert.equal(f.posts.length,0);assert.equal(f.jobs.length,0);assert.equal(f.reads.filter(s=>s.endsWith('/status')).length,0);
+ }finally{await f.db.close();}
+});
+
 test('real scene executor skips dim indoor light and sends the remaining commands in order exactly once',async()=>{
  const f=await fixture();try{
   const v=await f.scenes.getStoreScenes(f.storeId),scene=v.scenes[0];

@@ -262,6 +262,41 @@ public class StoreWidgetSceneTest {
         if (view instanceof Spinner) output.add((Spinner)view);
         if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)view).getChildCount(); i++) spinners(((ViewGroup)view).getChildAt(i), output);
     }
+    @Test public void selectedIconsPersistAndOnlyMatchingAuthenticatedSceneBindingsRefresh() throws Exception {
+        JSONObject rest = scene().put("icon", "bed");
+        JSONObject second = new JSONObject(rest.toString()).put("id", OTHER).put("name", "営業開始").put("icon", "sun");
+        StoreWidgetDevicesData.saveSlots(context, 7, StoreWidgetScenePolicy.binding(rest), device(), StoreWidgetScenePolicy.binding(second));
+        assertEquals("bed", StoreWidgetDevicesData.slot(context, 7, 0).getString("icon"));
+        assertEquals(R.drawable.inventory_widget_scene_bed, StoreWidgetDevicesRenderer.icon(StoreWidgetDevicesData.slot(context, 7, 0), null));
+        String[] keys = {"bed", "moon", "sun", "lightbulb", "lamp", "coffee", "utensils", "door-open", "lock", "music", "sparkles", "power"};
+        java.util.Set<Integer> resources = new java.util.HashSet<>();
+        for (String icon : keys) {
+            JSONObject binding = StoreWidgetScenePolicy.binding(new JSONObject(rest.toString()).put("icon", icon));
+            assertEquals(icon, binding.getString("icon"));
+            int resource = StoreWidgetDevicesRenderer.icon(binding, null);
+            assertNotNull(context.getDrawable(resource));assertTrue(resources.add(resource));
+        }
+        rest.remove("icon");assertEquals("bed", StoreWidgetScenePolicy.binding(rest).getString("icon"));
+        assertEquals("moon", StoreWidgetScenePolicy.icon(new JSONObject().put("name", "自由設定").put("icon", "unknown")));
+        String before = StoreWidgetDevicesData.slot(context, 7, 0).toString();
+        JSONObject catalog = new JSONObject().put("storeId", "store").put("scenes", new JSONArray().put(rest.put("icon", "coffee").put("name", "昼休み")));
+        StoreWidgetDevicesData.updateScenes(context, "old-session", "store", catalog);
+        assertEquals(before, StoreWidgetDevicesData.slot(context, 7, 0).toString());
+        StoreWidgetDevicesData.updateScenes(context, session, "store", new JSONObject(catalog.toString()).put("storeId", "foreign"));
+        assertEquals(before, StoreWidgetDevicesData.slot(context, 7, 0).toString());
+        StoreWidgetDevicesData.updateScenes(context, session, "store", catalog);
+        JSONObject current = StoreWidgetDevicesData.slot(context, 7, 0);
+        assertEquals(ID, current.getString("key"));assertEquals("昼休み", current.getString("name"));assertEquals("coffee", current.getString("icon"));
+        assertEquals("sun", StoreWidgetDevicesData.slot(context, 7, 2).getString("icon"));
+        assertFalse(StoreWidgetScenePolicy.isScene(StoreWidgetDevicesData.slot(context, 7, 1)));
+        StoreWidgetDevicesData.updateScenes(context, session, "store", null);
+        assertEquals("coffee", StoreWidgetDevicesData.slot(context, 7, 0).getString("icon"));
+        // A late catalog may not overwrite a slot the user rebound to another target.
+        StoreWidgetDevicesData.saveSlots(context, 7, StoreWidgetScenePolicy.binding(second), device());
+        StoreWidgetDevicesData.updateScenes(context, session, "store", catalog);
+        assertEquals(OTHER, StoreWidgetDevicesData.slot(context, 7, 0).getString("key"));
+        assertEquals("sun", StoreWidgetDevicesData.slot(context, 7, 0).getString("icon"));
+    }
     @Test public void configurationListsBothTypesAndPreservesSceneDuringPartialFailure() throws Exception {
         try (ActivityController<ConfigActivity> controller = Robolectric.buildActivity(ConfigActivity.class,
             new Intent(context, ConfigActivity.class).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, 7)).setup()) {
