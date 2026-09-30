@@ -30,7 +30,8 @@ export async function getStoreSceneRun(storeId: string, id?: string): Promise<Sc
 }
 export async function getStoreScenes(storeId: string): Promise<SceneView> {
   const [data, latestRun] = await Promise.all([definitions(storeId), getStoreSceneRun(storeId)]);
-  return { storeId, configured: Boolean(data.configured), revision: data.revision, scenes: data.scenes, latestRun };
+  return { storeId, configured: Boolean(data.configured), revision: data.revision, scenes: data.scenes,
+    devices: data.devices.map(device => ({ key: device.key, name: device.name, kind: device.kind })), latestRun };
 }
 function validateDevices(scenes: StoreScene[], devices: Awaited<ReturnType<typeof listStoreSwitchBots>>) {
   for (const scene of scenes) for (const step of scene.steps) {

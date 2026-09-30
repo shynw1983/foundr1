@@ -13,7 +13,7 @@ final class StoreWidgetDevicesData {
         JSONObject saved = StoreWidgetControlsData.object(prefs(context).getString("slot:" + id + ":" + slot, ""));
         if (saved == null || !saved.optString("store").equals(InventoryWidgetProvider.storeId(context, id))) return new JSONObject();
         // Upgrade existing bindings from the local snapshot, without waking the device API.
-        if (saved.optString("kind").isEmpty()) {
+        if (!StoreWidgetScenePolicy.isScene(saved) && saved.optString("kind").isEmpty()) {
             JSONObject snapshot = read(context, saved.optString("store"), saved.optString("key"));
             if (snapshot != null && !snapshot.optString("kind").isEmpty()) try {
                 saved.put("kind", snapshot.optString("kind"));
@@ -29,9 +29,10 @@ final class StoreWidgetDevicesData {
         for (int i = 0; i < 2; i++) {
             String key = "slot:" + id + ":" + i;
             JSONObject d = devices[i];
-            if (d == null || !StoreWidgetDevicePolicy.validKey(d.optString("key"))) edit.remove(key);
+            if (!StoreWidgetScenePolicy.validBinding(d)) edit.remove(key);
             else try { edit.putString(key, new JSONObject().put("store", store).put("key", d.getString("key"))
-                .put("name", d.optString("name")).put("kind", d.optString("kind")).toString()); }
+                .put("name", d.optString("name")).put("kind", d.optString("kind"))
+                .put("targetType", StoreWidgetScenePolicy.isScene(d) ? "scene" : "device").toString()); }
                 catch (org.json.JSONException impossible) { throw new IllegalArgumentException(impossible); }
         }
         edit.apply();
@@ -78,7 +79,7 @@ final class StoreWidgetDevicesData {
             if (stopped.getAsBoolean() || !session.equals(InventoryApiClient.sessionKey())) return;
             JSONObject binding = slot(context, id, slot);
             String store = binding.optString("store"), key = binding.optString("key");
-            if (!StoreWidgetDevicePolicy.validKey(key) || !seen.add(store + ":" + key)) continue;
+            if (StoreWidgetScenePolicy.isScene(binding) || !StoreWidgetDevicePolicy.validKey(key) || !seen.add(store + ":" + key)) continue;
             long generation = beginRead(session, store, key);
             try {
                 JSONObject device = find(InventoryApiClient.loadDevices(store, key, session), key);

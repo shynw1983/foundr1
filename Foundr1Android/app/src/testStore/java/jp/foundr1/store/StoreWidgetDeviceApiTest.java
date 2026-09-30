@@ -66,8 +66,27 @@ public class StoreWidgetDeviceApiTest {
         try { InventoryApiClient.loadDevices(store, key, session); fail(); } catch (InventoryApiClient.ApiException denied) { assertEquals(403, denied.status); }
         status = 200; response = new JSONObject().put("storeId", "other-store").put("devices", new JSONArray());
         try { InventoryApiClient.loadDevices(store, key, session); fail(); } catch (java.io.IOException denied) { assertEquals("Invalid device scope", denied.getMessage()); }
+        String sceneId = "1efbd558-7d9b-478c-a6bf-213d8d1f08a3", revision = java.util.UUID.randomUUID().toString();
+        response = new JSONObject().put("storeId", store).put("scenes", new JSONArray()).put("devices", new JSONArray());
+        InventoryApiClient.loadScenes(store, session);
+        assertEquals("GET", last.getRequestMethod()); assertEquals("/api/store/devices/scenes", last.getURL().getPath());
+        assertFalse(last.getUseCaches());
+        response = new JSONObject().put("run", new JSONObject().put("id", id).put("sceneId", sceneId));
+        InventoryApiClient.runScene(store, sceneId, revision, id, true, session);
+        JSONObject scenePayload = new JSONObject(last.payload.toString("UTF-8"));
+        assertEquals(sceneId, scenePayload.getString("sceneId")); assertEquals(revision, scenePayload.getString("revision"));
+        assertEquals(store, scenePayload.getString("storeId")); assertEquals(id, scenePayload.getString("requestId"));
+        assertTrue(scenePayload.getBoolean("confirmed")); assertTrue(scenePayload.getBoolean("allowUnlock"));
+        InventoryApiClient.loadSceneRun(store, id, session);
+        assertEquals("GET", last.getRequestMethod()); assertTrue(last.getURL().getQuery().contains("run=" + id));
+        response = new JSONObject().put("storeId", "another-store").put("scenes", new JSONArray()).put("devices", new JSONArray());
+        try { InventoryApiClient.loadScenes(store, session); fail(); } catch (java.io.IOException invalid) { assertEquals("Invalid scene scope", invalid.getMessage()); }
+        response = new JSONObject().put("run", new JSONObject().put("id", java.util.UUID.randomUUID().toString()));
+        try { InventoryApiClient.loadSceneRun(store, id, session); fail(); } catch (java.io.IOException invalid) { assertEquals("Invalid scene run", invalid.getMessage()); }
         CookieManager.getInstance().setCookie(InventoryApiClient.BASE_URL, "foundr1_os_session=changed");
         try { InventoryApiClient.commandDevice(store, key, "press", null, id, session); fail(); }
+        catch (InventoryApiClient.ApiException changed) { assertEquals(409, changed.status); assertEquals(0, last.payload.size()); }
+        try { InventoryApiClient.runScene(store, sceneId, revision, id, false, session); fail(); }
         catch (InventoryApiClient.ApiException changed) { assertEquals(409, changed.status); assertEquals(0, last.payload.size()); }
     }
 }

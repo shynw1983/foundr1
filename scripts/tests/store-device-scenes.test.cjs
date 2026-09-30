@@ -22,7 +22,7 @@ test('scene definitions are store scoped, revision protected, and preserve other
   await f.db.exec(migration);assert.deepEqual((await f.db.query('select * from module_settings')).rows,before);
   const start=f.queries.length,v=await f.scenes.getStoreScenes(f.storeId);
   assert.ok(f.queries.slice(start).every(q=>/^select/i.test(q.trim())),'GET never writes');
-  assert.equal(v.scenes[0].name,'休憩モード');assert.deepEqual(plain(v.scenes[0].steps.map(s=>s.action)),['turnOff','turnOn','setPosition','lock']);
+  assert.equal(v.scenes[0].name,'休憩モード');assert.ok(v.devices.every(d=>Object.keys(d).sort().join(',')==='key,kind,name'),'native confirmation gets names without raw vendor IDs');assert.deepEqual(plain(v.scenes[0].steps.map(s=>s.action)),['turnOff','turnOn','setPosition','lock']);
   assert.equal(f.posts.length,0);assert.equal(f.reads.filter(s=>s.endsWith('/status')).length,0,'scene configuration does not wake every device');
   const saved=await f.scenes.saveStoreScenes(f.storeId,f.actorId,v.scenes,'');
   assert.ok(saved.revision);await assert.rejects(()=>f.scenes.saveStoreScenes(f.storeId,f.actorId,[],''),e=>e.status===409);

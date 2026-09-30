@@ -10,7 +10,7 @@ export type StoreScene = { id: string; name: string; steps: SceneStep[] };
 export type SceneCatalogDevice = { key: string; name: string; kind: DeviceKind; cloud?: boolean; secondary?: boolean };
 export type SceneStepResult = SceneStep & { name: string; status: "waiting" | "running" | "sent" | "skipped" | "failed" | "unknown" | "not_run"; reason: string; commandId?: string };
 export type SceneRun = { id: string; sceneId: string; name: string; status: "running" | "finished" | "interrupted"; startedAt: string; expiresAt: string; finishedAt: string | null; steps: SceneStepResult[] };
-export type SceneView = { storeId: string; configured: boolean; revision: string; scenes: StoreScene[]; latestRun: SceneRun | null };
+export type SceneView = { storeId: string; configured: boolean; revision: string; scenes: StoreScene[]; devices: SceneCatalogDevice[]; latestRun: SceneRun | null };
 
 export function sceneActions(device: SceneCatalogDevice): SceneAction[] {
   if (device.cloud === false || device.secondary) return [];

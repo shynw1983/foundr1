@@ -32,6 +32,7 @@ public class InventoryWidgetLayoutTest {
     private float fontScale = 1f;
     private boolean responsive;
     private boolean accessDevices;
+    private boolean sceneShortcuts;
     @Before public void controls() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         android.webkit.CookieManager.getInstance().setCookie(InventoryApiClient.BASE_URL, "foundr1_os_session=layout-test");
@@ -74,8 +75,13 @@ public class InventoryWidgetLayoutTest {
                 light.put("name", "入口ドア").put("kind", "lock").put("actions", new JSONArray().put("lock").put("unlock"));
                 plug.put("name", "ロールスクリーン").put("kind", "shade").put("actions", new JSONArray().put("setPosition"));
             }
+            if (sceneShortcuts) {
+                light = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "1efbd558-7d9b-478c-a6bf-213d8d1f08a3").put("name", "休憩モード"));
+                plug = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "5b594eac-0920-4fc2-80e2-8b208c8dc3ec").put("name", "営業開始の照明と入口"));
+            }
             StoreWidgetDevicesData.saveSlots(context, 7, light, plug);
             for (JSONObject device : new JSONObject[]{light, plug}) {
+                if (StoreWidgetScenePolicy.isScene(device)) continue;
                 String key = device.optString("key"), session = InventoryApiClient.sessionKey();
                 long now = android.os.SystemClock.elapsedRealtime();
                 StoreWidgetDevicePolicy.recordRead(device, now, now);
@@ -227,6 +233,22 @@ public class InventoryWidgetLayoutTest {
         responsive = true;
         for (int[] size : new int[][]{{110,56},{176,88},{250,110},{300,130},{500,120},{250,148},{360,208}})
             render("widget-launcher-" + size[0] + "x" + size[1], size[0], size[1], "ja", sample());
+    }
+    @Test public void sceneSlotsKeepLayoutAndOpenDistinctReadOnlyConfirmations() throws Exception {
+        sceneShortcuts = true;
+        for (String language : new String[]{"ja", "zh"}) for (int[] size : new int[][]{{300,130},{360,164},{360,208}}) {
+            View view = render("widget-scenes-" + language + "-" + size[0] + "x" + size[1], size[0], size[1], language, sample());
+            for (int slot = 0; slot < 2; slot++) {
+                View button = view.findViewById(slot == 0 ? R.id.inventory_widget_device_left : R.id.inventory_widget_device_right);
+                assertTrue(button.getContentDescription().toString().contains(language.equals("ja") ? "シーン" : "场景"));
+                assertTrue(button.performClick()); Intent intent = shadowOf(RuntimeEnvironment.getApplication()).getNextStartedActivity();
+                assertEquals(StoreWidgetSceneActivity.class.getName(), intent.getComponent().getClassName());
+                assertEquals("widget-scenes", intent.getData().getHost());
+                assertEquals(slot, intent.getIntExtra(StoreWidgetDeviceActivity.EXTRA_SLOT, -1));
+            }
+        }
+        fontScale = 1.3f;
+        render("widget-scenes-large-text", 360, 164, "ja", sample());
     }
     @Test public void customSlotsRenderTheirOwnActionAndActualSyncResult() throws Exception {
         Context context = RuntimeEnvironment.getApplication();

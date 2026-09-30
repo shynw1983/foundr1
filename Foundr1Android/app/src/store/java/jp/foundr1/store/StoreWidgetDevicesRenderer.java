@@ -16,11 +16,12 @@ final class StoreWidgetDevicesRenderer {
         for (int slot = 0; slot < 2; slot++) {
             JSONObject binding = StoreWidgetDevicesData.slot(context, id, slot);
             String key = binding.optString("key");
-            boolean configured = StoreWidgetDevicePolicy.validKey(key);
-            JSONObject device = configured ? StoreWidgetDevicesData.read(context, store, key) : null;
+            boolean configured = StoreWidgetScenePolicy.validBinding(binding), scene = StoreWidgetScenePolicy.isScene(binding);
+            JSONObject device = configured && !scene ? StoreWidgetDevicesData.read(context, store, key) : null;
             String name = binding.optString("name", (zh ? "设备 " : "機器 ") + (slot + 1));
+            if (scene) name = StoreWidgetScenePolicy.name(name, zh);
             String state = configured ? (zh ? "点按确认" : "タップして確認") : (zh ? "选择设备" : "機器を選ぶ");
-            String detail = configured ? (zh ? "操作前读取状态" : "操作前に状態を確認") : (zh ? "自定义快捷开关" : "ショートカットを設定");
+            String detail = configured ? scene ? (zh ? "确认后执行场景" : "確認後にシーンを実行") : (zh ? "操作前读取状态" : "操作前に状態を確認") : (zh ? "设备或场景" : "機器・シーンを設定");
             boolean fresh = StoreWidgetDevicePolicy.fresh(device, android.os.SystemClock.elapsedRealtime());
             if (fresh) {
                 state = (zh ? "上次 " : "前回 ") + StoreWidgetDevicePolicy.state(device, zh);
@@ -36,12 +37,13 @@ final class StoreWidgetDevicesRenderer {
             views.setViewVisibility(title, size == InventoryWidgetPolicy.DENSE ? View.GONE : View.VISIBLE);
             views.setImageViewResource(icon, configured ? icon(binding, device) : R.drawable.inventory_widget_device_add);
             views.setContentDescription(root, name + "，" + state + "，" + detail);
-            views.setOnClickPendingIntent(root, configured ? action(context, id, slot, store, key) : InventoryWidgetProvider.configurationIntent(context, id));
+            views.setOnClickPendingIntent(root, configured ? action(context, id, slot, store, key, scene) : InventoryWidgetProvider.configurationIntent(context, id));
         }
     }
 
     // Icons identify the device, never claim that a cached physical state is current.
     static int icon(JSONObject binding, JSONObject device) {
+        if (StoreWidgetScenePolicy.isScene(binding)) return R.drawable.inventory_widget_scene;
         String kind = device == null ? binding.optString("kind") : device.optString("kind", binding.optString("kind"));
         String name = binding.optString("name").toLowerCase(java.util.Locale.ROOT);
         if ("lock".equals(kind)) return R.drawable.inventory_widget_device_lock;
@@ -61,10 +63,13 @@ final class StoreWidgetDevicesRenderer {
         return false;
     }
     static PendingIntent action(Context context, int id, int slot, String store, String key) {
-        Intent intent = new Intent(context, StoreWidgetDeviceActivity.class).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+        return action(context, id, slot, store, key, false);
+    }
+    static PendingIntent action(Context context, int id, int slot, String store, String key, boolean scene) {
+        Intent intent = new Intent(context, scene ? StoreWidgetSceneActivity.class : StoreWidgetDeviceActivity.class).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
             .putExtra(StoreWidgetDeviceActivity.EXTRA_STORE, store).putExtra(StoreWidgetDeviceActivity.EXTRA_KEY, key)
             .putExtra(StoreWidgetDeviceActivity.EXTRA_SLOT, slot).putExtra(StoreWidgetDeviceActivity.EXTRA_SESSION, InventoryApiClient.sessionKey())
-            .setData(Uri.parse("foundr1://widget-devices/" + id + "/" + slot + "/" + store + "/" + key));
+            .setData(Uri.parse("foundr1://widget-" + (scene ? "scenes" : "devices") + "/" + id + "/" + slot + "/" + store + "/" + key));
         return PendingIntent.getActivity(context, id, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 }

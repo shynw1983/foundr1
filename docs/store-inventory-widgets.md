@@ -9,11 +9,12 @@ brand and language settings:
 - **4×2 controls:** the unavailable count opens the full list. Two configurable
   slots default to Web reservations and away-order notifications; either can be
   replaced with the store's order list or sync results. These controls now share a
-  compact top row, followed by two independently configurable smart-device slots.
+  top row with a 2:2:1 width ratio: two operational controls, plus two stacked
+  slots for devices or scenes on the right.
   Inventory registration and resumption stay fixed at the bottom. Full controls
   start at 250 x 148 dp; 208 dp layouts add last-read times and sync details.
   Smaller layouts retain the original inventory/operational shortcuts; enlarge
-  the widget to show the two smart-device slots.
+  the widget to show the two device/scene slots.
 
 Cell counts are launcher targets. Android 12+ selects responsive RemoteViews by
 available width/height; older launchers use portrait/landscape options. Existing
@@ -63,12 +64,26 @@ The widget does not equate saving OS inventory with external platform completion
 
 ### Smart-device shortcuts
 
-Tap the widget's store title, then select Device 1 and Device 2. Each widget saves
-its own opaque device keys and labels locally. The choices come from the selected
-store's existing `/api/store/devices` API, independent of the inventory brand.
-Read-only sensors are excluded. Changing stores or deleting a widget clears its
-device bindings; other widgets keep their selections. An unsuccessful device-list
-read preserves existing selections when saving unrelated widget settings.
+Tap the widget's store title, then select Button 1 and Button 2. Each slot can
+target a device or a saved scene, independently. Each widget saves its own target
+type, opaque device key or scene UUID, and label locally. Device choices come from
+`/api/store/devices`; scenes come from `/api/store/devices/scenes`. Both lists belong
+to the selected store, independent of the inventory brand. Read-only sensors are
+excluded. Changing stores or deleting a widget clears its bindings; other widgets
+keep their selections. An unsuccessful integration-list read preserves its existing
+bindings when saving unrelated widget settings. Older device bindings remain valid.
+
+Scene shortcuts use a scene icon and name; they do not display a device state.
+Tapping reads the latest scene definition, device names, and revision, then shows
+an ordered checklist. Confirming sends one request UUID to the existing scene
+API; cancelling or restoring the sheet never starts work. Unlock actions require
+an extra acknowledgement. The shared server retains conditional indoor-light
+checks and executes the scene even if the sheet closes. Scene changes and removals
+are checked again by the server when confirming. Lost responses only look up the
+original run UUID, without resending. Result checks run every five seconds only
+while an active execution sheet is in the foreground, bounded to three minutes.
+Completed, failed, uncertain and skipped steps remain distinct. Scenes are created
+and edited on the Store device page; see [Store device scenes](store-device-scenes.md).
 
 Device taps open a native confirmation sheet and read the selected device before
 showing actions. Only an explicit named confirmation sends a command, using the
@@ -86,8 +101,9 @@ by login fingerprint, store, and device; stale/failed/missing samples are not us
 for commands. Device reads occur during configuration, explicit widget refresh,
 or the confirmation sheet. An accepted command schedules one read after 10 seconds
 while the sheet remains open. Existing periodic inventory refreshes and their
-retries do **not** poll SwitchBot. No additional server endpoint or database schema
-is needed; this feature is delivered in the Android Store APK.
+retries do **not** poll SwitchBot or scenes. The scene GET response includes only
+opaque keys, names and kinds for the checklist; it adds no endpoint or migration.
+Device/scene shortcut changes are delivered in the Android Store APK.
 
 ### Inventory and operational controls
 

@@ -57,6 +57,7 @@ public class StoreWidgetDeviceActivity extends Activity {
             && !session.isEmpty() && session.equals(InventoryApiClient.sessionKey())
             && AppWidgetManager.getInstance(this).getAppWidgetInfo(widgetId) != null
             && store.equals(InventoryWidgetProvider.storeId(this, widgetId)) && StoreWidgetDevicePolicy.validKey(key)
+            && !StoreWidgetScenePolicy.isScene(StoreWidgetDevicesData.slot(this, widgetId, slot))
             && key.equals(StoreWidgetDevicesData.slot(this, widgetId, slot).optString("key"));
     }
     void load() {

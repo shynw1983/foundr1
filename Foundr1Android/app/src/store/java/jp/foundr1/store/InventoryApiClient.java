@@ -84,6 +84,30 @@ final class InventoryApiClient {
         return request("POST", BASE_URL + "/api/store/devices", body.toString(), session);
     }
 
+    static JSONObject loadScenes(String storeId, String session) throws Exception {
+        JSONObject body = request("GET", BASE_URL + "/api/store/devices/scenes?storeId=" + URLEncoder.encode(storeId, "UTF-8"), null, session);
+        if (!storeId.equals(body.optString("storeId")) || body.optJSONArray("scenes") == null || body.optJSONArray("devices") == null)
+            throw new java.io.IOException("Invalid scene scope");
+        return body;
+    }
+
+    static JSONObject loadSceneRun(String storeId, String requestId, String session) throws Exception {
+        JSONObject body = request("GET", BASE_URL + "/api/store/devices/scenes?storeId=" + URLEncoder.encode(storeId, "UTF-8")
+            + "&run=" + URLEncoder.encode(requestId, "UTF-8"), null, session);
+        JSONObject run = body.optJSONObject("run");
+        if (run != null && !requestId.equals(run.optString("id"))) throw new java.io.IOException("Invalid scene run");
+        return run;
+    }
+
+    static JSONObject runScene(String storeId, String sceneId, String revision, String requestId, boolean allowUnlock, String session) throws Exception {
+        JSONObject body = new JSONObject().put("storeId", storeId).put("sceneId", sceneId).put("revision", revision)
+            .put("requestId", requestId).put("confirmed", true).put("allowUnlock", allowUnlock);
+        JSONObject run = request("POST", BASE_URL + "/api/store/devices/scenes", body.toString(), session).optJSONObject("run");
+        if (run == null || !requestId.equals(run.optString("id")) || !sceneId.equals(run.optString("sceneId")))
+            throw new java.io.IOException("Invalid scene run");
+        return run;
+    }
+
     static JSONObject setNotificationPreference(String storeId, boolean enabled, String version, String session) throws Exception {
         return request("POST", BASE_URL + "/api/store/order-notifications/preference", new JSONObject()
             .put("storeId", storeId).put("enabled", enabled).put("expectedVersion", version).toString(), session);

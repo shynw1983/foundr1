@@ -50,6 +50,7 @@ public class InventoryWidgetConfigActivity extends Activity {
     private boolean devicesLoading;
     private int deviceSequence;
     private String configurationSession;
+    private String choicesStoreId = "";
     private final List<Choice> shortcuts = new ArrayList<>();
     private TextView scopeSummary;
     private TextView status;
@@ -137,13 +138,13 @@ public class InventoryWidgetConfigActivity extends Activity {
         rightShortcut.setSelection(indexOf(shortcuts, savedShortcuts[1]));
 
         TextView deviceHelp = new TextView(this);
-        deviceHelp.setText("智能设备快捷开关 / スマート機器のショートカット\n每个小组件可选两个设备；点击后读取状态并确认操作。\n機器を2つ選択できます。タップ後に状態と操作を確認します。");
+        deviceHelp.setText("设备或场景快捷按钮 / 機器・シーンのショートカット\n两个按钮可各选设备或场景，点击后确认执行。\n機器・シーンを2つ選択できます。タップ後に確認して実行します。");
         deviceHelp.setTextSize(14); deviceHelp.setTextColor(Color.rgb(82, 106, 95));
         deviceHelp.setPadding(0, dp(14), 0, dp(6)); root.addView(deviceHelp);
-        leftDevice = addField(root, "设备 1 / 機器 1");
-        rightDevice = addField(root, "设备 2 / 機器 2");
+        leftDevice = addField(root, "快捷按钮 1 / ボタン 1");
+        rightDevice = addField(root, "快捷按钮 2 / ボタン 2");
         deviceStatus = new TextView(this); deviceStatus.setTextSize(13); deviceStatus.setTextColor(Color.rgb(82, 106, 95)); root.addView(deviceStatus);
-        Button retryDevices = new Button(this); retryDevices.setText("刷新设备清单 / 機器一覧を再読込");
+        Button retryDevices = new Button(this); retryDevices.setText("刷新设备与场景 / 機器・シーン一覧を再読込");
         retryDevices.setOnClickListener(v -> { Choice store = selected(storeSpinner, stores); if (store != null && !store.id.isEmpty()) loadDevices(store.id); });
         root.addView(retryDevices);
 
@@ -199,7 +200,7 @@ public class InventoryWidgetConfigActivity extends Activity {
     }
 
     private void resetDevices() {
-        devicesLoading = false; devices.clear(); deviceRows.clear();
+        devicesLoading = false; choicesStoreId = ""; devices.clear(); deviceRows.clear();
         devices.add(new Choice("", "未设置 / 未設定"));
         leftDevice.setAdapter(adapter(devices)); rightDevice.setAdapter(adapter(devices));
         leftDevice.setEnabled(false); rightDevice.setEnabled(false);
@@ -207,17 +208,27 @@ public class InventoryWidgetConfigActivity extends Activity {
         updateScopeSummary();
     }
 
-    private void loadDevices(String storeId) {
+    void loadDevices(String storeId) {
         int sequence = ++deviceSequence;
         String session = InventoryApiClient.sessionKey();
         String[] selectedKeys = new String[2];
-        for (int i = 0; i < 2; i++) selectedKeys[i] = storeId.equals(savedStoreId) ? StoreWidgetDevicesData.slot(this, widgetId, i).optString("key") : "";
-        resetDevices(); devicesLoading = true;
-        deviceStatus.setText("设备读取中… / 機器を読み込み中…"); updateScopeSummary();
+        Spinner[] selectors = {leftDevice, rightDevice};
+        for (int i = 0; i < 2; i++) {
+            Choice current = selected(selectors[i], devices);
+            selectedKeys[i] = storeId.equals(choicesStoreId) && current != null ? current.id
+                : storeId.equals(savedStoreId) ? StoreWidgetDevicesData.slot(this, widgetId, i).optString("key") : "";
+        }
+        resetDevices(); choicesStoreId = storeId; devicesLoading = true;
+        deviceStatus.setText("设备与场景读取中… / 機器・シーンを読み込み中…"); updateScopeSummary();
         new Thread(() -> {
-            JSONObject body = null; Exception error = null;
-            try { body = InventoryApiClient.loadDevices(storeId, "", session); } catch (Exception problem) { error = problem; }
-            JSONObject result = body; Exception failure = error;
+            java.util.concurrent.FutureTask<JSONObject> sceneRead = new java.util.concurrent.FutureTask<>(() -> readSceneList(storeId, session));
+            new Thread(sceneRead, "foundr1-widget-scene-list").start();
+            JSONObject body = null, sceneBody = null; Exception error = null, sceneError = null;
+            try { body = readDeviceList(storeId, session); } catch (Exception problem) { error = problem; }
+            try { sceneBody = sceneRead.get(); } catch (Exception problem) {
+                sceneError = problem.getCause() instanceof Exception ? (Exception)problem.getCause() : problem;
+            }
+            JSONObject result = body, sceneResult = sceneBody; Exception failure = error, sceneFailure = sceneError;
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed() || sequence != deviceSequence) return;
                 devicesLoading = false;
@@ -226,27 +237,40 @@ public class InventoryWidgetConfigActivity extends Activity {
                     JSONArray rows = result.optJSONArray("devices");
                     for (int i = 0; rows != null && i < rows.length(); i++) {
                         JSONObject device = rows.optJSONObject(i);
-                        if (!StoreWidgetDevicePolicy.selectable(device)) continue;
-                        devices.add(new Choice(device.optString("key"), device.optString("name")));
-                        deviceRows.put(device.optString("key"), device);
+                        if (StoreWidgetDevicePolicy.selectable(device)) addTarget(device, false);
                     }
-                    deviceStatus.setText(devices.size() == 1 ? "此门店暂无可控制的设备 / 操作可能な機器がありません" : "设备跟随门店，不受品牌筛选影响。/ 機器は店舗に紐付き、ブランド共通です。");
-                } else {
-                    // A failed optional integration must not erase existing bindings when other widget settings are saved.
-                    for (int i = 0; i < 2; i++) {
-                        JSONObject saved = StoreWidgetDevicesData.slot(this, widgetId, i);
-                        String key = saved.optString("key");
-                        if (storeId.equals(saved.optString("store")) && StoreWidgetDevicePolicy.validKey(key) && !deviceRows.containsKey(key)) {
-                            devices.add(new Choice(key, saved.optString("name"))); deviceRows.put(key, saved);
-                        }
-                    }
-                    deviceStatus.setText(StoreWidgetDevicePolicy.error(failure, true) + " / " + StoreWidgetDevicePolicy.error(failure, false));
                 }
+                if (sceneFailure == null) {
+                    JSONArray rows = sceneResult.optJSONArray("scenes");
+                    for (int i = 0; rows != null && i < rows.length(); i++) {
+                        JSONObject scene = rows.optJSONObject(i);
+                        if (StoreWidgetScenePolicy.validScene(scene)) try { addTarget(StoreWidgetScenePolicy.binding(scene), true); }
+                        catch (org.json.JSONException impossible) { throw new IllegalArgumentException(impossible); }
+                    }
+                }
+                // Preserve only the integration that failed; a successful list remains authoritative.
+                for (int i = 0; i < 2; i++) {
+                    JSONObject saved = StoreWidgetDevicesData.slot(this, widgetId, i);
+                    boolean scene = StoreWidgetScenePolicy.isScene(saved);
+                    if (storeId.equals(saved.optString("store")) && StoreWidgetScenePolicy.validBinding(saved)
+                        && (scene ? sceneFailure != null : failure != null) && !deviceRows.containsKey(saved.optString("key"))) addTarget(saved, scene);
+                }
+                deviceStatus.setText(failure == null && sceneFailure == null
+                    ? "场景在 Store 设备页编辑。快捷按钮跟随门店，不受品牌筛选影响。/ シーンはStoreの機器ページで編集できます。店舗に紐付き、ブランド共通です。"
+                    : "部分清单读取失败，已保留原绑定。可刷新后再选。/ 一部の一覧を取得できません。保存済みの設定を保持しました。再読込してください。");
                 leftDevice.setAdapter(adapter(devices)); rightDevice.setAdapter(adapter(devices));
                 leftDevice.setSelection(Math.max(0, indexOf(devices, selectedKeys[0]))); rightDevice.setSelection(Math.max(0, indexOf(devices, selectedKeys[1])));
                 leftDevice.setEnabled(true); rightDevice.setEnabled(true); updateScopeSummary();
             });
-        }, "foundr1-widget-device-list").start();
+        }, "foundr1-widget-shortcut-list").start();
+    }
+    JSONObject readDeviceList(String storeId, String session) throws Exception { return InventoryApiClient.loadDevices(storeId, "", session); }
+    JSONObject readSceneList(String storeId, String session) throws Exception { return InventoryApiClient.loadScenes(storeId, session); }
+    private void addTarget(JSONObject target, boolean scene) {
+        String key = target.optString("key");
+        if (deviceRows.containsKey(key)) return;
+        String label = scene ? StoreWidgetScenePolicy.name(target.optString("name"), true) + " / " + target.optString("name") : target.optString("name");
+        devices.add(new Choice(key, (scene ? "场景 / シーン · " : "设备 / 機器 · ") + label)); deviceRows.put(key, target);
     }
 
     private Spinner addField(LinearLayout root, String labelText) {
@@ -269,7 +293,7 @@ public class InventoryWidgetConfigActivity extends Activity {
         return spinner;
     }
 
-    private void loadStores() {
+    void loadStores() {
         loading.setVisibility(View.VISIBLE);
         status.setText("门店读取中… / 店舗を読み込み中…");
         new Thread(() -> {
@@ -387,7 +411,7 @@ public class InventoryWidgetConfigActivity extends Activity {
         boolean duplicateDevice = firstDevice != null && secondDevice != null && !firstDevice.id.isEmpty() && firstDevice.id.equals(secondDevice.id);
         if (duplicate && status != null) status.setText(chinese ? "请选择两个不同的快捷项。" : "異なるショートカットを選択してください。");
         else if (brandsLoaded && status != null) status.setText(chinese ? "点击小组件门店名，可随时调整。" : "ウィジェットの店舗名からいつでも変更できます。");
-        if (duplicateDevice && status != null) status.setText(chinese ? "请选择两个不同的设备。" : "異なる機器を選択してください。");
+        if (duplicateDevice && status != null) status.setText(chinese ? "请选择两个不同的设备或场景。" : "異なる機器・シーンを選択してください。");
         boolean ready = brandsLoaded && !devicesLoading && store != null && !store.id.isEmpty() && !duplicate && !duplicateDevice
             && configurationSession != null && !configurationSession.isEmpty() && configurationSession.equals(InventoryApiClient.sessionKey());
         if (saveButton != null) {
@@ -422,7 +446,7 @@ public class InventoryWidgetConfigActivity extends Activity {
         String session = InventoryApiClient.sessionKey();
         for (Choice choice : new Choice[]{deviceLeft, deviceRight}) {
             JSONObject device = choice == null ? null : deviceRows.get(choice.id);
-            if (device != null && device.has("fetchedAt")) StoreWidgetDevicesData.save(this, session, store.id, choice.id,
+            if (device != null && !StoreWidgetScenePolicy.isScene(device) && device.has("fetchedAt")) StoreWidgetDevicesData.save(this, session, store.id, choice.id,
                 StoreWidgetDevicesData.beginRead(session, store.id, choice.id), device);
         }
         InventoryWidgetProvider.refreshWidget(this, widgetId);

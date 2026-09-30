@@ -29,6 +29,15 @@ The worker reads each device immediately before its action, records the outcome,
 
 There is no idle polling. The browser observes only an active run (initially after two seconds, then every five seconds, bounded to three minutes). On completion it waits five seconds and refreshes device state once. Leaving the page does not deliberately cancel the server worker; runtime interruptions remain visible in the run record.
 
+The Android Store widget's two right-side slots can bind a scene or a device.
+Scene configuration and confirmation use the same authenticated API. The scene
+list response exposes `devices: [{ key, name, kind }]` so native confirmation can
+resolve step names without fetching device states or exposing vendor IDs. Opening
+the shortcut only reads the current definition. Execution requires confirmation
+of that revision, with explicit unlock acknowledgement where applicable. The
+native sheet observes the same run UUID in the foreground for at most three
+minutes; closing, restoring, or losing a response never sends the scene again.
+
 ## Verification
 
 Run the existing indoor-light tests and scene integration tests with the installed PGlite module:
