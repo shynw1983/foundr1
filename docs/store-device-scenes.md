@@ -17,6 +17,13 @@ These thresholds follow the current daytime calibration (off 2, on 12). They inf
 
 Other device safety checks are shared with manual controls: shade calibration and movement checks, lock/door state checks, device/store scope, and the ten-second per-device cooldown.
 
+For Roller Shade `setPosition`, the shared SwitchBot adapter sends the percentage
+as a JSON number. The installed firmware acknowledges string percentages with
+`statusCode: 100` and an empty body but does not move. Confirmed live reads changed
+from 0 to 10 with a numeric parameter and back to 0 on restoration. Public command
+and journal parameters remain text for existing clients and idempotent replay;
+device-page, widget, and scene actions all use this one transport conversion.
+
 ## Execution and persistence
 
 Scene settings live in `module_settings`, with `module_key=store_device_scenes` and `scope_key=store:<id>`. Revision checks reject concurrent stale edits. Device settings and ordering are separate and preserved.

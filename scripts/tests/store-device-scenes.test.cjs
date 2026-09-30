@@ -5,6 +5,29 @@ const {randomUUID}=require('node:crypto');
 const {fixture,policy,ids}=require('./store-scenes-fixture.cjs');
 const plain=x=>JSON.parse(JSON.stringify(x));
 
+test('Roller Shade numeric transport changes position while journal text and replay are preserved',async()=>{
+ const f=await fixture();try{
+  for(const position of [10,0,100]){
+   await f.expire();const id=randomUUID(),before=f.posts.length;
+   const result=await f.service.requestStoreDeviceCommand(f.storeId,f.actorId,f.key(ids.shade),id,'setPosition',String(position));
+   assert.equal(result.command.result,'accepted');
+   assert.deepEqual(f.posts.slice(before),[{id:ids.shade,command:'setPosition',parameter:position,commandType:'command'}]);
+   const device=(await f.service.getStoreDevices(f.storeId,f.key(ids.shade))).devices[0];
+   assert.equal(device.sample.position,position,'provider acknowledgement alone does not move a string percentage');
+   assert.equal(device.command.parameter,String(position),'public/journal parameter remains text');
+   const row=(await f.db.query('select parameter from store_light_commands where id=$1',[id])).rows[0];
+   assert.equal(row.parameter,String(position));
+   await f.service.requestStoreDeviceCommand(f.storeId,f.actorId,f.key(ids.shade),id,'setPosition',String(position));
+   assert.equal(f.posts.length,before+1,'same request ID cannot send the numeric command twice');
+  }
+  const count=f.posts.length;
+  for(const invalid of ['-1','101','','0,ff,10','garbage']){
+   await assert.rejects(()=>f.service.requestStoreDeviceCommand(f.storeId,f.actorId,f.key(ids.shade),randomUUID(),'setPosition',invalid),e=>e.status===400);
+  }
+  assert.equal(f.posts.length,count,'invalid values cannot become zero or NaN during transport conversion');
+ }finally{await f.db.close();}
+});
+
 test('indoor scene targets only press in the opposite calibrated range',()=>{
  for(const level of [1,2,3,4,9,10,12,20]){
   const sample={botMode:'pressMode',lightLevel:level};
@@ -53,7 +76,7 @@ test('real scene executor skips dim indoor light and sends the remaining command
    assert.equal(run.status,'finished');assert.equal(run.steps[0].status,level<10?'skipped':'sent');
    const expected=[...(level>=10?[{id:ids.light,command:'press',parameter:'default',commandType:'command'}]:[]),
     {id:ids.ambient,command:'turnOn',parameter:'default',commandType:'command'},
-    {id:ids.shade,command:'setPosition',parameter:'100',commandType:'command'},
+    {id:ids.shade,command:'setPosition',parameter:100,commandType:'command'},
     {id:ids.lock,command:'lock',parameter:'default',commandType:'command'}];
    assert.deepEqual(f.posts.slice(before),expected);
    const count=f.posts.length;

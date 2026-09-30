@@ -23,7 +23,7 @@ export function indoorLightConfig(storeId: string): IndoorLightConfig | null {
   return { storeId, token, secret, botId, hubId, controlEnabled: process.env.SWITCHBOT_CONTROL_ENABLED === "true" };
 }
 
-async function switchBotRequest(config: IndoorLightConfig, path: string, command?: { command: string; parameter: string; commandType: "command" }): Promise<Record<string, unknown>> {
+async function switchBotRequest(config: IndoorLightConfig, path: string, command?: { command: string; parameter: string | number; commandType: "command" }): Promise<Record<string, unknown>> {
   const t = String(Date.now());
   const nonce = randomUUID();
   const sign = createHmac("sha256", config.secret).update(`${config.token}${t}${nonce}`).digest("base64");
@@ -139,6 +139,9 @@ function assertDeviceCommandResult(body: Record<string, unknown>, deviceId: stri
 
 export async function sendStoreDeviceCommand(config: IndoorLightConfig, device: SwitchBotDevice, action: DeviceAction, parameter: string) {
   // Called only after typed command validation and a durable device claim.
-  const body = await switchBotRequest(config, `devices/${device.id}/commands`, { command: action, parameter, commandType: "command" });
+  // Roller Shade accepts a JSON number. A string can return success without
+  // moving the shade. Keep the public/journal parameter textual for replay.
+  const wireParameter = device.kind === "shade" && action === "setPosition" ? Number(parameter) : parameter;
+  const body = await switchBotRequest(config, `devices/${device.id}/commands`, { command: action, parameter: wireParameter, commandType: "command" });
   assertDeviceCommandResult(body, device.id);
 }

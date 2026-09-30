@@ -25,6 +25,13 @@ async function fixture() {
   if(init.method==='POST'){
    posts.push({id,...JSON.parse(init.body)});if(vendor.hold)await vendor.hold();
    if(vendor.postError===id) throw Error('lost response');
+   const body=JSON.parse(init.body);
+   if(id===ids.shade && body.command==='setPosition'){
+    // Match the installed firmware: string positions are acknowledged but do
+    // not move the shade. An empty response body can also acknowledge numbers.
+    if(typeof body.parameter==='number') vendor.position=body.parameter;
+    return Response.json({statusCode:100,body:{},message:'success'});
+   }
    return Response.json({statusCode:100,body:{items:[{deviceID:id,code:100}]}});
   }
   reads.push(url);

@@ -22,7 +22,10 @@ function fakeVendor(onPost=async()=>{}) {
  control.fetch=async(url,init)=>{
   assert.equal(init.redirect,'error');assert.equal(init.headers.sign,crypto.createHmac('sha256',env.SWITCHBOT_SECRET).update(env.SWITCHBOT_TOKEN+init.headers.t+init.headers.nonce).digest('base64'));
   if(init.method==='POST'){
-   control.posts.push({url,body:JSON.parse(init.body)});await onPost();
+   const body=JSON.parse(init.body);control.posts.push({url,body});await onPost();
+   // The installed Roller Shade acknowledges string percentages but ignores
+   // them. Only JSON numbers update its position, including endpoint zero.
+   if(url.includes(shadeId+'/commands') && body.command==='setPosition' && typeof body.parameter==='number')control.position=body.parameter;
    if(control.postMode==='timeout')throw Error('lost response');
    if(control.postMode==='offline')return Response.json({statusCode:161});
    return Response.json({statusCode:100,body:{items:[{deviceID:url.split('/').at(-2),code:100,status:{}}]}});
@@ -106,7 +109,8 @@ test('on-demand reads, additive migration, actual SQL claims, device safety and 
   await expire();assert.equal((await send(outdoorId,'turnOn')).command.result,'accepted');assert.equal(vendor.posts.length,4,'explicit on still sent when cloud already says on');
   await expire();await send(outdoorId,'turnOff');assert.deepEqual(vendor.posts.at(-1).body,{command:'turnOff',parameter:'default',commandType:'command'});
   vendor.mode='pressMode';await expire();vendor.calibrated=false;assert.equal((await send(shadeId,'setPosition','37')).command.reason,'not_calibrated');assert.equal(vendor.posts.length,5);
-  vendor.calibrated=true;await expire();await send(shadeId,'setPosition','37');assert.deepEqual(vendor.posts.at(-1).body,{command:'setPosition',parameter:'37',commandType:'command'});
+  vendor.calibrated=true;await expire();await send(shadeId,'setPosition','37');assert.deepEqual(vendor.posts.at(-1).body,{command:'setPosition',parameter:37,commandType:'command'});
+  assert.equal((await service.getStoreDevices(storeId,key(shadeId))).devices[0].sample.position,37,'numeric wire parameter moves the shade');
   await expire();vendor.doorState='open';assert.equal((await send(lockId,'lock')).command.reason,'door_not_closed');assert.equal(vendor.posts.length,6);
   vendor.doorState='close';vendor.lockState='unlock';await expire();assert.equal((await send(lockId,'unlock')).command.result,'accepted');assert.equal(vendor.posts.length,7,'explicit unlock not skipped based on stale cloud state');
   await expire();await send(lockId,'lock');assert.equal(vendor.posts.at(-1).body.command,'lock');
@@ -182,7 +186,7 @@ test('nested device results override an outer success and never trigger a resend
   [{items:'invalid'},'invalid_device_result',true],
   [{items:[{deviceID:shadeId,code:'100'}]},'invalid_device_result',true]
  ]){
-  let posts=0;const adapter=load('lib/switchbot.ts',{}, {fetch:async(url,init)=>{posts++;assert.equal(init.method,'POST');assert.equal(url,`https://api.switch-bot.com/v1.1/devices/${shadeId}/commands`);assert.deepEqual(JSON.parse(init.body),{command:'setPosition',parameter:'43',commandType:'command'});return Response.json({statusCode:100,body,message:'success'});}});
+  let posts=0;const adapter=load('lib/switchbot.ts',{}, {fetch:async(url,init)=>{posts++;assert.equal(init.method,'POST');assert.equal(url,`https://api.switch-bot.com/v1.1/devices/${shadeId}/commands`);assert.deepEqual(JSON.parse(init.body),{command:'setPosition',parameter:43,commandType:'command'});return Response.json({statusCode:100,body,message:'success'});}});
   if(code)await assert.rejects(()=>adapter.sendStoreDeviceCommand(config,device,'setPosition','43'),e=>e.code===code&&e.uncertain===uncertain);
   else await adapter.sendStoreDeviceCommand(config,device,'setPosition','43');
   assert.equal(posts,1,'no automatic retry even when nested result is uncertain');
