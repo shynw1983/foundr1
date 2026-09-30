@@ -10,7 +10,7 @@
         </LinearLayout>
         <TextView android:id="@+id/inventory_widget_refresh" style="@style/InventoryWidgetText" android:layout_width="24dp" android:layout_height="match_parent" android:gravity="center" android:layout_marginStart="3dp" android:text="↻" android:textSize="14sp" android:textColor="@color/widget_muted" />
     </LinearLayout>
-    <include layout="@layout/inventory_widget_controls" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="4dp" android:layout_marginBottom="4dp" />
+    <include layout="@layout/inventory_widget_controls" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="4dp" android:layout_marginBottom="8dp" />
     <LinearLayout android:id="@+id/inventory_widget_sync" android:layout_width="match_parent" android:layout_height="20dp" android:gravity="center_vertical" android:visibility="gone">
         <TextView android:id="@+id/inventory_widget_platforms" style="@style/InventoryWidgetText" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:textColor="@color/widget_muted" android:textSize="10sp" />
         <TextView android:id="@+id/inventory_widget_operation" style="@style/InventoryWidgetText" android:layout_width="wrap_content" android:layout_height="match_parent" android:textColor="@color/widget_muted" android:textSize="10sp" />

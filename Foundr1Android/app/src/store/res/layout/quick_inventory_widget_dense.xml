@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@android:id/background"
     android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical"
-    android:paddingHorizontal="12dp" android:paddingTop="4dp" android:paddingBottom="12dp" android:background="@drawable/inventory_widget_background">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="18dp" android:gravity="center_vertical">
+    android:paddingHorizontal="12dp" android:paddingTop="2dp" android:paddingBottom="12dp" android:background="@drawable/inventory_widget_background">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="16dp" android:gravity="center_vertical">
         <TextView android:id="@+id/inventory_widget_title" style="@style/InventoryWidgetText" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="Foundr1 Store" android:textColor="@color/widget_muted" android:textSize="12sp" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="12sp" />
         <LinearLayout android:id="@+id/inventory_widget_metric" android:layout_width="wrap_content" android:layout_height="match_parent" android:layout_marginStart="6dp" android:gravity="center_vertical">
             <TextView android:id="@+id/inventory_widget_status" style="@style/InventoryWidgetText" android:layout_width="wrap_content" android:layout_height="match_parent" android:text="欠品" android:textSize="10sp" android:textColor="@color/widget_muted" />
@@ -10,12 +10,12 @@
         </LinearLayout>
         <TextView android:id="@+id/inventory_widget_refresh" style="@style/InventoryWidgetText" android:layout_width="24dp" android:layout_height="match_parent" android:gravity="center" android:layout_marginStart="3dp" android:text="↻" android:textSize="14sp" android:textColor="@color/widget_muted" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="14sp" />
     </LinearLayout>
-    <include layout="@layout/inventory_widget_controls" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="2dp" android:layout_marginBottom="2dp" />
+    <include layout="@layout/inventory_widget_controls" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="2dp" android:layout_marginBottom="8dp" />
     <LinearLayout android:id="@+id/inventory_widget_sync" android:layout_width="match_parent" android:layout_height="20dp" android:gravity="center_vertical" android:visibility="gone">
         <TextView android:id="@+id/inventory_widget_platforms" style="@style/InventoryWidgetText" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:textColor="@color/widget_muted" android:textSize="10sp" />
         <TextView android:id="@+id/inventory_widget_operation" style="@style/InventoryWidgetText" android:layout_width="wrap_content" android:layout_height="match_parent" android:textColor="@color/widget_muted" android:textSize="10sp" />
     </LinearLayout>
-    <LinearLayout android:layout_width="match_parent" android:layout_height="26dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="24dp">
         <Button android:id="@+id/inventory_widget_shortage" style="@style/InventoryWidgetButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="4dp" android:background="@drawable/inventory_widget_secondary" android:text="@string/inventory_widget_shortage" android:textSize="12sp" />
         <Button android:id="@+id/inventory_widget_restore" style="@style/InventoryWidgetButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginStart="4dp" android:background="@drawable/inventory_widget_primary" android:text="@string/inventory_widget_restore" android:textColor="@color/widget_surface" android:textSize="12sp" />
     </LinearLayout>

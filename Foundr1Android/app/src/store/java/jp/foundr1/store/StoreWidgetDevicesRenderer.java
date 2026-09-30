@@ -10,10 +10,17 @@ import android.widget.RemoteViews;
 import org.json.JSONObject;
 
 final class StoreWidgetDevicesRenderer {
+    // Column order retains the old upper/lower pair; the added pair is on its right.
+    static final int[] BUTTONS = { R.id.inventory_widget_device_left, R.id.inventory_widget_device_right,
+        R.id.inventory_widget_device_third, R.id.inventory_widget_device_fourth };
+    static final int[] TITLES = { R.id.inventory_widget_device_left_title, R.id.inventory_widget_device_right_title,
+        R.id.inventory_widget_device_third_title, R.id.inventory_widget_device_fourth_title };
+    static final int[] ICONS = { R.id.inventory_widget_device_left_icon, R.id.inventory_widget_device_right_icon,
+        R.id.inventory_widget_device_third_icon, R.id.inventory_widget_device_fourth_icon };
     static void bind(Context context, RemoteViews views, int id, int size) {
         boolean zh = "zh".equals(InventoryWidgetProvider.language(context, id));
         String store = InventoryWidgetProvider.storeId(context, id);
-        for (int slot = 0; slot < 2; slot++) {
+        for (int slot = 0; slot < StoreWidgetDevicesData.SLOT_COUNT; slot++) {
             JSONObject binding = StoreWidgetDevicesData.slot(context, id, slot);
             String key = binding.optString("key");
             boolean configured = StoreWidgetScenePolicy.validBinding(binding), scene = StoreWidgetScenePolicy.isScene(binding);
@@ -30,9 +37,7 @@ final class StoreWidgetDevicesRenderer {
                 String time = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.JAPAN).format(new java.util.Date(at));
                 detail = (zh ? "上次读取 " : "前回確認 ") + time;
             }
-            int root = slot == 0 ? R.id.inventory_widget_device_left : R.id.inventory_widget_device_right;
-            int title = slot == 0 ? R.id.inventory_widget_device_left_title : R.id.inventory_widget_device_right_title;
-            int icon = slot == 0 ? R.id.inventory_widget_device_left_icon : R.id.inventory_widget_device_right_icon;
+            int root = BUTTONS[slot], title = TITLES[slot], icon = ICONS[slot];
             views.setTextViewText(title, name);
             views.setViewVisibility(title, size == InventoryWidgetPolicy.DENSE ? View.GONE : View.VISIBLE);
             views.setImageViewResource(icon, configured ? icon(binding, device) : R.drawable.inventory_widget_device_add);

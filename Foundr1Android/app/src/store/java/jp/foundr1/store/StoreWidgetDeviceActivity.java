@@ -53,7 +53,7 @@ public class StoreWidgetDeviceActivity extends Activity {
     }
     private boolean alive() { return !isFinishing() && !isDestroyed(); }
     private boolean bound() {
-        return widgetId != AppWidgetManager.INVALID_APPWIDGET_ID && slot >= 0 && slot < 2 && store != null
+        return widgetId != AppWidgetManager.INVALID_APPWIDGET_ID && StoreWidgetDevicesData.validSlot(slot) && store != null
             && !session.isEmpty() && session.equals(InventoryApiClient.sessionKey())
             && AppWidgetManager.getInstance(this).getAppWidgetInfo(widgetId) != null
             && store.equals(InventoryWidgetProvider.storeId(this, widgetId)) && StoreWidgetDevicePolicy.validKey(key)

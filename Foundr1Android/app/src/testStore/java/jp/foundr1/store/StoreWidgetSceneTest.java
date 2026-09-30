@@ -148,6 +148,23 @@ public class StoreWidgetSceneTest {
             assertNull(find(root(a), "确认执行场景")); a.execute(); assertEquals(1, a.writes);
         }
     }
+    @Test public void addedScenePositionsConfirmExactlyOnceAndInvalidIndexCannotRead() throws Exception {
+        for (int slot : new int[]{2, 3}) {
+            JSONObject[] bindings = {device(), null, null, null}; bindings[slot] = StoreWidgetScenePolicy.binding(scene());
+            StoreWidgetDevicesData.saveSlots(context, 7, bindings);
+            try (ActivityController<RecordingActivity> controller = Robolectric.buildActivity(RecordingActivity.class,
+                intent().putExtra(StoreWidgetDeviceActivity.EXTRA_SLOT, slot)).setup()) {
+                RecordingActivity a = controller.get(); ready(a); assertEquals(0, a.writes);
+                View confirm = find(root(a), "确认执行场景"); confirm.performClick(); confirm.performClick();
+                await(() -> find(root(a), "执行结果") != null); assertEquals(1, a.writes);
+            }
+        }
+        try (ActivityController<RecordingActivity> controller = Robolectric.buildActivity(RecordingActivity.class,
+            intent().putExtra(StoreWidgetDeviceActivity.EXTRA_SLOT, 4)).setup()) {
+            RecordingActivity a = controller.get(); await(() -> find(root(a), "打开设备页") != null);
+            assertEquals(0, a.reads); assertEquals(0, a.writes);
+        }
+    }
     @Test public void staleChangedBindingStoreSessionAndPausedActivityCannotConfirm() throws Exception {
         for (String change : new String[]{"stale", "binding", "store", "session", "paused"}) {
             setup();
@@ -250,7 +267,7 @@ public class StoreWidgetSceneTest {
             new Intent(context, ConfigActivity.class).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, 7)).setup()) {
             ConfigActivity a = controller.get(); a.loadDevices("store");
             java.util.List<Spinner> list = new java.util.ArrayList<>(); spinners(a.getWindow().getDecorView(), list);
-            Spinner first = list.get(list.size() - 2), second = list.get(list.size() - 1);
+            Spinner first = list.get(list.size() - 4), second = list.get(list.size() - 3);
             await(() -> first.isEnabled() && first.getCount() == 3);
             assertTrue(first.getSelectedItem().toString().contains("休息模式"));
             assertTrue(second.getSelectedItem().toString().contains("間接照明"));
@@ -261,6 +278,36 @@ public class StoreWidgetSceneTest {
             await(() -> first.isEnabled() && find(a.getWindow().getDecorView(), "部分清单读取失败") != null);
             assertEquals(3, first.getCount()); assertTrue(first.getItemAtPosition(2).toString().contains("休息模式"));
             assertTrue(StoreWidgetScenePolicy.isScene(StoreWidgetDevicesData.slot(context, 7, 0)));
+        }
+    }
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void fourSelectorsPreserveAllSavedTargetsRejectDuplicatesAndKeepControlsReachable() throws Exception {
+        JSONObject afternoon = new JSONObject(scene().toString()).put("id", OTHER).put("name", "午後休憩");
+        JSONObject closing = new JSONObject(scene().toString()).put("id", "2d306676-a5fb-491a-a6bb-e7206f042229").put("name", "閉店");
+        catalog.getJSONArray("scenes").put(afternoon).put(closing);
+        StoreWidgetDevicesData.saveSlots(context, 7, StoreWidgetScenePolicy.binding(scene()), device(),
+            StoreWidgetScenePolicy.binding(afternoon), StoreWidgetScenePolicy.binding(closing));
+        try (ActivityController<ConfigActivity> controller = Robolectric.buildActivity(ConfigActivity.class,
+            new Intent(context, ConfigActivity.class).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, 7)).setup().visible()) {
+            ConfigActivity a = controller.get(); a.loadDevices("store");
+            java.util.List<Spinner> list = new java.util.ArrayList<>(); spinners(a.getWindow().getDecorView(), list);
+            Spinner[] slots = list.subList(list.size() - 4, list.size()).toArray(new Spinner[0]);
+            await(() -> slots[0].isEnabled() && slots[0].getCount() == 5);
+            String[] labels = {"休息模式", "間接照明", "午後休憩", "閉店"};
+            for (int slot = 0; slot < 4; slot++) assertTrue(slots[slot].getSelectedItem().toString().contains(labels[slot]));
+            slots[2].setSelection(slots[0].getSelectedItemPosition()); shadowOf(Looper.getMainLooper()).idle();
+            assertNotNull(find(a.getWindow().getDecorView(), "请选择不同的设备或场景"));
+            slots[2].setSelection(3); shadowOf(Looper.getMainLooper()).idle();
+            ConfigActivity.scenesUnavailable = true; a.loadDevices("store");
+            await(() -> slots[0].isEnabled() && find(a.getWindow().getDecorView(), "部分清单读取失败") != null);
+            for (int slot = 0; slot < 4; slot++) assertTrue(slots[slot].getSelectedItem().toString().contains(labels[slot]));
+            ViewGroup content = a.findViewById(android.R.id.content);
+            content.measure(View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+            content.layout(0, 0, 360, 800);
+            ((android.widget.ScrollView)content.getChildAt(0)).fullScroll(View.FOCUS_DOWN);
+            Button save = (Button)find(content, "保存 / 保存する");
+            android.graphics.Rect bounds = new android.graphics.Rect(); save.getDrawingRect(bounds); content.offsetDescendantRectToMyCoords(save, bounds);
+            assertTrue(new android.graphics.Rect(0, 0, 360, 800).contains(bounds)); assertTrue(bounds.height() >= 48);
         }
     }
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)

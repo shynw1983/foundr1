@@ -7,9 +7,12 @@ import org.json.JSONObject;
 
 /** Per-widget bindings and per-account snapshots. No timer or background device polling. */
 final class StoreWidgetDevicesData {
+    static final int SLOT_COUNT = 4;
+    static boolean validSlot(int slot) { return slot >= 0 && slot < SLOT_COUNT; }
     private static final java.util.Map<String, Long> generations = new java.util.HashMap<>();
     static SharedPreferences prefs(Context context) { return context.getSharedPreferences("store_widget_devices", Context.MODE_PRIVATE); }
     static JSONObject slot(Context context, int id, int slot) {
+        if (!validSlot(slot)) return new JSONObject();
         JSONObject saved = StoreWidgetControlsData.object(prefs(context).getString("slot:" + id + ":" + slot, ""));
         if (saved == null || !saved.optString("store").equals(InventoryWidgetProvider.storeId(context, id))) return new JSONObject();
         // Upgrade existing bindings from the local snapshot, without waking the device API.
@@ -22,13 +25,13 @@ final class StoreWidgetDevicesData {
         }
         return saved;
     }
-    static void saveSlots(Context context, int id, JSONObject left, JSONObject right) {
+    static void saveSlots(Context context, int id, JSONObject... devices) {
+        if (devices.length > SLOT_COUNT) throw new IllegalArgumentException("Too many widget shortcuts");
         SharedPreferences.Editor edit = prefs(context).edit();
         String store = InventoryWidgetProvider.storeId(context, id);
-        JSONObject[] devices = {left, right};
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < SLOT_COUNT; i++) {
             String key = "slot:" + id + ":" + i;
-            JSONObject d = devices[i];
+            JSONObject d = i < devices.length ? devices[i] : null;
             if (!StoreWidgetScenePolicy.validBinding(d)) edit.remove(key);
             else try { edit.putString(key, new JSONObject().put("store", store).put("key", d.getString("key"))
                 .put("name", d.optString("name")).put("kind", d.optString("kind"))
@@ -37,7 +40,11 @@ final class StoreWidgetDevicesData {
         }
         edit.apply();
     }
-    static void delete(Context context, int id) { prefs(context).edit().remove("slot:" + id + ":0").remove("slot:" + id + ":1").apply(); }
+    static void delete(Context context, int id) {
+        SharedPreferences.Editor edit = prefs(context).edit();
+        for (int slot = 0; slot < SLOT_COUNT; slot++) edit.remove("slot:" + id + ":" + slot);
+        edit.apply();
+    }
     private static String prefix(String session, String store, String key) { return "read:" + session + ":" + store + ":" + key; }
     static synchronized long beginRead(String session, String store, String key) {
         String id = prefix(session, store, key);
@@ -75,7 +82,7 @@ final class StoreWidgetDevicesData {
         String session = InventoryApiClient.sessionKey();
         if (session.isEmpty()) return;
         java.util.Set<String> seen = new java.util.HashSet<>();
-        for (int id : InventoryWidgetProvider.widgetIds(context)) for (int slot = 0; slot < 2; slot++) {
+        for (int id : InventoryWidgetProvider.widgetIds(context)) for (int slot = 0; slot < SLOT_COUNT; slot++) {
             if (stopped.getAsBoolean() || !session.equals(InventoryApiClient.sessionKey())) return;
             JSONObject binding = slot(context, id, slot);
             String store = binding.optString("store"), key = binding.optString("key");

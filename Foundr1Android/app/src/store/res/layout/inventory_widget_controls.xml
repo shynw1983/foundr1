@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Shared by every full-control widget size: two 2x2 controls and two stacked 1x1 devices. -->
+<!-- Two narrow operational controls and a 2x2 grid. Slots 1/2 keep their upper/lower order. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="match_parent">
-    <LinearLayout android:id="@+id/inventory_widget_left" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="2" android:layout_marginEnd="4dp" android:orientation="vertical" android:gravity="center_vertical" android:paddingHorizontal="6dp" android:paddingVertical="4dp" android:background="@drawable/inventory_widget_control">
+    <LinearLayout android:id="@+id/inventory_widget_left" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1.5" android:layout_marginEnd="6dp" android:orientation="vertical" android:gravity="center_vertical" android:paddingHorizontal="6dp" android:paddingVertical="4dp" android:background="@drawable/inventory_widget_control">
         <LinearLayout android:layout_width="match_parent" android:layout_height="16dp" android:gravity="center_vertical">
             <TextView android:id="@+id/inventory_widget_left_title" style="@style/InventoryWidgetText" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:textSize="12sp" android:textColor="@color/widget_muted" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="12sp" />
             <ImageView android:id="@+id/inventory_widget_left_indicator" android:layout_width="18dp" android:layout_height="12dp" android:layout_marginStart="2dp" android:src="@drawable/inventory_widget_chevron" android:importantForAccessibility="no" />
@@ -10,7 +10,7 @@
         <TextView android:id="@+id/inventory_widget_left_value" style="@style/InventoryWidgetText" android:layout_width="match_parent" android:layout_height="18dp" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="15sp" />
         <TextView android:id="@+id/inventory_widget_left_detail" style="@style/InventoryWidgetText" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
     </LinearLayout>
-    <LinearLayout android:id="@+id/inventory_widget_right" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="2" android:layout_marginEnd="4dp" android:orientation="vertical" android:gravity="center_vertical" android:paddingHorizontal="6dp" android:paddingVertical="4dp" android:background="@drawable/inventory_widget_control">
+    <LinearLayout android:id="@+id/inventory_widget_right" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1.5" android:layout_marginEnd="6dp" android:orientation="vertical" android:gravity="center_vertical" android:paddingHorizontal="6dp" android:paddingVertical="4dp" android:background="@drawable/inventory_widget_control">
         <LinearLayout android:layout_width="match_parent" android:layout_height="16dp" android:gravity="center_vertical">
             <TextView android:id="@+id/inventory_widget_right_title" style="@style/InventoryWidgetText" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:textSize="12sp" android:textColor="@color/widget_muted" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="12sp" />
             <ImageView android:id="@+id/inventory_widget_right_indicator" android:layout_width="18dp" android:layout_height="12dp" android:layout_marginStart="2dp" android:src="@drawable/inventory_widget_chevron" android:importantForAccessibility="no" />
@@ -18,14 +18,26 @@
         <TextView android:id="@+id/inventory_widget_right_value" style="@style/InventoryWidgetText" android:layout_width="match_parent" android:layout_height="18dp" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="15sp" />
         <TextView android:id="@+id/inventory_widget_right_detail" style="@style/InventoryWidgetText" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
     </LinearLayout>
-    <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical">
-        <LinearLayout android:id="@+id/inventory_widget_device_left" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginBottom="2dp" android:orientation="vertical" android:gravity="center" android:paddingHorizontal="2dp" android:background="@drawable/inventory_widget_control">
-            <ImageView android:id="@+id/inventory_widget_device_left_icon" android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/inventory_widget_device_add" android:importantForAccessibility="no" />
-            <TextView android:id="@+id/inventory_widget_device_left_title" style="@style/InventoryWidgetText" android:layout_width="match_parent" android:layout_height="12dp" android:gravity="center" android:textSize="9sp" android:textColor="@color/widget_muted" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="7sp" android:autoSizeMaxTextSize="9sp" android:visibility="gone" />
+    <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="2">
+      <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="6dp" android:orientation="vertical">
+        <LinearLayout android:id="@+id/inventory_widget_device_left" style="@style/InventoryWidgetDeviceCell" android:layout_marginBottom="3dp">
+            <ImageView android:id="@+id/inventory_widget_device_left_icon" style="@style/InventoryWidgetDeviceIcon" />
+            <TextView android:id="@+id/inventory_widget_device_left_title" style="@style/InventoryWidgetDeviceLabel" />
         </LinearLayout>
-        <LinearLayout android:id="@+id/inventory_widget_device_right" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="2dp" android:orientation="vertical" android:gravity="center" android:paddingHorizontal="2dp" android:background="@drawable/inventory_widget_control">
-            <ImageView android:id="@+id/inventory_widget_device_right_icon" android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/inventory_widget_device_add" android:importantForAccessibility="no" />
-            <TextView android:id="@+id/inventory_widget_device_right_title" style="@style/InventoryWidgetText" android:layout_width="match_parent" android:layout_height="12dp" android:gravity="center" android:textSize="9sp" android:textColor="@color/widget_muted" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="7sp" android:autoSizeMaxTextSize="9sp" android:visibility="gone" />
+        <LinearLayout android:id="@+id/inventory_widget_device_right" style="@style/InventoryWidgetDeviceCell" android:layout_marginTop="3dp">
+            <ImageView android:id="@+id/inventory_widget_device_right_icon" style="@style/InventoryWidgetDeviceIcon" />
+            <TextView android:id="@+id/inventory_widget_device_right_title" style="@style/InventoryWidgetDeviceLabel" />
         </LinearLayout>
+      </LinearLayout>
+      <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical">
+        <LinearLayout android:id="@+id/inventory_widget_device_third" style="@style/InventoryWidgetDeviceCell" android:layout_marginBottom="3dp">
+            <ImageView android:id="@+id/inventory_widget_device_third_icon" style="@style/InventoryWidgetDeviceIcon" />
+            <TextView android:id="@+id/inventory_widget_device_third_title" style="@style/InventoryWidgetDeviceLabel" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/inventory_widget_device_fourth" style="@style/InventoryWidgetDeviceCell" android:layout_marginTop="3dp">
+            <ImageView android:id="@+id/inventory_widget_device_fourth_icon" style="@style/InventoryWidgetDeviceIcon" />
+            <TextView android:id="@+id/inventory_widget_device_fourth_title" style="@style/InventoryWidgetDeviceLabel" />
+        </LinearLayout>
+      </LinearLayout>
     </LinearLayout>
 </LinearLayout>

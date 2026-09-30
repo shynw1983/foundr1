@@ -94,6 +94,49 @@ public class StoreWidgetDeviceTest {
             assertNotNull(java.util.UUID.fromString(activity.requestId));
         }
     }
+    @Test public void addedSlotsReadTheirOwnDeviceAndOnlyExplicitlyConfirm() throws Exception {
+        String[] keys = {KEY, OTHER, "333333333333333333333333", "444444444444444444444444"};
+        for (int slot : new int[]{2, 3}) {
+            JSONObject[] bindings = new JSONObject[4];
+            for (int i = 0; i < 4; i++) bindings[i] = device(keys[i]);
+            fixture = bindings[slot]; StoreWidgetDevicesData.saveSlots(context, 7, bindings);
+            Intent launch = intent().putExtra(StoreWidgetDeviceActivity.EXTRA_SLOT, slot).putExtra(StoreWidgetDeviceActivity.EXTRA_KEY, keys[slot]);
+            try (ActivityController<RecordingActivity> controller = Robolectric.buildActivity(RecordingActivity.class, launch).setup()) {
+                RecordingActivity a = controller.get(); assertEquals(1, a.reads); assertEquals(0, a.writes);
+                find(a.getWindow().getDecorView(), "确认关闭").performClick();
+                assertTrue(a.sent.await(3, java.util.concurrent.TimeUnit.SECONDS)); assertEquals(1, a.writes);
+            }
+            try (ActivityController<RecordingActivity> controller = Robolectric.buildActivity(RecordingActivity.class, launch).setup()) {
+                RecordingActivity a = controller.get(); Button confirm = find(a.getWindow().getDecorView(), "确认关闭");
+                bindings[slot] = device(KEY); StoreWidgetDevicesData.saveSlots(context, 7, bindings);
+                confirm.performClick(); assertEquals(0, a.writes);
+            }
+        }
+    }
+    @Test public void oldTwoBindingsUpgradeAndFourSlotsStayScopedThroughStoreBrandAndDeletion() throws Exception {
+        JSONObject old = StoreWidgetDevicesData.slot(context, 7, 0); old.remove("targetType");
+        StoreWidgetDevicesData.prefs(context).edit().putString("slot:7:0", old.toString()).commit();
+        assertEquals(KEY, StoreWidgetDevicesData.slot(context, 7, 0).getString("key"));
+        assertEquals(OTHER, StoreWidgetDevicesData.slot(context, 7, 1).getString("key"));
+        assertEquals("", StoreWidgetDevicesData.slot(context, 7, 2).optString("key"));
+        assertEquals("", StoreWidgetDevicesData.slot(context, 7, 3).optString("key"));
+        JSONObject scene = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "1efbd558-7d9b-478c-a6bf-213d8d1f08a3").put("name", "休憩モード"));
+        StoreWidgetDevicesData.saveSlots(context, 7, old, device(OTHER), scene, device("444444444444444444444444"));
+        InventoryWidgetProvider.saveConfiguration(context, 7, "zh", "store", "清水店", "brand", "まぁ麻");
+        assertEquals(KEY, StoreWidgetDevicesData.slot(context, 7, 0).getString("key"));
+        assertEquals(OTHER, StoreWidgetDevicesData.slot(context, 7, 1).getString("key"));
+        assertTrue(StoreWidgetScenePolicy.isScene(StoreWidgetDevicesData.slot(context, 7, 2)));
+        assertEquals("444444444444444444444444", StoreWidgetDevicesData.slot(context, 7, 3).getString("key"));
+        InventoryWidgetProvider.saveConfiguration(context, 8, "ja", "store", "清水店", "", "");
+        StoreWidgetDevicesData.saveSlots(context, 8, old, device(OTHER), scene, device("444444444444444444444444"));
+        InventoryWidgetProvider.saveConfiguration(context, 7, "zh", "other", "别店", "", "");
+        for (int slot = 0; slot < 4; slot++) {
+            assertEquals("", StoreWidgetDevicesData.slot(context, 7, slot).optString("key"));
+            assertFalse(StoreWidgetDevicesData.slot(context, 8, slot).optString("key").isEmpty());
+        }
+        new InventoryWidgetProvider().onDeleted(context, new int[]{8});
+        for (int slot = 0; slot < 4; slot++) assertEquals("", StoreWidgetDevicesData.slot(context, 8, slot).optString("key"));
+    }
     @Test public void freshIndoorLightReadAllowsConfirmationWhenPhoneClockDiffers() throws Exception {
         for (long skewSeconds : new long[]{30, -300, 86_400, -86_400}) {
             fixture = device(KEY).put("name", "室内照明").put("kind", "indoorLight")

@@ -9,12 +9,14 @@ brand and language settings:
 - **4×2 controls:** the unavailable count opens the full list. Two configurable
   slots default to Web reservations and away-order notifications; either can be
   replaced with the store's order list or sync results. These controls now share a
-  top row with a 2:2:1 width ratio: two operational controls, plus two stacked
-  slots for devices or scenes on the right.
-  Inventory registration and resumption stay fixed at the bottom. Full controls
-  start at 250 x 148 dp; 208 dp layouts add last-read times and sync details.
+  top row with a 3:3:4 width ratio: two narrower operational controls, plus a
+  2×2 grid of four slots for devices or scenes on the right. Grid gaps are 6 dp;
+  the top controls and bottom inventory buttons keep at least 8 dp between them.
+  Inventory registration and resumption stay fixed at the bottom. Dense icon
+  controls start at 250 x 110 dp; 148 dp layouts show device/scene labels, and
+  208 dp layouts add last-read times and sync details.
   Smaller layouts retain the original inventory/operational shortcuts; enlarge
-  the widget to show the two device/scene slots.
+  the widget to show the four device/scene slots.
 
 Cell counts are launcher targets. Android 12+ selects responsive RemoteViews by
 available width/height; older launchers use portrait/landscape options. Existing
@@ -32,7 +34,7 @@ Product names no longer occupy the widget's middle area. Registration/resumption
 keep the existing searchable selection flow, exact item/option UUIDs and shared
 inventory mutation API. Brand scope applies to inventory. Reservation controls
 apply to the whole store; away notifications apply to the current account at that
-store. Tap the widget title to change its two slots independently of other widgets.
+store. Tap the widget title to change its shortcuts independently of other widgets.
 
 Reservations reuse GET/PATCH `/api/store/operations` and provide Auto, Manual Open
 and Manual Closed choices in a native sheet. Changing modes preserves pickup times.
@@ -64,7 +66,7 @@ The widget does not equate saving OS inventory with external platform completion
 
 ### Smart-device shortcuts
 
-Tap the widget's store title, then select Button 1 and Button 2. Each slot can
+Tap the widget's store title, then configure Buttons 1–4. Each slot can
 target a device or a saved scene, independently. Each widget saves its own target
 type, opaque device key or scene UUID, and label locally. Device choices come from
 `/api/store/devices`; scenes come from `/api/store/devices/scenes`. Both lists belong
@@ -72,6 +74,10 @@ to the selected store, independent of the inventory brand. Read-only sensors are
 excluded. Changing stores or deleting a widget clears its bindings; other widgets
 keep their selections. An unsuccessful integration-list read preserves its existing
 bindings when saving unrelated widget settings. Older device bindings remain valid.
+The original two bindings keep their upper/lower positions in the left grid
+column; the new two slots start unset in the right column. All four slots are
+independent, and duplicate targets are rejected when saving. Store changes and
+widget deletion clear all four bindings for that widget only.
 
 Scene shortcuts use a scene icon and name; they do not display a device state.
 Tapping reads the latest scene definition, device names, and revision, then shows

@@ -79,8 +79,14 @@ public class InventoryWidgetLayoutTest {
                 light = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "1efbd558-7d9b-478c-a6bf-213d8d1f08a3").put("name", "休憩モード"));
                 plug = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "5b594eac-0920-4fc2-80e2-8b208c8dc3ec").put("name", "営業開始の照明と入口"));
             }
-            StoreWidgetDevicesData.saveSlots(context, 7, light, plug);
-            for (JSONObject device : new JSONObject[]{light, plug}) {
+            JSONObject third = new JSONObject().put("key", "333333333333333333333333").put("name", "ロールスクリーン").put("kind", "shade");
+            JSONObject fourth = new JSONObject().put("key", "444444444444444444444444").put("name", "入口ドア").put("kind", "lock");
+            if (sceneShortcuts) {
+                third = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "2d306676-a5fb-491a-a6bb-e7206f042229").put("name", "昼休み"));
+                fourth = StoreWidgetScenePolicy.binding(new JSONObject().put("id", "b8c4c765-a6ce-477c-959c-2d3ccf92c576").put("name", "閉店"));
+            }
+            StoreWidgetDevicesData.saveSlots(context, 7, light, plug, third, fourth);
+            for (JSONObject device : new JSONObject[]{light, plug, third, fourth}) {
                 if (StoreWidgetScenePolicy.isScene(device)) continue;
                 String key = device.optString("key"), session = InventoryApiClient.sessionKey();
                 long now = android.os.SystemClock.elapsedRealtime();
@@ -106,6 +112,7 @@ public class InventoryWidgetLayoutTest {
         if (layout == InventoryWidgetPolicy.DENSE || layout == InventoryWidgetPolicy.SUMMARY || layout == InventoryWidgetPolicy.EXPANDED) {
             int[] buttons = {R.id.inventory_widget_left, R.id.inventory_widget_right,
                 R.id.inventory_widget_device_left, R.id.inventory_widget_device_right,
+                R.id.inventory_widget_device_third, R.id.inventory_widget_device_fourth,
                 R.id.inventory_widget_shortage, R.id.inventory_widget_restore};
             java.util.List<Rect> boxes = new java.util.ArrayList<>();
             for (int id : buttons) {
@@ -119,32 +126,38 @@ public class InventoryWidgetLayoutTest {
                 for (Rect previous : boxes) assertFalse(name + ": overlapping buttons", Rect.intersects(previous, box));
                 boxes.add(box);
             }
-            Rect first = boxes.get(0), second = boxes.get(1), upper = boxes.get(2), lower = boxes.get(3);
+            Rect first = boxes.get(0), second = boxes.get(1), upper = boxes.get(2), lower = boxes.get(3), upperRight = boxes.get(4), lowerRight = boxes.get(5);
             assertTrue(name + ": devices must be in right column", upper.left >= second.right && second.left >= first.right);
             assertEquals(name + ": devices must be stacked", upper.left, lower.left);
             assertEquals(first.top, upper.top); assertEquals(first.bottom, lower.bottom);
-            assertTrue(name + ": column ratio must be 2:2:1", Math.abs(first.width() - 2 * upper.width()) <= 2);
+            assertEquals(upperRight.left, lowerRight.left); assertEquals(upper.top, upperRight.top); assertEquals(lower.bottom, lowerRight.bottom);
+            assertTrue(name + ": right grid columns need a visible gap", upperRight.left - upper.right >= 6 * density);
+            assertTrue(name + ": right grid rows need a visible gap", lower.top - upper.bottom >= 6 * density);
+            assertTrue(name + ": inventory row needs at least 8dp clearance", boxes.get(6).top - first.bottom >= 8 * density);
+            assertTrue(name + ": operational controls must be narrower than before", Math.abs(4 * first.width() - 3 * (upperRight.right - upper.left)) <= 5);
             assertTrue(name + ": controls must have equal width", Math.abs(first.width() - second.width()) <= 1);
-            for (int slot = 0; slot < 2; slot++) {
-                ImageView icon = view.findViewById(slot == 0 ? R.id.inventory_widget_device_left_icon : R.id.inventory_widget_device_right_icon);
+            for (int slot = 0; slot < StoreWidgetDevicesData.SLOT_COUNT; slot++) {
+                ImageView icon = view.findViewById(StoreWidgetDevicesRenderer.ICONS[slot]);
                 assertNotNull(name + ": missing device icon", icon);
                 assertEquals(View.VISIBLE, icon.getVisibility()); assertNotNull(icon.getDrawable());
                 Rect iconBox = new Rect(); icon.getDrawingRect(iconBox); parent.offsetDescendantRectToMyCoords(icon, iconBox);
                 assertTrue(name + ": icon clipped by device button", boxes.get(slot + 2).contains(iconBox));
-                View button = view.findViewById(slot == 0 ? R.id.inventory_widget_device_left : R.id.inventory_widget_device_right);
+                View button = view.findViewById(StoreWidgetDevicesRenderer.BUTTONS[slot]);
                 assertTrue(name + ": device name missing from accessibility label", button.getContentDescription().length() > 5);
             }
         }
         for (int id : new int[]{R.id.inventory_widget_title, R.id.inventory_widget_shortage, R.id.inventory_widget_restore,
             R.id.inventory_widget_left_title, R.id.inventory_widget_left_value,
             R.id.inventory_widget_right_title, R.id.inventory_widget_right_value,
-            R.id.inventory_widget_device_left_title, R.id.inventory_widget_device_right_title}) {
+            R.id.inventory_widget_device_left_title, R.id.inventory_widget_device_right_title,
+            R.id.inventory_widget_device_third_title, R.id.inventory_widget_device_fourth_title}) {
             TextView target = view.findViewById(id);
             if (target == null) {
                 assertTrue(name + ": missing label " + id, layout == InventoryWidgetPolicy.COMPACT || layout == InventoryWidgetPolicy.MINIMAL);
                 continue;
             }
-            boolean deviceLabel = id == R.id.inventory_widget_device_left_title || id == R.id.inventory_widget_device_right_title;
+            boolean deviceLabel = id == R.id.inventory_widget_device_left_title || id == R.id.inventory_widget_device_right_title
+                || id == R.id.inventory_widget_device_third_title || id == R.id.inventory_widget_device_fourth_title;
             if (deviceLabel && layout == InventoryWidgetPolicy.DENSE) {
                 assertEquals(name + ": compact device button should show only its icon", View.GONE, target.getVisibility());
                 continue;
@@ -155,8 +168,8 @@ public class InventoryWidgetLayoutTest {
             parent.offsetDescendantRectToMyCoords(target, box);
             assertTrue(name + ": control clipped " + id, box.left >= 0 && box.right <= w && box.top >= 0 && box.bottom <= h);
             assertTrue(name + ": text clipped " + id, target.getHeight() - target.getPaddingTop() - target.getPaddingBottom() >= target.getLineHeight());
-            if (id == R.id.inventory_widget_device_left_title || id == R.id.inventory_widget_device_right_title) {
-                View card = view.findViewById(id == R.id.inventory_widget_device_left_title ? R.id.inventory_widget_device_left : R.id.inventory_widget_device_right);
+            if (deviceLabel) {
+                View card = (View)target.getParent();
                 Rect cardBox = new Rect(); card.getDrawingRect(cardBox); parent.offsetDescendantRectToMyCoords(card, cardBox);
                 assertTrue(name + ": device text outside card", box.top >= cardBox.top && box.bottom <= cardBox.bottom);
             }
@@ -179,7 +192,7 @@ public class InventoryWidgetLayoutTest {
     }
 
     @Test public void renderLauncherSizesAndLongNames() throws Exception {
-        for (int[] size : new int[][]{{110,56},{176,88},{250,110},{300,130},{360,147},{250,148},{360,156},{360,164},{360,208},{360,280}}) {
+        for (int[] size : new int[][]{{110,56},{176,88},{250,110},{300,130},{330,140},{360,147},{250,148},{360,156},{360,164},{360,208},{360,280}}) {
             View view = render("widget-" + size[0] + "x" + size[1], size[0], size[1], "ja", sample());
             if (size[0] >= 250) assertEquals("57", ((TextView)view.findViewById(R.id.inventory_widget_count)).getText().toString());
         }
@@ -213,8 +226,8 @@ public class InventoryWidgetLayoutTest {
     @Test public void deviceButtonsOpenTheirOwnConfirmationOrConfiguration() throws Exception {
         for (int height : new int[]{110, 148, 208}) for (boolean configured : new boolean[]{true, false}) {
             View view = render("widget-" + (configured ? "configured" : "empty") + "-" + height, 250, height, "ja", sample());
-            for (int slot = 0; slot < 2; slot++) {
-                View button = view.findViewById(slot == 0 ? R.id.inventory_widget_device_left : R.id.inventory_widget_device_right);
+            for (int slot = 0; slot < StoreWidgetDevicesData.SLOT_COUNT; slot++) {
+                View button = view.findViewById(StoreWidgetDevicesRenderer.BUTTONS[slot]);
                 assertTrue(button.performClick());
                 Intent intent = shadowOf(RuntimeEnvironment.getApplication()).getNextStartedActivity();
                 assertNotNull(intent);
@@ -223,7 +236,7 @@ public class InventoryWidgetLayoutTest {
                 if (configured) {
                     assertEquals("store", intent.getStringExtra(StoreWidgetDeviceActivity.EXTRA_STORE));
                     assertEquals(slot, intent.getIntExtra(StoreWidgetDeviceActivity.EXTRA_SLOT, -1));
-                    assertEquals(slot == 0 ? "111111111111111111111111" : "222222222222222222222222", intent.getStringExtra(StoreWidgetDeviceActivity.EXTRA_KEY));
+                    assertEquals(new String[]{"111111111111111111111111","222222222222222222222222","333333333333333333333333","444444444444444444444444"}[slot], intent.getStringExtra(StoreWidgetDeviceActivity.EXTRA_KEY));
                 }
             }
         }
@@ -238,8 +251,8 @@ public class InventoryWidgetLayoutTest {
         sceneShortcuts = true;
         for (String language : new String[]{"ja", "zh"}) for (int[] size : new int[][]{{300,130},{360,164},{360,208}}) {
             View view = render("widget-scenes-" + language + "-" + size[0] + "x" + size[1], size[0], size[1], language, sample());
-            for (int slot = 0; slot < 2; slot++) {
-                View button = view.findViewById(slot == 0 ? R.id.inventory_widget_device_left : R.id.inventory_widget_device_right);
+            for (int slot = 0; slot < StoreWidgetDevicesData.SLOT_COUNT; slot++) {
+                View button = view.findViewById(StoreWidgetDevicesRenderer.BUTTONS[slot]);
                 assertTrue(button.getContentDescription().toString().contains(language.equals("ja") ? "シーン" : "场景"));
                 assertTrue(button.performClick()); Intent intent = shadowOf(RuntimeEnvironment.getApplication()).getNextStartedActivity();
                 assertEquals(StoreWidgetSceneActivity.class.getName(), intent.getComponent().getClassName());
