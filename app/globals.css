@@ -45431,6 +45431,57 @@ a:focus-visible {
 
 /* On-demand store equipment controls */
 .store-devices-panel { max-width: 1080px; margin: 24px auto; color: var(--ink); }
+.store-scenes { margin: 0 0 28px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.store-scenes-heading, .store-scenes-heading > div:last-child, .store-scene-title, .store-scene-result header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.store-scenes-heading { margin-bottom: 14px; flex-wrap: wrap; }
+.store-scenes-heading h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; font-weight: 600; }
+.store-scenes-heading p { margin: 5px 0 0; font-size: 12px; color: var(--muted); }
+.store-scene-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.store-scene { min-width: 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.store-scene h4, .store-scene-result h4 { font-size: 15px; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+.store-scenes .store-scene-edit, .store-scene-step-buttons button { border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--muted); min-width: 36px; padding: 7px; }
+.store-scene-preview { margin: 12px 0 16px; padding-left: 21px; font-size: 12px; color: var(--muted); }
+.store-scene-preview li { padding: 5px 0 5px 3px; line-height: 1.5; overflow-wrap: anywhere; }
+.store-scene-preview li > span:first-child { color: var(--ink); margin-right: 12px; }
+.store-scene-preview li > span:last-child { display: inline-block; }
+.store-scene-run { width: 100%; }
+.store-scene-result { margin-top: 16px; border-left: 3px solid var(--green); padding: 4px 0 4px 16px; }
+.store-scene-result header { flex-wrap: wrap; }
+.store-scene-result header > span { font-size: 12px; color: var(--muted); }
+.store-scene-result ol { list-style: none; margin: 10px 0; padding: 0; }
+.store-scene-result li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.store-scene-result li > div { flex: 1; min-width: 0; }
+.store-scene-result li strong { font-weight: 500; margin-right: 10px; overflow-wrap: anywhere; }
+.store-scene-result li p { margin: 5px 0 0; color: var(--muted); line-height: 1.5; }
+.store-scene-result-icon { color: var(--green); display: flex; justify-content: center; min-width: 18px; padding-top: 2px; }
+.store-scene-step-status { white-space: nowrap; color: var(--muted); }
+.store-scene-result [data-step-status="failed"] .store-scene-step-status, .store-scene-result [data-step-status="unknown"] .store-scene-step-status { color: var(--amber); }
+.store-scene-result [data-step-status="sent"] .store-scene-step-status { color: var(--green); }
+.store-scene-editor { width: min(700px,calc(100vw - 32px)); }
+.store-scene-editor label { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 12px; color: var(--muted); }
+.store-scene-editor .store-scene-name { margin-top: 20px; }
+.store-scene-editor input, .store-scene-editor select { width: 100%; min-width: 0; min-height: 42px; margin: 0; padding: 9px 10px; font-size: 14px; color: var(--ink); border: 1px solid var(--line); border-radius: 7px; background: var(--panel); }
+.store-scene-editor select:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.store-scene-editor-steps { list-style: none; padding: 0; margin: 10px 0 16px; }
+.store-scene-editor-steps li { display: flex; align-items: flex-start; gap: 10px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.store-scene-step-number { padding-top: 29px; color: var(--muted); font-size: 12px; min-width: 16px; }
+.store-scene-step-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); flex: 1; min-width: 0; gap: 10px; }
+.store-scene-step-fields > label:nth-child(3) { grid-column: 2; }
+.store-scene-step-fields .store-scene-step-help { grid-column: 1 / -1; font-size: 11px; color: var(--muted); line-height: 1.6; margin: 0; }
+.store-scene-step-buttons { display: flex; flex-wrap: wrap; gap: 4px; max-width: 76px; padding-top: 20px; }
+.store-scene-editor-footer { align-items: center; flex-wrap: wrap; }
+.store-scenes .store-scene-delete { margin-right: auto; padding: 6px 0; background: transparent; border: 0; color: var(--red); }
+@media (max-width: 650px) {
+ .store-scene-list { grid-template-columns: minmax(0,1fr); }
+ .store-scene-editor-steps li { gap: 7px; }
+ .store-scene-step-fields { grid-template-columns: minmax(0,1fr); }
+ .store-scene-step-fields > label:nth-child(3) { grid-column: auto; }
+ .store-scene-step-number { padding-top: 27px; }
+ .store-scene-step-buttons { flex-direction: column; max-width: 36px; }
+ .store-scene-editor-footer .store-scene-delete { width: 100%; justify-content: flex-start; }
+ .store-scene-result { padding-left: 10px; }
+ .store-scene-step-status { max-width: 7em; white-space: normal; text-align: right; }
+}
 .store-cameras-panel { margin-top: 28px; }
 .store-camera-card > .primary-button { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; min-height: 42px; }
 .store-camera-dialog { width: min(820px,calc(100vw - 32px)); }

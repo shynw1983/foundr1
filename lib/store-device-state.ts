@@ -21,12 +21,14 @@ export type StoreDevice = {
   controlEnabled: boolean; blockedUntil: string | null; command: DeviceCommand | null;
 };
 export type StoreDevicesView = { configured: boolean; storeId: string; devices: StoreDevice[] };
+export function deviceCommandSkipped(command: DeviceCommand) { return ["already_in_state", "light_below_on_range", "light_ambiguous"].includes(command.reason); }
 
 export function deviceObservation(device: StoreDevice, now = Date.now()): "none" | "waiting" | "observed" | "unconfirmed" | "rejected" {
   const command = device.command;
   if (!command) return "none";
   if (command.result === "rejected") return "rejected";
   if (command.reason === "already_in_state") return "observed";
+  if (deviceCommandSkipped(command)) return "unconfirmed";
   const finished = command.finishedAt ? Date.parse(command.finishedAt) : Date.parse(command.requestedAt) + deviceCommandLeaseMs;
   if (!device.readError && device.sample && device.fetchedAt && Date.parse(device.fetchedAt) >= finished + 4_000) {
     const sample = device.sample;
@@ -35,6 +37,10 @@ export function deviceObservation(device: StoreDevice, now = Date.now()): "none"
     if (command.action === "unlock" && sample.lockState === "unlocked") return "observed";
     if (command.action === "turnOn" && sample.power === "on") return "observed";
     if (command.action === "turnOff" && sample.power === "off") return "observed";
+    if (device.kind === "indoorLight" && sample.botMode === "pressMode" && (command.action === "turnOn" || command.action === "turnOff")) {
+      const after = estimateIndoorLight(sample.lightLevel, device.fetchedAt, Date.parse(device.fetchedAt));
+      if (after === (command.action === "turnOn" ? "on" : "off")) return "observed";
+    }
     if (device.kind === "indoorLight" && command.action === "press") {
       const before = estimateIndoorLight(command.before?.lightLevel, device.fetchedAt, Date.parse(device.fetchedAt));
       const after = estimateIndoorLight(sample.lightLevel, device.fetchedAt, Date.parse(device.fetchedAt));

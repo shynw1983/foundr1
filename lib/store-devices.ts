@@ -2,6 +2,7 @@ import { sql } from "./db";
 import { estimateIndoorLight } from "./store-light-state";
 import { deviceCommandLeaseMs, deviceCooldownMs, type DeviceAction, type DeviceCommand, type DeviceSample, type StoreDevice, type StoreDevicesView } from "./store-device-state";
 import { deviceActions, indoorLightConfig, listStoreSwitchBots, readRawStatus, readStoreDevice, sendStoreDeviceCommand, SwitchBotError, validateDeviceAction } from "./switchbot";
+import { indoorSceneDecision } from "./store-scene-state";
 
 export class StoreDeviceError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -13,7 +14,7 @@ function publicCommand(row: CommandRow | null | undefined): DeviceCommand | null
   return { id: row.id, action: row.command, parameter: row.parameter, result: row.result === "pending" && Date.now() - Date.parse(row.requested_at) >= deviceCommandLeaseMs ? "unknown" : row.result, before: row.before_sample, reason: row.reason, requestedAt: iso(row.requested_at)!, finishedAt: iso(row.finished_at) };
 }
 const priority = { indoorLight: 0, plug: 1, bot: 2, shade: 3, lock: 4, hub: 5, meter: 6, keypad: 7, remote: 8, unsupported: 9 };
-async function storeDeviceConfig(storeId: string) {
+export async function storeDeviceConfig(storeId: string) {
   const config = indoorLightConfig(storeId);
   if (!config) return null;
   const rows = await sql`select settings from module_settings where scope_key=${`store:${storeId}`} and module_key='store_devices' limit 1`;
@@ -69,7 +70,7 @@ export async function getStoreDevices(storeId: string, key?: string): Promise<St
   return { configured: true, storeId, devices: views };
 }
 
-export async function requestStoreDeviceCommand(storeId: string, actorId: string, key: string, requestId: string, action: DeviceAction, parameter: string) {
+export async function requestStoreDeviceCommand(storeId: string, actorId: string, key: string, requestId: string, action: DeviceAction, parameter: string, sceneRunId?: string) {
   const config = (await storeDeviceConfig(storeId))?.config;
   if (!config || !config.controlEnabled) throw new StoreDeviceError("機器の操作はまだ有効になっていません。", 409);
   const device = (await listStoreSwitchBots(config)).find(d => d.key === key);
@@ -83,6 +84,8 @@ export async function requestStoreDeviceCommand(storeId: string, actorId: string
     if (row.store_id !== storeId || row.device_id !== device.id || row.command !== action || row.parameter !== parameter) throw new StoreDeviceError("操作番号が一致しません。", 409);
     return { command: publicCommand(row)!, blockedUntil: new Date(Date.parse(row.finished_at || row.requested_at) + (row.finished_at ? deviceCooldownMs : deviceCommandLeaseMs)).toISOString() };
   }
+  const activeScene = await sql`select id::text from store_device_scene_runs where store_id=${storeId}::uuid and status='running' and expires_at>now() limit 1`;
+  if (sceneRunId ? activeScene[0]?.id !== sceneRunId : activeScene.length > 0) throw new StoreDeviceError("シーンを実行中です。完了後に操作してください。", 409);
   await sql`insert into store_light_runtime(store_id,device_id) values(${storeId}::uuid,${device.id}) on conflict do nothing`;
   // A bounded in-flight lease prevents slow requests from overlapping a send.
   // Normal completion replaces it with the requested 10-second cooldown.
@@ -98,12 +101,21 @@ export async function requestStoreDeviceCommand(storeId: string, actorId: string
   let result: DeviceCommand["result"] = "rejected", reason = "preflight_failed", attempted = false;
   try {
     const sample = await readStoreDevice(config, device);
-    validateDeviceAction(device, sample, action, parameter);
+    const decision = sceneRunId && device.kind === "indoorLight" ? indoorSceneDecision(sample, action) : { action, skip: "" };
+    validateDeviceAction(device, sample, decision.action, parameter);
     const beforeState = device.kind === "indoorLight" ? estimateIndoorLight(sample.lightLevel, new Date().toISOString()) : "unknown";
     await sql`update store_light_commands set before_sample=${JSON.stringify(sample)}::jsonb, before_state=${beforeState}, before_level=${sample.lightLevel ?? null} where id=${requestId}::uuid`;
-    attempted = true;
-    await sendStoreDeviceCommand(config, device, action, parameter);
-    result = "accepted"; reason = "";
+    if (decision.skip === "invalid_light_level") throw new SwitchBotError("invalid_light_level");
+    if (decision.skip) { result = "accepted"; reason = decision.skip; }
+    else {
+      if (sceneRunId) {
+        const stillRunning = await sql`select id from store_device_scene_runs where id=${sceneRunId}::uuid and store_id=${storeId}::uuid and status='running' and expires_at>now()`;
+        if (!stillRunning.length) throw new SwitchBotError("interrupted");
+      }
+      attempted = true;
+      await sendStoreDeviceCommand(config, device, decision.action, parameter);
+      result = "accepted"; reason = "";
+    }
   } catch (error) {
     result = attempted && (!(error instanceof SwitchBotError) || error.uncertain) ? "unknown" : "rejected";
     reason = error instanceof SwitchBotError ? error.code : "unavailable";

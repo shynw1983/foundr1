@@ -14,7 +14,7 @@ function load(file, modules={}, globals={}) {
  const context={exports:{},Response,Request,URL,AbortSignal,Date,Buffer,process:{env},console,require:name=>Object.hasOwn(modules,name.split('/').at(-1))?modules[name.split('/').at(-1)]:require(name),...globals};
  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,context,{filename:file});return context.exports;
 }
-const light=load('lib/store-light-state.ts'), state=load('lib/store-device-state.ts',{'store-light-state':light});
+const light=load('lib/store-light-state.ts'), state=load('lib/store-device-state.ts',{'store-light-state':light}), scenePolicy=load('lib/store-scene-state.ts');
 const plain=v=>JSON.parse(JSON.stringify(v));
 const types=[[botId,'Bot'],[outdoorId,'Bot'],[shadeId,'Roller Shade'],[lockId,'Smart Lock Pro'],[hubId,'Hub 2'],[meterId,'Meter'],[keypadId,'Keypad Vision'],[remoteId,'Remote'],[foreignId,'Bot'],[plugId,'Plug Mini (JP)'],[foreignPlugId,'Plug Mini (JP)']];
 function fakeVendor(onPost=async()=>{}) {
@@ -63,13 +63,14 @@ test('on-demand reads, additive migration, actual SQL claims, device safety and 
   const legacyId=crypto.randomUUID();await db.query("insert into store_light_commands(id,store_id,device_id,result,before_state,before_level) values($1,$2,$3,'accepted','off',2)",[legacyId,storeId,botId]);
   const before=(await db.query('select * from store_light_commands')).rows[0];await db.exec(expand);await db.exec(expand);
   const after=(await db.query('select * from store_light_commands')).rows[0];for(const k in before)assert.deepEqual(after[k],before[k],`preserved ${k}`);assert.equal(after.command,'press');assert.equal(after.parameter,'default');assert.equal(after.before_sample,null);
-  assert.ok(fs.readFileSync('db/schema.sql','utf8').endsWith(expand));
+  assert.ok(fs.readFileSync('db/schema.sql','utf8').includes(expand));
+  await db.exec(fs.readFileSync('db/migrations/20260930-store-device-scenes.sql','utf8'));
   const queries=[];const sql=async(strings,...values)=>{const q=strings.reduce((q,s,i)=>q+(i?'$'+i:'')+s,'');queries.push(q);return(await db.query(q,values)).rows;};
   let holdPost=null;
   const vendor=fakeVendor(async()=>{
    assert.equal((await db.query("select count(*)::int as n from store_light_commands where result='pending'")).rows[0].n,1,'durable journal before send');if(holdPost)await holdPost;
   });
-  const adapter=load('lib/switchbot.ts',{}, {fetch:vendor.fetch});const service=load('lib/store-devices.ts',{db:{sql},switchbot:adapter,'store-device-state':state,'store-light-state':light});
+  const adapter=load('lib/switchbot.ts',{}, {fetch:vendor.fetch});const service=load('lib/store-devices.ts',{db:{sql},switchbot:adapter,'store-device-state':state,'store-light-state':light,'store-scene-state':scenePolicy});
   const legacy=load('lib/store-indoor-light.ts',{'store-devices':service,switchbot:adapter,'store-light-state':light});
   const key=id=>adapter.deviceKey(storeId,id),send=(id,action='press',param='default',requestId=crypto.randomUUID())=>service.requestStoreDeviceCommand(storeId,actorId,key(id),requestId,action,param);
   const expire=()=>db.exec("update store_light_runtime set blocked_until=now()-interval '1 second'");
