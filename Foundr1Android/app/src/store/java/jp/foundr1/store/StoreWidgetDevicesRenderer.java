@@ -21,7 +21,7 @@ final class StoreWidgetDevicesRenderer {
             String name = binding.optString("name", (zh ? "设备 " : "機器 ") + (slot + 1));
             String state = configured ? (zh ? "点按确认" : "タップして確認") : (zh ? "选择设备" : "機器を選ぶ");
             String detail = configured ? (zh ? "操作前读取状态" : "操作前に状態を確認") : (zh ? "自定义快捷开关" : "ショートカットを設定");
-            boolean fresh = StoreWidgetDevicePolicy.fresh(device, System.currentTimeMillis());
+            boolean fresh = StoreWidgetDevicePolicy.fresh(device, android.os.SystemClock.elapsedRealtime());
             if (fresh) {
                 state = (zh ? "上次 " : "前回 ") + StoreWidgetDevicePolicy.state(device, zh);
                 if ("bot".equals(device.optString("kind")) && StoreWidgetDevicePolicy.hasAction(device, "press")) state = zh ? "按一下" : "スイッチを押す";

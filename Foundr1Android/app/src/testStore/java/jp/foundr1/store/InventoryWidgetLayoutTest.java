@@ -77,6 +77,8 @@ public class InventoryWidgetLayoutTest {
             StoreWidgetDevicesData.saveSlots(context, 7, light, plug);
             for (JSONObject device : new JSONObject[]{light, plug}) {
                 String key = device.optString("key"), session = InventoryApiClient.sessionKey();
+                long now = android.os.SystemClock.elapsedRealtime();
+                StoreWidgetDevicePolicy.recordRead(device, now, now);
                 StoreWidgetDevicesData.save(context, session, "store", key, StoreWidgetDevicesData.beginRead(session, "store", key), device);
             }
         } else StoreWidgetDevicesData.saveSlots(context, 7, null, null);

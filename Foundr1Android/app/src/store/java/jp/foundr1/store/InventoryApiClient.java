@@ -64,9 +64,16 @@ final class InventoryApiClient {
     static JSONObject loadDevices(String storeId, String device, String session) throws Exception {
         String endpoint = BASE_URL + "/api/store/devices?storeId=" + URLEncoder.encode(storeId, "UTF-8");
         if (device != null && !device.isEmpty()) endpoint += "&device=" + URLEncoder.encode(device, "UTF-8");
+        long started = android.os.SystemClock.elapsedRealtime();
         JSONObject body = request("GET", endpoint, null, session);
         if (!storeId.equals(body.optString("storeId")) || body.optJSONArray("devices") == null)
             throw new java.io.IOException("Invalid device scope");
+        long received = android.os.SystemClock.elapsedRealtime();
+        JSONArray devices = body.getJSONArray("devices");
+        for (int i = 0; i < devices.length(); i++) {
+            JSONObject current = devices.optJSONObject(i);
+            if (current != null) StoreWidgetDevicePolicy.recordRead(current, started, received);
+        }
         return body;
     }
 
@@ -255,6 +262,7 @@ final class InventoryApiClient {
         try {
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(20000);
+            connection.setUseCaches(false);
             connection.setRequestMethod(method);
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("X-Foundr1-Native-Surface", "store-widget");

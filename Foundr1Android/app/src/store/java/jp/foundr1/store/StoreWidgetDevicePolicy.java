@@ -5,6 +5,25 @@ import org.json.JSONObject;
 
 /** Display/intent only. The existing Store API owns authorization, preflight and device locks. */
 final class StoreWidgetDevicePolicy {
+    // Persisted snapshots from another process/boot cannot reuse this process's elapsed clock.
+    private static final String READ_PROCESS = java.util.UUID.randomUUID().toString();
+    static void recordRead(JSONObject device, long started, long received) throws org.json.JSONException {
+        device.put("_widgetRead", new JSONObject().put("process", READ_PROCESS)
+            .put("started", started).put("received", received));
+    }
+    private static JSONObject currentRead(JSONObject device, long elapsedNow) {
+        JSONObject read = device == null ? null : device.optJSONObject("_widgetRead");
+        if (read == null || !READ_PROCESS.equals(read.optString("process"))) return null;
+        long started = read.optLong("started", -1), received = read.optLong("received", -1);
+        return started >= 0 && received >= started && elapsedNow >= received ? read : null;
+    }
+    private static long age(JSONObject device, long elapsedNow) {
+        JSONObject read = currentRead(device, elapsedNow);
+        if (read == null || device.optBoolean("readError") || device.optJSONObject("sample") == null
+            || time(device.optString("fetchedAt")) <= 0) return Long.MAX_VALUE;
+        // The no-store GET reads the device anew. Count network time too, conservatively.
+        return elapsedNow - read.optLong("started");
+    }
     static boolean validKey(String key) { return key != null && key.matches("[a-f0-9]{24}"); }
     static boolean hasAction(JSONObject device, String action) {
         JSONArray actions = device == null ? null : device.optJSONArray("actions");
@@ -19,9 +38,15 @@ final class StoreWidgetDevicePolicy {
     static long time(String iso) {
         try { return java.time.Instant.parse(iso).toEpochMilli(); } catch (Exception ignored) { return 0; }
     }
-    static boolean fresh(JSONObject device, long now) {
-        return device != null && !device.optBoolean("readError") && device.optJSONObject("sample") != null
-            && now >= time(device.optString("fetchedAt")) && now - time(device.optString("fetchedAt")) <= 120_000;
+    static boolean fresh(JSONObject device, long elapsedNow) { return age(device, elapsedNow) <= 120_000; }
+    static boolean freshForAction(JSONObject device, long elapsedNow) { return age(device, elapsedNow) <= 30_000; }
+    static long cooldownRemaining(JSONObject device, long elapsedNow) {
+        JSONObject read = currentRead(device, elapsedNow);
+        long fetched = device == null ? 0 : time(device.optString("fetchedAt"));
+        if (read == null || fetched <= 0) return 0;
+        // Both timestamps come from the server. Waiting from receipt is conservative even on slow reads.
+        long remaining = time(device.optString("blockedUntil")) - fetched;
+        return Math.max(0, remaining - (elapsedNow - read.optLong("received")));
     }
     static String state(JSONObject device, boolean zh) {
         JSONObject sample = device == null ? null : device.optJSONObject("sample");

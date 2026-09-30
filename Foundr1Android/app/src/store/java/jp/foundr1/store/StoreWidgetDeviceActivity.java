@@ -88,8 +88,9 @@ public class StoreWidgetDeviceActivity extends Activity {
         if (current == null || !key.equals(current.optString("key"))) { failure(null); return; }
         name = current.optString("name", name); header(); text(StoreWidgetDevicePolicy.state(current, zh), 22, true);
         if (!bound()) { failure(new InventoryApiClient.ApiException(409, "changed")); return; }
-        boolean available = current.optBoolean("controlEnabled") && StoreWidgetDevicePolicy.fresh(current, System.currentTimeMillis());
-        long cooldown = StoreWidgetDevicePolicy.time(current.optString("blockedUntil")) - System.currentTimeMillis();
+        long elapsedNow = android.os.SystemClock.elapsedRealtime();
+        boolean available = current.optBoolean("controlEnabled") && StoreWidgetDevicePolicy.freshForAction(current, elapsedNow);
+        long cooldown = StoreWidgetDevicePolicy.cooldownRemaining(current, elapsedNow);
         if (cooldown > 0) text(zh ? "上一操作处理中，请稍后重新读取。" : "直前の操作を処理中です。少し待って再読込してください。", 14, false);
         else if (!available) text(zh ? "当前不能操作，请重新读取或在 Store 设备页确认。" : "現在は操作できません。再読込するかStoreの機器ページで確認してください。", 14, false);
         else {
@@ -112,10 +113,10 @@ public class StoreWidgetDeviceActivity extends Activity {
     private void action(String action, Integer position, boolean primary) { button(StoreWidgetDevicePolicy.actionLabel(action, position, zh), primary, () -> execute(action, position)); }
     void execute(String action, Integer position) {
         if (busy || submitted) return;
+        long elapsedNow = android.os.SystemClock.elapsedRealtime();
         if (!bound() || device == null || !device.optBoolean("controlEnabled") || !StoreWidgetDevicePolicy.hasAction(device, action)
-            || !StoreWidgetDevicePolicy.fresh(device, System.currentTimeMillis())
-            || System.currentTimeMillis() - StoreWidgetDevicePolicy.time(device.optString("fetchedAt")) > 30_000
-            || StoreWidgetDevicePolicy.time(device.optString("blockedUntil")) > System.currentTimeMillis()) {
+            || !StoreWidgetDevicePolicy.freshForAction(device, elapsedNow)
+            || StoreWidgetDevicePolicy.cooldownRemaining(device, elapsedNow) > 0) {
             failure(new InventoryApiClient.ApiException(409, "changed")); return;
         }
         submitted = true; busy = true;

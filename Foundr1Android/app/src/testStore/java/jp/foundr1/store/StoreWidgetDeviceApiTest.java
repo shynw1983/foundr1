@@ -44,8 +44,13 @@ public class StoreWidgetDeviceApiTest {
         String store = "ed6c3b1f-e68a-4cbd-92e2-06a800eb7183", key = "111111111111111111111111";
         CookieManager.getInstance().setCookie(InventoryApiClient.BASE_URL, "foundr1_os_session=client-test");
         String session = InventoryApiClient.sessionKey();
-        response = new JSONObject().put("storeId", store).put("devices", new JSONArray());
-        InventoryApiClient.loadDevices(store, key, session);
+        response = new JSONObject().put("storeId", store).put("devices", new JSONArray().put(new JSONObject()
+            .put("key", key).put("sample", new JSONObject().put("lightLevel", 1))
+            .put("fetchedAt", java.time.Instant.now().plusSeconds(30).toString())
+            .put("_widgetRead", new JSONObject().put("process", "must-not-trust-response-metadata"))));
+        JSONObject read = InventoryApiClient.loadDevices(store, key, session).getJSONArray("devices").getJSONObject(0);
+        assertTrue(StoreWidgetDevicePolicy.freshForAction(read, android.os.SystemClock.elapsedRealtime()));
+        assertFalse(last.getUseCaches());
         assertEquals("GET", last.getRequestMethod());
         assertEquals("/api/store/devices", last.getURL().getPath());
         assertTrue(last.getURL().getQuery().contains("device=" + key));
