@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Clock3, RefreshCw, XCi
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useOsTranslation } from "../../../os/components/OsTranslationProvider";
 import { StoreNavTabs } from "../../components/StoreNavTabs";
+import { InventoryActionBadge } from "../../components/InventoryActionBadge";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 
 type Language = "ja" | "zh-Hans" | "zh-Hant";
@@ -56,7 +57,7 @@ function copy(language: Language) {
     siri: "Siri 语音",
     system: "系统",
     available: "恢复销售",
-    unavailable: "缺货",
+    unavailable: "设为缺货",
     lowStock: "即将缺货",
     override: "单独平台设置",
     fullSync: "全平台、全商品同步",
@@ -97,7 +98,7 @@ function copy(language: Language) {
     siri: "Siri 語音",
     system: "系統",
     available: "恢復銷售",
-    unavailable: "缺貨",
+    unavailable: "設為缺貨",
     lowStock: "即將缺貨",
     override: "單獨平台設定",
     fullSync: "全平台、全商品同步",
@@ -138,7 +139,7 @@ function copy(language: Language) {
     siri: "Siri音声",
     system: "システム",
     available: "販売再開",
-    unavailable: "在庫切れ",
+    unavailable: "在庫切れに設定",
     lowStock: "残りわずか",
     override: "個別プラットフォーム設定",
     fullSync: "全プラットフォーム・全商品同期",
@@ -354,8 +355,13 @@ export default function InventoryHistoryPage() {
                   <span data-i18n-ignore>{labels.operator}: {actorLabel(report, labels)}</span>
                 </div>
                 <div className="store-inventory-history-operation">
+                  {report.runType !== "full_sync" && (report.action === "available" || report.action === "unavailable") ? (
+                    <InventoryActionBadge available={report.action === "available"} label={actionLabel(report, labels)} />
+                  ) : null}
                   <strong data-i18n-ignore>{report.runType === "full_sync" ? actionLabel(report, labels) : historyItemName(report, language)}</strong>
-                  <span data-i18n-ignore>{report.runType === "full_sync" ? "Store → Bridge" : actionLabel(report, labels)}</span>
+                  {report.runType === "full_sync" || (report.action !== "available" && report.action !== "unavailable") ? (
+                    <span data-i18n-ignore>{report.runType === "full_sync" ? "Store → Bridge" : actionLabel(report, labels)}</span>
+                  ) : null}
                 </div>
                 <div className="store-inventory-history-platforms">
                   {report.platforms.map((platform) => {

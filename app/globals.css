@@ -12643,29 +12643,52 @@ body :where(
 
 .store-menu-sync-heading {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
 }
 
 .store-menu-sync-heading strong {
+  flex: 1 1 160px;
   min-width: 0;
-  overflow: hidden;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
-.store-menu-sync-heading span {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  padding: 2px 7px;
-  background: #eef3f0;
-  color: var(--green);
+.store-menu-sync-heading small {
+  color: var(--muted);
   font-size: 11px;
-  font-weight: 600;
+}
+
+.store-menu-sync-heading .store-inventory-action-badge,
+.store-inventory-history-operation .store-inventory-action-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 5px;
+  max-width: 100%;
+  padding: 5px 9px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.store-inventory-action-badge svg {
+  flex-shrink: 0;
+}
+
+.store-inventory-action-badge.is-unavailable {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.store-inventory-action-badge.is-available {
+  background: #dbeafe;
+  color: #1e40af;
 }
 
 .store-menu-sync-platforms {
@@ -12920,6 +12943,17 @@ body :where(
   color: var(--muted);
   font-size: 11px;
   font-weight: 500;
+}
+
+.store-inventory-history-operation {
+  gap: 6px;
+}
+
+.store-inventory-history-operation strong {
+  overflow: visible;
+  font-size: 14px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .store-inventory-history-platforms {

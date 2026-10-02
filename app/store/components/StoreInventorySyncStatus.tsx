@@ -2,6 +2,7 @@
 
 import { useReadRequest, readJson } from "../../../components/useReadRequest";
 import { ReadStatusNotice } from "../../../components/ReadStatusNotice";
+import { InventoryActionBadge } from "./InventoryActionBadge";
 
 import { CheckCircle2, ChevronDown, ChevronUp, Clock3, LoaderCircle, RefreshCw, TimerOff, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -52,7 +53,7 @@ function syncCopy(language: StoreMenuLanguage) {
   if (language === "zh-Hans") {
     return {
       available: "恢复销售",
-      unavailable: "缺货",
+      unavailable: "设为缺货",
       queued: "等待中",
       processing: "执行中",
       retrying: "重试中",
@@ -83,7 +84,7 @@ function syncCopy(language: StoreMenuLanguage) {
   if (language === "zh-Hant") {
     return {
       available: "恢復銷售",
-      unavailable: "缺貨",
+      unavailable: "設為缺貨",
       queued: "等待中",
       processing: "執行中",
       retrying: "重試中",
@@ -113,7 +114,7 @@ function syncCopy(language: StoreMenuLanguage) {
   }
   return {
     available: "販売再開",
-    unavailable: "在庫切れ",
+    unavailable: "在庫切れに設定",
     queued: "待機中",
     processing: "実行中",
     retrying: "再試行中",
@@ -463,8 +464,9 @@ export function StoreInventorySyncStatus() {
           {runs.map((run) => (
             <article className="store-menu-sync-run" key={run.id}>
               <div className="store-menu-sync-heading">
+                <InventoryActionBadge available={run.isAvailable} label={run.isAvailable ? copy.available : copy.unavailable} />
                 <strong>{run.itemLabel}</strong>
-                <span>{run.source === "siri" ? `${copy.siri} · ` : ""}{run.isAvailable ? copy.available : copy.unavailable}</span>
+                {run.source === "siri" ? <small>{copy.siri}</small> : null}
               </div>
               <div className="store-menu-sync-platforms">
                 {run.platforms.map((platform) => {
@@ -505,6 +507,14 @@ export function StoreInventorySyncStatus() {
               </div>
             </article>
           ))}
+        </div>
+      ) : runs[0] ? (
+        <div className="store-menu-sync-run store-menu-sync-preview">
+          <div className="store-menu-sync-heading">
+            <InventoryActionBadge available={runs[0].isAvailable} label={runs[0].isAvailable ? copy.available : copy.unavailable} />
+            <strong>{runs[0].itemLabel}</strong>
+            {runs[0].source === "siri" ? <small>{copy.siri}</small> : null}
+          </div>
         </div>
       ) : null}
     </aside>
