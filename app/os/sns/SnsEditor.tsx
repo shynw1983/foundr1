@@ -17,6 +17,7 @@ export function SnsEditor({ surface }: {
         name: string;
     }>>([]), [storeId, setStoreId] = useState("");
     const [preset, setPreset] = useState(0), [photo, setPhoto] = useState<ImageBitmap | null>(null), [logo, setLogo] = useState<HTMLImageElement | null>(null);
+    const [textColor, setTextColor] = useState<"black" | "white">("black");
     const [crop, setCrop] = useState<SnsCrop>({ zoom: 1, x: 0, y: 0 }), [caption, setCaption] = useState("");
     const [message, setMessage] = useState(""), [busy, setBusy] = useState(false), [loading, setLoading] = useState(false), [format, setFormat] = useState("image/png"), [preview, setPreview] = useState(false);
     const canvas = useRef<HTMLCanvasElement>(null), fileInput = useRef<HTMLInputElement>(null), lock = useRef(false), generation = useRef(0), ownedPhoto = useRef<ImageBitmap | null>(null);
@@ -37,7 +38,7 @@ export function SnsEditor({ surface }: {
     useEffect(() => { setLogo(null); if (!storeId)
         return; let alive = true; const im = new Image(); im.onload = () => { if (alive)
         setLogo(im); }; im.onerror = () => { if (alive)
-        setMessage(t("ロゴを読み込めません。再読み込みしてください。")); }; im.src = `/api/sns?asset=logo&surface=${surface}&storeId=${encodeURIComponent(storeId)}`; return () => { alive = false; }; }, [storeId, surface, t]);
+        setMessage(t("ロゴを読み込めません。再読み込みしてください。")); }; im.src = `/api/sns?asset=logo&color=${textColor}&surface=${surface}&storeId=${encodeURIComponent(storeId)}`; return () => { alive = false; }; }, [storeId, surface, t, textColor]);
     useEffect(() => () => { generation.current++; ownedPhoto.current?.close(); }, []);
     useEffect(() => { if (canvas.current && logo)
         drawSns(canvas.current, photo, { width: photo?.width ?? 1080, height: photo?.height ?? 1920 }, logo, snsPresets[preset], crop); }, [photo, logo, preset, crop]);
@@ -98,7 +99,7 @@ export function SnsEditor({ surface }: {
         setMessage("");
         try {
             const blob = await new Promise<Blob>((resolve, reject) => canvas.current!.toBlob(b => b ? resolve(b) : reject(Error(t("画像を作成できません。"))), format, .94));
-            const name = `maamaa-sns-${snsPresets[preset].id}-${Date.now()}.${format === "image/png" ? "png" : "jpg"}`;
+            const name = `maamaa-sns-${snsPresets[preset].id}-${textColor}-${Date.now()}.${format === "image/png" ? "png" : "jpg"}`;
             const file = new File([blob], name, { type: format });
             if (share && navigator.canShare?.({ files: [file] })) {
                 await navigator.share({ files: [file] });
@@ -145,6 +146,7 @@ export function SnsEditor({ surface }: {
       <input ref={fileInput} type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; void load(f); }}/>
       <button className="primary" disabled={!logo || loading || busy} onClick={() => fileInput.current?.click()}>{t(loading ? "写真を読み込み中…" : "写真を選択")}</button>
       <fieldset><legend>{t("ロゴプリセット")}</legend>{snsPresets.map((p, i) => <button key={p.id} aria-pressed={i === preset} disabled={busy} onClick={() => setPreset(i)}>{t(p.label)}<small>{p.width} × {p.height}px</small></button>)}</fieldset>
+      <fieldset><legend>{t("ロゴの文字色")}</legend>{(["black", "white"] as const).map(color => <button key={color} aria-pressed={textColor === color} disabled={busy || loading} onClick={() => setTextColor(color)}>{t(color === "black" ? "黒文字" : "白文字")}</button>)}</fieldset>
       <label>{t("拡大")}<input aria-label={t("拡大")} type="range" min="1" max="4" step="0.01" disabled={!photo || preview || busy} value={crop.zoom} onChange={e => setCrop(c => ({ ...c, zoom: Number(e.target.value) }))}/></label>
       <div className="sns-actions"><button disabled={!photo || busy} onClick={() => setCrop({ zoom: 1, x: 0, y: 0 })}>{t("構図をリセット")}</button><button aria-pressed={preview} disabled={busy} onClick={() => setPreview(!preview)}>{t(preview ? "編集に戻る" : "プレビュー")}</button></div>
       <p>{t("写真をドラッグして位置を調整できます。矢印キーでも移動できます。")}</p>

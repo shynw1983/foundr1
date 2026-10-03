@@ -3,23 +3,23 @@ import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import sharp from 'sharp';
-const evidence='/tmp/sns-evidence';
+const evidence='/tmp/sns-evidence';const base=process.env.SNS_BASE||'http://localhost:3136';
 const browser=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true,args:['--no-first-run','--no-default-browser-check']});
 const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
-const logo=await fs.readFile('assets/sns/maamaa-complete-logo.png');
+const logos=Object.fromEntries(await Promise.all(['black','white'].map(async color=>[color,await fs.readFile(`assets/sns/maamaa-complete-logo-${color}.png`)])));
 const payload=Buffer.from(JSON.stringify({role:'owner',sessionId:'00000000-0000-4000-8000-000000000001',expiresAt:Date.now()+3600000})).toString('base64url');
 const signature=crypto.createHmac('sha256','postgresql://local:local@localhost:5432/local').update(payload).digest('base64url');
-await page.setCookie({name:'foundr1_os_session',value:payload+'.'+signature,url:'http://localhost:3136'});
+await page.setCookie({name:'foundr1_os_session',value:payload+'.'+signature,url:base});
 await page.setRequestInterception(true);
 page.on('request',r=>{
  const u=new URL(r.url());
- if(u.pathname==='/api/sns')return void r.respond(u.searchParams.has('asset')?{status:200,contentType:'image/png',body:logo}:{status:200,contentType:'application/json',body:JSON.stringify({stores:[{id:'test-maamaa',name:'まぁ麻 · テスト店舗'}],canManage:true})});
+ if(u.pathname==='/api/sns')return void r.respond(u.searchParams.has('asset')?{status:200,contentType:'image/png',body:logos[u.searchParams.get('color')||'black']}:{status:200,contentType:'application/json',body:JSON.stringify({stores:[{id:'test-maamaa',name:'まぁ麻 · テスト店舗'}],canManage:true})});
  if(u.pathname.startsWith('/api/'))return void r.respond({status:200,contentType:'application/json',body:JSON.stringify({employee:{role:'owner',name:'Test',permittedNavPaths:['/os/sns','/store']},access:{role:'owner',stores:[{id:'test-maamaa',name:'まぁ麻 · テスト店舗'}]},selectedStoreId:'test-maamaa',runs:[],notifications:[],settings:{}})});
  if(r.method()!=='GET')throw Error('Unexpected non-GET request '+r.url());
  void r.continue();
 });
 try{
- await page.goto('http://localhost:3136/os/sns',{waitUntil:'networkidle0',timeout:90000});
+ await page.goto(base+'/os/sns',{waitUntil:'networkidle0',timeout:90000});
  await page.waitForFunction(()=>document.querySelector('input[type=file]')&&!Array.from(document.querySelectorAll('button')).find(x=>x.textContent==='写真を選択')?.disabled);
  const click=async text=>page.evaluate(t=>{const b=Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()===t||b.textContent.startsWith(t));if(!b)throw Error(t);b.click()},text);
  const upload=async file=>{await (await page.$('input[type=file]')).uploadFile(file);await page.waitForFunction(()=>!Array.from(document.querySelectorAll('button')).find(x=>x.textContent==='画像を保存')?.disabled);};
