@@ -52,7 +52,7 @@ const orderModulePaths = new Set([
   "/os/suppliers",
   "/os/product-comparisons"
 ]);
-const analyticsModulePaths = new Set(["/os/analytics", "/os/analytics/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit", "/os/analytics/competitors"]);
+const analyticsModulePaths = new Set(["/os/analytics/menu-ranking", "/os/analytics", "/os/analytics/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit", "/os/analytics/competitors"]);
 const storeOperationsModulePaths = new Set(["/os/inventory", "/os/procedures", "/os/field-notes", "/os/reports", "/os/feedback"]);
 const posModulePaths = new Set(["/os/pos", "/os/pos/reconciliation", "/os/pos/table-order", "/os/menus", "/os/brand-sites", "/os/loyalty"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/requests", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff"]);
@@ -67,6 +67,7 @@ export const canonicalNavItems: OsNavItem[] = [
   { label: "証憑管理", href: "/os/vouchers", icon: ReceiptText },
   { label: "経営分析", href: "/os/analytics", icon: LineChart },
   { label: "売上分析", href: "/os/analytics/sales", icon: ChartColumn },
+  { label: "メニューランキング", href: "/os/analytics/menu-ranking", icon: MenuSquare },
   { label: "人件費分析", href: "/os/analytics/labor", icon: WalletCards },
   { label: "原価・経費分析", href: "/os/analytics/cost", icon: Boxes },
   { label: "経費設定", href: "/os/analytics/expenses", icon: Boxes },
@@ -177,6 +178,7 @@ export const navModules: OsNavModule[] = [
     paths: [
       { href: "/os/analytics" },
       { href: "/os/analytics/sales" },
+      { href: "/os/analytics/menu-ranking" },
       { href: "/os/sales" },
       { href: "/os/analytics/labor" },
       { href: "/os/analytics/cost" },

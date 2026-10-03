@@ -21,7 +21,8 @@
     "apk:os": "node scripts/publish-android-apk.mjs os",
     "apk:member": "node scripts/publish-android-apk.mjs member",
     "apk:staff": "node scripts/publish-android-apk.mjs staff",
-    "apk:bridge": "node scripts/publish-android-apk.mjs bridge"
+    "apk:bridge": "node scripts/publish-android-apk.mjs bridge",
+    "prebuild": "node scripts/publish-menu-ranking-snapshot.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

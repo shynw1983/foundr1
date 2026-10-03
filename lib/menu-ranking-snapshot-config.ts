@@ -1,0 +1,2 @@
+export const menuRankingSnapshotSha256 = "70d18b0848c813fc7da4ed13ed5265b90cce05629ed79cae5d5b4a4fe65d8adf";
+export const menuRankingSnapshotPath = "menu-ranking/2026-09/70d18b0848c813fc7da4ed13ed5265b90cce05629ed79cae5d5b4a4fe65d8adf.json";
