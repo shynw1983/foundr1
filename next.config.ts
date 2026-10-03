@@ -41,6 +41,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@sparticuz/chromium"],
   outputFileTracingIncludes: {
+    "/api/sns": ["./assets/sns/*.png"],
     "/api/public/orders/receipt/preview-pdf": [
       "./node_modules/@sparticuz/chromium/bin/**/*",
       "./fonts/**/*",

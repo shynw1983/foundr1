@@ -103,7 +103,7 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     category: "モジュール",
     defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
     lockedRoles: ["owner"],
-    navPaths: ["/os/procedures"]
+    navPaths: ["/os/procedures", "/os/sns"]
   },
   {
     key: "module.pos",

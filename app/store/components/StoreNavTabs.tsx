@@ -27,6 +27,7 @@ const tabs = [
   { label: "POS", href: "/store/pos", icon: ShoppingCart },
   { label: "納品確認", href: "/store/receiving", icon: PackageCheck },
   { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
+  { label: "SNS素材作成", href: "/store/sns", icon: Tags },
   { label: "手順書", href: "/store/procedures", icon: BookOpen },
   { label: "問題報告", href: "/store/feedback", icon: MessageSquareWarning },
   { label: "OS", href: "/os", icon: Settings }
@@ -56,7 +57,7 @@ function formatStoreClock(date: Date) {
   return { dateText, timeText };
 }
 
-export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" | "notifications" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "receiving" | "feedback" | "devices" }) {
+export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" | "notifications" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "receiving" | "feedback" | "devices" | "sns" }) {
   const activeHref = active === "home"
     ? "/store"
     : active === "kitchen"
@@ -78,9 +79,12 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
   const mobileDisplayMenuRef = useRef<HTMLDivElement | null>(null);
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
+  const [snsAvailable, setSnsAvailable] = useState(false);
+  useEffect(() => { let alive = true; fetch("/api/sns").then(r => r.ok ? r.json() : null).then(d => { if (alive) setSnsAvailable(Boolean(d?.stores?.length)); }).catch(() => {}); return () => { alive = false; }; }, [storeContext?.selectedStoreId]);
+  const authorizedTabs = tabs.filter(tab => tab.href !== "/store/sns" || snsAvailable);
   const visibleTabs = employeeRole === null || employeeRole === "store_terminal"
-    ? tabs.filter((tab) => tab.href !== "/os")
-    : tabs;
+    ? authorizedTabs.filter((tab) => tab.href !== "/os")
+    : authorizedTabs;
   const visibleDisplayTabs = displayTabs;
   const isDisplayActive = visibleDisplayTabs.some((tab) => tab.href === activeHref);
   const storeOptions = storeContext?.access?.stores ?? [];

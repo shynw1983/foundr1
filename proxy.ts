@@ -33,6 +33,7 @@ const defaultRoleNavPaths: Record<string, string[]> = {
     "/os/brand-sites",
     "/os/loyalty",
     "/os/procedures",
+    "/os/sns",
     "/os/pos",
     "/os/settings",
     "/os/system-usage"
@@ -68,6 +69,7 @@ const defaultRoleNavPaths: Record<string, string[]> = {
     "/os/brand-sites",
     "/os/loyalty",
     "/os/procedures",
+    "/os/sns",
     "/os/pos"
   ],
   store_owner: ["/os", "/staff", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
@@ -87,6 +89,7 @@ const storeTerminalAllowedPaths = [
   "/store/pos",
   "/store/pos/customer-display",
   "/store/procedures",
+  "/store/sns",
   "/store/feedback"
 ];
 
@@ -150,6 +153,8 @@ function getPermittedPagePaths(session: ProxySession) {
 function isPermittedPagePath(pathname: string, permittedPaths: Set<string>) {
   if (pathname === "/os/logout" || pathname === "/store/logout" || pathname === "/staff/logout" || pathname === "/os/privacy-consent" || pathname === "/staff/privacy-consent") return true;
   if (pathname === "/os") return true;
+  // Existing sessions already carry the parent module permission before SNS rollout.
+  if ((pathname === "/os/sns" || pathname.startsWith("/os/sns/")) && permittedPaths.has("/os/procedures")) return true;
   return Array.from(permittedPaths).some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 

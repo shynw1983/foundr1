@@ -53,7 +53,7 @@ const orderModulePaths = new Set([
   "/os/product-comparisons"
 ]);
 const analyticsModulePaths = new Set(["/os/analytics/menu-ranking", "/os/analytics", "/os/analytics/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit", "/os/analytics/competitors"]);
-const storeOperationsModulePaths = new Set(["/os/inventory", "/os/procedures", "/os/field-notes", "/os/reports", "/os/feedback"]);
+const storeOperationsModulePaths = new Set(["/os/inventory", "/os/procedures", "/os/sns", "/os/field-notes", "/os/reports", "/os/feedback"]);
 const posModulePaths = new Set(["/os/pos", "/os/pos/reconciliation", "/os/pos/table-order", "/os/menus", "/os/brand-sites", "/os/loyalty"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/requests", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff"]);
 const settingsModulePaths = new Set(["/os/products", "/os/stores", "/os/settings", "/os/system-usage"]);
@@ -88,6 +88,7 @@ export const canonicalNavItems: OsNavItem[] = [
   { label: "メニュー管理", href: "/os/menus", icon: MenuSquare },
   { label: "ブランドサイト", href: "/os/brand-sites", icon: Globe2 },
   { label: "商品比較", href: "/os/product-comparisons", icon: Search },
+  { label: "SNSテンプレート", href: "/os/sns", icon: FileText },
   { label: "手順書管理", href: "/os/procedures", icon: ClipboardCheck },
   { label: "POS", href: "/os/pos", icon: ShoppingCart },
   { label: "日次レジ締め", href: "/os/pos/reconciliation", icon: WalletCards },
@@ -139,6 +140,7 @@ export const navModules: OsNavModule[] = [
     icon: ClipboardCheck,
     paths: [
       { href: "/os/inventory" },
+      { href: "/os/sns" },
       { href: "/os/procedures" },
       { href: "/os/field-notes" },
       { href: "/os/reports" },
@@ -203,6 +205,7 @@ export const navModules: OsNavModule[] = [
 function getModuleNavPaths(pathname: string) {
   if (
     pathname === "/os/inventory" || pathname.startsWith("/os/inventory/")
+    || pathname === "/os/sns" || pathname.startsWith("/os/sns/")
     || pathname === "/os/procedures" || pathname.startsWith("/os/procedures/")
     || pathname === "/os/field-notes"
     || pathname === "/os/reports"
@@ -248,7 +251,7 @@ function canShowNavItem(role: string, item: OsNavItem, permittedNavPaths: Set<st
 }
 
 function filterPermittedNavItems(_navItems: OsNavItem[], role: string, permittedNavPaths: Set<string>) {
-  const availableNavItems = canonicalNavItems;
+  const availableNavItems = canonicalNavItems.filter(item => item.href !== "/os/sns" || _navItems.some(input => input.href === item.href));
   if (!role) return [];
   return availableNavItems.filter((item) => canShowNavItem(role, item, permittedNavPaths));
 }
@@ -275,6 +278,9 @@ function buildPermittedNavModules(navItems: OsNavItem[], role: string, permitted
 
 export function usePermittedNavItems(navItems: OsNavItem[]) {
   const pathname = usePathname();
+  const [snsAvailable, setSnsAvailable] = useState(false);
+  useEffect(() => { let alive = true; fetch("/api/sns?surface=os").then(r => r.ok ? r.json() : null).then(d => { if (alive) setSnsAvailable(Boolean(d?.stores?.length)); }).catch(() => {}); return () => { alive = false; }; }, [pathname]);
+  const scopedNavItems = useMemo(() => navItems.filter(item => item.href !== "/os/sns" || snsAvailable), [navItems, snsAvailable]);
   const cachedEmployee = getCachedCurrentEmployee();
   const cachedNavigationSettings = getCachedNavigationSettings();
   const [role, setRole] = useState(() => cachedEmployee?.role ?? "");
@@ -315,14 +321,18 @@ export function usePermittedNavItems(navItems: OsNavItem[]) {
   }, []);
 
   return useMemo(() => {
-    const permittedItems = filterPermittedNavItems(navItems, role, permittedNavPaths);
+    const permittedItems = filterPermittedNavItems(scopedNavItems, role, permittedNavPaths);
     return permittedItems
       .filter((item) => canShowInCurrentModule(pathname, item))
       .map((item) => ({ ...item, beta: betaNavPaths.has(item.href) }));
-  }, [betaNavPaths, navItems, pathname, permittedNavPaths, role]);
+  }, [betaNavPaths, scopedNavItems, pathname, permittedNavPaths, role]);
 }
 
 export function usePermittedNavModules(navItems: OsNavItem[]) {
+  const pathname = usePathname();
+  const [snsAvailable, setSnsAvailable] = useState(false);
+  useEffect(() => { let alive = true; fetch("/api/sns?surface=os").then(r => r.ok ? r.json() : null).then(d => { if (alive) setSnsAvailable(Boolean(d?.stores?.length)); }).catch(() => {}); return () => { alive = false; }; }, [pathname]);
+  const scopedNavItems = useMemo(() => navItems.filter(item => item.href !== "/os/sns" || snsAvailable), [navItems, snsAvailable]);
   const cachedEmployee = getCachedCurrentEmployee();
   const cachedNavigationSettings = getCachedNavigationSettings();
   const [role, setRole] = useState(() => cachedEmployee?.role ?? "");
@@ -362,11 +372,14 @@ export function usePermittedNavModules(navItems: OsNavItem[]) {
     };
   }, []);
 
-  return useMemo(() => buildPermittedNavModules(navItems, role, permittedNavPaths, betaNavPaths), [betaNavPaths, navItems, permittedNavPaths, role]);
+  return useMemo(() => buildPermittedNavModules(scopedNavItems, role, permittedNavPaths, betaNavPaths), [betaNavPaths, scopedNavItems, permittedNavPaths, role]);
 }
 
 export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
   const pathname = usePathname();
+  const [snsAvailable, setSnsAvailable] = useState(false);
+  useEffect(() => { let alive = true; fetch("/api/sns?surface=os").then(r => r.ok ? r.json() : null).then(d => { if (alive) setSnsAvailable(Boolean(d?.stores?.length)); }).catch(() => {}); return () => { alive = false; }; }, [pathname]);
+  const scopedNavItems = useMemo(() => navItems.filter(item => item.href !== "/os/sns" || snsAvailable), [navItems, snsAvailable]);
   const cachedEmployee = getCachedCurrentEmployee();
   const cachedNavigationSettings = getCachedNavigationSettings();
   const [role, setRole] = useState(() => cachedEmployee?.role ?? "");
@@ -407,7 +420,7 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
     };
   }, []);
 
-  const visibleModules = useMemo(() => buildPermittedNavModules(navItems, role, permittedNavPaths, betaNavPaths), [betaNavPaths, navItems, permittedNavPaths, role]);
+  const visibleModules = useMemo(() => buildPermittedNavModules(scopedNavItems, role, permittedNavPaths, betaNavPaths), [betaNavPaths, scopedNavItems, permittedNavPaths, role]);
   const activeModule = visibleModules.find((module) => module.paths.some((path) => !path.isShortcut && (pathname === path.href || (path.href !== "/os" && pathname.startsWith(`${path.href}/`)))))
     ?? visibleModules.find((module) => module.paths.some((path) => pathname === path.href || (path.href !== "/os" && pathname.startsWith(`${path.href}/`))));
   const openModule = visibleModules.find((module) => module.id === openModuleId);
