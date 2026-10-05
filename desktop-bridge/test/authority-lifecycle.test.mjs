@@ -9,6 +9,7 @@ function fixture() {
  const payload={authoritativePublication:true,sourceId:'s',storeId:'os',platformKey:'demae_can',merchantId:'1',revision:1,newItemsHidden:true,imagePolicy:'read_only',targets};
  const rows=[{kind:'category',id:'old',name:'old',price:null,childIds:['food'],hidden:false},{kind:'category',id:'new',name:'new',price:null,childIds:[],hidden:true},{kind:'item',id:'food',name:'food',price:100,description:'',parentIds:['old'],groupIds:[],hidden:false,native:{categoryItemLinkList:[{categoryCode:'old'}]}}];
  const driver=new AuthorityNativeDriver({},payload);driver.snapshot=async()=>structuredClone(rows);
+ driver.client.catalog=async()=>({items:{categoryList:rows.filter(row=>row.kind==='category').map(row=>({categoryCode:row.id}))}});
  const writes=[];
  driver.client.updateItem=async(id,patch)=>{
   writes.push(patch);const item=rows.find(row=>row.kind==='item'&&row.id===id);

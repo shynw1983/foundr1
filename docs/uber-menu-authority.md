@@ -169,6 +169,37 @@ Runtime log inspection found a Node dependency deprecation warning, not a menu
 sync failure. Log drain configuration was not inspected. Production command
 results and source state, rather than older notes below, determine live status.
 
+### Manual unchanged-source reconciliation — 2026-10-06
+
+A manual OS source check must independently verify Rocket Now and Demae even
+when Uber content has not changed. An unchanged import keeps the revision and
+OS identities; it schedules the ordinary full native publisher with current
+mappings, source projection, creation receipts and migration journals. Existing
+same-revision commands keep their IDs and results. A capture-scoped marker
+prevents a repeated acknowledgement from replaying the same batch.
+
+Source/store/revision/configuration and the preparation manifest are checked
+again in the source-locked queue transaction. Pending removals, changed physical
+identity, uncertain receipts and unknown platform members still stop writes.
+Only successful independent native readback may mark a platform verified.
+Scheduled unchanged scans do not replay successful or deterministic failures;
+temporary network failures get at most two additional recoveries per revision.
+Manual verification never restores stock or changes Uber's original menu.
+
+Ordering is verified as an ordered identity list, not a sorted set. This covers
+business categories, products within each category, each product's option
+groups and the options within a group. Rocket uses its official
+`menus/update-expose-order` request with `menuId`, `exposeOrder` and optional
+`dishOrders`; reading honors explicit `exposeOrder` values. Demae's dedicated
+`menu-pattern/{code}/category-list-order` PATCH takes
+`menuPatternCategoryLinkList` entries with `categoryCode` and `dispOrder`.
+Its separate internal recommendation category is retained last in that PATCH,
+matching the native sorting UI. Do not confuse this with the whole-pattern PUT's
+`displayOrder` field or change pattern assignment/availability to reorder it.
+Only mapped business categories are reordered within their native slots;
+unmanaged categories and existing stock/image/content fields are preserved.
+An ignored save or unverifiable membership/order must remain a failed result.
+
 ### Lifecycle and native ordering fixes — 2026-09-08
 
 - The obsolete rice-cake mappings were backed up and removed after native

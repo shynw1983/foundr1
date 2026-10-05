@@ -136,6 +136,22 @@ test('Rocket readback uses explicit display order rather than API creation order
  const client=new RocketMenuClient({request:async()=>({...dish(),options:[{optionId:3,exposeOrder:2},{optionId:8,exposeOrder:0},{optionId:9,exposeOrder:1}]})},'1');
  assert.deepEqual((await client.detail('12')).options.map(row=>row.optionId),[8,9,3]);
 });
+test('Rocket catalog uses relationship display order for categories, dishes and options',async()=>{
+ const client=new RocketMenuClient({request:async path=>path.includes('all-menu-dishes')
+  ?{menus:[{menuId:2,exposeOrder:1,dishes:[]},{menuId:1,exposeOrder:0,dishes:[{dishId:8,exposeOrder:1},{dishId:9,exposeOrder:0}]}]}
+  :[{optionId:3,optionItems:[{optionItemId:4,exposeOrder:2},{optionItemId:5,exposeOrder:0}]}]},'1');
+ const catalog=await client.catalog();
+ assert.deepEqual(catalog.menus.map(row=>row.menuId),[1,2]);
+ assert.deepEqual(catalog.menus[0].dishes.map(row=>row.dishId),[9,8]);
+ assert.deepEqual(catalog.groups[0].optionItems.map(row=>row.optionItemId),[5,4]);
+});
+test('Demae item group reads use explicit dispOrder, keeping creation order when absent',async()=>{
+ const client=new DemaeMenuClient({request:async()=>({itemCode:'a',sizeInfoList:[
+  {sizeCode:'1',sizeOptionGroupLinkList:[{optionGroupCode:'b',dispOrder:2},{optionGroupCode:'a',dispOrder:1}]},
+  {sizeCode:'2',sizeOptionGroupLinkList:[{optionGroupCode:'b'},{optionGroupCode:'a'}]}]})},'1','live');
+ const actual=await client.item('a');
+ assert.deepEqual(actual.sizeInfoList.map(size=>size.sizeOptionGroupLinkList.map(row=>row.optionGroupCode)),[['a','b'],['b','a']]);
+});
 test('Demae refuses linking a draft before any merchant request',async()=>{
  let requests=0;
  const client=new DemaeMenuClient({request:async()=>{requests++;}},'1','one');

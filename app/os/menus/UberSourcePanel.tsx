@@ -12,7 +12,7 @@ type Job={id:string;platform:string;status:string;updated_at:string;last_error:s
 
 type SourceData={
   source:null|{enabled:boolean;auto_publish:boolean;revision:number;last_checked_at:string|null;last_error:string};
-  runs:Array<{id:string;revision:number;created_at:string;trigger:string;summary:{added:number;observed:number;archived:number;pendingRemoval:number;moved?:number;renamed?:number;repriced?:number;noChanges?:boolean;changes?:MenuChange[]}}>;
+  runs:Array<{id:string;revision:number;created_at:string;trigger:string;summary:{added:number;observed:number;archived:number;pendingRemoval:number;moved?:number;renamed?:number;repriced?:number;noChanges?:boolean;changes?:MenuChange[];reconciliation?:{queued:number;blocked:Array<{platform?:string;code:string}>}}}>;
   jobs:Job[];jobHistory:Job[];
   successes:Array<{platform:string;revision:string|null;completed_at:string}>;
   devices:Array<{platform:string;last_seen_at:string|null}>;
@@ -67,7 +67,7 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
   const source=data?.source;
   const active=data?.jobs.some(job=>['pending','processing'].includes(job.status));
   const failed=data?.jobs.filter(job=>job.status==='failed')??[];
-  const jobLabel=(job:Job)=>t(job.status==='processing'&&job.phase?phaseNames[job.phase]??statusNames.processing:job.status==='pending'&&job.attempts>0?'自動再試行を待機中':statusNames[job.status]??job.status);
+  const jobLabel=(job:Job)=>job.status==='processing'&&job.phase==='ordering'?label('並び順を同期中','正在同步顺序','正在同步順序'):t(job.status==='processing'&&job.phase?phaseNames[job.phase]??statusNames.processing:job.status==='pending'&&job.attempts>0?'自動再試行を待機中':statusNames[job.status]??job.status);
   const problem=menuSyncIssue(failed[0]?.last_error||source?.last_error,language,{issues:failed[0]?.issues});
   const retryButton=(job:Job)=>canRetryMenuJob(job,data?.jobs.find(row=>row.platform===job.platform)?.id,source?.revision??0)?<button type="button" className="secondary-button compact-button" disabled={busy||active||!source?.enabled} onClick={()=>void submit('retry',job.id)}>{t('接続・保存結果を確認して再試行')}</button>:null;
   return <section id="uber-menu-sync" className={`menu-publish-preview ${styles.panel}`} data-i18n-ignore aria-label={t('メニュー同期センター')}>
@@ -107,14 +107,15 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
         </li>;
       })}</ul>
       <div className={styles.history}><strong>{t('同期履歴')}</strong>
-        {data?.runs.length?data.runs.slice(0,showAll?20:5).map(run=><details key={run.id} className={styles.run}><summary><span>{dateLabel(run.created_at)} · {t('取込版')} {run.revision} · {t(run.trigger==='manual'?'手動':run.trigger==='scheduled'?'自動':'過去の記録')}</span><small>{run.summary.noChanges?t('確認済み・変更なし（配信なし）'):`${t('新規')} ${run.summary.added} · ${t('名称変更')} ${run.summary.renamed??'—'} · ${t('価格変更')} ${run.summary.repriced??'—'} · ${t('移動')} ${run.summary.moved??'—'} · ${t('削除')} ${run.summary.archived}`}</small></summary>
-          {!run.summary.noChanges&&<div className={styles.runJobs}>{data.jobHistory.filter(job=>job.revision===String(run.revision)).map(job=>{
+        {data?.runs.length?data.runs.slice(0,showAll?20:5).map(run=><details key={run.id} className={styles.run}><summary><span>{dateLabel(run.created_at)} · {t('取込版')} {run.revision} · {t(run.trigger==='manual'?'手動':run.trigger==='scheduled'?'自動':'過去の記録')}</span><small>{run.summary.noChanges?(run.summary.reconciliation?.queued?label('Uber は変更なし・各社の確認を予約','Uber 无变化·已安排平台核对','Uber 無變化·已安排平台核對'):t('確認済み・変更なし（配信なし）')):`${t('新規')} ${run.summary.added} · ${t('名称変更')} ${run.summary.renamed??'—'} · ${t('価格変更')} ${run.summary.repriced??'—'} · ${t('移動')} ${run.summary.moved??'—'} · ${t('削除')} ${run.summary.archived}`}</small></summary>
+          {(!run.summary.noChanges||Boolean(run.summary.reconciliation?.queued))&&<div className={styles.runJobs}>{data.jobHistory.filter(job=>job.revision===String(run.revision)).map(job=>{
             const issue=menuSyncIssue(job.last_error,language,{issues:job.issues});
             return <div key={job.id}><span>{platformNames[job.platform]}：{jobLabel(job)}</span>{issue&&<p>{t(issue.title)} · {t(issue.action)}</p>}{job.retries?.map((retry,index)=><small key={`${retry.at}-${index}`}>{dateLabel(retry.at)} · {t('手動再試行')} · {t(menuSyncIssue(retry.error,language)?.title??'同期を完了できませんでした')}</small>)}{job.status==='failed'&&data.jobs.some(row=>row.id===job.id)&&issue?.retry!==false&&retryButton(job)}</div>;
           })}</div>}
           {run.summary.pendingRemoval>0&&<p>{t('削除候補（再確認待ち）')}：{run.summary.pendingRemoval}</p>}
           {meaningfulMenuChanges(run.summary.changes).length?<div className={styles.changes}>{meaningfulMenuChanges(run.summary.changes).map((change,index)=><div key={`${change.sourceKey}-${index}`}><strong>{change.name}</strong><span>{t(change.field)}</span><p><span>{label('変更前','修改前','修改前')}：{menuChangeValue(change,change.before,language)}</span><br/><span>{label('変更後','修改后','修改後')}：{menuChangeValue(change,change.after,language)}</span></p>{change.field==='数量ルール'&&<details><summary>{label('詳細ルール（技術情報）','完整规则（技术信息）','完整規則（技術資訊）')}</summary><code>{change.before} → {change.after}</code></details>}{change.kind==='added'&&<small>{t('新規商品は非公開')}</small>}</div>)}</div>:<p>{run.summary.changes?.length?label('設定値は同じです。データ内の項目順だけの違いは変更として表示しません。','设置值没有变化，已隐藏仅字段排列顺序不同的记录。','設定值沒有變化，已隱藏僅欄位排列順序不同的記錄。'):t(run.summary.noChanges?'メニューに変更はありません。':'この履歴には詳細な差分が保存されていません。')}</p>}
-          {run.summary.noChanges&&<p className={styles.meta}>{label('今回の確認では再配信していません。過去の配信失敗が解消したことを意味しません。','这次检查未重新发布菜单，不代表之前的同步失败已解决。','這次檢查未重新發佈菜單，不代表之前的同步失敗已解決。')}</p>}
+          {run.summary.noChanges&&<p className={styles.meta}>{run.summary.reconciliation?.queued?label('Uber の原本は変わっていません。各社の現在のメニューと並び順を再確認し、差分だけ修正します。完了結果は各社の状態で確認してください。','Uber 原本没有变化。已安排重新核对各平台当前菜单和顺序，只修正差异；是否完成请以上方平台结果为准。','Uber 原本沒有變化。已安排重新核對各平台目前菜單及順序，只修正差異；是否完成請以上方平台結果為準。'):label('今回の確認では再配信していません。過去の配信失敗が解消したことを意味しません。','这次检查未重新发布菜单，不代表之前的同步失败已解决。','這次檢查未重新發佈菜單，不代表之前的同步失敗已解決。')}</p>}
+          {run.summary.reconciliation?.blocked.map((block,index)=>{const issue=menuSyncIssue(block.code,language);return issue?<p className={styles.meta} key={`${block.platform??''}-${index}`}>{block.platform?`${platformNames[block.platform]??''}：`:''}{issue.title} · {issue.action}</p>:null;})}
         </details>):<p>{t('未実行')}</p>}
         {(data?.runs.length??0)>5&&<button type="button" className="secondary-button compact-button" onClick={()=>setShowAll(!showAll)}>{t(showAll?'最近5件に戻す':'過去の履歴を表示')}</button>}
       </div>

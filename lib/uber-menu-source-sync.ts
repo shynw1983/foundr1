@@ -5,6 +5,8 @@ import { sql } from './db.ts';
 import { resolveUberOptionMove, missingUberSourceObjects, pendingUberRemovals } from './uber-menu-identity.ts';
 import { buildUberPublication, type UberPublicationMapping, type UberPublicationNode, type UberMenuNameAdaptation } from './uber-menu-publication.ts';
 import { splitUberName, uberContextPrice, resolveUberBasePrice, uberSourceContentHash, validateUberSourceCatalog, confirmedUberRemovals, UBER_PRICE_RULE_VERSION, type UberSourceCatalog } from './uber-menu-authority.ts';
+import {reconcileUberPublications} from './uber-menu-publication-reconcile.ts';
+import {publishBridgeCommandAvailable} from './local-bridge-realtime.ts';
 
 type SourceObject = { sourceKey: string; kind: string; uberId: string; parentUberId: string; targetId: string; priceMode: 'manual' | 'automatic'; archived: boolean; movedFromSourceKey?: string };
 type Node = SourceObject & { name: string; displayNames: Record<string, string>; price: number | null; uberPrice: number | null; description: string; imageUrl: string; sortOrder: number; parentId: string | null; groupKey: string; payload: Record<string, unknown>; isNew: boolean };
@@ -14,8 +16,22 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
   const source = sources[0];
   if (!source) throw new Error('uber_source_not_enabled');
   if(input.bootstrap&&(source.enabled||source.auto_publish||Number(source.revision)!==0||input.verifyRollback))throw Error('uber_bootstrap_requires_disabled_initial_source');
-  const previousRun = await sql`select summary from menu_uber_sync_runs where command_id::text=${input.commandId} and source_id=${source.id}`;
-  if (previousRun.length) return previousRun[0].summary;
+  const previousRun = await sql`select revision,summary from menu_uber_sync_runs where command_id::text=${input.commandId} and source_id=${source.id}`;
+  // A repeated capture ACK may follow an import which committed before its
+  // downstream reconciliation could run. Replay that safe reconciliation, not
+  // the import; capture identity in each queued payload prevents double enqueue.
+  if (previousRun.length) {
+    const summary=previousRun[0].summary as Record<string,unknown>;
+    if(summary.noChanges===true&&!input.dryRun&&!input.verifyRollback&&!input.bootstrap&&Number(previousRun[0].revision)===Number(source.revision)) {
+      const acknowledged=validateUberSourceCatalog(input.catalog,String(source.uber_store_uuid));
+      // A delayed ACK from an older observation is not a new manual decision
+      // to verify today's revision, even if a later scan kept the same revision.
+      if(acknowledged.capturedAt===(source.last_catalog as UberSourceCatalog|null)?.capturedAt
+        &&(!summary.sourceCapturedAt||summary.sourceCapturedAt===acknowledged.capturedAt))
+        return reconcileUnchangedSource(input,Number(previousRun[0].revision),summary,undefined,acknowledged);
+    }
+    return summary;
+  }
   const catalog = validateUberSourceCatalog(input.catalog, String(source.uber_store_uuid));
   const previous = source.last_catalog as UberSourceCatalog | null;
   if (previous && Date.parse(catalog.capturedAt) <= Date.parse(previous.capturedAt)) throw new Error('uber_source_stale_snapshot');
@@ -127,7 +143,7 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
     (node.kind==='item'?items:options).find(old=>old.id===node.targetId)?.price!==node.price ||
     overrides.some(row=>row.kind===node.kind&&row.id===node.targetId&&row.price!==node.price)
   ));
-  const summary = {added:nodes.filter(row=>row.isNew).length,moved:nodes.filter(row=>row.kind==='option' && options.some(old=>old.id===row.targetId && old.parentId!==row.parentId)).length,observed:nodes.length,archived:archived.length,pendingRemoval:missingObjects.length,contentChanged:hash!==source.last_content_hash,changes,renamed:changes.filter(row=>row.kind==='renamed').length,repriced:changes.filter(row=>row.kind==='repriced').length,noChanges:false};
+  const summary = {added:nodes.filter(row=>row.isNew).length,moved:nodes.filter(row=>row.kind==='option' && options.some(old=>old.id===row.targetId && old.parentId!==row.parentId)).length,observed:nodes.length,archived:archived.length,pendingRemoval:missingObjects.length,contentChanged:hash!==source.last_content_hash,changes,renamed:changes.filter(row=>row.kind==='renamed').length,repriced:changes.filter(row=>row.kind==='repriced').length,noChanges:false,sourceCapturedAt:catalog.capturedAt};
   Object.assign(summary,{placementRuleVersion:UBER_PLACEMENT_RULE_VERSION,placementPolicyChanged});
   Object.assign(summary,{priceRuleVersion:UBER_PRICE_RULE_VERSION,pricePolicyChanged,priceDrift});
   if(input.dryRun) return {...summary, dryRun:true, additions:nodes.filter(row=>row.isNew).map(row=>({kind:row.kind,name:row.name,uberId:row.uberId})), prices:nodes.filter(row=>row.price!==null).map(row=>({kind:row.kind,name:row.name,uberPrice:row.uberPrice,osPrice:row.price,mode:row.priceMode})), nodes};
@@ -138,7 +154,9 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
       sql`update menu_uber_sources set last_catalog=${JSON.stringify(catalog)}::jsonb,missing_keys=${pendingKeys},last_checked_at=now(),last_error='',updated_at=now() where id=${source.id}`,
       sql`insert into menu_uber_sync_runs(source_id,command_id,revision,content_hash,summary) values(${source.id},${input.commandId},${source.revision},${hash},${JSON.stringify(summary)}::jsonb)`
     ]);
-    return summary;
+    const retired:UberPublicationNode[]=sourceObjects.filter(row=>row.archived&&!nodes.some(node=>node.sourceKey===row.sourceKey))
+      .map(row=>({...row,name:'',displayNames:{},price:null,uberPrice:null,description:'',imageUrl:'',sortOrder:0,parentId:null,payload:{},archived:true}));
+    return reconcileUnchangedSource(input,Number(source.revision),summary,[...nodes,...retired],catalog);
   }
   const statements = input.bootstrap?[sql`with locked as materialized(select id from menu_uber_sources where id=${source.id} and revision=0 and enabled=false and auto_publish=false for update) select 1/count(*)::int from locked`]:input.verifyRollback ? [sql`update menu_uber_sources set enabled=true where id=${source.id}`,sql`select lock_menu_uber_revision(${source.id},${source.revision})`] : [sql`select lock_menu_uber_revision(${source.id},${source.revision})`];
   for (const node of legacyMissing) statements.push(sql`insert into menu_uber_objects(source_id,source_key,kind,uber_id,parent_uber_id,target_id,price_mode) values(${source.id},${node.sourceKey},${node.kind},${node.uberId},${node.parentUberId},${node.targetId},'manual') on conflict do nothing`);
@@ -231,13 +249,34 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
   return summary;
 }
 
+async function reconcileUnchangedSource(input:{sourceId:string;commandId:string;storeId:string},revision:number,summary:Record<string,unknown>,nodes?:UberPublicationNode[],catalog?:UberSourceCatalog) {
+  const commands=await sql`select payload->>'trigger' as trigger from local_bridge_commands where id::text=${input.commandId}
+    and store_id::text=${input.storeId} and payload->>'sourceId'=${input.sourceId} and payload->>'authoritativeSource'='true'`;
+  const reconciliation=await reconcileUberPublications({sourceId:input.sourceId,storeId:input.storeId,revision,captureCommandId:input.commandId,
+    mode:commands[0]?.trigger==='manual'?'manual':'scheduled',nodes,catalog});
+  if(reconciliation.queued)await publishBridgeCommandAvailable(input.storeId).catch(()=>undefined);
+  const prior=summary.reconciliation as {jobs?:Array<{id:string;platform:string}>}|undefined;
+  const jobs=[...new Map([...(prior?.jobs??[]),...reconciliation.jobs].map(job=>[job.id,job])).values()];
+  // Historical queue counts describe what this capture actually requested, not
+  // whether a duplicate ACK happened to enqueue it for a second time.
+  const updated={...summary,reconciliation:{...reconciliation,queued:jobs.length,jobs}};
+  await sql`update menu_uber_sync_runs set summary=${JSON.stringify(updated)}::jsonb where source_id::text=${input.sourceId}
+    and command_id::text=${input.commandId} and revision=${revision}`;
+  return updated;
+}
+
 export async function scheduleUberSourceScans(storeId?: string) {
   const rows = await sql`select s.* from menu_uber_sources s where enabled=true and (${storeId??null}::text is null or store_id::text=${storeId??''}) and (${Boolean(storeId)} or last_checked_at is null or last_checked_at<now()-interval '10 minutes')`;
   let queued=0;
   for(const source of rows) {
     const key=`uber-authority:${source.id}:${storeId?randomUUID():Math.floor(Date.now()/600000)}`;
-    const result=await sql`insert into local_bridge_commands(store_id,platform,command_type,idempotency_key,payload) select ${source.store_id},'uber_eats','capture_menu_snapshot',${key},${JSON.stringify({brandId:source.brand_id,sourceId:source.id,trigger:storeId?'manual':'scheduled',authoritativeSource:true,expectedUberStoreUuid:source.uber_store_uuid,ruleVersion:'uber-authority-v1',targets:[]})}::jsonb where not exists(select 1 from local_bridge_commands where store_id=${source.store_id} and payload->>'sourceId'=${source.id}::text and status in ('pending','processing')) on conflict(idempotency_key) do nothing returning id`;
-    queued+=result.length;
+    // Share the source lock with publication reconciliation. A bare NOT EXISTS
+    // can race a simultaneous manual retry and leave two active source batches.
+    const result=await sql.transaction([
+      sql`select lock_menu_uber_revision(${source.id},${source.revision})`,
+      sql`insert into local_bridge_commands(store_id,platform,command_type,idempotency_key,payload) select ${source.store_id},'uber_eats','capture_menu_snapshot',${key},${JSON.stringify({brandId:source.brand_id,sourceId:source.id,trigger:storeId?'manual':'scheduled',authoritativeSource:true,expectedUberStoreUuid:source.uber_store_uuid,ruleVersion:'uber-authority-v1',targets:[]})}::jsonb where not exists(select 1 from local_bridge_commands where store_id=${source.store_id} and payload->>'sourceId'=${source.id}::text and status in ('pending','processing')) on conflict(idempotency_key) do nothing returning id`
+    ]);
+    queued+=result[1].length;
   }
   return {queued};
 }

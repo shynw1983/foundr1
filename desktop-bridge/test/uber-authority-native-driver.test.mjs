@@ -32,6 +32,38 @@ test('confirmed retirement retains Demae carrier ownership without trusting unkn
  rows[0].groupIds.push('unknown');
  assert.deepEqual(driver.structureIssues(target,rows,{preflight:true}).map(row=>row.code),['item_group_migration_required']);
 });
+
+test('Demae category item order is applied and verified independently, excluding hidden drafts',async()=>{
+ for(const ignored of [false,true]) {
+  const category={kind:'category',targetId:'category',sourceKey:'category:category',name:'category',mappings:[{externalId:'12'}]};
+  const item=(id,sortOrder)=>({kind:'item',targetId:id,sourceKey:`item:${id}`,parentId:'category',sortOrder,mappings:[{externalId:id}]});
+  const payload={platformKey:'demae_can',merchantId:'1',menuPatternCode:'live',targets:[category,item('1',0),item('15',1),item('2',2)]};
+  const rows=[{kind:'category',id:'12',childIds:['2','1'],name:'category',hidden:false},
+   {kind:'item',id:'1',hidden:false},{kind:'item',id:'2',hidden:true},{kind:'item',id:'15',staged:true,hidden:true}];
+  const driver=new AuthorityNativeDriver({},payload);driver.categorySnapshot=rows;
+  assert.deepEqual(driver.structureIssues(category,rows,{preflight:true}),[]);
+  assert.equal(driver.structureIssues(category,rows).length,1);
+  let writes=0;
+  driver.client.updateCategory=async(id,patch)=>{writes++;assert.equal(id,'12');assert.deepEqual(patch,{itemCodes:['1','2']});if(!ignored)rows[0].childIds=patch.itemCodes;};
+  await driver.updateRelationships(category);
+  assert.equal(writes,1);driver.observationSnapshot=rows;
+  assert.equal((await driver.observe(category))[0].structureVerified,!ignored);
+  assert.equal(rows[3].hidden,true);assert.equal(rows[3].staged,true);
+ }
+});
+
+test('category sorting never removes hidden retired records or adopts unknown members',async()=>{
+ const category={kind:'category',targetId:'category',sourceKey:'category:category',mappings:[{externalId:'12'}]};
+ const item=(id,sortOrder,archived=false)=>({kind:'item',targetId:id,sourceKey:`item:${id}`,parentId:'category',sortOrder,archived,mappings:[{externalId:id}]});
+ const driver=new AuthorityNativeDriver({}, {platformKey:'rocket_now',merchantId:'1',targets:[category,item('1',0),item('2',1),item('3',2,true)]});
+ const rows=[{kind:'category',id:'12',childIds:['2','3','1']},{kind:'item',id:'1'},{kind:'item',id:'2'},{kind:'item',id:'3',hidden:true}];
+ driver.categorySnapshot=rows;let writes=0;
+ driver.client.reorderCategoryItems=async(id,ids)=>{writes++;assert.equal(id,'12');assert.deepEqual(ids,['1','2','3']);rows[0].childIds=ids;};
+ await driver.updateRelationships(category);assert.equal(writes,1);
+ assert.deepEqual(driver.structureIssues(category,rows),[]);assert.equal(rows[3].hidden,true);
+ rows[0].childIds.push('unknown');
+ await assert.rejects(()=>driver.updateRelationships(category),/relationship_drift/);assert.equal(writes,1);
+});
 test('same-name options in another group are safe only with a distinct exact mapped owner',()=>{
  const {payload,driver,rows}=fixture();
  const owner=payload.targets[2];owner.sourceKey='option:g:old';

@@ -75,6 +75,10 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
     await reportProgress({phase:'retiring',sourceKey:target.sourceKey,targetName:target.name});
     await driver.retire(target,payload);
   }
+  if(typeof driver.updateCategoryOrder==='function') {
+    await reportProgress({phase:'relationships',completed:relationshipTotal,total:relationshipTotal,orderScope:'categories'});
+    await driver.updateCategoryOrder(payload);
+  }
   completed=0;
   const verifyTotal=payload.targets.filter(target=>!target.quarantined).length;
   await reportProgress({phase:'verifying',completed,total:verifyTotal});

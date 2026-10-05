@@ -6,6 +6,7 @@ import {DemaeStagedOption} from './demae-staged-option.mjs';
 import {DemaeDraftClient} from './demae-draft-client.mjs';
 import {collectDemaeInternalCarriers,readDemaeInternalCarriers} from './demae-internal-carriers.mjs';
 import {migrateRocketOption,rocketMigrationIdentity} from './rocket-option-migration.mjs';
+import {nativeMenuOrder} from './native-menu-order.mjs';
 
 const ordered=rows=>[...rows].sort((a,b)=>a.sortOrder-b.sortOrder);
 const equalIds=(a,b)=>sameMenuValue(a.map(String),b.map(String));
@@ -49,6 +50,13 @@ export class AuthorityNativeDriver {
       row.kind==='option_group'&&row.id===id&&row.staged&&!row.internalCarrier&&row.childIds.length===0)));
   }
   children(target){return ordered(this.payload.targets.filter(row=>!row.archived&&!row.quarantined&&row.parentId===target.targetId));}
+  categoryItemIds(target,rows){return this.children(target).filter(child=>child.kind==='item').flatMap(child=>this.ids(child))
+    .filter(id=>!rows.some(row=>row.kind==='item'&&row.id===id&&row.staged));}
+  retainedCategoryItemIds(row,rows,{preflight=false}={}){return row.childIds.filter(id=>!this.payload.targets.some(child=>
+    child.archived&&!child.quarantined&&child.kind==='item'&&this.ids(child).includes(String(id))
+    &&(preflight||rows.some(item=>item.kind==='item'&&item.id===String(id)&&item.hidden))));}
+  categoryIds(){return ordered(this.payload.targets.filter(target=>target.kind==='category'&&!target.archived&&!target.quarantined))
+    .flatMap(target=>this.ids(target));}
   ownsItem(id){return this.payload.targets.some(target=>target.kind==='item'&&!target.quarantined&&this.ids(target).includes(String(id)));}
   activeChildIds(target,rows){return this.children(target).flatMap(child=>this.ids(child)).filter(id=>!rows.some(row=>row.kind==='option'&&row.id===id&&row.staged&&row.hidden));}
   managedGroup(id,rows) {
@@ -242,7 +250,7 @@ export class AuthorityNativeDriver {
       })]);
       for(const item of items) {
         const sizes=(item.sizeInfoList??[]).filter(size=>String(size.applyStartDate).replaceAll('/','-')<=c.today&&String(size.applyEndDate).replaceAll('/','-')>=c.today);
-        rows.push({kind:'item',id:String(item.itemCode),name:item.itemName,price:sizes.length===1?Number(sizes[0].price):null,description:String(item.itemDescription??'').replaceAll('<br>','\n'),hidden:!itemIds.includes(String(item.itemCode))||hidden('item',item.itemCode),staged:!itemIds.includes(String(item.itemCode)),parentIds:remote.items.categoryList.filter(cat=>cat.itemList?.some(row=>row.itemCode===item.itemCode)).map(cat=>String(cat.categoryCode)),groupIds:sizes.length===1?(sizes[0].sizeOptionGroupLinkList??[]).map(row=>String(row.optionGroupCode)):[],native:item});
+        rows.push({kind:'item',id:String(item.itemCode),name:item.itemName,price:sizes.length===1?Number(sizes[0].price):null,description:String(item.itemDescription??'').replaceAll('<br>','\n'),hidden:!itemIds.includes(String(item.itemCode))||hidden('item',item.itemCode),staged:!itemIds.includes(String(item.itemCode)),parentIds:remote.items.categoryList.filter(cat=>cat.itemList?.some(row=>row.itemCode===item.itemCode)).map(cat=>String(cat.categoryCode)),groupIds:sizes.length===1?nativeMenuOrder(sizes[0].sizeOptionGroupLinkList??[],'dispOrder').map(row=>String(row.optionGroupCode)):[],native:item});
       }
       const liveGroupIds=remote.groups.map(row=>String(row.optionGroupCode));
       const knownGroupIds=this.payload.targets.filter(target=>target.kind==='option_group'&&!target.quarantined).flatMap(target=>[...target.mappings,this.payload.authorityState?.[target.sourceKey]].filter(mapping=>mapping?.externalId).map(mapping=>this.id('option_group',mapping.externalId)));
@@ -296,9 +304,16 @@ export class AuthorityNativeDriver {
           if(!equalIds(reorderAllowed?[...actualIds].sort():actualIds,reorderAllowed?[...expected].sort():expected)&&!knownDemaeMigration)add('group_membership_migration_required');
         }
         if(target.kind==='category') {
-          const expected=this.children(target).filter(child=>child.kind==='item').flatMap(child=>this.ids(child)).filter(id=>!rows.some(row=>row.kind==='item'&&row.id===id&&row.staged));
-          const retained=row.childIds.filter(id=>!this.payload.targets.some(child=>child.archived&&!child.quarantined&&child.kind==='item'&&this.ids(child).includes(String(id))&&(preflight||rows.some(item=>item.kind==='item'&&item.id===String(id)&&item.hidden))));
-          if(!equalIds([...retained].sort(),[...expected].sort())&&!(preflight&&row.childIds.every(id=>this.ownsItem(id))))add('category_membership_migration_required');
+          const expected=this.categoryItemIds(target,rows);
+          const retained=this.retainedCategoryItemIds(row,rows,{preflight});
+          // Preflight may admit an owned move/reorder. The final read must
+          // prove the customer-facing sequence, not merely the same ID set.
+          if(!equalIds(retained,expected)&&!(preflight&&row.childIds.every(id=>this.ownsItem(id))))add('category_membership_migration_required');
+          if(!preflight) {
+            const expectedCategories=this.categoryIds();
+            const actualCategories=rows.filter(row=>row.kind==='category'&&expectedCategories.includes(row.id)).map(row=>row.id);
+            if(actualCategories.indexOf(id)!==expectedCategories.indexOf(id))add('category_order_migration_required');
+          }
         }
         if(target.kind==='item') {
           const parent=this.payload.targets.find(row=>row.targetId===target.parentId);
@@ -513,7 +528,19 @@ export class AuthorityNativeDriver {
       return;
     }
     if(target.kind==='category') {
-      if(this.structureIssues(target,this.categorySnapshot??await this.snapshot()).length)throw Error(`uber_authority_relationship_drift:${target.sourceKey}`);
+      const rows=this.categorySnapshot??await this.snapshot();
+      const expected=this.categoryItemIds(target,rows);
+      for(const id of this.ids(target)) {
+        const actual=rows.find(row=>row.kind==='category'&&row.id===id);
+        if(!actual||!equalIds([...this.retainedCategoryItemIds(actual,rows)].sort(),[...expected].sort()))throw Error(`uber_authority_relationship_drift:${target.sourceKey}`);
+        if(equalIds(this.retainedCategoryItemIds(actual,rows),expected))continue;
+        // Hidden retired Rocket items can retain their category relationship.
+        // Never remove those records or reopen them just to sort active items.
+        const retained=actual.childIds.filter(id=>!expected.includes(String(id)));
+        if(this.platform==='demae_can')await this.client.updateCategory(id,{itemCodes:[...expected,...retained]});
+        else if(typeof this.client.reorderCategoryItems==='function')await this.client.reorderCategoryItems(id,[...expected,...retained]);
+        else throw Error(`uber_authority_category_order_unsupported:${target.sourceKey}`);
+      }
       return;
     }
     // Preflight currently admits only verified unchanged relationships. Any
@@ -536,6 +563,22 @@ export class AuthorityNativeDriver {
       else if(target.kind==='option')await this.client.updateOption(id,{retire:true});
       else throw Error('uber_authority_parent_still_available');
     }
+  }
+  async updateCategoryOrder() {
+    const expected=this.categoryIds();
+    if(expected.length<2)return;
+    const remote=await this.client.catalog();
+    const current=(this.platform==='rocket_now'?remote.menus:remote.items.categoryList)
+      .map(row=>String(this.platform==='rocket_now'?row.menuId:row.categoryCode));
+    const managed=current.filter(id=>expected.includes(id));
+    if(!equalIds([...managed].sort(),[...expected].sort()))throw Error('uber_authority_category_order_identity_mismatch');
+    if(equalIds(managed,expected))return;
+    // Only reorder our mapped categories within their current native slots.
+    // Unmanaged categories retain both their identity and absolute position.
+    let index=0;
+    const ordered=current.map(id=>expected.includes(id)?expected[index++]:id);
+    if(typeof this.client.reorderCategories!=='function')throw Error('uber_authority_category_order_unsupported');
+    await this.client.reorderCategories(ordered);
   }
   async observe(target) {
     const rows=this.observationSnapshot,structureVerified=this.structureIssues(target,rows).length===0;

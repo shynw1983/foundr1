@@ -7,6 +7,16 @@ import {canonicalMenuValue,meaningfulMenuChanges,menuChangeValue} from './menu-c
 
 const catalog=():UberSourceCatalog=>({version:1,storeUuid:'s',menuId:'m',capturedAt:'2026-09-09T00:00:00Z',sections:[],categories:[],groups:[{id:'g',name:'Base',optionIds:['a'],min:0,max:10}],entities:[{id:'a',name:'Tofu',price:200,description:'',imageUrl:'',groupIds:[],contextPrices:[]}]});
 
+test('publication reconciliation explains safe queue guards in all UI languages',()=>{
+ for(const language of ['ja','zh-Hans','zh-Hant'])for(const code of ['active','disabled','scheduled_limit','pending_removal','conflict','identity_changed','candidate_changed','not_configured','catalog_missing','manual_required']) {
+  const issue=menuSyncIssue(`uber_publication_reconcile_${code}`,language)!;
+  assert.doesNotMatch(issue.title+issue.action,/uber_publication_reconcile_|identity_changed|scheduled_limit/);
+  assert.equal(issue.retry,code==='scheduled_limit');
+ }
+ assert.match(menuSyncIssue('uber_publication_reconcile_active','zh-Hans')!.action,/等待当前任务/);
+ assert.match(menuSyncIssue('uber_publication_reconcile_identity_changed','zh-Hans')!.action,/阻止执行旧记录/);
+});
+
 test('pending removal and carrier mismatch are explained without blaming Uber input',()=>{
  const error='uber_source_pending_removal:'+JSON.stringify([{sourceKey:'option:g:mango',name:'マンゴー'}]);
  for(const language of ['ja','zh-Hans','zh-Hant']) {
@@ -221,6 +231,20 @@ test('only latest failed downstream revision can retry',()=>{
  assert.equal(canRetryMenuJob(job,'a',11),false);
  assert.equal(canRetryMenuJob({...job,platform:'uber_eats'},'a',10),false);
  assert.equal(canRetryMenuJob({...job,status:'succeeded'},'a',10),false);
+});
+test('order failures explain native readback and do not claim successful synchronization',()=>{
+ for(const language of ['ja','zh-Hans','zh-Hant'])for(const code of [
+  'uber_authority_category_order_unsupported','uber_authority_category_order_identity_mismatch',
+  'rocket_menu_category_order_metadata_missing','rocket_menu_order_scope_invalid',
+  'demae_menu_category_order_availability_changed','rocket_menu_order_verification_failed',
+  'category_order_migration_required'
+ ]) {
+  const issue=menuSyncIssue(code,language)!;
+  assert.equal(issue.kind,'verify');
+  assert.equal(issue.retry,/order_verification_failed|category_order_migration_required/.test(code));
+  assert.doesNotMatch(issue.title+issue.action,new RegExp(code));
+  assert.doesNotMatch(issue.action,/Uber の名称を変更|修改 Uber 原名/);
+ }
 });
 test('next automatic check is noon Japan time, including day boundary',()=>{
  assert.equal(nextMenuCheck(new Date('2026-09-09T02:59:59Z')),'2026-09-09T03:00:00.000Z');

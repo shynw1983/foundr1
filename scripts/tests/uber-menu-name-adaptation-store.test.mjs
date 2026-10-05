@@ -1,5 +1,7 @@
-// Real PostgreSQL tests for the production adapter SQL. The only service
-// dependency stub is AI generation; DATABASE_URL is never loaded or used.
+// Real PostgreSQL tests for the production name adapter SQL. AI generation is
+// stubbed. Manual route tests also stub the shared publication reconciler;
+// its complete manifest/CAS SQL is covered by uber-menu-publication-reconcile.
+// DATABASE_URL is never loaded or used.
 // Run with PGLITE_MODULE pointing to an isolated @electric-sql/pglite install.
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -54,7 +56,7 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
  await db.query("insert into menu_platform_availability_settings values($1,'unavailable')",[ids.target]);
  await db.query("insert into menu_uber_option_migrations values($1,'rocket_now','migration',$2)",[ids.source,JSON.stringify(payload.migrationState.migration)]);
  let gate,aiFailure;
- const requests=[];
+ const requests=[],reconciliations=[];
  const mocks={
   'lib/menu-name-adaptation.ts':{
    async requestMenuNameAdaptation(input) {
@@ -67,9 +69,9 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
    }
   }
  };
- // Exercise the actual acknowledgement/manual routes with only authentication,
- // realtime transport and unrelated external services stubbed. Their writes,
- // adapter and native verifier still use real local PostgreSQL.
+ // Exercise the actual acknowledgement/manual routes and name adapter on real
+ // local PostgreSQL. The publication helper's minimal queue test double models
+ // its handoff, not its separately tested canonical source-manifest rebuild.
  Object.assign(mocks,{
   'lib/inventory-command-supersession.ts':{},'lib/inventory-manual-sync.ts':{},'lib/menu-platform-snapshot-merge.ts':{},
   'lib/uber-menu-source-sync.ts':{},'lib/order-realtime.ts':{publishPublicMenuUpdatedEvent:async()=>{}},
@@ -78,6 +80,20 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
   'lib/local-bridge-realtime.ts':{publishBridgeCommandUpdated:async()=>{},publishBridgeInventoryUpdated:async()=>{},publishBridgeCommandAvailable:async()=>{}},
   'lib/api-auth.ts':{requireMasterOsSession:async()=>({role:'owner'})}
  });
+ mocks['lib/uber-menu-publication-reconcile.ts']={async reconcileUberPublications(input) {
+  reconciliations.push(json(input));
+  assert.deepEqual(json(input),{sourceId:ids.source,storeId:ids.store,revision:37,mode:'manual',jobId:ids.command});
+  const active=await db.query("select id from local_bridge_commands where store_id=$1 and payload->>'sourceId'=$2 and status in ('pending','processing')",[ids.store,ids.source]);
+  if(active.rows.length)return {queued:0,blocked:[{code:'uber_publication_reconcile_active'}],jobs:[]};
+  const before=(await db.query('select * from local_bridge_commands where id=$1',[ids.command])).rows[0];
+  assert.equal(before.status,'failed');
+  const next={...before.payload,
+   publicationReconciliation:{...before.payload.publicationReconciliation,mode:'manual',scheduledRetries:0},
+   manualRetryHistory:[...before.payload.manualRetryHistory,{at:new Date().toISOString(),error:before.last_error,
+    attempts:before.attempts,status:before.status,reason:'manual_source_verification'}]};
+  await db.query("update local_bridge_commands set status='pending',attempts=0,available_at=now(),completed_at=null,claimed_by_device_id=null,claimed_at=null,claim_expires_at=null,payload=$1,last_error='',updated_at=now() where id=$2",[JSON.stringify(next),ids.command]);
+  return {queued:1,blocked:[],jobs:[{id:ids.command,platform:'rocket_now'}]};
+ }};
  // Neon tagged queries are lazy; transaction statements must not run before
  // BEGIN. This adapter exercises exactly their emitted SQL on local Postgres.
  const sql=(parts,...params)=>{
@@ -118,7 +134,7 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
  const source=async()=>(await db.query('select * from menu_uber_sources where id=$1',[ids.source])).rows[0];
  const external=async()=>({receipts:(await db.query('select * from menu_uber_creation_attempts')).rows,stock:(await db.query('select * from menu_platform_availability_settings')).rows});
  const setCandidate=async candidate=>db.query("update menu_uber_sources set publish_config=jsonb_set(publish_config,'{rocket_now}',publish_config->'rocket_now'||jsonb_build_object('nameAdaptations',jsonb_build_object($1::text,$2::jsonb)))",[primary.sourceKey,JSON.stringify(candidate)]);
- return {db,ids,claim,payload,config,primary,input,service,publication,requests,command,source,external,setCandidate,
+ return {db,ids,claim,payload,config,primary,input,service,publication,requests,reconciliations,command,source,external,setCandidate,
   menuSyncIssue:load('lib/menu-sync-status.ts').menuSyncIssue,
   defer(){gate=defer();return gate;},
   failAI(code='menu_name_ai_invalid',diagnostic={stage:'output_json',model:'test-model',attempts:[]}) {
@@ -363,7 +379,9 @@ test('actual manual route regenerates for a diagnosed target before requeuing th
  const h=await fixture();
  try {
   h.failAI();assert.equal((await h.ack({status:'failed',error:h.input.error,result:{}})).status,200);
-  h.failAI(null);const response=await h.manual();assert.equal(response.status,200);assert.deepEqual(await response.json(),{queued:1});
+  h.failAI(null);const response=await h.manual();assert.equal(response.status,200);
+  assert.deepEqual(await response.json(),{queued:1,blocked:[],jobs:[{id:h.ids.command,platform:'rocket_now'}]});
+  assert.equal(h.reconciliations.length,1);
   const after=await h.command();assert.equal(after.id,h.ids.command);assert.equal(after.status,'pending');assert.equal(after.attempts,0);
   assert.equal(h.requests.length,2);assert.equal(h.requests[1].targetId,h.primary.targetId);
   assert.notEqual(after.payload.targets[0].name,h.primary.name);
@@ -373,13 +391,24 @@ test('actual manual route regenerates for a diagnosed target before requeuing th
  }finally {await h.db.close();}
 });
 
-test('actual manual route explains fresh-scan recovery for legacy jobs without changing the failed command',async()=>{
+test('actual manual route replays legacy jobs through the shared helper without inventing native rejection',async()=>{
  const h=await fixture({status:'failed'});
  try {
-  await h.db.exec("update local_bridge_commands set last_error='menu_name_ai_invalid'");const before=await h.command();
-  const response=await h.manual();assert.equal(response.status,409);
-  const body=await response.json();assert.match(body.error,/未保存原始平台拒绝/);assert.match(body.error,/重新读取 Uber 最新菜单/);
-  assert.doesNotMatch(body.error,/menu_name_ai_|command_changed/);assert.deepEqual(await h.command(),before);
+  const legacyError=`menu_name_ai_invalid:${JSON.stringify({sourceKey:h.primary.sourceKey,targetId:h.primary.targetId,name:h.primary.name})}`;
+  await h.db.query('update local_bridge_commands set last_error=$1',[legacyError]);
+  const before=await h.command(),external=await h.external();
+  const response=await h.manual();assert.equal(response.status,200);
+  assert.deepEqual(await response.json(),{queued:1,blocked:[],jobs:[{id:h.ids.command,platform:'rocket_now'}]});
+  assert.equal(h.reconciliations.length,1);
+  const after=await h.command();assert.equal(after.id,before.id);assert.equal(after.status,'pending');assert.equal(after.attempts,0);
+  assert.equal(after.claimed_at,null);assert.equal(after.claimed_by_device_id,null);assert.equal(after.claim_expires_at,null);
+  const retained=json(after.payload);delete retained.publicationReconciliation;
+  const retry=retained.manualRetryHistory.at(-1);assert.ok(Number.isFinite(Date.parse(retry.at)));
+  assert.deepEqual({...retry,at:undefined},{at:undefined,error:legacyError,attempts:before.attempts,
+   status:'failed',reason:'manual_source_verification'});
+  retained.manualRetryHistory.pop();assert.deepEqual(retained,before.payload);
+  assert.deepEqual(after.result,before.result);assert.deepEqual(await h.external(),external);
+  assert.equal(after.result.nameAdaptationDiagnostic,undefined);
   assert.equal(h.requests.length,0);
  }finally {await h.db.close();}
 });

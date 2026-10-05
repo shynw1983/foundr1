@@ -1,7 +1,8 @@
 import { requireMasterOsSession } from '../../../../lib/api-auth';
 import { sql } from '../../../../lib/db';
 import { scheduleUberSourceScans } from '../../../../lib/uber-menu-source-sync';
-import { nextMenuCheck, menuSyncIssueContext } from '../../../../lib/menu-sync-status';
+import { nextMenuCheck, menuSyncIssue, menuSyncIssueContext } from '../../../../lib/menu-sync-status';
+import { reconcileUberPublications } from '../../../../lib/uber-menu-publication-reconcile';
 import { publishBridgeCommandAvailable } from '../../../../lib/local-bridge-realtime';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,43 +32,68 @@ export async function GET(request: Request) {
 }
 export async function POST(request: Request) {
   if (!await requireMasterOsSession()) return Response.json({error:'権限がありません。'},{status:403});
-  const body = await request.json().catch(()=>({}));
+  const value:unknown=await request.json().catch(()=>({}));
+  const body=value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};
   const sources = await sql`select id::text,store_id::text,revision from menu_uber_sources where brand_id::text=${String(body.brandId??'')} and enabled=true`;
   if (!sources.length) return Response.json({error:'Uber メニュー連携はまだ有効になっていません。'},{status:409});
   if(body.action==='scan') return Response.json(await scheduleUberSourceScans(sources[0].store_id));
   if(body.action==='retry') {
-    // Reuse the exact command ID: creation receipts and uncertain writes belong
-    // to it. Never replay an older publication over a newer one.
-    const source=sources[0],id=String(body.jobId??'');
-    const failures=await sql`select platform,last_error from local_bridge_commands where id::text=${id}
-      and store_id=${source.store_id} and payload->>'sourceId'=${source.id} and status='failed'`;
-    if(failures.length) {
+    const source=sources[0],id=typeof body.jobId==='string'?body.jobId.trim():'';
+    const language=typeof body.language==='string'?body.language:'ja';
+    const humanIssue=(detail:string)=>{
+      const issue=menuSyncIssue(detail,language);
+      return {reason:`${issue?.title??''} ${issue?.action??''}`.trim()
+        .replace(/[\u0000-\u001f\u007f\u2028\u2029]/gu,' ').slice(0,800),retry:issue?.retry===true};
+    };
+    if(!id||id.length>80) {
+      const blocked=humanIssue('uber_publication_reconcile_conflict');
+      return Response.json({error:blocked.reason,queued:0,blocked:[blocked],jobs:[]},{status:409});
+    }
+    // AI preparation is permitted only for the exact latest failed command.
+    // The shared reconciler rechecks these guards atomically before requeueing.
+    // Do not fetch a payload into this API response or infer native rejection
+    // details from an older AI-only error string.
+    const failures=await sql`select c.platform,c.last_error,
+      coalesce(c.result ? 'nameAdaptationDiagnostic',false) as "hasNameDiagnostic"
+      from local_bridge_commands c join menu_uber_sources s on s.id::text=c.payload->>'sourceId'
+      where c.id::text=${id} and c.store_id::text=${source.store_id} and s.store_id=c.store_id
+        and s.id::text=${source.id} and s.enabled=true and s.auto_publish=true
+        and s.revision=${Number(source.revision)} and c.payload->>'revision'=s.revision::text
+        and c.status='failed' and c.command_type='publish_menu_changes' and c.payload->>'authoritativePublication'='true'
+        and c.platform in ('rocket_now','demae_can')
+        and coalesce(c.payload->'pendingRemovals','[]'::jsonb)='[]'::jsonb
+        and not exists(select 1 from local_bridge_commands newer where newer.store_id=c.store_id
+          and newer.payload->>'sourceId'=c.payload->>'sourceId' and newer.id<>c.id
+          and ((newer.platform=c.platform and newer.command_type='publish_menu_changes' and (newer.created_at>c.created_at
+            or (newer.created_at=c.created_at and newer.id>c.id))) or newer.status in ('pending','processing')))`;
+    const failure=failures[0];
+    const nativeFailure=failure&&/^uber_authority_(?:content_failed|preflight_blocked):/.test(String(failure.last_error??''));
+    if(failure&&(failure.hasNameDiagnostic===true||nativeFailure)) {
       const {adaptRejectedUberMenuName,MenuNameAdaptationConflict}=await import('../../../../lib/uber-menu-name-adaptation-store');
-      try {await adaptRejectedUberMenuName({commandId:id,storeId:source.store_id,platform:String(failures[0].platform),error:String(failures[0].last_error),status:'failed'});}
+      try {await adaptRejectedUberMenuName({commandId:id,storeId:source.store_id,platform:String(failure.platform),error:String(failure.last_error),status:'failed'});}
       catch(error) {
-        if(error instanceof MenuNameAdaptationConflict)return Response.json({error:'同期の状態が変わりました。状態を更新して確認してください。'},{status:409});
-        const detail=error instanceof Error?error.message:'menu_name_ai_invalid';
-        const {menuSyncIssue}=await import('../../../../lib/menu-sync-status');
-        const issue=menuSyncIssue(detail,String(body.language??'ja'));
-        return Response.json({error:issue?`${issue.title} ${issue.action}`:'名前の調整を確認してください。'}, {status:409});
+        const message=error instanceof Error?error.message:'';
+        const detail=error instanceof MenuNameAdaptationConflict?'uber_publication_reconcile_conflict'
+          :/^menu_name_ai_(?:unavailable|timeout|invalid|unsafe|exhausted|recovery_unavailable)(?::|$)/.test(message)?message:'menu_name_ai_unavailable';
+        const blocked={platform:String(failure.platform),...humanIssue(detail)};
+        return Response.json({error:blocked.reason,queued:0,blocked:[blocked],jobs:[]},{status:409});
       }
     }
-    const result=await sql.transaction([
-      sql`select lock_menu_uber_revision(${source.id},${source.revision})`,
-      sql`update local_bridge_commands c set status='pending',attempts=0,available_at=now(),completed_at=null,claimed_by_device_id=null,claimed_at=null,claim_expires_at=null,
-        payload=jsonb_set(c.payload,'{manualRetryHistory}',coalesce(c.payload->'manualRetryHistory','[]'::jsonb)||jsonb_build_array(jsonb_build_object('at',now(),'error',c.last_error,'attempts',c.attempts)))
-          ||jsonb_build_object('authorityState',coalesce((select jsonb_object_agg(a.source_key,jsonb_build_object('sourceKey',a.source_key,'status',a.status,'externalId',a.external_id,'externalParentId',a.external_parent_id)) from menu_uber_creation_attempts a where a.source_id=${source.id} and a.platform=c.platform),'{}'::jsonb),'migrationState',coalesce((select jsonb_object_agg(m.migration_key,m.state) from menu_uber_option_migrations m where m.source_id=${source.id} and m.platform=c.platform),'{}'::jsonb)),
-        last_error='',updated_at=now()
-        where c.id::text=${id} and c.store_id=${source.store_id} and c.payload->>'sourceId'=${source.id} and c.payload->>'authoritativePublication'='true'
-          and c.platform in ('rocket_now','demae_can') and c.status='failed'
-          and coalesce(c.payload->'pendingRemovals','[]'::jsonb)='[]'::jsonb
-          and c.payload->>'revision'=${String(source.revision)}
-          and not exists(select 1 from local_bridge_commands newer where newer.store_id=c.store_id and newer.payload->>'sourceId'=c.payload->>'sourceId' and ((newer.platform=c.platform and newer.created_at>c.created_at) or newer.status in ('pending','processing')))
-        returning c.id::text`
-    ]);
-    if(!result[1].length)return Response.json({error:'新しい同期または実行中の処理があります。状態を更新してください。'},{status:409});
-    await publishBridgeCommandAvailable(String(source.store_id)).catch(()=>undefined);
-    return Response.json({queued:1});
+    let reconciled;
+    try {reconciled=await reconcileUberPublications({sourceId:String(source.id),storeId:String(source.store_id),
+      revision:Number(source.revision),mode:'manual',jobId:id});}
+    catch {
+      const blocked=humanIssue('uber_publication_reconcile_conflict');
+      return Response.json({error:blocked.reason,queued:0,blocked:[blocked],jobs:[]},{status:409});
+    }
+    const blocked=reconciled.blocked.slice(0,2).map(row=>({
+      ...(['rocket_now','demae_can'].includes(String(row.platform))?{platform:String(row.platform)}:{}),...humanIssue(row.code)
+    }));
+    const jobs=reconciled.jobs.slice(0,2).map(row=>({id:String(row.id).slice(0,80),platform:String(row.platform)}));
+    if(!reconciled.queued&&!blocked.length)blocked.push(humanIssue('uber_publication_reconcile_conflict'));
+    if(reconciled.queued)await publishBridgeCommandAvailable(String(source.store_id)).catch(()=>undefined);
+    return Response.json({queued:reconciled.queued,blocked,jobs,
+      ...(!reconciled.queued?{error:blocked[0].reason}:{})},{status:reconciled.queued?200:409});
   }
   if(body.action==='price') return Response.json({error:'価格は Uber で変更し、最新メニューを読み取ってください。'},{status:409});
   return Response.json({error:'操作が不正です。'},{status:400});

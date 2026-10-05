@@ -1,4 +1,5 @@
 import { positiveId, yen, sameMenuValue } from './merchant-menu-client.mjs';
+import {nativeMenuOrder} from './native-menu-order.mjs';
 
 export function rocketPhysicalId(value) {
   const text = String(value ?? '');
@@ -12,6 +13,15 @@ function optionMappings(groups = []) {
     // dish association contains only identity and stock, so compare by ID.
     optionItemSaveDtos: (group.optionItems ?? []).map(item => ({optionItemId:Number(item.optionItemId),displayStatus:item.displayStatus})).sort((a,b)=>a.optionItemId-b.optionItemId)
   }));
+}
+
+function orderInvariant(menus) {
+  return menus.map(menu=>{
+    const {exposeOrder,...content}=menu;
+    return {...content,dishes:(menu.dishes??[]).map(dish=>{
+      const {exposeOrder,...content}=dish;return content;
+    }).sort((left,right)=>String(left.dishId).localeCompare(String(right.dishId)))};
+  }).sort((left,right)=>String(left.menuId).localeCompare(String(right.menuId)));
 }
 
 export function rocketGroupUpdate(group,patch={}) {
@@ -76,13 +86,14 @@ export class RocketMenuClient {
       this.transport.request(`${this.readBase}/all-options?fetchDish=true`)
     ]);
     if (!Array.isArray(menus?.menus) || !Array.isArray(groups)) throw new Error('rocket_menu_incomplete_catalog');
-    return {menus:menus.menus,groups};
+    return {menus:nativeMenuOrder(menus.menus,'exposeOrder').map(menu=>({...menu,dishes:nativeMenuOrder(menu.dishes,'exposeOrder')})),
+      groups:groups.map(group=>({...group,optionItems:nativeMenuOrder(group.optionItems,'exposeOrder')}))};
   }
   async detail(id) {
     const detail=await this.transport.request(`${this.readBase}/dishes/${rocketPhysicalId(id)}/detail`);
     // The API array retains creation order; exposeOrder is the actual
     // customer-facing order (also used by the merchant frontend).
-    if(Array.isArray(detail.options))detail.options=[...detail.options].sort((a,b)=>(Number.isFinite(a.exposeOrder)?a.exposeOrder:Infinity)-(Number.isFinite(b.exposeOrder)?b.exposeOrder:Infinity));
+    if(Array.isArray(detail.options))detail.options=nativeMenuOrder(detail.options,'exposeOrder');
     return detail;
   }
   async updateDish(id, patch) {
@@ -247,6 +258,45 @@ export class RocketMenuClient {
     if(!actual || actual.menuName!==body.menuName || (actual.description??'')!==body.description || actual.exposeStatus!==before.exposeStatus
       || !sameMenuValue((actual.dishes??[]).map(row=>row.dishId),(before.dishes??[]).map(row=>row.dishId)))throw new Error('rocket_menu_category_verification_failed');
     return actual;
+  }
+  async reorderCategoryItems(id,ids) {
+    const physicalId=positiveId(id),before=await this.catalog();
+    const category=before.menus.find(menu=>String(menu.menuId)===physicalId);
+    if(!category||!Number.isSafeInteger(category.exposeOrder)||category.exposeOrder<0)throw Error('rocket_menu_category_order_metadata_missing');
+    const prior=(category.dishes??[]).map(row=>String(row.dishId));
+    if(!Array.isArray(ids)||ids.length!==prior.length||new Set(ids.map(String)).size!==ids.length
+      ||ids.some(id=>!prior.includes(String(id))))throw Error('rocket_menu_category_members_require_migration');
+    if(sameMenuValue(prior,ids.map(String)))return category;
+    // Official merchant Fje -> Zje uses this shared ordering endpoint. This
+    // payload contains only existing relationship IDs and display positions.
+    await this.transport.request(`${this.writeBase}/menus/update-expose-order`,'POST',[
+      {menuId:Number(physicalId),exposeOrder:category.exposeOrder,
+        dishOrders:ids.map((dishId,index)=>({dishId:Number(positiveId(dishId)),exposeOrder:index}))}
+    ]);
+    const after=await this.catalog(),actual=after.menus.find(menu=>String(menu.menuId)===physicalId);
+    if(!actual||!sameMenuValue((actual.dishes??[]).map(row=>String(row.dishId)),ids.map(String))
+      ||!sameMenuValue(before.menus.map(row=>String(row.menuId)),after.menus.map(row=>String(row.menuId)))
+      ||!sameMenuValue(orderInvariant(before.menus),orderInvariant(after.menus))
+      ||before.menus.filter(menu=>String(menu.menuId)!==physicalId).some(menu=>!sameMenuValue((menu.dishes??[]).map(row=>String(row.dishId)),
+        (after.menus.find(row=>String(row.menuId)===String(menu.menuId))?.dishes??[]).map(row=>String(row.dishId))))
+      ||!sameMenuValue(before.groups,after.groups))throw Error('rocket_menu_category_order_verification_failed');
+    return actual;
+  }
+  async reorderCategories(ids) {
+    const before=await this.catalog(),prior=before.menus.map(row=>String(row.menuId));
+    if(!Array.isArray(ids)||ids.length!==prior.length||new Set(ids.map(String)).size!==ids.length
+      ||ids.some(id=>!prior.includes(String(id))))throw Error('rocket_menu_category_order_scope_invalid');
+    if(sameMenuValue(prior,ids.map(String)))return before;
+    if(before.menus.some(menu=>!Number.isSafeInteger(menu.exposeOrder)||menu.exposeOrder<0))throw Error('rocket_menu_category_order_metadata_missing');
+    await this.transport.request(`${this.writeBase}/menus/update-expose-order`,'POST',
+      ids.map((menuId,index)=>({menuId:Number(positiveId(menuId)),exposeOrder:index})));
+    const after=await this.catalog();
+    if(!sameMenuValue(after.menus.map(row=>String(row.menuId)),ids.map(String))
+      ||!sameMenuValue(orderInvariant(before.menus),orderInvariant(after.menus))
+      ||before.menus.some(menu=>!sameMenuValue((menu.dishes??[]).map(row=>String(row.dishId)),
+        (after.menus.find(row=>String(row.menuId)===String(menu.menuId))?.dishes??[]).map(row=>String(row.dishId))))
+      ||!sameMenuValue(before.groups,after.groups))throw Error('rocket_menu_category_order_verification_failed');
+    return after;
   }
   async retireEmptyCategory(id) {
     const {menus}=await this.catalog();

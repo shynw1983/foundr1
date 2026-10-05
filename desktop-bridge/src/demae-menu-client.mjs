@@ -1,5 +1,6 @@
 import { positiveId, yen, sameMenuValue } from './merchant-menu-client.mjs';
 import {DemaeDraftClient} from './demae-draft-client.mjs';
+import {nativeMenuOrder} from './native-menu-order.mjs';
 
 const code = value => {
   const text=String(value??'');
@@ -11,6 +12,21 @@ const date = value => {
   if(!/^\d{4}-\d{2}-\d{2}$/.test(text))throw new Error('demae_menu_date_invalid');
   return text;
 };
+
+function stockInvariant(snapshot) {
+  if(snapshot.itemList.some(row=>!row.itemCode||!Array.isArray(row.linkedShopList)||!Array.isArray(row.stockoutItemList))
+    ||snapshot.optionList.some(row=>!row.optionCode||!Array.isArray(row.linkedShopList)||!Array.isArray(row.stockoutOptionList)))throw Error('demae_menu_stock_snapshot_incomplete');
+  const sort=rows=>rows.sort((left,right)=>JSON.stringify([left.chainId,left.id]).localeCompare(JSON.stringify([right.chainId,right.id])));
+  return {items:sort(snapshot.itemList.map(row=>({chainId:row.chainId,id:String(row.itemCode),linkedShops:row.linkedShopList,
+    records:row.stockoutItemList,sizes:(row.itemSizeList??[]).map(size=>({id:String(size.sizeCode),linkedShops:size.linkedShopList,records:size.stockoutItemSizeList}))
+      .sort((left,right)=>left.id.localeCompare(right.id))}))),
+    options:sort(snapshot.optionList.map(row=>({chainId:row.chainId,id:String(row.optionCode),linkedShops:row.linkedShopList,records:row.stockoutOptionList})))};
+}
+
+function categoryOrderInvariant(rows) {
+  return rows.map(({dispOrder,...row})=>row)
+    .sort((left,right)=>String(left.categoryCode).localeCompare(String(right.categoryCode)));
+}
 
 export function demaeItemUpdate(detail,patch,today) {
   const sizes=detail.sizeInfoList??[];
@@ -98,9 +114,14 @@ export class DemaeMenuClient {
       this.transport.request(`/merchant-admin/api/v1/product/suggest/chain/${this.chainId}/menu-pattern/${this.patternPath}/linked-option-group-list`)
     ]);
     if(!Array.isArray(items?.categoryList)||!Array.isArray(groups))throw new Error('demae_menu_incomplete_catalog');
-    return {items,groups};
+    return {items:{...items,categoryList:nativeMenuOrder(items.categoryList,'dispOrder')
+      .map(category=>({...category,itemList:nativeMenuOrder(category.itemList,'dispOrder')}))},groups};
   }
-  item(id) {return this.transport.request(`${this.base}/item/${code(id)}`);}
+  async item(id) {
+    const item=await this.transport.request(`${this.base}/item/${code(id)}`);
+    return {...item,sizeInfoList:item.sizeInfoList?.map(size=>({...size,
+      sizeOptionGroupLinkList:nativeMenuOrder(size.sizeOptionGroupLinkList,'dispOrder')}))};
+  }
   async allItems() {
     await this.assertScope();
     const rows=await this.transport.request(`/merchant-admin/api/v2/product/suggest/chain/${this.chainId}/menu-pattern/${this.patternPath}/item-list-with-unlinked`);
@@ -224,6 +245,7 @@ export class DemaeMenuClient {
     if(String(detail.chainId)!==this.chainId||!Array.isArray(links)||links.length!==1||links[0].menuPatternCode!==this.pattern)throw Error('demae_menu_category_scope_mismatch');
     const ids=patch.itemCodes??row.itemList.map(item=>item.itemCode);
     if(ids.length!==row.itemList.length||new Set(ids.map(String)).size!==ids.length||ids.some(id=>!row.itemList.some(item=>String(item.itemCode)===String(id))))throw Error('demae_menu_category_members_require_migration');
+    const stock=patch.itemCodes!==undefined?stockInvariant(await this.stockCatalog()):null;
     const body={};
     for(const key of ['chainId','categoryCode','applyStartDate','applyEndDate','categoryName','adminCategoryName','type','categoryType','businessType','isSideOrderCategory','categoryDescription'])body[key]=detail[key];
     body.categoryName=patch.name??detail.categoryName;
@@ -249,7 +271,53 @@ export class DemaeMenuClient {
     }
     if(!actual||actual.categoryName!==body.categoryName||!sameMenuValue(actual.itemList.map(item=>item.itemCode),ids)
       ||!sameMenuValue(await this.transport.request(`${this.base}/category/${code(id)}/menu-pattern-list`),links))throw Error('demae_menu_category_verification_failed');
+    if(stock&&!sameMenuValue(stock,stockInvariant(await this.stockCatalog())))throw Error('demae_menu_category_order_availability_changed');
     return actual;
+  }
+  async reorderCategories(ids) {
+    const before=await this.catalog();
+    const categories=before.items.categoryList;
+    const current=categories.map(row=>String(row.categoryCode));
+    if(!Array.isArray(ids)||categories.some(row=>!row.categoryCode)
+      ||new Set(current).size!==current.length||ids.length!==current.length
+      ||new Set(ids.map(String)).size!==ids.length||ids.some(id=>!current.includes(String(id))))throw Error('demae_menu_category_order_scope_invalid');
+    const requested=ids.map(String);
+    if(sameMenuValue(current,requested))return before;
+    const path=`${this.base}/menu-pattern/${this.patternPath}`;
+    const [pattern,links,stock]=await Promise.all([
+      this.transport.request(path),this.transport.request(`${path}/linked-category-list`),
+      this.stockCatalog().then(stockInvariant)
+    ]);
+    if(String(pattern?.chainId)!==this.chainId||String(pattern?.menuPatternCode)!==this.pattern
+      ||typeof pattern.menuPatternName!=='string'||pattern.isAvailable===undefined
+      ||!Array.isArray(links?.categoryList)
+      ||links.categoryList.some(row=>String(row.chainId)!==this.chainId||!row.categoryCode)
+      ||links.categoryList.length!==current.length
+      ||new Set(links.categoryList.map(row=>String(row.categoryCode))).size!==current.length
+      ||links.categoryList.some(row=>!current.includes(String(row.categoryCode))))throw Error('demae_menu_category_order_scope_invalid');
+    const recommendation=links.recommendCategory;
+    if(recommendation&&(String(recommendation.chainId)!==this.chainId||!recommendation.categoryCode
+      ||current.includes(String(recommendation.categoryCode))))throw Error('demae_menu_category_order_scope_invalid');
+    // This is the official sorting PATCH, not a menu-pattern content PUT.
+    // Its form places the special recommendation-management category last;
+    // that category is not part of the customer-facing business category list.
+    const ordered=[...requested,...(recommendation?[String(recommendation.categoryCode)]:[])];
+    await this.transport.request(`${path}/category-list-order`,'PATCH',{
+      menuPatternCategoryLinkList:ordered.map((categoryCode,index)=>({categoryCode,dispOrder:index+1}))
+    });
+    const [after,actualPattern,actualLinks,actualStock]=await Promise.all([
+      this.catalog(),this.transport.request(path),this.transport.request(`${path}/linked-category-list`),
+      this.stockCatalog().then(stockInvariant)
+    ]);
+    if(!Array.isArray(actualLinks?.categoryList)
+      ||!sameMenuValue(after.items.categoryList.map(row=>String(row.categoryCode)),requested)
+      ||!sameMenuValue(actualLinks.categoryList.map(row=>String(row.categoryCode)),requested)
+      ||!sameMenuValue(categoryOrderInvariant(after.items.categoryList),categoryOrderInvariant(categories))
+      ||!sameMenuValue(categoryOrderInvariant(actualLinks.categoryList),categoryOrderInvariant(links.categoryList))
+      ||!sameMenuValue(actualLinks.recommendCategory,recommendation)
+      ||!sameMenuValue(actualPattern,pattern)||!sameMenuValue(after.groups,before.groups)
+      ||!sameMenuValue(actualStock,stock))throw Error('demae_menu_category_order_verification_failed');
+    return after;
   }
   async retireItem(id) {
     // The native form requires at least one category. Retire into the

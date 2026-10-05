@@ -203,7 +203,7 @@ test('business group ordering is repaired and independently verified without dro
       const update=f.driver.client.updateItem.bind(f.driver.client);
       f.driver.client.updateItem=async(id,patch)=>{
         const result=await update(id,patch);
-        if(id==='99')f.items.get('99').sizeInfoList[0].sizeOptionGroupLinkList.reverse();
+        if(id==='99')f.items.get('99').sizeInfoList[0].sizeOptionGroupLinkList.reverse().forEach((row,index)=>row.dispOrder=index+1);
         return result;
       };
       await assert.rejects(()=>runUberAuthorityPublication(f.payload,f.driver,async()=>{}),/content_unverified:item:99/);
