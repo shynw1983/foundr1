@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildUberPublication,verifyUberPublication,type UberPublicationNode} from './uber-menu-publication.ts';
+import {buildUberPublication,verifyUberPublication,type UberPublicationNode,type UberMenuNameAdaptation} from './uber-menu-publication.ts';
 const node:UberPublicationNode={sourceKey:'item:a',kind:'item',targetId:'a',parentId:'c',name:'湯',displayNames:{zh:'汤'},price:180,uberPrice:227,description:'Soup',imageUrl:'',sortOrder:0,payload:{}};
 const input={sourceId:'s',storeId:'store',brandId:'b',revision:1,merchantId:'123',nodes:[node],mappings:[]};
 test('Demae hidden identity survives repeated group moves without relaxing isolation',()=>{
@@ -101,4 +101,56 @@ test('explicit informational-card exclusions do not drop other zero-price produc
   assert.equal(payload.targets[0].price,0);
  }
  assert.equal(nodes.length,2);
+});
+
+test('verified exact name adaptations are reused while unsafe or stale cache entries are ignored',()=>{
+ const source:UberPublicationNode={...node,sourceKey:'option_group:minimum',targetId:'minimum',kind:'option_group',name:'お願い：商品合計1,600円〜で',displayNames:{},uberPrice:null,price:null};
+ const baseline=buildUberPublication({...input,platform:'rocket_now',nodes:[source]});
+ const projected=baseline.targets[0];
+ const adaptation:UberMenuNameAdaptation={sourceKey:source.sourceKey,targetId:source.targetId,
+  sourceName:source.name,inputName:projected.nameProjection,name:'お願い：商品合計1600円以上で',
+  reason:'金額の下限を自然な表現で維持',model:'test-model',policyVersion:'contextual-name-v1',
+  verified:true,attemptedNames:[projected.nameProjection],rejectionReason:'special characters',createdAt:'2026-10-05T00:00:00Z'};
+ const publish=(saved:UberMenuNameAdaptation)=>buildUberPublication({...input,platform:'rocket_now',nodes:[source],nameAdaptations:{[source.sourceKey]:saved}});
+ const accepted=publish(adaptation).targets[0];
+ assert.equal(accepted.name,adaptation.name);
+ assert.equal(accepted.nameAdaptation,adaptation);
+ assert.equal(accepted.sourceName,source.name);
+ assert.equal(accepted.nameProjection,projected.nameProjection);
+ for(const patch of [{verified:false},{sourceName:'別の商品名'},{targetId:'another-target'},{sourceKey:'option_group:other'},{inputName:'前の公開名称'}]) {
+  const ignored=publish({...adaptation,...patch}).targets[0];
+  assert.equal(ignored.name,projected.nameProjection);
+  assert.equal(ignored.nameAdaptation,undefined);
+ }
+ const renamed=buildUberPublication({...input,platform:'rocket_now',nodes:[{...source,name:'お願い：商品合計1,700円〜で'}],nameAdaptations:{[source.sourceKey]:adaptation}}).targets[0];
+ assert.equal(renamed.name,renamed.nameProjection);assert.equal(renamed.nameAdaptation,undefined);
+ const translationChanged=buildUberPublication({...input,platform:'rocket_now',nodes:[{...source,displayNames:{zh:'商品总额1600日元起'}}],nameAdaptations:{[source.sourceKey]:adaptation}}).targets[0];
+ assert.equal(translationChanged.name,translationChanged.nameProjection);assert.equal(translationChanged.nameAdaptation,undefined);
+});
+
+test('AI name cache changes only the downstream name and retains the source graph, identities, prices and ordering',()=>{
+ const category:UberPublicationNode={...node,sourceKey:'category:c',targetId:'c',kind:'category',parentId:null,name:'麺',displayNames:{},price:null,uberPrice:null,payload:{id:'c',itemIds:['a']}};
+ const group:UberPublicationNode={...node,sourceKey:'option_group:g',targetId:'g',kind:'option_group',parentId:null,name:'麺の種類',displayNames:{},price:null,uberPrice:null,payload:{id:'g',optionIds:['o']}};
+ const option:UberPublicationNode={...node,sourceKey:'option:g:o',targetId:'o',kind:'option',parentId:'g',name:'刀削麺50〜100g',displayNames:{zh:'刀削面'},sortOrder:20,payload:{id:'o',groupId:'g'}};
+ const product:UberPublicationNode={...node,payload:{id:'a',groupIds:['g'],categoryIds:['c']}};
+ const nodes=[category,group,option,product];
+ const original=structuredClone(nodes);
+ const before=buildUberPublication({...input,platform:'rocket_now',nodes});
+ const projected=before.targets.find(target=>target.sourceKey===option.sourceKey)!;
+ const saved:UberMenuNameAdaptation={sourceKey:option.sourceKey,targetId:option.targetId,sourceName:option.name,
+  inputName:projected.nameProjection,name:'刀削麺50から100g(刀削面)',reason:'重量の範囲を維持',model:'test-model',policyVersion:'contextual-name-v1',
+  verified:true,attemptedNames:[projected.nameProjection],rejectionReason:'special characters',createdAt:'2026-10-05T00:00:00Z'};
+ const after=buildUberPublication({...input,platform:'rocket_now',nodes,nameAdaptations:{[option.sourceKey]:saved}});
+ assert.deepEqual(nodes,original);
+ assert.equal(after.targets.length,before.targets.length);
+ for(const prior of before.targets) {
+  const current=after.targets.find(target=>target.sourceKey===prior.sourceKey)!;
+  assert.deepEqual({targetId:current.targetId,parentId:current.parentId,marker:current.marker,price:current.price,sortOrder:current.sortOrder,source:current.source},
+   {targetId:prior.targetId,parentId:prior.parentId,marker:prior.marker,price:prior.price,sortOrder:prior.sortOrder,source:prior.source});
+  assert.equal(current.name,prior.sourceKey===option.sourceKey?saved.name:prior.name);
+ }
+ const observations=after.targets.map(target=>({sourceKey:target.sourceKey,externalId:`native-${target.targetId}`,name:target.name,price:target.price,hidden:true,structureVerified:true}));
+ assert.deepEqual(verifyUberPublication(after,{observations}),{verified:4,observed:4});
+ const stale=observations.map(row=>row.sourceKey===option.sourceKey?{...row,name:projected.nameProjection}:row);
+ assert.throws(()=>verifyUberPublication(after,{observations:stale}),/uber_publication_content_mismatch/);
 });

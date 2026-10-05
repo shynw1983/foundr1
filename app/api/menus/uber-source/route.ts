@@ -1,7 +1,7 @@
 import { requireMasterOsSession } from '../../../../lib/api-auth';
 import { sql } from '../../../../lib/db';
 import { scheduleUberSourceScans } from '../../../../lib/uber-menu-source-sync';
-import { nextMenuCheck } from '../../../../lib/menu-sync-status';
+import { nextMenuCheck, menuSyncIssueContext } from '../../../../lib/menu-sync-status';
 import { publishBridgeCommandAvailable } from '../../../../lib/local-bridge-realtime';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,7 +10,11 @@ export async function GET(request: Request) {
   const brandId = new URL(request.url).searchParams.get('brandId') ?? '';
   const sources = await sql`select id::text,brand_id::text,store_id::text,uber_store_uuid,enabled,auto_publish,revision,last_checked_at,last_error from menu_uber_sources where brand_id::text=${brandId}`;
   const runs = sources.length ? await sql`select r.id::text,r.revision,r.summary,r.created_at,coalesce(c.payload->>'trigger','unknown') as trigger from menu_uber_sync_runs r left join local_bridge_commands c on c.id=r.command_id where r.source_id=${sources[0].id} order by r.created_at desc limit 20` : [];
-  const jobHistory = sources.length ? await sql`select id::text,platform,status,created_at,updated_at,last_error,attempts,available_at,payload->>'revision' as revision,result->'progress'->>'phase' as phase,result->'progress' as progress,payload->'manualRetryHistory' as retries from local_bridge_commands where store_id=${sources[0].store_id} and payload->>'sourceId'=${sources[0].id}::text and (payload->>'authoritativePublication'='true' or payload->>'authoritativeSource'='true') order by created_at desc limit 80` : [];
+  const history = sources.length ? await sql`select id::text,platform,status,created_at,updated_at,last_error,attempts,available_at,payload->>'revision' as revision,result->'progress'->>'phase' as phase,result->'progress' as progress,payload->'manualRetryHistory' as retries,
+    case when last_error<>'' then (select jsonb_object_agg(target->>'sourceKey',coalesce(target->>'sourceName',target->>'name'))
+      from jsonb_array_elements(coalesce(payload->'targets','[]'::jsonb)) target where target->>'sourceKey' is not null) else '{}'::jsonb end as "targetNames"
+    from local_bridge_commands where store_id=${sources[0].store_id} and payload->>'sourceId'=${sources[0].id}::text and (payload->>'authoritativePublication'='true' or payload->>'authoritativeSource'='true') order by created_at desc limit 80` : [];
+  const jobHistory=history.map(({targetNames,...job})=>Object.assign(job,menuSyncIssueContext(String(job.last_error??''),(targetNames??{}) as Record<string,string>)));
   const jobs=jobHistory.filter((row,index)=>jobHistory.findIndex(other=>other.platform===row.platform)===index);
   // Resolve only the current target name, never return the full command payload.
   for(const job of jobs.filter(row=>row.status==='processing')) {
@@ -35,6 +39,19 @@ export async function POST(request: Request) {
     // Reuse the exact command ID: creation receipts and uncertain writes belong
     // to it. Never replay an older publication over a newer one.
     const source=sources[0],id=String(body.jobId??'');
+    const failures=await sql`select platform,last_error from local_bridge_commands where id::text=${id}
+      and store_id=${source.store_id} and payload->>'sourceId'=${source.id} and status='failed'`;
+    if(failures.length) {
+      const {adaptRejectedUberMenuName,MenuNameAdaptationConflict}=await import('../../../../lib/uber-menu-name-adaptation-store');
+      try {await adaptRejectedUberMenuName({commandId:id,storeId:source.store_id,platform:String(failures[0].platform),error:String(failures[0].last_error),status:'failed'});}
+      catch(error) {
+        if(error instanceof MenuNameAdaptationConflict)return Response.json({error:'同期の状態が変わりました。状態を更新して確認してください。'},{status:409});
+        const detail=error instanceof Error?error.message:'menu_name_ai_invalid';
+        const {menuSyncIssue}=await import('../../../../lib/menu-sync-status');
+        const issue=menuSyncIssue(detail,String(body.language??'ja'));
+        return Response.json({error:issue?`${issue.title} ${issue.action}`:'名前の調整を確認してください。'}, {status:409});
+      }
+    }
     const result=await sql.transaction([
       sql`select lock_menu_uber_revision(${source.id},${source.revision})`,
       sql`update local_bridge_commands c set status='pending',attempts=0,available_at=now(),completed_at=null,claimed_by_device_id=null,claimed_at=null,claim_expires_at=null,

@@ -7,7 +7,12 @@ export async function recordUberPublicationProgress(input:{commandId:string;stor
   if(!scope)throw new Error('uber_publication_scope_invalid');
   const payload=scope.payload as Record<string,unknown>;
   if(Number(payload.revision)!==Number(scope.revision))throw new Error('uber_publication_superseded');
-  if(input.result) return verifyUberPublication(payload,input.result);
+  if(input.result) {
+    const verified=verifyUberPublication(payload,input.result);
+    const {confirmUberMenuNameAdaptations}=await import('./uber-menu-name-adaptation-store');
+    await confirmUberMenuNameAdaptations({sourceId:scope.sourceId,revision:Number(scope.revision),platform:input.platform,payload});
+    return verified;
+  }
   if(input.progress.authorityMigration) {
     const {recordUberOptionMigration}=await import('./uber-option-migration-store');
     await recordUberOptionMigration({sourceId:scope.sourceId,storeId:input.storeId,brandId:scope.brandId,platformId:scope.platformId,revision:Number(scope.revision),payload,state:input.progress.authorityMigration as Record<string,unknown>,commandId:input.commandId});

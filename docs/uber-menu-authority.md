@@ -54,6 +54,32 @@ An already-authorized automatic source does not require a new manual confirmatio
    fails rather than reassigning another OS object's external ID. The worker must
    treat progress acknowledgements as required for this protocol.
 
+## Contextual downstream name adaptation
+
+Uber source names are not edited to satisfy another platform's character rules.
+If Rocket Now or Demae explicitly rejects the name of one exactly identified
+publication target, or Demae preflight confirms one exact group's native name-length
+limit, the server may ask AI for a context-aware, name-only candidate.
+There is no universal wave-dash replacement: minimums, ranges and decorative
+punctuation must retain their meaning. Numeric order, quantities, units and the
+existing words in product/option identities are checked before use. Login,
+network, stock and identity failures do not trigger name adaptation.
+
+The candidate, model, reason and attempt history are saved in the source's
+platform-specific `publish_config.nameAdaptations`. At most two candidates are
+tried for the same source name/projection and stable target. Automatic execution
+still observes the command's three-attempt limit. The candidate and same-command
+retry share a claim-guarded transaction; existing IDs, creation receipts, migration
+intent, prices, availability and ordering remain unchanged. Incomplete migrations
+are not renamed. No schema change or rewrite of Uber/OS menu text is required.
+
+A candidate becomes reusable only after the ordinary full native publication
+verifier passes. Future payloads reuse it only for the exact source key, target ID,
+source name and original projected name. A changed source name or translation
+requires a fresh decision. Unsafe or exhausted candidates stop with the affected
+object's name and an actionable explanation; technical codes remain in collapsed
+details. This describes local behavior, not a production rollout record.
+
 ## New-arrival presentation policy — 2026-09-11
 
 `新登場トッピング` is an optional Uber presentation membership. Within one

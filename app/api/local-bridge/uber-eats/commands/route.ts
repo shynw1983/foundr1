@@ -2,6 +2,7 @@ import { sql } from "../../../../../lib/db";
 import { reconcileInventoryCommandsSql } from "../../../../../lib/inventory-command-supersession";
 import { applyUberAvailabilitySync } from "../../../../../lib/inventory-manual-sync";
 import { menuSyncIssue } from "../../../../../lib/menu-sync-status";
+import { findRejectedMenuNameTarget } from "../../../../../lib/menu-name-adaptation";
 import { mergePlatformSnapshotEntries } from "../../../../../lib/menu-platform-snapshot-merge";
 import { ingestUberMenuSource } from "../../../../../lib/uber-menu-source-sync";
 import { publishPublicMenuUpdatedEvent } from "../../../../../lib/order-realtime";
@@ -504,7 +505,7 @@ export async function POST(request: Request) {
   }
 
   const commandRows = await sql`
-    select command_type as "commandType", platform, payload, attempts
+    select command_type as "commandType", platform, payload, attempts,claimed_at::text as "claimedAt"
     from local_bridge_commands
     where id::text = ${commandId}
       and store_id::text = ${authorization.storeId}
@@ -597,9 +598,29 @@ export async function POST(request: Request) {
     }
   }
 
-  const stopAuthorityRetry = (commandPayload.authoritativePublication===true||commandPayload.authoritativeSource===true)
+  let nameAdapted=false;
+  if(status==='failed'&&commandPayload.authoritativePublication===true&&authorization.isDesktop
+    &&Number(commandRows[0].attempts)<3&&findRejectedMenuNameTarget(commandPayload,error)) {
+    const {adaptRejectedUberMenuName,MenuNameAdaptationConflict}=await import('../../../../../lib/uber-menu-name-adaptation-store');
+    try {
+      const adaptation=await adaptRejectedUberMenuName({commandId,storeId:authorization.storeId,
+        platform:String(commandRows[0].platform),error,status:'processing',result,
+        claim:{deviceId:authorization.deviceId,claimedAt:String(commandRows[0].claimedAt??'')}});
+      nameAdapted=Boolean(adaptation);
+      if(adaptation) {
+        result.nameAdaptation=adaptation;
+        error=`menu_name_ai_retry_prepared:${JSON.stringify(adaptation)}`;
+      }
+    }
+    catch(failure) {
+      if(failure instanceof MenuNameAdaptationConflict)return Response.json({error:'Command changed while preparing its name.'},{status:409});
+      error=failure instanceof Error?failure.message:'menu_name_ai_invalid';
+    }
+  }
+  const stopAuthorityRetry = !nameAdapted&&(commandPayload.authoritativePublication===true||commandPayload.authoritativeSource===true)
     && menuSyncIssue(error)?.kind!=='network';
-  const rows = status === "succeeded" ? await sql`
+  // Name repairs were persisted and requeued atomically with their claim guard.
+  const rows = nameAdapted ? [{id:commandId,status:'pending',platform:commandRows[0].platform,commandType:commandRows[0].commandType}] : status === "succeeded" ? await sql`
     update local_bridge_commands
     set
       status = 'succeeded',

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { deliveryPlatformRules, projectDeliveryName, projectDeliveryDescription } from './delivery-menu-publishing.ts';
 import { authoritativeDeliveryPrice } from './uber-menu-authority.ts';
 import {resolveUberOptionPlacement} from './uber-option-placement.ts';
+import type {MenuNameAdaptation} from './menu-name-adaptation.ts';
 
 export type UberPublicationNode = {
   sourceKey: string; kind: string; targetId: string; parentId: string | null;
@@ -11,6 +12,9 @@ export type UberPublicationNode = {
 };
 export type UberPublicationMapping = {kind:string; targetId:string; externalId:string; externalParentId:string};
 export type UberCreationIdentity = {sourceKey:string;status:string;externalId:string;externalParentId:string};
+export type UberMenuNameAdaptation = MenuNameAdaptation & {
+  sourceName:string; verified:boolean; attemptedNames:string[]; rejectionReason:string; createdAt:string;
+};
 
 // A Demae carrier retains its creation marker when its option moves between
 // Uber groups. Recover it only from an exact, persisted external identity.
@@ -59,6 +63,7 @@ export function buildUberPublication(input: {
   excludedSourceKeys?:string[];
   optionMigrationPolicy?:'preserve_stock';
   creationIdentities?:UberCreationIdentity[];
+  nameAdaptations?:Record<string,UberMenuNameAdaptation>;
 }) {
   // Explicit, persisted owner decisions only; never infer exclusions from price.
   // Retain the source in OS while omitting it from downstream relationships.
@@ -66,10 +71,16 @@ export function buildUberPublication(input: {
   const placements=resolveUberOptionPlacement(input.nodes.filter(n=>!excluded.has(n.sourceKey)
     &&!input.quarantinedSourceKeys?.includes(n.sourceKey)),input.mappings);
   for(const alias of placements)excluded.add(alias.sourceKey);
-  const targets=input.nodes.filter(node=>!excluded.has(node.sourceKey)).map(node=>({
+  const targets=input.nodes.filter(node=>!excluded.has(node.sourceKey)).map(node=>{
+    const nameProjection=nativePublicationName(input.platform,node);
+    const saved=input.nameAdaptations?.[node.sourceKey];
+    const adaptation=saved?.verified===true&&saved.sourceKey===node.sourceKey&&saved.targetId===node.targetId
+      &&saved.sourceName===node.name&&saved.inputName===nameProjection?saved:undefined;
+    return {
     sourceKey:node.sourceKey,kind:node.kind,targetId:node.targetId,parentId:node.parentId,
     marker:`FS${createHash('sha256').update(`${input.sourceId}:${input.platform==='demae_can'&&input.creationIdentities?creationSourceKey(node,input.mappings,input.creationIdentities):node.sourceKey}`).digest('hex').slice(0,14)}`,
-    name:nativePublicationName(input.platform,node),
+    name:adaptation?.name??nameProjection,sourceName:node.name,nameProjection,
+    ...(adaptation?{nameAdaptation:adaptation}:{}),
     price:['item','option'].includes(node.kind) && !isUberPublicationRetired(node)
       ? authoritativeDeliveryPrice(input.platform,node.uberPrice as number,node.price as number) : null,
     description:projectDeliveryDescription(input.platform,node.description),sortOrder:node.sortOrder,
@@ -77,7 +88,7 @@ export function buildUberPublication(input: {
     quarantined:input.quarantinedSourceKeys?.includes(node.sourceKey)===true,
     mappings:input.mappings.filter(mapping=>mapping.kind===node.kind && mapping.targetId===node.targetId)
       .flatMap(mapping=>mapping.externalId.split(',').map(id=>id.trim()).filter(Boolean).map(externalId=>({externalId,externalParentId:mapping.externalParentId})))
-  }));
+  };});
   return {authoritativePublication:true,sourceId:input.sourceId,brandId:input.brandId,
     storeId:input.storeId,revision:input.revision,platformKey:input.platform,
     merchantId:input.merchantId,menuPatternCode:input.menuPatternCode??'',
