@@ -20,11 +20,13 @@ export async function retryTransientMenuRead(method,operation,wait=delay) {
 // cookies or replay requests against an unverified origin.
 export async function connectMerchantMenuClient(session, origin, successCode, onProgress=async()=>{}) {
   const page = await CdpPage.connect(await session.ensureRunning(), origin);
-  const paced=createMerchantMenuPacer();
   if (await page.evaluate('location.origin') !== origin) {
     page.close();
     throw new Error('merchant_menu_origin_mismatch');
   }
+  // Conservative request pacing, not a substitute for resolving native
+  // authentication/rejection errors. Keep every retry on the same serial queue.
+  const paced=createMerchantMenuPacer({intervalMs:origin==='https://store.rocketnow.co.jp'?1000:250});
   return {
     close: () => page.close(),
     async creationReceipt(receiptKey) {
