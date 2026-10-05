@@ -4,27 +4,35 @@ import {RocketMenuClient} from '../src/rocket-menu-client.mjs';
 import {DemaeMenuClient} from '../src/demae-menu-client.mjs';
 import {AuthorityNativeDriver} from '../src/uber-authority-native-driver.mjs';
 
-function rocket(mode='ok') {
-  const menus=[{menuId:1,menuName:'a',exposeOrder:0,dishes:[
+function rocket(mode='ok',{menus:initialMenus,groups:initialGroups}={}) {
+  const menus=structuredClone(initialMenus??[{menuId:1,menuName:'a',exposeOrder:0,dishes:[
     {dishId:4,exposeOrder:0,displayStatus:'NOT_EXPOSE',salePrice:100},
     {dishId:5,exposeOrder:1,displayStatus:'ON_SALE',salePrice:200}]},
-  {menuId:2,menuName:'b',exposeOrder:1,dishes:[{dishId:6,exposeOrder:0,displayStatus:'SOLD_OUT_TODAY',salePrice:300}]}];
+  {menuId:2,menuName:'b',exposeOrder:1,dishes:[{dishId:6,exposeOrder:0,displayStatus:'SOLD_OUT_TODAY',salePrice:300}]}]);
+  const groups=structuredClone(initialGroups??[{optionId:11,optionName:'group',optionItems:[{optionItemId:12,displayStatus:'SOLD_OUT_TODAY',salePrice:50}]}]);
   const writes=[];
   const client=new RocketMenuClient({request:async(path,method,body)=>{
     if(method==='POST') {
-      writes.push({path,body:structuredClone(body)});assert.match(path,/menus\/update-expose-order$/);
+      // The real transport JSON serializer omits undefined but retains null.
+      const saved=JSON.parse(JSON.stringify(body));
+      writes.push({path,body:saved});assert.match(path,/menus\/update-expose-order$/);
       if(mode==='ignored')return {};
-      for(const dto of body) {
-        const menu=menus.find(row=>row.menuId===dto.menuId);menu.exposeOrder=dto.exposeOrder;
+      for(const dto of saved) {
+        const menu=menus.find(row=>row.menuId===dto.menuId);
+        if(Object.hasOwn(dto,'exposeOrder'))menu.exposeOrder=dto.exposeOrder;
         for(const dish of dto.dishOrders??[])menu.dishes.find(row=>row.dishId===dish.dishId).exposeOrder=dish.exposeOrder;
       }
       if(mode==='stock')menus[0].dishes[0].displayStatus='ON_SALE';
-      if(mode==='otherOrder')menus[1].dishes.reverse();
+      if(mode==='content')menus[0].description='changed';
+      if(mode==='groups')groups[0].optionItems[0].displayStatus='ON_SALE';
+      if(mode==='newId')menus.push({menuId:99,menuName:'new',exposeOrder:99,dishes:[]});
+      if(mode==='otherOrder')menus[1].dishes.forEach((dish,index)=>{dish.exposeOrder=menus[1].dishes.length-index-1;});
+      if(mode==='otherCategoryOrder')menus.forEach((menu,index)=>{menu.exposeOrder=menus.length-index-1;});
       return {};
     }
-    return path.includes('all-menu-dishes')?{menus:structuredClone(menus)}:[];
+    return path.includes('all-menu-dishes')?{menus:structuredClone(menus)}:structuredClone(groups);
   }},'1');
-  return {client,menus,writes};
+  return {client,menus,groups,writes};
 }
 
 test('Rocket uses the official menu ordering DTO for item order and rereads display fields',async()=>{
@@ -35,8 +43,8 @@ test('Rocket uses the official menu ordering DTO for item order and rereads disp
   assert.equal(f.menus[0].dishes[0].displayStatus,'NOT_EXPOSE');
 });
 
-test('Rocket category and item ordering reject ignored saves, changed stock and new IDs',async()=>{
-  for(const method of ['reorderCategoryItems','reorderCategories'])for(const mode of ['ignored','stock']) {
+test('Rocket category and item ordering reject ignored saves, content/stock/group changes and new IDs',async()=>{
+  for(const method of ['reorderCategoryItems','reorderCategories'])for(const mode of ['ignored','stock','content','groups','newId']) {
     const f=rocket(mode);
     await assert.rejects(()=>method==='reorderCategoryItems'?f.client[method]('1',['5','4']):f.client[method](['2','1']),/order_verification_failed/);
     assert.equal(f.writes.length,1);
@@ -45,6 +53,92 @@ test('Rocket category and item ordering reject ignored saves, changed stock and 
   await assert.rejects(()=>f.client.reorderCategoryItems('1',['5','unknown']),/members_require_migration/);
   await assert.rejects(()=>f.client.reorderCategories(['1','unknown']),/scope_invalid/);
   assert.equal(f.writes.length,0);
+});
+
+test('Rocket menu/dish display order matches the official ID tie-break, not API creation order',async()=>{
+  const f=rocket('ok',{menus:[
+    {menuId:40,exposeOrder:null,dishes:[]},
+    {menuId:20,exposeOrder:1,dishes:[]},
+    {menuId:30,dishes:[]},
+    {menuId:10,exposeOrder:1,dishes:[{dishId:9,exposeOrder:null},{dishId:7,exposeOrder:0},{dishId:8},{dishId:6,exposeOrder:0}]},
+    {menuId:50,exposeOrder:null,dishes:[]}
+  ]});
+  const catalog=await f.client.catalog();
+  assert.deepEqual(catalog.menus.map(row=>row.menuId),[10,20,30,40,50]);
+  assert.deepEqual(catalog.menus[0].dishes.map(row=>row.dishId),[6,7,8,9]);
+  assert.deepEqual(f.menus.map(row=>row.menuId),[40,20,30,10,50]);
+  assert.deepEqual(f.menus[3].dishes.map(row=>row.dishId),[9,7,8,6]);
+  assert.equal(f.writes.length,0);
+});
+
+test('Rocket single-category sort preserves null/omitted category metadata through official JSON DTO',async()=>{
+  for(const present of [true,false]) {
+    const f=rocket();
+    if(present)f.menus[0].exposeOrder=null;else delete f.menus[0].exposeOrder;
+    const before=await f.client.catalog();
+    await f.client.reorderCategoryItems('1',['5','4']);
+    assert.deepEqual(f.writes[0].body,[{menuId:1,...(present?{exposeOrder:null}:{}),dishOrders:[{dishId:5,exposeOrder:0},{dishId:4,exposeOrder:1}]}]);
+    const after=await f.client.catalog();
+    assert.deepEqual(after.menus.map(row=>row.menuId),before.menus.map(row=>row.menuId));
+    assert.deepEqual(after.menus.find(row=>row.menuId===1).dishes.map(row=>row.dishId),[5,4]);
+    assert.equal(Object.hasOwn(f.menus[0],'exposeOrder'),present);
+    if(present)assert.equal(f.menus[0].exposeOrder,null);
+    assert.equal(f.menus[0].dishes[0].displayStatus,'NOT_EXPOSE');
+  }
+});
+
+test('Rocket missing-position no-op does not write, while non-native positions fail before a real change',async()=>{
+  for(const exposeOrder of [null,undefined,'1',-1,0.5,Infinity,NaN]) {
+    const f=rocket();f.menus[0].exposeOrder=exposeOrder;
+    await f.client.reorderCategoryItems('1',['4','5']);
+    assert.equal(f.writes.length,0);
+    if(exposeOrder!==null&&exposeOrder!==undefined) {
+      await assert.rejects(()=>f.client.reorderCategoryItems('1',['5','4']),/category_order_metadata_missing/);
+      assert.equal(f.writes.length,0);
+    }
+  }
+});
+
+test('Rocket item sorting rejects changed category slots and unrelated item display order',async()=>{
+  for(const mode of ['otherCategoryOrder','otherOrder']) {
+    const f=rocket(mode);
+    f.menus[1].dishes.push({dishId:7,exposeOrder:1,displayStatus:'NOT_EXPOSE',salePrice:400});
+    await assert.rejects(()=>f.client.reorderCategoryItems('1',['5','4']),/order_verification_failed/);
+    assert.equal(f.writes.length,1);
+  }
+  const f=rocket('otherOrder');
+  f.menus[1].dishes.push({dishId:7,exposeOrder:1,displayStatus:'NOT_EXPOSE',salePrice:400});
+  await assert.rejects(()=>f.client.reorderCategories(['2','1']),/order_verification_failed/);
+});
+
+test('Rocket full category ordering handles the observed 3 numeric/12 null catalog and preserves unmanaged slots',async()=>{
+  // Bounded 2026-10-06 native GET: these category positions are genuinely
+  // nullable. API dish creation arrays also differ from the official ID tie.
+  const rawIds=[1625484,1625481,1625483,1652416,1652417,1652418,1652419,1652420,1761001,1761002,1761003,1761018,1761068,1761069,1821035];
+  const menus=rawIds.map((menuId,index)=>({menuId,menuName:`category ${menuId}`,description:'preserved',exposeStatus:'EXPOSE',menuType:null,
+    exposeOrder:index<3?index:null,dishes:index===0?[
+      {dishId:11027839,exposeOrder:null,displayStatus:'NOT_EXPOSE',salePrice:2380},
+      {dishId:9987919,exposeOrder:null,displayStatus:'SOLD_OUT_TODAY',salePrice:2280}
+    ]:[]}));
+  const f=rocket('ok',{menus});
+  const before=await f.client.catalog();
+  const expected=['1761018','1652417','1625481','1625483','1625484','1652419','1761068','1652420'];
+  const driver=new AuthorityNativeDriver({}, {platformKey:'rocket_now',merchantId:'1',targets:expected.map((id,sortOrder)=>({
+    kind:'category',targetId:id,sourceKey:`category:${id}`,sortOrder,name:id,mappings:[{externalId:id}]
+  }))});
+  driver.client=f.client;
+  await driver.updateCategoryOrder();
+  const after=await f.client.catalog();
+  assert.deepEqual(after.menus.filter(row=>expected.includes(String(row.menuId))).map(row=>String(row.menuId)),expected);
+  for(const [index,menu] of before.menus.entries())if(!expected.includes(String(menu.menuId)))assert.equal(after.menus[index].menuId,menu.menuId);
+  assert.deepEqual(f.writes[0].body,after.menus.map((row,index)=>({menuId:row.menuId,exposeOrder:index})));
+  assert.ok(after.menus.every((row,index)=>row.exposeOrder===index));
+  for(const menu of before.menus) {
+    const actual=after.menus.find(row=>row.menuId===menu.menuId);
+    assert.deepEqual({...actual,exposeOrder:menu.exposeOrder},menu);
+  }
+  assert.deepEqual(f.groups,[{optionId:11,optionName:'group',optionItems:[{optionItemId:12,displayStatus:'SOLD_OUT_TODAY',salePrice:50}]}]);
+  await driver.updateCategoryOrder();assert.equal(f.writes.length,1);
 });
 
 test('Rocket category-only sorting preserves every item sequence and content',async()=>{

@@ -32,6 +32,8 @@ export function demaeItemUpdate(detail,patch,today) {
   const sizes=detail.sizeInfoList??[];
   const active=sizes.filter(size=>date(size.applyStartDate)<=today && date(size.applyEndDate)>=today);
   if((patch.price!==undefined||patch.groupLinks!==undefined) && active.length!==1)throw new Error('demae_menu_ambiguous_active_size');
+  const groupSizeCode=patch.groupLinks!==undefined?String(active[0].sizeCode??''):null;
+  if(groupSizeCode!==null&&!/^[A-Za-z0-9_-]+$/.test(groupSizeCode))throw Error('demae_menu_active_size_identity_invalid');
   const output={};
   for(const key of ['chainId','itemCode','itemName','itemDescription','imageTrimmingRange','comboItemType','itemType','appealIconCode','sizeInfoList','categoryItemLinkList','itemImageFileName'])output[key]=detail[key];
   output.itemName=patch.name??detail.itemName;
@@ -41,7 +43,10 @@ export function demaeItemUpdate(detail,patch,today) {
     // fields as null; echoing null makes the server treat it as a new period.
     originalApplyStartDate:size.applyStartDate,originalApplyEndDate:size.applyEndDate,
     price:patch.price!==undefined && size===active[0]?yen(patch.price):size.price,
-    ...(patch.groupLinks!==undefined&&size===active[0]?{sizeOptionGroupLinkList:patch.groupLinks}:{}),
+    // Native group associations belong to itemCode + sizeCode, not to a price
+    // period. The official editor updates every period of this same size;
+    // sending old/new lists for it in one PUT creates conflicting requests.
+    ...(groupSizeCode!==null&&String(size.sizeCode)===groupSizeCode?{sizeOptionGroupLinkList:patch.groupLinks}:{}),
     ...(patch.retireGroupId!==undefined?{sizeOptionGroupLinkList:(size.sizeOptionGroupLinkList??[]).filter(link=>String(link.optionGroupCode)!==String(patch.retireGroupId))}:{})}));
   output.categoryItemLinkList=patch.categoryLinks??detail.categoryItemLinkList;
   output.itemImageEditType='NOT_EDIT';output.itemImage=null;
@@ -171,36 +176,50 @@ export class DemaeMenuClient {
     const stock=await this.stockState('item',id);
     const before=await this.item(id);
     if(String(before.itemCode)!==String(id)||String(before.chainId)!==this.chainId)throw new Error('demae_menu_identity_mismatch');
+    // Resolve the unique current size and its safe identity before validating
+    // any proposed association. Other size codes cannot lend release authority.
+    const body=demaeItemUpdate(before,patch,this.today);
     if(patch.categoryLinks?.length) {
       const {items}=await this.catalog();
       if(!occurrences.length&&patch.releaseAvailable!==true||!items.categoryList.some(row=>String(row.categoryCode)===String(patch.categoryLinks[0].categoryCode)))throw Error('demae_menu_draft_requires_release');
     }
     if(patch.groupLinks!==undefined) {
       if(!Array.isArray(patch.groupLinks)||new Set(patch.groupLinks.map(row=>row.optionGroupCode)).size!==patch.groupLinks.length)throw Error('demae_menu_group_links_invalid');
+      const currentSizeCode=String(before.sizeInfoList.find(size=>date(size.applyStartDate)<=this.today&&date(size.applyEndDate)>=this.today).sizeCode);
       for(const link of patch.groupLinks) {
         const group=await this.group(link.optionGroupCode);
         // Unlinked draft groups cannot be accidentally exposed through a
         // content update. They need the separate permanent-hold release flow.
         if(!group.items.length)throw Error('demae_menu_draft_group_requires_release');
-        const prior=(before.sizeInfoList??[]).flatMap(row=>row.sizeOptionGroupLinkList??[]).some(row=>row.optionGroupCode===link.optionGroupCode);
+        const prior=before.sizeInfoList.filter(size=>String(size.sizeCode)===currentSizeCode)
+          .flatMap(row=>row.sizeOptionGroupLinkList??[]).some(row=>row.optionGroupCode===link.optionGroupCode);
         if(occurrences.length&&!prior) {
           const snapshot=await this.stockCatalog();
           if(!group.options.length||group.options.some(option=>!snapshot.optionList.some(row=>String(row.chainId)===this.chainId&&row.optionCode===option.optionCode&&row.linkedShopList?.length)))throw Error('demae_menu_new_group_requires_release');
         }
       }
     }
-    const body=demaeItemUpdate(before,patch,this.today);
     await this.transport.request(`${this.base}/item/${code(id)}`,'PUT',body);
     const actual=await this.item(id);
-    const active=(actual.sizeInfoList??[]).filter(size=>date(size.applyStartDate)<=this.today&&date(size.applyEndDate)>=this.today);
-    if(String(actual.itemCode)!==String(id) || String(actual.chainId)!==this.chainId
-      || actual.itemName!==body.itemName || String(actual.itemDescription??'')!==String(body.itemDescription??'')
-      || (patch.price!==undefined && (active.length!==1||Number(active[0].price)!==patch.price))
-      || !(patch.categoryLinks!==undefined
+    const active=(Array.isArray(actual.sizeInfoList)?actual.sizeInfoList:[]).filter(size=>date(size.applyStartDate)<=this.today&&date(size.applyEndDate)>=this.today);
+    const failedFields=[];
+    if(String(actual.itemCode)!==String(id)||String(actual.chainId)!==this.chainId)failedFields.push('identity');
+    if(actual.itemName!==body.itemName)failedFields.push('name');
+    if(String(actual.itemDescription??'')!==String(body.itemDescription??''))failedFields.push('description');
+    if(!['comboItemType','itemType','appealIconCode'].every(key=>sameMenuValue(actual[key],body[key])))failedFields.push('item_fields');
+    if(patch.price!==undefined&&(active.length!==1||Number(active[0].price)!==patch.price))failedFields.push('price');
+    if(!(patch.categoryLinks!==undefined
         ? sameRequestedCategoryLinks(actual.categoryItemLinkList,body.categoryItemLinkList,this.chainId)
-        : sameMenuValue(actual.categoryItemLinkList,body.categoryItemLinkList))
-      || !sameMenuValue(storedSizes(actual.sizeInfoList),storedSizes(body.sizeInfoList))
-      || !sameDemaeImage(before,actual))throw new Error('demae_menu_item_verification_failed');
+        : sameMenuValue(actual.categoryItemLinkList,body.categoryItemLinkList)))failedFields.push('category_links');
+    if(!Array.isArray(actual.sizeInfoList)||!sameMenuValue(storedSizes(actual.sizeInfoList),storedSizes(body.sizeInfoList))) {
+      const actualSizes=Array.isArray(actual.sizeInfoList)?storedSizes(actual.sizeInfoList):[];
+      const expectedSizes=storedSizes(body.sizeInfoList);
+      const fields=sizes=>sizes.map(({sizeOptionGroupLinkList,...size})=>size);
+      if(!Array.isArray(actual.sizeInfoList)||!sameMenuValue(fields(actualSizes),fields(expectedSizes)))failedFields.push('size_fields');
+      if(!sameMenuValue(actualSizes.map(size=>size.sizeOptionGroupLinkList),expectedSizes.map(size=>size.sizeOptionGroupLinkList)))failedFields.push('size_group_links');
+    }
+    if(!sameDemaeImage(before,actual))failedFields.push('image');
+    if(failedFields.length)throw Error(`demae_menu_item_verification_failed:${JSON.stringify({nativeId:String(id),failedFields})}`);
     const afterOccurrences=await this.itemOccurrences(id);
     if(patch.categoryLinks?.length===0) {
       if(afterOccurrences.length)throw new Error('demae_menu_item_still_linked');

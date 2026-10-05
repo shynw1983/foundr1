@@ -1,6 +1,16 @@
 import { positiveId, yen, sameMenuValue } from './merchant-menu-client.mjs';
 import {nativeMenuOrder} from './native-menu-order.mjs';
 
+// Rocket's official merchant Lje/Mje treats absent positions as last and
+// breaks equal/missing positions by the native relationship ID. Its raw API
+// arrays can still be in creation order. Keep this platform-specific: other
+// merchant APIs do not necessarily share the same tie-breaking contract.
+function rocketCatalogOrder(rows,idKey) {
+  if(!Array.isArray(rows))return rows;
+  const position=row=>typeof row?.exposeOrder==='number'&&Number.isFinite(row.exposeOrder)?row.exposeOrder:Infinity;
+  return [...rows].sort((left,right)=>position(left)-position(right)||Number(left[idKey])-Number(right[idKey]));
+}
+
 export function rocketPhysicalId(value) {
   const text = String(value ?? '');
   return positiveId(text.match(/^sub_checkbox_\d+_(\d+)$/u)?.[1] ?? text);
@@ -86,7 +96,7 @@ export class RocketMenuClient {
       this.transport.request(`${this.readBase}/all-options?fetchDish=true`)
     ]);
     if (!Array.isArray(menus?.menus) || !Array.isArray(groups)) throw new Error('rocket_menu_incomplete_catalog');
-    return {menus:nativeMenuOrder(menus.menus,'exposeOrder').map(menu=>({...menu,dishes:nativeMenuOrder(menu.dishes,'exposeOrder')})),
+    return {menus:rocketCatalogOrder(menus.menus,'menuId').map(menu=>({...menu,dishes:rocketCatalogOrder(menu.dishes,'dishId')})),
       groups:groups.map(group=>({...group,optionItems:nativeMenuOrder(group.optionItems,'exposeOrder')}))};
   }
   async detail(id) {
@@ -262,11 +272,16 @@ export class RocketMenuClient {
   async reorderCategoryItems(id,ids) {
     const physicalId=positiveId(id),before=await this.catalog();
     const category=before.menus.find(menu=>String(menu.menuId)===physicalId);
-    if(!category||!Number.isSafeInteger(category.exposeOrder)||category.exposeOrder<0)throw Error('rocket_menu_category_order_metadata_missing');
+    if(!category)throw Error('rocket_menu_category_missing');
     const prior=(category.dishes??[]).map(row=>String(row.dishId));
     if(!Array.isArray(ids)||ids.length!==prior.length||new Set(ids.map(String)).size!==ids.length
       ||ids.some(id=>!prior.includes(String(id))))throw Error('rocket_menu_category_members_require_migration');
     if(sameMenuValue(prior,ids.map(String)))return category;
+    // Official Fje(false) preserves the category's position, including a
+    // null/omitted position. Only dishOrders change; an absent old position
+    // is not a reason to invent one or reorder unrelated category slots.
+    if(category.exposeOrder!==null&&category.exposeOrder!==undefined
+      &&(!Number.isSafeInteger(category.exposeOrder)||category.exposeOrder<0))throw Error('rocket_menu_category_order_metadata_missing');
     // Official merchant Fje -> Zje uses this shared ordering endpoint. This
     // payload contains only existing relationship IDs and display positions.
     await this.transport.request(`${this.writeBase}/menus/update-expose-order`,'POST',[
@@ -287,7 +302,8 @@ export class RocketMenuClient {
     if(!Array.isArray(ids)||ids.length!==prior.length||new Set(ids.map(String)).size!==ids.length
       ||ids.some(id=>!prior.includes(String(id))))throw Error('rocket_menu_category_order_scope_invalid');
     if(sameMenuValue(prior,ids.map(String)))return before;
-    if(before.menus.some(menu=>!Number.isSafeInteger(menu.exposeOrder)||menu.exposeOrder<0))throw Error('rocket_menu_category_order_metadata_missing');
+    // Official Fje(true) assigns the full ordered set new indexes and does
+    // not require old exposeOrder metadata (new/private menus may be null).
     await this.transport.request(`${this.writeBase}/menus/update-expose-order`,'POST',
       ids.map((menuId,index)=>({menuId:Number(positiveId(menuId)),exposeOrder:index})));
     const after=await this.catalog();

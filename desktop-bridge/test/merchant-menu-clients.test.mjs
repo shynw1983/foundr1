@@ -45,11 +45,11 @@ test('Demae updates only the current price period, preserving photos and links',
  const ambiguous=demaeItem();ambiguous.sizeInfoList.push({...ambiguous.sizeInfoList[1],sizeCode:'2'});
  assert.throws(()=>demaeItemUpdate(ambiguous,{price:190},'2026-09-07'),/ambiguous/);
 });
-test('Demae group ordering changes leave historical price periods and old associations intact',()=>{
+test('Demae group ordering is shared across same-size periods, while prices stay period-specific',()=>{
  const before=demaeItem();before.sizeInfoList[0].sizeOptionGroupLinkList=[{optionGroupCode:'old'}];
  const links=[{chainId:1,optionGroupCode:'new',dispOrder:1}];
  const body=demaeItemUpdate(before,{groupLinks:links},'2026-09-08');
- assert.deepEqual(body.sizeInfoList[0].sizeOptionGroupLinkList,[{optionGroupCode:'old'}]);
+ assert.deepEqual(body.sizeInfoList[0].sizeOptionGroupLinkList,links);
  assert.deepEqual(body.sizeInfoList[1].sizeOptionGroupLinkList,links);
  assert.deepEqual(body.sizeInfoList.map(row=>row.price),[80,180]);
 });
