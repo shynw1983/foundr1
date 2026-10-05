@@ -25,6 +25,55 @@ function optionMappings(groups = []) {
   }));
 }
 
+const optionStatusRank={ON_SALE:0,SOLD_OUT_TODAY:1,NOT_EXPOSE:2};
+
+function optionStockCatalog(groups) {
+  if(!Array.isArray(groups))throw Error('rocket_menu_option_stock_scope_invalid');
+  const groupIds=new Set(),options=new Map();
+  for(const group of groups) {
+    const groupId=positiveId(group.optionId);
+    if(groupIds.has(groupId)||!Array.isArray(group.optionItems))throw Error('rocket_menu_option_stock_scope_invalid');
+    groupIds.add(groupId);
+    for(const item of group.optionItems) {
+      const id=positiveId(item.optionItemId);
+      if(options.has(id))throw Error('rocket_menu_option_stock_identity_ambiguous');
+      if(!Object.hasOwn(optionStatusRank,item.displayStatus)
+        ||(item.forceNotExpose!==undefined&&typeof item.forceNotExpose!=='boolean'))throw Error('rocket_menu_option_stock_unknown');
+      options.set(id,{id,groupId,displayStatus:item.displayStatus,forceNotExpose:item.forceNotExpose===true});
+    }
+  }
+  return {groupIds,options,manifest:{groups:[...groupIds].sort(),options:[...options.values()].sort((a,b)=>a.id.localeCompare(b.id))}};
+}
+
+function retainedOptionStatuses(detail,groups,stock) {
+  const local=new Map(),selected=new Set(),selectedGroups=new Set(),statuses=new Map();
+  for(const group of detail.options??[])for(const item of group.optionItems??[]) {
+    const id=positiveId(item.optionItemId);
+    if(local.has(id))throw Error('rocket_menu_option_stock_identity_ambiguous');
+    if(!Object.hasOwn(optionStatusRank,item.displayStatus)
+      ||(item.forceNotExpose!==undefined&&typeof item.forceNotExpose!=='boolean'))throw Error('rocket_menu_option_stock_unknown');
+    local.set(id,{groupId:positiveId(group.optionId),displayStatus:item.forceNotExpose?'NOT_EXPOSE':item.displayStatus});
+  }
+  for(const group of groups) {
+    const groupId=positiveId(group.optionId);
+    if(selectedGroups.has(groupId)||!stock.groupIds.has(groupId)||!Array.isArray(group.optionItems))throw Error('rocket_menu_option_stock_scope_invalid');
+    selectedGroups.add(groupId);
+    for(const item of group.optionItems) {
+      const id=positiveId(item.optionItemId),native=stock.options.get(id),prior=local.get(id);
+      if(selected.has(id)||!native||native.groupId!==groupId||(prior&&prior.groupId!==groupId))throw Error('rocket_menu_option_stock_identity_ambiguous');
+      selected.add(id);
+      // The official dish DTO has only one status field. Never let a local
+      // restriction override a different global stock baseline, or mistake a
+      // temporary forced hide for a permanent NOT_EXPOSE hold. A global hold
+      // may tighten a less-restricted local relationship, never the reverse.
+      if((native.forceNotExpose&&native.displayStatus!=='NOT_EXPOSE')
+        ||(prior&&optionStatusRank[prior.displayStatus]>optionStatusRank[native.displayStatus]))throw Error(`rocket_menu_option_stock_conflict:${id}`);
+      statuses.set(id,native.displayStatus);
+    }
+  }
+  return statuses;
+}
+
 function orderInvariant(menus) {
   return menus.map(menu=>{
     const {exposeOrder,...content}=menu;
@@ -56,7 +105,7 @@ export function rocketGroupUpdate(group,patch={}) {
   };
 }
 
-export function rocketDishUpdate(detail, patch, storeId) {
+export function rocketDishUpdate(detail, patch, storeId,optionStatuses) {
   const displayStatus = patch.retire || detail.forceNotExpose ? 'NOT_EXPOSE' : detail.displayStatus;
   if (!['ON_SALE','NOT_EXPOSE','SOLD_OUT_TODAY'].includes(displayStatus)) throw new Error('rocket_menu_unknown_availability');
   const fromMenuId = Number(detail.mappingMenus?.[0]?.menuId ?? 0);
@@ -67,7 +116,11 @@ export function rocketDishUpdate(detail, patch, storeId) {
   // is inappropriate here. Pending reviews must not block content edits.
   const groups=patch.groups?.map((group,index)=>({...group,exposeOrder:index}))??detail.options??[];
   const priorStatuses=new Map((detail.options??[]).flatMap(group=>(group.optionItems??[]).map(item=>[String(item.optionItemId),item.displayStatus])));
-  const mappingDtos=optionMappings(groups).map(group=>({...group,optionItemSaveDtos:group.optionItemSaveDtos.map(item=>({...item,displayStatus:priorStatuses.get(String(item.optionItemId))??item.displayStatus}))}));
+  const mappingDtos=optionMappings(groups).map(group=>({...group,optionItemSaveDtos:group.optionItemSaveDtos.map(item=>{
+    const id=String(item.optionItemId);
+    if(optionStatuses&&!optionStatuses.has(id))throw Error('rocket_menu_option_stock_scope_invalid');
+    return {...item,displayStatus:optionStatuses?optionStatuses.get(id):priorStatuses.get(id)??item.displayStatus};
+  })}));
   return {
     storeId:Number(positiveId(storeId)),dishId:Number(positiveId(detail.dishId)),
     dishName:patch.name ?? detail.dishName,description:patch.description ?? detail.description ?? '',
@@ -110,9 +163,16 @@ export class RocketMenuClient {
     // Fetch immediately before the write so a prior sold-out state is retained.
     const detail=await this.detail(id);
     if (String(detail.dishId)!==rocketPhysicalId(id)) throw new Error('rocket_menu_identity_mismatch');
-    const body=rocketDishUpdate(detail,patch,this.storeId);
+    // Dish detail carries relationship statuses, which may say ON_SALE while
+    // the option's independent global catalog still has a permanent hold.
+    // Content and relationship saves both include status in the official DTO.
+    const stock=optionStockCatalog(await this.transport.request(`${this.readBase}/all-options?fetchDish=true`));
+    const statuses=retainedOptionStatuses(detail,patch.groups??detail.options??[],stock);
+    const body=rocketDishUpdate(detail,patch,this.storeId,statuses);
     await this.transport.request(`${this.writeBase}/dishes/${rocketPhysicalId(id)}/update`,'POST',body);
-    const actual=await this.detail(id);
+    const [actual,afterStock]=await Promise.all([this.detail(id),
+      this.transport.request(`${this.readBase}/all-options?fetchDish=true`).then(optionStockCatalog)]);
+    if(!sameMenuValue(stock.manifest,afterStock.manifest))throw Error(`rocket_menu_option_availability_changed:${rocketPhysicalId(id)}`);
     if ((patch.name!==undefined && actual.dishName!==patch.name)
       || (patch.price!==undefined && Number(actual.salePrice)!==patch.price)
       || (patch.description!==undefined && actual.description!==patch.description)

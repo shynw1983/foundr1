@@ -24,10 +24,10 @@ test('Rocket content edits preserve permanent hidden state and option availabili
 });
 test('Rocket writes are checked by a second independent read',async()=>{
  let state=dish();let writes=0;
- const transport={async request(path,method,body){if(method==='POST'){writes++;state={...state,dishName:body.dishName,salePrice:body.salePrice};return {};}return structuredClone(state);}};
+ const transport={async request(path,method,body){if(method==='POST'){writes++;state={...state,dishName:body.dishName,salePrice:body.salePrice};return {};}return structuredClone(path.includes('all-options')?state.options:state);}};
  const client=new RocketMenuClient(transport,'1');
  assert.equal((await client.updateDish('12',{name:'new',price:227})).salePrice,227);assert.equal(writes,1);
- transport.request=async(path,method)=>method==='POST'?{}:dish();
+ transport.request=async(path,method)=>method==='POST'?{}:path.includes('all-options')?dish().options:dish();
  await assert.rejects(()=>client.updateDish('12',{price:227}),/verification_failed/);
 });
 test('Rocket creations always use a hidden marker and are never blindly retried',async()=>{
@@ -106,7 +106,7 @@ test('Rocket content-only edits omit all image commands, including during pendin
  let state={...before,allDishImages:[{...image,requestDishImage:{requestId:9}}],allDetailImages:[{requestId:10}]};
  const client=new RocketMenuClient({request:async(path,method,body)=>{
   if(method){writes++;assert.equal(Object.keys(body).some(key=>/image/i.test(key)),false);state={...state,salePrice:body.salePrice};}
-  return structuredClone(state);
+  return structuredClone(path.includes('all-options')?state.options:state);
  }},'1');
  const actual=await client.updateDish('12',{price:300});
  assert.equal(writes,1);assert.equal(actual.allDishImages[0].requestDishImage.requestId,9);
@@ -117,7 +117,7 @@ test('Rocket does not trust a successful response with wrong category, associati
   let state=dish();
   const client=new RocketMenuClient({request:async(path,method,body)=>{
    if(method) {state={...state,dishName:body.dishName};if(kind==='groups')state.options=[];if(kind==='images')state.allDishImages=[];return {};}
-   return structuredClone(state);
+   return structuredClone(path.includes('all-options')?dish().options:state);
   }},'1');
   await assert.rejects(()=>client.updateDish('12',kind==='category'?{menuId:'99'}:{name:'new'}),/verification_failed/);
  }
