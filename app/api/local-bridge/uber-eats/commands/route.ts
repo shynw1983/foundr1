@@ -514,6 +514,10 @@ export async function POST(request: Request) {
     where id::text = ${commandId}
       and store_id::text = ${authorization.storeId}
       and status = 'processing'
+      and claimed_at is not null
+      and greatest(created_at,case when payload->>'authoritativePublication'='true'
+        then (payload->'manualRetryHistory'->-1->>'at')::timestamptz
+        else null end) + interval '2 hours' > now()
       and (
         ${authorization.deviceId} = ''
         or claimed_by_device_id::text = ${authorization.deviceId}
@@ -534,10 +538,30 @@ export async function POST(request: Request) {
       set
         result = result || ${JSON.stringify(result)}::jsonb,
         last_error = ${error},
+        -- Progress renews only this captured claim, never a requeued/reclaimed
+        -- one. An expired lease can still be renewed while its ownership has
+        -- not changed; this keeps already-running legacy workers compatible.
+        -- Heartbeats cannot move the absolute execution-window deadline.
+        claim_expires_at = least(
+          now() + case
+            when command_type in ('audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') then interval '30 minutes'
+            when command_type = 'set_inventory_availability'
+              and (${authorization.isDesktop} or platform = 'rocket_now') then interval '15 minutes'
+            else interval '2 minutes'
+          end,
+          greatest(created_at,case when payload->>'authoritativePublication'='true'
+            then (payload->'manualRetryHistory'->-1->>'at')::timestamptz
+            else null end) + interval '2 hours'
+        ),
         updated_at = now()
       where id::text = ${commandId}
         and store_id::text = ${authorization.storeId}
         and status = 'processing'
+        and claimed_at = ${String(commandRows[0].claimedAt ?? '')}::timestamptz
+        and attempts = ${Number(commandRows[0].attempts)}
+        and greatest(created_at,case when payload->>'authoritativePublication'='true'
+          then (payload->'manualRetryHistory'->-1->>'at')::timestamptz
+          else null end) + interval '2 hours' > now()
         and (
           ${authorization.deviceId} = ''
           or claimed_by_device_id::text = ${authorization.deviceId}
@@ -638,6 +662,8 @@ export async function POST(request: Request) {
     where id::text = ${commandId}
       and store_id::text = ${authorization.storeId}
       and status = 'processing'
+      and claimed_at = ${String(commandRows[0].claimedAt ?? '')}::timestamptz
+      and attempts = ${Number(commandRows[0].attempts)}
       and (
         ${authorization.deviceId} = ''
         or claimed_by_device_id::text = ${authorization.deviceId}
@@ -670,6 +696,7 @@ export async function POST(request: Request) {
       and store_id::text = ${authorization.storeId}
       and status = 'processing'
       and claimed_at = ${String(commandRows[0].claimedAt ?? '')}::timestamptz
+      and attempts = ${Number(commandRows[0].attempts)}
       and (
         ${authorization.deviceId} = ''
         or claimed_by_device_id::text = ${authorization.deviceId}
