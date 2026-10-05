@@ -36,8 +36,9 @@ async function fixture({status='failed',trigger='manual',missing=false}={}) {
  const lock=readFileSync(resolve(root,'db/uber-menu-authority.sql'),'utf8').match(/create or replace function lock_menu_uber_revision[\s\S]*?\$\$;/)?.[0];
  assert.ok(lock);await db.exec(lock);
  let beforeTransaction;
+ const commandReads=[];
  const sql=(parts,...params)=>({text:parts.map((part,index)=>part+(index<params.length?`$${index+1}`:'')).join(''),params,
-   then(resolve,reject){return db.query(this.text,this.params).then(result=>result.rows).then(resolve,reject);}});
+   then(resolve,reject){return db.query(this.text,this.params).then(result=>{if(/from local_bridge_commands c/.test(this.text))commandReads.push({text:this.text,rows:json(result.rows)});return result.rows;}).then(resolve,reject);}});
  sql.transaction=async(statements,options)=>{
   if(beforeTransaction){const action=beforeTransaction;beforeTransaction=undefined;await action();}
   return db.transaction(async tx=>{const rows=[];for(const statement of statements)rows.push((await tx.query(statement.text,statement.params)).rows);return rows;});
@@ -104,7 +105,7 @@ async function fixture({status='failed',trigger='manual',missing=false}={}) {
  const service=load('lib/uber-menu-publication-reconcile.ts');
  const input={sourceId:ids.source,storeId:ids.store,revision:38,mode:trigger,captureCommandId:ids.capture};
  const command=async platform=>(await db.query('select * from local_bridge_commands where id=$1',[ids[platform==='rocket_now'?'rocket':'demae']])).rows[0];
- return {db,ids,catalog,nodes,native,payloads,service,input,publication,command,broadcasts,
+ return {db,ids,catalog,nodes,native,payloads,service,input,publication,command,broadcasts,commandReads,
   reconcile:patch=>service.reconcileUberPublications({...input,...patch}),
   race(action){beforeTransaction=action;},
   async finish(){await db.query("update local_bridge_commands set status='succeeded' where platform in ('rocket_now','demae_can')");},
@@ -153,6 +154,18 @@ test('unknown in-flight creation journal is retained, never converted to permiss
   const command=await h.command('rocket_now');command.payload.authorityState['option:orphan:key']={status:'creating',externalId:'receipt-only-id',externalParentId:'stage:old'};
   await h.db.query('update local_bridge_commands set payload=$1 where id=$2',[JSON.stringify(command.payload),h.ids.rocket]);
   assert.equal((await h.reconcile()).queued,2);assert.deepEqual((await h.command('rocket_now')).payload.authorityState,command.payload.authorityState);
+ }finally {await h.db.close();}
+});
+
+test('publication reads are bounded to latest heads and small active/capture metadata, excluding historical results',async()=>{
+ const h=await fixture();try {
+  const history=randomUUID();await h.db.query('insert into local_bridge_commands(id,store_id,platform,command_type,status,payload,result,created_at) values($1,$2,\'rocket_now\',\'publish_menu_changes\',\'failed\',$3,$4,\'2026-10-04T00:00:00Z\')',
+   [history,h.ids.store,JSON.stringify(h.payloads.rocket_now),JSON.stringify({observations:'old snapshot '.repeat(100000)})]);
+  await h.db.query("update local_bridge_commands set result=jsonb_build_object('captureHistory',repeat('native snapshot ',100000)) where id=$1",[h.ids.capture]);
+  assert.equal((await h.reconcile()).queued,2);
+  const loaded=h.commandReads.flatMap(read=>read.rows.map(row=>row.data));assert.equal(loaded.some(row=>row.id===history),false);
+  const capture=loaded.find(row=>row.id===h.ids.capture);assert.ok(capture);assert.equal(Object.hasOwn(capture,'result'),false);assert.equal(Object.keys(capture.payload).length,2);
+  assert.equal(h.commandReads.find(read=>/to_jsonb\(c\)/.test(read.text)).rows.length,2);
  }finally {await h.db.close();}
 });
 
@@ -236,9 +249,9 @@ test('old-key Demae carrier receipts remain complete even after their option mov
  }finally {await h.db.close();}
 });
 
-test('persisted replay retains archived identities and applies the ordinary promotion alias policy',async()=>{
+test('persisted replay retains archived history and unused-entity evidence while applying ordinary promotion aliases',async()=>{
  const h=await fixture();try {
-  const archived=randomUUID(),promotion=randomUUID(),alias=randomUUID();
+  const archived=randomUUID(),archivedItem=randomUUID(),archivedCategory=randomUUID(),promotion=randomUUID(),alias=randomUUID();
   const catalog=json(h.catalog);catalog.groups.push({id:'new',name:'新登場トッピング',optionIds:['b1'],min:0,max:1});catalog.entities[0].groupIds.push('new');
   const itemPayload={...catalog.entities[0],categoryIds:['c'],attached:true};
   await h.db.query('update menu_uber_sources set last_catalog=$1',[JSON.stringify(catalog)]);
@@ -247,19 +260,25 @@ test('persisted replay retains archived identities and applies the ordinary prom
   await h.db.query("insert into menu_options(id,option_group_id,name,display_names,price_delta) values($1,$2,'ねぎ50g','{}',70)",[alias,promotion]);
   const additions=[
    {sourceKey:'option_group:retired',kind:'option_group',targetId:archived,parentId:null,name:'',displayNames:{},uberPrice:null,price:null,description:'',imageUrl:'',sortOrder:0,payload:{},archived:true},
+   {sourceKey:'item:retired-item',kind:'item',targetId:archivedItem,parentId:null,name:'',displayNames:{},uberPrice:null,price:null,description:'',imageUrl:'',sortOrder:0,payload:{},archived:true},
+   {sourceKey:'category:retired-category',kind:'category',targetId:archivedCategory,parentId:null,name:'',displayNames:{},uberPrice:null,price:null,description:'',imageUrl:'',sortOrder:0,payload:{},archived:true},
    {sourceKey:'option_group:new',kind:'option_group',targetId:promotion,parentId:null,name:'新登場トッピング',displayNames:{},uberPrice:null,price:null,description:'',imageUrl:'',sortOrder:20,payload:catalog.groups.at(-1)},
    {sourceKey:'option:new:b1',kind:'option',targetId:alias,parentId:promotion,name:'ねぎ50g',displayNames:{},uberPrice:70,price:70,description:'',imageUrl:'',sortOrder:0,payload:{...catalog.entities[1],groupId:'new'}}
   ];
   for(const node of additions)await h.db.query('insert into menu_uber_objects(source_id,source_key,kind,uber_id,parent_uber_id,target_id,price_mode,archived,last_uber_price,source_payload) values($1,$2,$3,$4,$5,$6,\'automatic\',$7,$8,$9)',
    [h.ids.source,node.sourceKey,node.kind,node.kind==='option'?'b1':node.sourceKey.split(':').at(-1),node.kind==='option'?'new':'',node.targetId,Boolean(node.archived),node.uberPrice,JSON.stringify(node.payload)]);
   const nodes=h.nodes.map(node=>node.kind==='item'?{...node,payload:itemPayload}:node).concat(additions);
+  const history=['group:retired','entity:retired-item','category:retired-category','object:option_group:retired','entity:unused-removed'];
+  await h.db.query('update menu_uber_sources set missing_keys=$1',[history]);
   for(const platform of ['rocket_now','demae_can']) {
-   for(const [targetId,externalId]of [[archived,'native-retired'],[promotion,'native-new']])await h.db.query('insert into menu_platform_object_mappings(brand_id,external_platform_id,target_type,target_id,external_id,external_parent_id) values($1,$2,\'option_group\',$3,$4,\'\')',[h.ids.brand,h.native[platform],targetId,externalId]);
-   const before=await h.command(platform),mappings=before.payload.targets.flatMap(node=>node.mappings.map(mapping=>({kind:node.kind,targetId:node.targetId,...mapping}))).concat([{kind:'option_group',targetId:archived,externalId:'native-retired',externalParentId:''},{kind:'option_group',targetId:promotion,externalId:'native-new',externalParentId:''}]);
+   const additionsMappings=[{kind:'option_group',targetId:archived,externalId:'native-retired',externalParentId:''},{kind:'item',targetId:archivedItem,externalId:'native-retired-item',externalParentId:''},{kind:'category',targetId:archivedCategory,externalId:'native-retired-category',externalParentId:''},{kind:'option_group',targetId:promotion,externalId:'native-new',externalParentId:''}];
+   for(const mapping of additionsMappings)await h.db.query('insert into menu_platform_object_mappings(brand_id,external_platform_id,target_type,target_id,external_id,external_parent_id) values($1,$2,$3,$4,$5,\'\')',[h.ids.brand,h.native[platform],mapping.kind,mapping.targetId,mapping.externalId]);
+   const before=await h.command(platform),mappings=before.payload.targets.flatMap(node=>node.mappings.map(mapping=>({kind:node.kind,targetId:node.targetId,...mapping}))).concat(additionsMappings);
    const fresh=h.publication.buildUberPublication({...before.payload,platform,nodes,mappings,creationIdentities:[]});
    await h.db.query('update local_bridge_commands set payload=$1 where id=$2',[JSON.stringify({...before.payload,...fresh}),before.id]);
   }
   const result=await h.reconcile();assert.equal(result.queued,2);assert.equal(result.blocked.length,0);
+  assert.deepEqual((await h.db.query('select missing_keys from menu_uber_sources')).rows[0].missing_keys,history);
   for(const platform of ['rocket_now','demae_can']) {
    const targets=(await h.command(platform)).payload.targets;
    assert.equal(targets.find(row=>row.sourceKey==='option_group:retired').archived,true);
@@ -268,6 +287,18 @@ test('persisted replay retains archived identities and applies the ordinary prom
    assert.deepEqual(targets.find(row=>row.sourceKey==='item:a').source.groupIds,['g1','g2','new']);
    assert.equal(targets.find(row=>row.sourceKey==='option_group:new').sortOrder,20);
   }
+ }finally {await h.db.close();}
+});
+
+for(const change of ['active entity','active membership','unknown object','unknown group','unknown prefix'])test(`retained missing evidence still blocks ${change}`,async()=>{
+ const h=await fixture();try {
+  if(change==='active entity') {
+   const catalog=json(h.catalog);catalog.entities=catalog.entities.filter(row=>row.id!=='b1');await h.db.query('update menu_uber_sources set last_catalog=$1,missing_keys=$2',[JSON.stringify(catalog),['entity:b1']]);
+  }else if(change==='active membership') {
+   const catalog=json(h.catalog);catalog.groups.find(row=>row.id==='g1').optionIds=[];await h.db.query('update menu_uber_sources set last_catalog=$1,missing_keys=$2',[JSON.stringify(catalog),['object:option:g1:b1']]);
+  }else await h.db.query('update menu_uber_sources set missing_keys=$1',[[change==='unknown object'?'object:option:unknown:never-imported':change==='unknown group'?'group:never-imported':'unknown:never-imported']]);
+  const before=await h.command('rocket_now'),result=await h.reconcile();assert.equal(result.queued,0);assert.equal(result.blocked[0].code,'uber_publication_reconcile_pending_removal');
+  assert.deepEqual((await h.command('rocket_now')).payload,before.payload);assert.equal((await h.command('rocket_now')).status,'failed');
  }finally {await h.db.close();}
 });
 

@@ -36,6 +36,37 @@ async function readState(input:UberPublicationReconcileInput) {
   return rows[0] as Row|undefined;
 }
 
+function hasUnconfirmedRemovals(state:Row) {
+  const catalog=record(state.last_catalog) as unknown as UberSourceCatalog;
+  if(!Array.isArray(catalog.entities)||!Array.isArray(catalog.groups)||!Array.isArray(catalog.categories))throw Error('uber_publication_reconcile_catalog_missing');
+  const objects=state.objects as Row[];
+  const present=(object:Row)=>object.kind==='item'?catalog.entities.some(row=>row.id===object.uber_id)
+    :object.kind==='option'?catalog.entities.some(row=>row.id===object.uber_id)&&catalog.groups.some(row=>row.id===object.parent_uber_id&&row.optionIds.includes(object.uber_id))
+    :object.kind==='option_group'?catalog.groups.some(row=>row.id===object.uber_id)
+    :object.kind==='category'?catalog.categories.some(row=>row.id===object.uber_id):false;
+  if(objects.some(object=>!object.archived&&!present(object)))return true;
+  for(const key of state.missing_keys??[]) {
+    if(typeof key!=='string'||!key.includes(':'))return true;
+    const type=key.slice(0,key.indexOf(':')),id=key.slice(key.indexOf(':')+1);
+    if(!id)return true;
+    if(type==='object') {
+      const object=objects.find(row=>row.source_key===id);
+      if(!object||!object.archived||present(object))return true;
+      continue;
+    }
+    const kinds=type==='entity'?['item','option']:type==='group'?['option_group']:type==='category'?['category']:[];
+    if(!kinds.length)return true;
+    const current=type==='entity'?catalog.entities:type==='group'?catalog.groups:catalog.categories;
+    const matches=objects.filter(row=>kinds.includes(row.kind)&&row.uber_id===id);
+    if(current.some(row=>row.id===id)||matches.some(row=>!row.archived))return true;
+    // Complete Uber snapshots contain unused entities too: their historical
+    // absence has no OS/publication identity to retire. Groups/categories are
+    // always imported; an unknown one remains unsafe. Never erase the evidence.
+    if(type!=='entity'&&!matches.length)return true;
+  }
+  return false;
+}
+
 /** Rebuild the current projection without importing stock or guessing/adopting
  * objects. Source keys and OS IDs come only from the persisted source graph. */
 function persistedNodes(state:Row):UberPublicationNode[] {
@@ -140,13 +171,24 @@ export async function reconcileUberPublications(input:UberPublicationReconcileIn
     if(!state||!state.enabled||!state.auto_publish)return blocked('uber_publication_reconcile_disabled');
     if(Number(state.revision)!==input.revision)return blocked('uber_publication_reconcile_conflict');
     if(input.catalog&&!equal(state.last_catalog,input.catalog))return blocked('uber_publication_reconcile_conflict');
-    if((state.missing_keys??[]).length)return blocked('uber_publication_reconcile_pending_removal');
-    const commandRows=await sql`select to_jsonb(c) as data from local_bridge_commands c where c.store_id::text=${input.storeId} and c.payload->>'sourceId'=${input.sourceId} order by c.created_at desc,c.id desc`;
-    const commands=commandRows.map(row=>row.data as Row);
-    const capture=input.captureCommandId?commands.find(row=>row.id===input.captureCommandId):undefined;
+    if(hasUnconfirmedRemovals(state))return blocked('uber_publication_reconcile_pending_removal');
+    // History can include tens of megabytes of native observations. Read only
+    // active/capture metadata, then the two current publication heads. Loading
+    // every historical result exceeded the database HTTP response limit.
+    const activeRows=await sql`select jsonb_build_object('id',c.id,'platform',c.platform,'command_type',c.command_type,'status',c.status,
+      'payload',jsonb_build_object('sourceId',c.payload->>'sourceId','authoritativeSource',c.payload->'authoritativeSource')) as data
+      from local_bridge_commands c where c.store_id::text=${input.storeId} and c.payload->>'sourceId'=${input.sourceId}
+      and (c.status in ('pending','processing') or c.id::text=${input.captureCommandId??''})`;
+    const activeCommands=activeRows.map(row=>row.data as Row);
+    const capture=input.captureCommandId?activeCommands.find(row=>row.id===input.captureCommandId):undefined;
     if(input.captureCommandId&&(!capture||capture.platform!=='uber_eats'||capture.command_type!=='capture_menu_snapshot'||capture.payload.authoritativeSource!==true
       ||!['processing','succeeded'].includes(capture.status)))return blocked('uber_publication_reconcile_conflict');
-    if(commands.some(row=>row.id!==input.captureCommandId&&['pending','processing'].includes(row.status)))return blocked('uber_publication_reconcile_active');
+    if(activeCommands.some(row=>row.id!==input.captureCommandId&&['pending','processing'].includes(row.status)))return blocked('uber_publication_reconcile_active');
+    const commandRows=await sql`select to_jsonb(c) as data from local_bridge_commands c where c.store_id::text=${input.storeId} and c.payload->>'sourceId'=${input.sourceId}
+      and c.id in(select distinct on(head.platform) head.id from local_bridge_commands head where head.store_id::text=${input.storeId} and head.payload->>'sourceId'=${input.sourceId}
+        and head.platform in ('rocket_now','demae_can') and head.command_type='publish_menu_changes' order by head.platform,head.created_at desc,head.id desc)
+      order by c.created_at desc,c.id desc`;
+    const commands=commandRows.map(row=>row.data as Row);
     const nodes=input.nodes??persistedNodes(state);
     if(nodes.length!==state.objects.length)return blocked('uber_publication_reconcile_identity_changed');
     for(const node of nodes)if(!(state.objects as Row[]).some(row=>row.source_key===node.sourceKey&&row.target_id===node.targetId&&row.kind===node.kind&&Boolean(row.archived)===Boolean(node.archived)))return blocked('uber_publication_reconcile_identity_changed');
