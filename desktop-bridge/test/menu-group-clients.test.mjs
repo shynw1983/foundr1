@@ -106,6 +106,82 @@ test('Demae refuses to expose a new option by adding it to a live group',async()
  await assert.rejects(()=>client.updateGroup('g',{optionCodes:['a','b']}),/requires_staging/);
  assert.equal(calls.some(call=>call.method==='PUT'),false);
 });
+
+// Native group 0009 reads proved that linked-item-list generates a different
+// CDN `v` on each GET, even with no write. Keep the observed response shape,
+// dated size links and image path; only that cache parameter is volatile.
+function demaeConsumerVersionFixture({failure}={}) {
+ const image='https://cdn.demae-can.com/files/imgix/item720/jkaW8rzm/l2_ce0830f864adeafa45db78bab505a771a999320f4075c9921a9b1670d21b1f82.jpg';
+ const consumers=[
+  {chainId:410649,itemCode:'00000004',itemName:'既存の麻辣湯セット',itemImageUri:image,
+   sizeList:[{sizeCode:'001',sizeName:'',applyStartDate:'2026/08/11',applyEndDate:'9999/12/31'}]},
+  {chainId:410649,itemCode:'a0a10002',itemName:'既存のカスタム麻辣湯',itemImageUri:'https://cdn.demae-can.com/files/imgix/item720/jkaW8rzm/l2_D8Ta0a10002.jpg',
+   sizeList:[{sizeCode:'1',sizeName:'',applyStartDate:'2026/08/06',applyEndDate:'9999/12/31'}]}
+ ];
+ if(failure==='unknownHost')consumers[0].itemImageUri='https://images.example.test/files/imgix/item720/original.jpg';
+ if(failure==='unknownPath')consumers[0].itemImageUri='https://cdn.demae-can.com/contents/non/l2_non.png';
+ let detail={chainId:410649,optionGroupCode:'0009',optionGroupName:'麺の種類を変更する',adminOptionGroupName:'麺の種類を変更する 管理用',
+  optionGroupDescription:null,optionButtonType:'RADIO',sizeOptionGroupLinkList:[],optionGroupItemLinkList:[]};
+ const options=[{chainId:410649,optionCode:'00000202',optionName:'既存の麺',price:170,applyStartDate:'2026/08/11',applyEndDate:'9999/12/31'},
+  {chainId:410649,optionCode:'00000232',optionName:'追加先へ移す既存の麺',price:180,applyStartDate:'2026/08/11',applyEndDate:'9999/12/31'}];
+ let members=[options[0]],written=false,consumerReads=0;const calls=[];
+ const stock=()=>({hasOverOptionLimitChain:false,itemList:[],optionList:options.map(option=>({chainId:410649,optionCode:option.optionCode,
+  linkedShopList:[{shopId:2,orderType:'DELIVERY'}],stockoutOptionList:written&&failure==='stock'?[]:[{shopId:2,orderType:'DELIVERY',isEndSale:true,isCurrentApplying:true}]}))});
+ const transport={request:async(path,method,body)=>{
+  calls.push({path,method,body});
+  if(path.endsWith('chain-menu-pattern'))return [{chain:{chainId:410649},menuPatternList:[{menuPatternCode:'D8Ta'}]}];
+  if(path.endsWith('stockout/shop-list'))return {shopList:[{chainId:410649,shopId:2,orderType:'DELIVERY'}]};
+  if(path.endsWith('stockout/target-list'))return structuredClone(stock());
+  if(method==='PUT') {
+   written=true;detail={...detail,...body};
+   if(failure!=='ignoredMembers')members=body.optionGroupItemLinkList.map(link=>options.find(row=>row.optionCode===link.optionCode));
+   if(failure==='memberOrder')members.reverse();
+   if(failure==='memberPrice')members=members.map(row=>row.optionCode==='00000202'?{...row,price:999}:row);
+   return {};
+  }
+  if(path.endsWith('linked-item-list')) {
+   const rows=structuredClone(consumers);consumerReads++;
+   for(const row of rows)row.itemImageUri+=`?v=${1791261380+consumerReads}`;
+   if(written) {
+    if(failure==='imagePath')rows[0].itemImageUri=rows[0].itemImageUri.replace('l2_ce0830f864','l2_DIFFERENT');
+    if(failure==='imageQuery')rows[0].itemImageUri+='&crop=changed';
+    if(failure==='itemId')rows[0].itemCode='unknown';
+    if(failure==='itemName')rows[0].itemName='別の商品';
+    if(failure==='sizeId')rows[0].sizeList[0].sizeCode='unknown';
+    if(failure==='sizeDates')rows[0].sizeList[0].applyEndDate='2026/10/05';
+    if(failure==='consumerOrder')rows.reverse();
+    if(failure==='lostConsumer')rows.pop();
+   }
+   return rows;
+  }
+  if(path.endsWith('option-item-list'))return structuredClone(members);
+  return structuredClone(detail);
+ }};
+ return {client:new DemaeMenuClient(transport,'410649','D8Ta'),calls,stock:()=>structuredClone(stock())};
+}
+
+test('Demae existing-member migration and subsequent ordering survive read-generated image versions',async()=>{
+ const h=demaeConsumerVersionFixture(),beforeStock=h.stock();
+ const added=await h.client.updateGroup('0009',{optionCodes:['00000202','00000232']});
+ assert.deepEqual(added.options.map(row=>row.optionCode),['00000202','00000232']);
+ const ordered=await h.client.updateGroup('0009',{optionCodes:['00000232','00000202']});
+ assert.deepEqual(ordered.options.map(row=>row.optionCode),['00000232','00000202']);
+ assert.deepEqual(h.stock(),beforeStock);
+ const writes=h.calls.filter(call=>call.method==='PUT');assert.equal(writes.length,2);
+ assert.deepEqual(writes[1].body.optionGroupItemLinkList,[{optionCode:'00000232',dispOrder:1},{optionCode:'00000202',dispOrder:2}]);
+ assert.deepEqual(writes[0].body.sizeOptionGroupLinkList,[{itemCode:'00000004',sizeCode:'001'},{itemCode:'a0a10002',sizeCode:'1'}]);
+ assert.equal(Object.keys(writes[0].body).some(key=>/image/i.test(key)),false);
+});
+
+test('Demae group verification ignores no image identity, relationship, order or stock changes',async()=>{
+ for(const failure of ['unknownHost','unknownPath','imagePath','imageQuery','itemId','itemName','sizeId','sizeDates',
+  'consumerOrder','lostConsumer','ignoredMembers','memberOrder','memberPrice','stock']) {
+  const h=demaeConsumerVersionFixture({failure});
+  await assert.rejects(()=>h.client.updateGroup('0009',{optionCodes:['00000232','00000202']}),
+   /verification_failed|member_content_changed|availability_changed/,failure);
+  assert.equal(h.calls.filter(call=>call.method==='PUT').length,1,failure);
+ }
+});
 test('Demae rejects unsupported unlinked group creation before a native write',async()=>{
  const {client,calls}=demaeFixture({linked:false});
  await assert.rejects(()=>client.createUnlinkedGroup({marker:'FS0123456789abcd',optionCodes:['a'],buttonType:'CHECKBOX'},async()=>{}),/requires_hidden_item/);

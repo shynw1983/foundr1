@@ -66,22 +66,23 @@ function sameRequestedCategoryLinks(actual, expected, chainId) {
   });
 }
 
+function demaeImageIdentity(value) {
+  if (typeof value !== 'string') return value;
+  try {
+    const url = new URL(value);
+    if (url.origin === 'https://cdn.demae-can.com' && url.pathname.startsWith('/files/imgix/item720/')) {
+      url.searchParams.delete('v');
+      return url.href;
+    }
+  } catch {}
+  return value;
+}
+
 export function sameDemaeImage(before, actual) {
-  // Native text/price saves refresh the CDN cache version without changing
-  // the image. Ignore only that parameter on the observed image CDN path;
-  // unknown hosts, other parameters, file names and cropping stay strict.
-  const identity = value => {
-    if (typeof value !== 'string') return value;
-    try {
-      const url = new URL(value);
-      if (url.origin === 'https://cdn.demae-can.com' && url.pathname.startsWith('/files/imgix/item720/')) {
-        url.searchParams.delete('v');
-        return url.href;
-      }
-    } catch {}
-    return value;
-  };
-  return identity(before.itemImageUri) === identity(actual.itemImageUri)
+  // Native saves and even read-only linked-item-list GETs refresh this CDN
+  // cache version without changing the image. Unknown hosts, other query
+  // parameters, file names and cropping remain strict.
+  return demaeImageIdentity(before.itemImageUri) === demaeImageIdentity(actual.itemImageUri)
     && before.itemImageFileName === actual.itemImageFileName
     && sameMenuValue(before.imageTrimmingRange, actual.imageTrimmingRange);
 }
@@ -448,7 +449,9 @@ export class DemaeMenuClient {
     if(actual.detail.optionGroupName!==body.optionGroupName
       ||String(actual.detail.optionGroupDescription??'')!==String(body.optionGroupDescription??'')
       ||actual.detail.adminOptionGroupName!==body.adminOptionGroupName||actual.detail.optionButtonType!==body.optionButtonType
-      ||(patch.releaseItemLinks?!sameMenuValue(actual.items.flatMap(item=>item.sizeList.map(size=>({itemCode:item.itemCode,sizeCode:size.sizeCode}))).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),[...patch.releaseItemLinks].sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))):!sameMenuValue(actual.items,before.items))
+      ||(patch.releaseItemLinks?!sameMenuValue(actual.items.flatMap(item=>item.sizeList.map(size=>({itemCode:item.itemCode,sizeCode:size.sizeCode}))).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),[...patch.releaseItemLinks].sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))):!sameMenuValue(
+        actual.items.map(item=>({...item,itemImageUri:demaeImageIdentity(item.itemImageUri)})),
+        before.items.map(item=>({...item,itemImageUri:demaeImageIdentity(item.itemImageUri)}))))
       ||!sameMenuValue([...new Set(actual.options.map(row=>String(row.optionCode)))],ids.map(String)))throw Error('demae_menu_group_verification_failed');
     for(const prior of before.options.filter(row=>ids.map(String).includes(String(row.optionCode)))) {
       const after=actual.options.find(row=>String(row.optionCode)===String(prior.optionCode)&&row.applyStartDate===prior.applyStartDate&&row.applyEndDate===prior.applyEndDate);
