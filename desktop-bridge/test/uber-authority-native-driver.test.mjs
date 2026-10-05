@@ -83,6 +83,95 @@ test('mapped native graph runs end-to-end and reports separately read prices',as
  assert.equal(result.observations.find(row=>row.sourceKey==='item:i').price,227);
 });
 
+function stableCreatedFixture(platform='rocket_now') {
+ const {payload,rows,writes}=fixture();payload.platformKey=platform;
+ for(const target of payload.targets) {
+  target.mappings[0].created=true;
+  const row=rows.find(row=>row.kind===target.kind&&row.id===target.mappings[0].externalId);
+  Object.assign(row,{name:target.name,price:target.price,hidden:true});
+ }
+ const driver=new AuthorityNativeDriver({},payload),reads=[];
+ driver.snapshot=async options=>{reads.push(options);return structuredClone(rows);};
+ for(const method of ['updateCategory','updateGroup','updateOption','updateDish','updateItem'])driver.client[method]=async()=>{writes.push(method);};
+ return {payload,driver,rows,writes,reads};
+}
+
+test('historical created receipts reuse exact preflight kind/IDs without another content snapshot',async()=>{
+ for(const platform of ['rocket_now','demae_can']) {
+  const {payload,driver,writes,reads}=stableCreatedFixture(platform);
+  const mappings=structuredClone(payload.targets.map(target=>target.mappings));
+  assert.deepEqual((await driver.preflight(payload)).issues,[]);
+  for(const target of payload.targets)await driver.updateContent(target);
+  assert.equal(reads.length,1,platform);assert.deepEqual(writes,[]);
+  assert.deepEqual(payload.targets.map(target=>target.mappings),mappings);
+ }
+});
+
+test('mixed historical/new created IDs need fresh proof only for the missing same-kind identity',async()=>{
+ const {payload,driver,rows,writes,reads}=stableCreatedFixture();
+ const target=payload.targets.find(target=>target.kind==='option');
+ assert.deepEqual((await driver.preflight(payload)).issues,[]);
+ const second={...rows.find(row=>row.kind==='option'),id:'5'};
+ rows.push(second);rows.find(row=>row.kind==='option_group').childIds.push('5');
+ target.mappings.push({externalId:'5',created:true});
+ await driver.updateContent(target);
+ assert.equal(reads.length,2);assert.deepEqual(reads[1],{itemDetails:false});assert.deepEqual(writes,[]);
+ // The next execution independently lists both identities, regardless of
+ // the durable created flags; it must not repeat the full content scan.
+ assert.deepEqual((await driver.preflight(payload)).issues,[]);
+ target.mappings[1].created=false; // mixed durable/new mapping flags
+ await driver.updateContent(target);assert.equal(reads.length,3);assert.deepEqual(writes,[]);
+ // The same numeric ID in a different kind is not an identity proof.
+ driver.contentSnapshot=driver.contentSnapshot.map(row=>row.kind==='option'&&row.id==='3'?{...row,kind:'item'}:row);
+ await driver.updateContent(target);assert.equal(reads.length,4);assert.deepEqual(writes,[]);
+ driver.contentSnapshot=[];driver.snapshot=async()=>[{...second,id:'different'}];
+ await assert.rejects(()=>driver.updateContent(target),/native_object_missing/);assert.deepEqual(writes,[]);
+});
+
+test('a new Demae group missing from preflight retains the original full identity proof and name update',async()=>{
+ const target={kind:'option_group',sourceKey:'option_group:new',targetId:'new',source:{},name:'new group',price:null,
+  marker:'FS0123456789abcd',mappings:[{externalId:'3',created:true}]};
+ const driver=new AuthorityNativeDriver({},{platformKey:'demae_can',merchantId:'1',targets:[target]});
+ driver.contentSnapshot=[{kind:'category',id:'3',name:'different native kind'}];
+ const native={kind:'option_group',id:'3',name:target.marker,price:null,hidden:true,childIds:[]};
+ let reads=0;const writes=[];
+ driver.snapshot=async options=>{reads++;assert.deepEqual(options,{itemDetails:false});return [structuredClone(native)];};
+ driver.client.updateGroup=async(id,patch)=>{writes.push({id,patch});Object.assign(native,patch);};
+ await driver.updateContent(target);
+ assert.equal(reads,1);assert.deepEqual(writes,[{id:'3',patch:{name:'new group'}}]);
+ assert.equal(native.hidden,true);assert.equal(target.mappings[0].created,true);
+ driver.snapshot=async()=>[{...native,id:'unrelated'}];
+ await assert.rejects(()=>driver.updateContent(target),/native_object_missing/);assert.equal(writes.length,1);
+});
+
+test('unchanged created content still requires fresh final ordering, identity and hidden-state verification',async()=>{
+ for(const mode of ['ok','order','identity','exposed']) {
+  const {payload,driver,rows,writes,reads}=stableCreatedFixture();
+  const option=payload.targets.find(target=>target.kind==='option');
+  const second={...option,targetId:'second',sourceKey:'option:second',name:'new-second',mappings:[{externalId:'5',created:true}]};
+  payload.targets.push(second);
+  rows.push({...rows.find(row=>row.kind==='option'),id:'5',name:second.name});
+  rows.find(row=>row.kind==='option_group').childIds.push('5');
+  const snapshot=driver.snapshot,beginPhase=driver.beginPhase.bind(driver);let verifying=false;
+  driver.beginPhase=async(...args)=>{if(args[0]==='verifying')verifying=true;return beginPhase(...args);};
+  driver.snapshot=async options=>{
+   const observed=await snapshot(options);
+   if(verifying) {
+    if(mode==='order')observed.find(row=>row.kind==='option_group').childIds.reverse();
+    if(mode==='identity')observed.splice(observed.findIndex(row=>row.kind==='option'&&row.id==='5'),1);
+    if(mode==='exposed')observed.find(row=>row.kind==='option'&&row.id==='5').hidden=false;
+   }
+   return observed;
+  };
+  if(mode==='ok') {
+   const result=await runUberAuthorityPublication(payload,driver,async()=>{});
+   assert.equal(result.observations.length,5);assert.equal(result.observations.find(row=>row.sourceKey==='option:second').hidden,true);
+  }else await assert.rejects(()=>runUberAuthorityPublication(payload,driver,async()=>{}),mode==='exposed'?/draft_exposed/:/content_unverified/,mode);
+  assert.equal(reads.length,5,mode);assert.equal(reads.at(-1),undefined);assert.deepEqual(writes,[]);
+  assert.ok(payload.targets.every(target=>target.mappings.every(mapping=>mapping.created===true)));
+ }
+});
+
 test('creation uses the same exact-owner exception as preflight without changing the other option',async()=>{
  const {payload,driver,rows}=fixture();
  const owner=payload.targets[2];owner.sourceKey='option:g:old';rows[2].name=owner.name;

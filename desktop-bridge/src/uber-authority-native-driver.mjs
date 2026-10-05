@@ -430,7 +430,15 @@ export class AuthorityNativeDriver {
         const actual=await new DemaeStagedOption(this.client).read({optionCode:this.id('option',mapping.externalId),groupCode:mapping.externalParentId.slice(6),marker:target.marker});
         return {kind:'option',id:String(actual.option.optionCode),name:actual.option.optionName,price:Number(actual.option.price),staged:true,parentIds:[actual.groupCode]};
       }));
-    }else rows=target.mappings.some(mapping=>mapping.created)?await this.snapshot({itemDetails:target.kind==='item'}):this.contentSnapshot;
+    }else {
+      // `created` is a durable receipt/hidden-state guard, not a signal that an
+      // object is new to this execution. A later verification already read its
+      // exact kind/ID during preflight; only a newly received missing identity
+      // still needs the original fresh creation proof below.
+      rows=target.mappings.some(mapping=>mapping.created&&!this.contentSnapshot.some(row=>
+        row.kind===target.kind&&row.id===this.id(target.kind,mapping.externalId)))
+        ?await this.snapshot({itemDetails:target.kind==='item'}):this.contentSnapshot;
+    }
     for(const id of this.ids(target)) {
       const before=rows.find(row=>row.kind===target.kind&&row.id===id);
       if(!before)throw Error('uber_authority_native_object_missing');
