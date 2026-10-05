@@ -23,9 +23,9 @@ function fixture() {
 test('confirmed retirement retains Demae carrier ownership without trusting unknown groups',()=>{
  const target={kind:'item',sourceKey:'item:beef',targetId:'beef',source:{groupIds:[]},mappings:[{externalId:'00000015'}]};
  const option={kind:'option',sourceKey:'option:fruit:mango',targetId:'mango',archived:true,mappings:[{externalId:'00000210',externalParentId:'stage:0044'}]};
- const driver=new AuthorityNativeDriver({}, {platformKey:'demae_can',merchantId:'1',menuPatternCode:'live',targets:[target,option]});
- const rows=[{kind:'item',id:'00000015',staged:true,parentIds:[],groupIds:['0044']},
-  {kind:'option_group',id:'0044',staged:true,childIds:['00000210']},
+ const driver=new AuthorityNativeDriver({}, {platformKey:'demae_can',merchantId:'1',menuPatternCode:'live',draftCarrierItemCode:'00000015',targets:[target,option]});
+ const rows=[{kind:'item',id:'00000015',staged:true,hidden:true,parentIds:[],groupIds:['0044']},
+  {kind:'option_group',id:'0044',staged:true,internalCarrier:true,carrierItemId:'00000015',childIds:['00000210']},
   {kind:'option',id:'00000210',staged:true,hidden:true,parentIds:['0044']}];
  driver.contentSnapshot=rows;
  assert.deepEqual(driver.structureIssues(target,rows,{preflight:true}),[]);
@@ -217,18 +217,18 @@ test('Rocket caps 50 to 13 available choices and still enables repeated quantiti
 });
 
 test('Demae permits only identified additions to a verified private draft carrier',async()=>{
- for(const mode of ['owned','isolated-option','unknown','selling','removed']) {
+ for(const mode of ['owned','missing-group-proof','unknown','selling','removed']) {
   const target={kind:'item',sourceKey:'item:i',targetId:'i',source:{groupIds:[]},mappings:[{externalId:'itemList_141false'}]};
   const payload={platformKey:'demae_can',merchantId:'1',targets:[target,{kind:'option',mappings:[{externalId:'itemList_151true',externalParentId:'stage:g'}]}]};
   const driver=new AuthorityNativeDriver({},payload);
   driver.contentSnapshot=[{kind:'item',id:'41',staged:mode!=='selling',groupIds:mode==='removed'?['old']:[],parentIds:['draft']}];
   driver.relationshipSnapshot=[{kind:'item',id:'41',staged:mode!=='selling',groupIds:['g'],parentIds:['draft']},
-   {kind:'option_group',id:'g',staged:true,childIds:['51']},
+   {kind:'option_group',id:'g',staged:true,internalCarrier:true,carrierItemId:'41',childIds:['51']},
    {kind:'option',id:'51',staged:true,hidden:true,parentIds:['g']}];
   driver.groupIds=()=>['g'];
-  if(mode==='isolated-option')driver.relationshipSnapshot.splice(1,1);
+  if(mode==='missing-group-proof')driver.relationshipSnapshot.splice(1,1);
   if(mode==='unknown')driver.managedGroup=()=>false;
-  if(mode==='owned'||mode==='isolated-option')await driver.updateRelationships(target);
+  if(mode==='owned')await driver.updateRelationships(target);
   else await assert.rejects(()=>driver.updateRelationships(target),/relationship_drift/);
  }
 });

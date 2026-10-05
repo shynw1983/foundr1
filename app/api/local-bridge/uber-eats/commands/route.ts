@@ -498,8 +498,12 @@ export async function POST(request: Request) {
   let status = cleanText(body.status, 40);
   let error = cleanText(body.error, 1000);
   const result = body.result && typeof body.result === "object"
-    ? body.result as Record<string, unknown>
+    ? { ...body.result as Record<string, unknown> }
     : {};
+  // Name recovery records belong to the server. A Bridge response must never
+  // replace the native rejection/identity proof used by a later manual retry.
+  delete result.nameAdaptationDiagnostic;
+  delete result.nameAdaptation;
   if (!commandId || !["processing", "succeeded", "failed"].includes(status)) {
     return Response.json({ error: "Invalid command acknowledgement." }, { status: 400 });
   }
@@ -601,7 +605,7 @@ export async function POST(request: Request) {
   let nameAdapted=false;
   if(status==='failed'&&commandPayload.authoritativePublication===true&&authorization.isDesktop
     &&Number(commandRows[0].attempts)<3&&findRejectedMenuNameTarget(commandPayload,error)) {
-    const {adaptRejectedUberMenuName,MenuNameAdaptationConflict}=await import('../../../../../lib/uber-menu-name-adaptation-store');
+    const {adaptRejectedUberMenuName,MenuNameAdaptationConflict,MenuNameAdaptationFailure}=await import('../../../../../lib/uber-menu-name-adaptation-store');
     try {
       const adaptation=await adaptRejectedUberMenuName({commandId,storeId:authorization.storeId,
         platform:String(commandRows[0].platform),error,status:'processing',result,
@@ -614,6 +618,7 @@ export async function POST(request: Request) {
     }
     catch(failure) {
       if(failure instanceof MenuNameAdaptationConflict)return Response.json({error:'Command changed while preparing its name.'},{status:409});
+      if(failure instanceof MenuNameAdaptationFailure)result.nameAdaptationDiagnostic=failure.diagnostic;
       error=failure instanceof Error?failure.message:'menu_name_ai_invalid';
     }
   }
@@ -625,7 +630,8 @@ export async function POST(request: Request) {
     set
       status = 'succeeded',
       completed_at = now(),
-      result = ${JSON.stringify(result)}::jsonb,
+      result = ${JSON.stringify(result)}::jsonb || case when result ? 'nameAdaptationDiagnostic'
+        then jsonb_build_object('nameAdaptationDiagnostic',result->'nameAdaptationDiagnostic') else '{}'::jsonb end,
       last_error = '',
       claim_expires_at = null,
       updated_at = now()
@@ -647,7 +653,8 @@ export async function POST(request: Request) {
         else 'pending'
       end,
       available_at = now() + (case when ${commandPayload.authoritativePublication===true||commandPayload.authoritativeSource===true} then least(120,15*power(2,greatest(0,attempts-1))) else 15 end) * interval '1 second',
-      result = ${JSON.stringify(result)}::jsonb,
+      result = ${JSON.stringify(result)}::jsonb || case when result ? 'nameAdaptationDiagnostic'
+        then jsonb_build_object('nameAdaptationDiagnostic',result->'nameAdaptationDiagnostic') else '{}'::jsonb end,
       last_error = ${error || "Bridge command failed."},
       claimed_by_device_id = null,
       claimed_at = null,
@@ -662,6 +669,7 @@ export async function POST(request: Request) {
     where id::text = ${commandId}
       and store_id::text = ${authorization.storeId}
       and status = 'processing'
+      and claimed_at = ${String(commandRows[0].claimedAt ?? '')}::timestamptz
       and (
         ${authorization.deviceId} = ''
         or claimed_by_device_id::text = ${authorization.deviceId}

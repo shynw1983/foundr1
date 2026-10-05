@@ -20,10 +20,13 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
  const db=new PGlite();
  await db.exec(`
   create table menu_uber_sources(id uuid primary key,brand_id uuid,store_id uuid,revision integer,enabled boolean,auto_publish boolean,publish_config jsonb,updated_at timestamptz default now());
-  create table local_bridge_commands(id uuid primary key,store_id uuid,platform text,status text,attempts integer,payload jsonb,result jsonb default '{}',last_error text default '',created_at timestamptz default now(),updated_at timestamptz default now(),available_at timestamptz default now(),completed_at timestamptz,claimed_by_device_id uuid,claimed_at timestamptz,claim_expires_at timestamptz);
+  create table local_bridge_commands(id uuid primary key,store_id uuid,platform text,command_type text default 'publish_menu_changes',status text,attempts integer,payload jsonb,result jsonb default '{}',last_error text default '',created_at timestamptz default now(),updated_at timestamptz default now(),available_at timestamptz default now(),completed_at timestamptz,claimed_by_device_id uuid,claimed_at timestamptz,claim_expires_at timestamptz);
   create table menu_external_platforms(id uuid primary key,brand_id uuid,store_id uuid,platform_key text);
   create table menu_uber_creation_attempts(source_id uuid,platform text,source_key text,status text,external_id text,external_parent_id text,command_id uuid);
   create table menu_platform_availability_settings(target_id uuid,availability text);
+  create table local_bridge_devices(id uuid primary key,last_seen_at timestamptz,updated_at timestamptz);
+  create table menu_change_sync_tasks(command_id uuid,status text,phase text,attempts integer,error_code text,error_detail text,updated_at timestamptz,completed_at timestamptz);
+  create table menu_uber_option_migrations(source_id uuid,platform text,migration_key text,state jsonb);
  `);
  const lock=readFileSync(resolve(root,'db/uber-menu-authority.sql'),'utf8')
   .match(/create or replace function lock_menu_uber_revision[\s\S]*?\$\$;/)?.[0];
@@ -49,23 +52,32 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
  await db.query("insert into menu_external_platforms(id,brand_id,platform_key) values($1,$2,'rocket_now')",[ids.platform,ids.brand]);
  await db.query("insert into menu_uber_creation_attempts values($1,'rocket_now',$2,'identified','native-secondary','stage:0010',$3)",[ids.source,secondary.sourceKey,ids.command]);
  await db.query("insert into menu_platform_availability_settings values($1,'unavailable')",[ids.target]);
- let gate;
+ await db.query("insert into menu_uber_option_migrations values($1,'rocket_now','migration',$2)",[ids.source,JSON.stringify(payload.migrationState.migration)]);
+ let gate,aiFailure;
  const requests=[];
  const mocks={
   'lib/menu-name-adaptation.ts':{
-   findRejectedMenuNameTarget(value,error) {
-    const target=value.targets.find(row=>error.startsWith(`uber_authority_content_failed:${row.sourceKey}:${row.name}:`));
-    return target?{platform:value.platformKey,sourceKey:target.sourceKey,targetId:target.targetId,kind:target.kind,inputName:target.name,originalName:target.sourceName,rejectionReason:error}:null;
-   },
    async requestMenuNameAdaptation(input) {
     requests.push(json(input));
     if(gate)await gate.promise;
+    if(aiFailure)throw aiFailure;
     return {sourceKey:input.sourceKey,targetId:input.targetId,inputName:input.inputName,
      name:kind==='item'?'四川風麻辣湯330円から':'お願い：商品合計1,600円からで',
      reason:'Keep the minimum amount meaning',model:'test-model',policyVersion:'contextual-name-v1'};
    }
   }
  };
+ // Exercise the actual acknowledgement/manual routes with only authentication,
+ // realtime transport and unrelated external services stubbed. Their writes,
+ // adapter and native verifier still use real local PostgreSQL.
+ Object.assign(mocks,{
+  'lib/inventory-command-supersession.ts':{},'lib/inventory-manual-sync.ts':{},'lib/menu-platform-snapshot-merge.ts':{},
+  'lib/uber-menu-source-sync.ts':{},'lib/order-realtime.ts':{publishPublicMenuUpdatedEvent:async()=>{}},
+  'lib/local-bridge-auth.ts':{authorizeLocalBridge:async()=>({authorized:true,storeId:ids.store,deviceId:ids.device,devicePlatform:'desktop'})},
+  'lib/competitor-bridge-snapshot.ts':{},
+  'lib/local-bridge-realtime.ts':{publishBridgeCommandUpdated:async()=>{},publishBridgeInventoryUpdated:async()=>{},publishBridgeCommandAvailable:async()=>{}},
+  'lib/api-auth.ts':{requireMasterOsSession:async()=>({role:'owner'})}
+ });
  // Neon tagged queries are lazy; transaction statements must not run before
  // BEGIN. This adapter exercises exactly their emitted SQL on local Postgres.
  const sql=(parts,...params)=>{
@@ -79,12 +91,12 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
  });
  mocks['lib/db.ts']={sql};
  const cache=new Map();
- function load(path) {
-  if(mocks[path])return mocks[path];
+ function load(path,bypassMock=false) {
+  if(mocks[path]&&!bypassMock)return mocks[path];
   if(cache.has(path))return cache.get(path);
   const exports={};cache.set(path,exports);
   const source=ts.transpileModule(readFileSync(resolve(root,path),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-  runInNewContext(source,{exports,Date,Error,Response,URL,console,process,structuredClone,
+  runInNewContext(source,{exports,Date,Error,Request,Response,URL,console,process,structuredClone,
    require:name=>{
     if(!name.startsWith('.'))return require(name);
     let dependency=relative(root,resolve(root,dirname(path),name));
@@ -93,16 +105,29 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
    }});
   return exports;
  }
+ // The exact native rejection classifier is production code too. Stub only
+ // generation, not its field/identity or authentication-error checks.
+ const helper=load('lib/menu-name-adaptation.ts',true);
+ mocks['lib/menu-name-adaptation.ts'].findRejectedMenuNameTarget=helper.findRejectedMenuNameTarget;
  const service=load('lib/uber-menu-name-adaptation-store.ts');
  const publication=load('lib/uber-menu-publication-store.ts');
  const input={commandId:ids.command,storeId:ids.store,platform:'rocket_now',status,claim,
-  error:`uber_authority_content_failed:${primary.sourceKey}:${primary.name}:merchant_menu_request_failed:200:10036`};
+  error:`uber_authority_content_failed:${primary.sourceKey}:${primary.name}:merchant_menu_request_failed:200:10036:productName contains special characters`};
+ await db.query('update local_bridge_commands set last_error=$1 where id=$2',[input.error,ids.command]);
  const command=async()=>(await db.query('select * from local_bridge_commands where id=$1',[ids.command])).rows[0];
  const source=async()=>(await db.query('select * from menu_uber_sources where id=$1',[ids.source])).rows[0];
  const external=async()=>({receipts:(await db.query('select * from menu_uber_creation_attempts')).rows,stock:(await db.query('select * from menu_platform_availability_settings')).rows});
  const setCandidate=async candidate=>db.query("update menu_uber_sources set publish_config=jsonb_set(publish_config,'{rocket_now}',publish_config->'rocket_now'||jsonb_build_object('nameAdaptations',jsonb_build_object($1::text,$2::jsonb)))",[primary.sourceKey,JSON.stringify(candidate)]);
  return {db,ids,claim,payload,config,primary,input,service,publication,requests,command,source,external,setCandidate,
+  menuSyncIssue:load('lib/menu-sync-status.ts').menuSyncIssue,
   defer(){gate=defer();return gate;},
+  failAI(code='menu_name_ai_invalid',diagnostic={stage:'output_json',model:'test-model',attempts:[]}) {
+   aiFailure=code?Object.assign(new Error(code),{code,diagnostic}):undefined;
+  },
+  ack(body){return load('app/api/local-bridge/uber-eats/commands/route.ts').POST(new Request(`http://isolated.test/api/local-bridge/uber-eats/commands?storeId=${ids.store}`,{
+   method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:ids.command,...body})}));},
+  manual(language='zh-Hans'){return load('app/api/menus/uber-source/route.ts').POST(new Request('http://isolated.test/api/menus/uber-source',{
+   method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({brandId:ids.brand,action:'retry',jobId:ids.command,language})}));},
   async waitForRequests(count=1){for(let i=0;i<100&&requests.length<count;i++)await new Promise(resolve=>setTimeout(resolve,1));assert.equal(requests.length,count);}
  };
 }
@@ -191,15 +216,203 @@ test('execution cap does not generate a candidate or claim a queued retry',async
  }finally {await h.db.close();}
 });
 
-test('two previously rejected names stop further AI calls and preserve the command',async()=>{
+test('two previously rejected names stop further AI calls and preserve command content with a bounded diagnostic',async()=>{
  const h=await fixture();
  try {
   await h.setCandidate({sourceKey:h.primary.sourceKey,targetId:h.primary.targetId,sourceName:h.primary.sourceName,
    inputName:h.primary.name,name:'previous candidate',verified:false,attemptedNames:['candidate one','candidate two']});
   const before=await h.command(),config=(await h.source()).publish_config;
   await assert.rejects(h.service.adaptRejectedUberMenuName(h.input),/menu_name_ai_exhausted/);
-  assert.equal(h.requests.length,0);assert.deepEqual(await h.command(),before);
+  const after=await h.command();
+  assert.equal(h.requests.length,0);assert.deepEqual(after.payload,before.payload);
+  assert.equal(after.status,before.status);assert.equal(after.claimed_at.getTime(),before.claimed_at.getTime());
+  assert.equal(after.result.nameAdaptationDiagnostic.errorCode,'menu_name_ai_exhausted');
+  assert.equal(after.result.nameAdaptationDiagnostic.platformRejection,h.input.error);
   assert.deepEqual((await h.source()).publish_config,config);
+ }finally {await h.db.close();}
+});
+
+test('AI failure saves native rejection and bound identities, without changing content or exposing response bodies',async()=>{
+ const h=await fixture();
+ try {
+  const before=await h.command(),external=await h.external();
+  h.failAI('menu_name_ai_invalid',{stage:'output_incomplete',model:'m'.repeat(1000),responseStatus:'incomplete',
+   incompleteReason:'max_output_tokens',httpStatus:200,usage:{inputTokens:123,outputTokens:2000,totalTokens:2123,reasoningTokens:1400,secret:999},
+   candidateName:'n'.repeat(2000),candidateReason:'Bearer sk-secret-token '+ 'r'.repeat(2000),raw:'PRIVATE RESPONSE',reasoning:'PRIVATE REASONING',
+   attempts:[1,2,3,4].map(attempt=>({attempt,stage:'output_incomplete',model:'test-model',raw:'PRIVATE RESPONSE'}))});
+  await assert.rejects(h.service.adaptRejectedUberMenuName(h.input),error=>error instanceof h.service.MenuNameAdaptationFailure);
+  const after=await h.command(),diagnostic=after.result.nameAdaptationDiagnostic;
+  assert.equal(diagnostic.commandId,h.ids.command);assert.equal(diagnostic.sourceId,h.ids.source);assert.equal(diagnostic.revision,37);
+  assert.equal(diagnostic.platform,'rocket_now');assert.equal(diagnostic.sourceKey,h.primary.sourceKey);
+  assert.equal(diagnostic.targetId,h.primary.targetId);assert.equal(diagnostic.inputName,h.primary.name);
+  assert.equal(diagnostic.sourceName,h.primary.sourceName);assert.equal(diagnostic.rejectedName,h.primary.name);
+  assert.equal(diagnostic.platformRejection,h.input.error);assert.equal(diagnostic.errorCode,'menu_name_ai_invalid');
+  assert.equal(diagnostic.ai.stage,'output_incomplete');assert.equal(diagnostic.ai.model.length,200);
+  assert.equal(diagnostic.ai.candidateName.length,512);assert.equal(diagnostic.ai.candidateReason.length,512);
+  assert.equal(diagnostic.ai.attempts.length,2);assert.deepEqual(diagnostic.ai.usage,{inputTokens:123,outputTokens:2000,totalTokens:2123,reasoningTokens:1400});
+  assert.doesNotMatch(JSON.stringify(diagnostic),/PRIVATE|sk-secret-token|"secret"/);
+  assert.match(after.last_error,/"stage":"output_incomplete"/);
+  assert.equal(after.status,'processing');assert.equal(after.attempts,before.attempts);
+  assert.deepEqual(after.payload,before.payload);assert.equal(after.result.receipt,before.result.receipt);
+  assert.deepEqual(await h.external(),external);assert.deepEqual((await h.source()).publish_config,h.config);
+ }finally {await h.db.close();}
+});
+
+for(const status of ['processing','failed'])test(`${status}: saved AI failure is repaired directly for the same native target on manual retry`,async()=>{
+ const h=await fixture({status});
+ try {
+  h.failAI();await assert.rejects(h.service.adaptRejectedUberMenuName(h.input),/menu_name_ai_invalid/);
+  const diagnosed=await h.command();
+  await h.db.exec("update local_bridge_commands set status='failed',completed_at=now(),claimed_by_device_id=null,claimed_at=null,claim_expires_at=null");
+  h.failAI(null);
+  const prepared=await h.service.adaptRejectedUberMenuName({...h.input,status:'failed',error:diagnosed.last_error});
+  assert.equal(h.requests.length,2);assert.equal(h.requests[1].sourceKey,h.primary.sourceKey);
+  assert.equal(h.requests[1].targetId,h.primary.targetId);assert.equal(h.requests[1].inputName,h.primary.name);
+  assert.equal(h.requests[1].rejectionReason,'merchant_menu_request_failed:200:10036:productName contains special characters');
+  const after=await h.command();assert.equal(after.id,h.ids.command);assert.equal(after.status,'failed');
+  assert.equal(after.payload.targets[0].name,prepared.adaptedName);assert.equal(after.result.receipt,'receipt-kept');
+  assert.equal(after.result.nameAdaptationDiagnostic.platformRejection,h.input.error);
+  assert.match(after.last_error,/menu_name_ai_candidate_prepared/);
+  const again=await h.service.adaptRejectedUberMenuName({...h.input,status:'failed',error:after.last_error});
+  assert.equal(again,false);assert.equal(h.requests.length,2);
+ }finally {await h.db.close();}
+});
+
+for(const change of ['revision','claim','receipt','source disabled','auto-publish disabled'])test(`deferred AI failure: ${change} prevents even diagnostic writes`,async()=>{
+ const h=await fixture();
+ try {
+  h.failAI();const gate=h.defer(),operation=h.service.adaptRejectedUberMenuName(h.input);
+  await h.waitForRequests();
+  if(change==='revision')await h.db.exec('update menu_uber_sources set revision=38');
+  if(change==='claim')await h.db.query("update local_bridge_commands set claimed_at=claimed_at+interval '1 minute',claimed_by_device_id=$1",[randomUUID()]);
+  if(change==='receipt')await h.db.exec("update local_bridge_commands set payload=jsonb_set(payload,'{authorityState,newReceipt}',jsonb_build_object('status','received','externalId','new-exact-id'))");
+  if(change==='source disabled')await h.db.exec('update menu_uber_sources set enabled=false');
+  if(change==='auto-publish disabled')await h.db.exec('update menu_uber_sources set auto_publish=false');
+  const latest=await h.command(),config=(await h.source()).publish_config;
+  gate.release();await assert.rejects(operation,error=>error instanceof h.service.MenuNameAdaptationConflict);
+  assert.deepEqual(await h.command(),latest);assert.deepEqual((await h.source()).publish_config,config);
+ }finally {await h.db.close();}
+});
+
+for(const patch of ['sourceKey','targetId','sourceId','commandId','revision','platform','rejectedName','sourceName','inputName','native price rejection','native authentication rejection'])test(`manual recovery cannot use an untrusted ${patch} diagnostic`,async()=>{
+ const h=await fixture();
+ try {
+  h.failAI();await assert.rejects(h.service.adaptRejectedUberMenuName(h.input));
+  const command=await h.command(),diagnostic=command.result.nameAdaptationDiagnostic;
+  if(patch==='revision')diagnostic.revision=38;
+  else if(patch==='native price rejection')diagnostic.platformRejection=`uber_authority_content_failed:${h.primary.sourceKey}:${h.primary.name}:optionName invalid price quantity`;
+  else if(patch==='native authentication rejection')diagnostic.platformRejection=`uber_authority_content_failed:${h.primary.sourceKey}:${h.primary.name}:merchant_menu_request_failed:401:MWA0007`;
+  else diagnostic[patch]='forged';
+  await h.db.query("update local_bridge_commands set status='failed',result=$1",[JSON.stringify({...command.result,nameAdaptationDiagnostic:diagnostic})]);
+  const before=await h.command();h.failAI(null);
+  await assert.rejects(h.service.adaptRejectedUberMenuName({...h.input,status:'failed',error:before.last_error}),error=>error instanceof h.service.MenuNameAdaptationConflict);
+  assert.equal(h.requests.length,1);assert.deepEqual(await h.command(),before);
+ }finally {await h.db.close();}
+});
+
+test('legacy AI failures without native rejection cannot choose targets from last_error JSON',async()=>{
+ const h=await fixture({status:'failed'});
+ try {
+  await h.db.query('update local_bridge_commands set last_error=$1',[`menu_name_ai_invalid:${JSON.stringify({sourceKey:h.primary.sourceKey,targetId:h.primary.targetId,name:h.primary.name})}`]);
+  const before=await h.command();
+  await assert.rejects(h.service.adaptRejectedUberMenuName({...h.input,error:before.last_error}),error=>error instanceof h.service.MenuNameAdaptationRecoveryUnavailable);
+  assert.equal(h.requests.length,0);assert.deepEqual(await h.command(),before);
+ }finally {await h.db.close();}
+});
+
+test('Bridge result cannot overwrite a server diagnosis while preparing a name candidate',async()=>{
+ const h=await fixture();
+ try {
+  const existing={audit:'server-only'};
+  await h.db.query("update local_bridge_commands set result=result||jsonb_build_object('nameAdaptationDiagnostic',$1::jsonb)",[JSON.stringify(existing)]);
+  await h.service.adaptRejectedUberMenuName({...h.input,result:{nameAdaptationDiagnostic:{sourceKey:'forged'},nameAdaptation:{name:'forged'},platformResponse:'allowed'}});
+  const command=await h.command();assert.deepEqual(command.result.nameAdaptationDiagnostic,existing);
+  assert.equal(command.result.platformResponse,'allowed');assert.notEqual(command.result.nameAdaptation.adaptedName,'forged');
+ }finally {await h.db.close();}
+});
+
+test('actual failed ACK preserves the server diagnostic and strips a Bridge-supplied recovery record',async()=>{
+ const h=await fixture();
+ try {
+  h.failAI('menu_name_ai_invalid',{stage:'output_incomplete',model:'test-model',incompleteReason:'max_output_tokens',attempts:[]});
+  const response=await h.ack({status:'failed',error:h.input.error,result:{platformResponse:'name rejected',
+   nameAdaptationDiagnostic:{platformRejection:'forged',sourceKey:'forged'},nameAdaptation:{adaptedName:'forged'}}});
+  assert.equal(response.status,200);
+  const after=await h.command();assert.equal(after.status,'failed');assert.equal(after.claimed_at,null);
+  assert.equal(after.result.platformResponse,'name rejected');assert.equal(after.result.nameAdaptation,undefined);
+  assert.equal(after.result.nameAdaptationDiagnostic.platformRejection,h.input.error);
+  assert.equal(after.result.nameAdaptationDiagnostic.sourceKey,h.primary.sourceKey);
+  assert.equal(after.result.nameAdaptationDiagnostic.ai.stage,'output_incomplete');
+  assert.match(after.last_error,/menu_name_ai_invalid/);assert.equal(h.requests.length,1);
+ }finally {await h.db.close();}
+});
+
+test('actual final ACK cannot inject a recovery record when no server diagnostic exists',async()=>{
+ const h=await fixture();
+ try {
+  const response=await h.ack({status:'failed',error:'merchant_menu_request_failed:401:MWA0007',
+   result:{nameAdaptationDiagnostic:{sourceKey:h.primary.sourceKey,platformRejection:h.input.error},nameAdaptation:{adaptedName:'forged'},allowed:'retained'}});
+  assert.equal(response.status,200);const after=await h.command();
+  assert.equal(after.status,'failed');assert.equal(after.result.allowed,'retained');
+  assert.equal(after.result.nameAdaptationDiagnostic,undefined);assert.equal(after.result.nameAdaptation,undefined);
+  assert.equal(h.requests.length,0);
+ }finally {await h.db.close();}
+});
+
+test('actual manual route regenerates for a diagnosed target before requeuing the original command',async()=>{
+ const h=await fixture();
+ try {
+  h.failAI();assert.equal((await h.ack({status:'failed',error:h.input.error,result:{}})).status,200);
+  h.failAI(null);const response=await h.manual();assert.equal(response.status,200);assert.deepEqual(await response.json(),{queued:1});
+  const after=await h.command();assert.equal(after.id,h.ids.command);assert.equal(after.status,'pending');assert.equal(after.attempts,0);
+  assert.equal(h.requests.length,2);assert.equal(h.requests[1].targetId,h.primary.targetId);
+  assert.notEqual(after.payload.targets[0].name,h.primary.name);
+  assert.equal(after.payload.authorityState['option:other:second'].externalId,'native-secondary');
+  assert.equal(after.payload.migrationState.migration.phase,'complete');
+  assert.equal(after.result.nameAdaptationDiagnostic.platformRejection,h.input.error);
+ }finally {await h.db.close();}
+});
+
+test('actual manual route explains fresh-scan recovery for legacy jobs without changing the failed command',async()=>{
+ const h=await fixture({status:'failed'});
+ try {
+  await h.db.exec("update local_bridge_commands set last_error='menu_name_ai_invalid'");const before=await h.command();
+  const response=await h.manual();assert.equal(response.status,409);
+  const body=await response.json();assert.match(body.error,/未保存原始平台拒绝/);assert.match(body.error,/重新读取 Uber 最新菜单/);
+  assert.doesNotMatch(body.error,/menu_name_ai_|command_changed/);assert.deepEqual(await h.command(),before);
+  assert.equal(h.requests.length,0);
+ }finally {await h.db.close();}
+});
+
+test('actual manual route retains the latest failure diagnosis while returning human recovery advice',async()=>{
+ const h=await fixture({status:'failed'});
+ try {
+  h.failAI('menu_name_ai_invalid',{stage:'output_schema',model:'test-model',attempts:[]});
+  const response=await h.manual();assert.equal(response.status,409);const body=await response.json();
+  assert.match(body.error,/没有提交给平台/);assert.match(body.error,/直接.*重新生成/);assert.doesNotMatch(body.error,/menu_name_ai_|output_schema/);
+  const after=await h.command();assert.equal(after.status,'failed');assert.equal(after.payload.targets[0].name,h.primary.name);
+  assert.equal(after.result.nameAdaptationDiagnostic.ai.stage,'output_schema');
+  assert.equal(after.result.nameAdaptationDiagnostic.platformRejection,h.input.error);assert.equal(after.result.receipt,'receipt-kept');
+ }finally {await h.db.close();}
+});
+
+test('manual preparation followed by a competing queued job reports saved candidate, never a scheduled retry',async()=>{
+ const h=await fixture({status:'failed'});
+ try {
+  const adapt=h.service.adaptRejectedUberMenuName;
+  h.service.adaptRejectedUberMenuName=async input=>{
+   const prepared=await adapt(input);
+   await h.db.query("insert into local_bridge_commands(id,store_id,platform,status,attempts,payload) values($1,$2,'demae_can','pending',0,$3)",
+    [randomUUID(),h.ids.store,JSON.stringify({...h.payload,platformKey:'demae_can'})]);
+   return prepared;
+  };
+  const response=await h.manual();assert.equal(response.status,409);
+  const after=await h.command();assert.equal(after.status,'failed');assert.match(after.last_error,/menu_name_ai_candidate_prepared/);
+  assert.equal(after.result.nameAdaptation.adaptedName,after.payload.targets[0].name);
+  // The route cannot queue this task; the saved status must describe only what
+  // actually happened, not promise a platform save or a scheduled execution.
+  assert.match(h.menuSyncIssue(after.last_error,'zh-Hans').action,/尚未执行/);
+  assert.doesNotMatch(h.menuSyncIssue(after.last_error,'zh-Hans').action,/已安排重试|同步成功|已完成/);
  }finally {await h.db.close();}
 });
 

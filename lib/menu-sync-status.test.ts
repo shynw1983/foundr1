@@ -80,6 +80,49 @@ test('a prepared AI retry does not claim platform acceptance',()=>{
  assert.match(issue.title,/已生成/);assert.match(issue.action,/等待平台保存并回读确认/);
  assert.doesNotMatch(issue.title+issue.action,/同步成功|已完成|同步完成/);
 });
+test('saved manual candidate does not claim a retry was queued',()=>{
+ const error='menu_name_ai_candidate_prepared:'+JSON.stringify({name:'请求组',adaptedName:'请求'});
+ const issue=menuSyncIssue(error,'zh-Hans')!;
+ assert.equal(issue.retry,true);assert.match(issue.title,/候选已保存/);assert.match(issue.action,/尚未执行/);
+ assert.doesNotMatch(issue.title+issue.action,/已安排重试|同步成功|已完成/);
+ for(const language of ['ja','zh-Hant'])assert.doesNotMatch(menuSyncIssue(error,language)!.action,/予約しました|已安排重試/);
+});
+test('AI failures describe the failed phase without revealing technical codes or model metadata',()=>{
+ const reasons={output_incomplete:/完成前/,output_json:/AI.*候选/,output_schema:/AI.*候选/,
+  candidate_quantities:/数量、单位或价格/,candidate_identity:/商品种类或身份/,candidate_repeated:/重复/};
+ for(const [stage,reason] of Object.entries(reasons)) {
+  const error='menu_name_ai_invalid:'+JSON.stringify({name:'お願い：商品合計1,600円〜で',sourceKey:'option_group:g',stage,model:'private-model'});
+  const context=menuSyncIssueContext(error,{'option_group:g':'お願い：商品合計1,600円〜で'});
+  assert.equal(context.issues[0].stage,stage);
+  const issue=menuSyncIssue(error,'zh-Hans',context)!;
+  assert.match(issue.action,reason);assert.match(issue.action,/没有提交给平台/);assert.match(issue.action,/直接.*重新生成/);
+  assert.doesNotMatch(issue.title+issue.action,/menu_name_ai_|option_group:g|private-model|output_|candidate_/);
+  for(const language of ['ja','zh-Hant']) {
+   const translated=menuSyncIssue(error,language,context)!;
+   assert.match(translated.action,/お願い：商品合計1,600円〜で/);assert.doesNotMatch(translated.action,/private-model|output_|candidate_/);
+  }
+ }
+ assert.equal(menuSyncIssue('menu_name_ai_unsafe:'+JSON.stringify({name:'汤底',stage:'candidate_identity'}),'zh-Hans')!.retry,false);
+});
+test('legacy AI failures give a safe new-scan recovery instead of replaying an unproven name',()=>{
+ for(const language of ['ja','zh-Hans','zh-Hant']) {
+  const issue=menuSyncIssue('menu_name_ai_recovery_unavailable',language)!;
+  assert.equal(issue.retry,false);assert.match(issue.action,/Uber/);assert.doesNotMatch(issue.title+issue.action,/menu_name_ai_|command_changed/);
+ }
+ const issue=menuSyncIssue('menu_name_ai_recovery_unavailable','zh-Hans')!;
+ assert.match(issue.action,/未保存原始平台拒绝/);assert.match(issue.action,/重新读取 Uber 最新菜单/);assert.match(issue.action,/无需修改 Uber 原名/);
+});
+test('internal Demae carrier conflicts stop safely and explain the native relationship problem',()=>{
+ for(const code of ['identity_conflict','member_mismatch','consumer_mismatch','unknown']) {
+  for(const language of ['ja','zh-Hans','zh-Hant']) {
+   const issue=menuSyncIssue(`demae_internal_carrier_${code}:`+JSON.stringify({name:'刀削麺'}),language)!;
+   assert.equal(issue.kind,'verify');assert.equal(issue.retry,false);assert.match(issue.action,/刀削麺/);
+   assert.doesNotMatch(issue.title+issue.action,/demae_internal_carrier_|identity_conflict|unknown/);
+  }
+ }
+ const issue=menuSyncIssue('demae_internal_carrier_member_mismatch','zh-Hans')!;
+ assert.match(issue.action,/创建记录与实际成员/);assert.match(issue.action,/避免选错商品/);assert.match(issue.action,/无需修改 Uber 原名/);
+});
 test('structured preflight errors show affected names and association recovery',()=>{
  const error='uber_authority_preflight_blocked:2:'+JSON.stringify([
   {sourceKey:'option_group:g1',name:'选择面',code:'group_membership_migration_required'},

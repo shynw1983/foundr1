@@ -1,4 +1,4 @@
-type MenuIssueDetails={name?:string;targetName?:string;sourceName?:string;code?:string;platform?:string;sourceKey?:string;adaptedName?:string};
+type MenuIssueDetails={name?:string;targetName?:string;sourceName?:string;code?:string;platform?:string;sourceKey?:string;adaptedName?:string;stage?:string};
 type MenuIssueContext={targetName?:string;issues?:MenuIssueDetails[]};
 
 // Error strings from older Bridges may wrap a JSON object in additional API
@@ -48,7 +48,8 @@ export function menuSyncIssueContext(error='',targetNames:Record<string,string>=
     const mapped=sourceKey&&Object.prototype.hasOwnProperty.call(targetNames,sourceKey)?targetNames[sourceKey]:undefined;
     const name=displayName(mapped)
       ??[detail.sourceName,detail.name,detail.targetName].map(displayName).find(value=>value!==undefined);
-    if(sourceKey||code||name)issues.push({...(sourceKey?{sourceKey}:{}),...(code?{code}:{}),...(name?{name}:{})});
+    const stage=typeof detail.stage==='string'&&/^(input_validation|configuration|http|response_json|response_status|output_incomplete|output_refusal|output_json|output_schema|candidate_name|candidate_unchanged|candidate_repeated|candidate_quantities|candidate_identity|candidate_unsafe|request|deadline|candidate_limit)$/.test(detail.stage)?detail.stage:undefined;
+    if(sourceKey||code||name||stage)issues.push({...(sourceKey?{sourceKey}:{}),...(code?{code}:{}),...(name?{name}:{}),...(stage?{stage}:{})});
   }
   return {issues};
 }
@@ -64,12 +65,25 @@ export function menuSyncIssue(error = '',language='ja',context:MenuIssueContext=
   const names=[...new Set([...details.map(row=>row.sourceName||row.name||row.targetName),context.targetName,contentName].filter((name):name is string=>typeof name==='string'&&!!name.trim()))];
   const target=names.length?label(`対象：${names.join('、')}。`,`对象：${names.join('、')}。`,`對象：${names.join('、')}。`):'';
   const action=(ja:string,cn:string,tw=cn)=>target+label(ja,cn,tw);
+  if(error.includes('menu_name_ai_recovery_unavailable'))return {kind:'verify',title:label('旧記録から安全に名称を調整できません','旧记录不足以安全调整名称','舊紀錄不足以安全調整名稱'),action:action('旧記録には元のプラットフォーム拒否内容が保存されておらず、正しい調整対象を特定できません。Uber の最新メニューを読み取り、新しい同期を開始してください。Uber の原名を変更する必要はありません。','旧记录未保存原始平台拒绝，无法确定安全改名对象。请重新读取 Uber 最新菜单，创建新的同步任务；无需修改 Uber 原名。','舊紀錄未儲存原始平台拒絕，無法確定安全改名對象。請重新讀取 Uber 最新菜單，建立新的同步工作；無需修改 Uber 原名。'),retry:false};
+  const aiStage=details.find(row=>row.stage)?.stage;
+  const aiStageReason=aiStage==='output_incomplete'?label('AI の応答が完成する前に終了しました。','AI 响应在完成前停止了。','AI 回應在完成前停止了。')
+    :['response_json','output_json','output_schema'].includes(aiStage??'')?label('AI の応答から有効な名称候補を読み取れませんでした。','无法从 AI 响应中读取有效的名称候选。','無法從 AI 回應中讀取有效的名稱候選。')
+    :aiStage==='response_status'?label('AI の処理が正常に完了しませんでした。','AI 服务未正常完成这次请求。','AI 服務未正常完成這次請求。')
+    :aiStage==='output_refusal'?label('AI が名称候補の作成を見送りました。','AI 未提供可使用的名称候选。','AI 未提供可使用的名稱候選。')
+    :aiStage==='candidate_quantities'?label('候補の数量・単位・価格条件が元の名称と一致しませんでした。','候选中的数量、单位或价格条件与原名不一致。','候選中的數量、單位或價格條件與原名不一致。')
+    :aiStage==='candidate_identity'?label('候補の商品種類・識別情報が元の対象と一致しませんでした。','候选的商品种类或身份信息与原项目不一致。','候選的商品種類或身分資訊與原項目不一致。')
+    :['candidate_unchanged','candidate_repeated'].includes(aiStage??'')?label('元の名称と同じ、またはすでに試した候補でした。','候选仍与原名相同，或重复了已经尝试的名称。','候選仍與原名相同，或重複了已經嘗試的名稱。')
+    :aiStage==='candidate_name'?label('候補がプラットフォームの名称条件を満たしていませんでした。','候选未满足平台的名称格式或长度要求。','候選未滿足平台的名稱格式或長度要求。')
+    :aiStage==='configuration'?label('AI サービスの設定を確認する必要があります。','需要检查 AI 服务配置。','需要檢查 AI 服務設定。'):'';
   if(error.includes('menu_name_ai_retry_prepared'))return {kind:'verify',title:label('AI がこのプラットフォーム向けの名称を用意しました','AI 已生成适合该平台的名称','AI 已產生適合該平台的名稱'),action:action('再試行を予約しました。保存・読み取り確認が完了すると同期結果に表示されます。','已安排重试，正在等待平台保存并回读确认；完成后会更新同步结果。','已安排重試，正在等待平台儲存及回讀確認；完成後會更新同步結果。'),retry:true};
-  if(error.includes('menu_name_ai_unavailable'))return {kind:'network',title:label('AI の名称調整を利用できませんでした','暂时无法使用 AI 调整名称','暫時無法使用 AI 調整名稱'),action:action('AI への接続を確認し、同期を再試行してください。Uber の名称変更は不要です。','请检查 AI 服务连接后重试同步，无需修改 Uber 原名。','請檢查 AI 服務連線後重試同步，無需修改 Uber 原名。'),retry:true};
+  if(error.includes('menu_name_ai_candidate_prepared'))return {kind:'verify',title:label('AI の名称候補を保存しました','AI 名称候选已保存','AI 名稱候選已儲存'),action:action('まだ実行していません。他の処理が完了したら、このプラットフォームを再試行して保存・読み取り確認を行ってください。','尚未执行同步。其他任务完成后，请重试此平台，保存并回读确认候选。','尚未執行同步。其他工作完成後，請重試此平台，儲存並回讀確認候選。'),retry:true};
+  if(error.includes('menu_name_ai_unavailable'))return {kind:'network',title:label('AI の名称調整を利用できませんでした','暂时无法使用 AI 调整名称','暫時無法使用 AI 調整名稱'),action:action(aiStageReason+'AI への接続を確認し、同期を再試行してください。Uber の名称変更は不要です。',aiStageReason+'请检查 AI 服务连接后重试同步，无需修改 Uber 原名。',aiStageReason+'請檢查 AI 服務連線後重試同步，無需修改 Uber 原名。'),retry:true};
   if(error.includes('menu_name_ai_timeout'))return {kind:'network',title:label('AI の名称調整に時間がかかっています','AI 调整名称超时','AI 調整名稱逾時'),action:action('時間をあけて同期を再試行してください。再試行では名称を改めて確認します。','请稍后重试同步，重试时会重新核对名称。','請稍後重試同步，重試時會重新核對名稱。'),retry:true};
-  if(error.includes('menu_name_ai_invalid'))return {kind:'verify',title:label('AI の名称候補を確認できませんでした','AI 生成的名称未通过检查','AI 產生的名稱未通過檢查'),action:action('同期を再試行して別の候補を作成してください。繰り返す場合は対象名とプラットフォームの入力条件を確認してください。','请重试同步以生成其他候选；若反复失败，请核对这项名称及平台的输入要求。','請稍後重試同步以產生其他候選；若反覆失敗，請核對這項名稱及平台的輸入要求。'),retry:true};
-  if(error.includes('menu_name_ai_unsafe'))return {kind:'content',title:label('AI の候補で元の意味を保てるか確認が必要です','AI 候选可能改变原名含义，需要确认','AI 候選可能改變原名含義，需要確認'),action:action('商品の種類・量・価格条件を保つ名称を確認してください。候補が確定してからこのプラットフォームの同期を再開してください。','请确认能保留商品种类、份量和价格条件的名称，确认后再继续同步此平台。','請確認能保留商品種類、份量及價格條件的名稱，確認後再繼續同步此平台。'),retry:false};
+  if(error.includes('menu_name_ai_invalid'))return {kind:'verify',title:label('AI の名称候補を確認できませんでした','AI 生成的名称未通过检查','AI 產生的名稱未通過檢查'),action:action(aiStageReason+'この候補は送信していません。再試行すると保存済みの対象から別の名称を作成します。繰り返す場合は対象名とプラットフォームの入力条件を確認してください。',aiStageReason+'这次候选没有提交给平台。重试会直接为已确认的对象重新生成名称；若反复失败，请核对这项名称及平台的输入要求。',aiStageReason+'這次候選沒有提交給平台。重試會直接為已確認的對象重新產生名稱；若反覆失敗，請核對這項名稱及平台的輸入要求。'),retry:true};
+  if(error.includes('menu_name_ai_unsafe'))return {kind:'content',title:label('AI の候補で元の意味を保てるか確認が必要です','AI 候选可能改变原名含义，需要确认','AI 候選可能改變原名含義，需要確認'),action:action(aiStageReason+'この候補は送信していません。商品の種類・量・価格条件を保つ名称を確認してから、このプラットフォームの同期を再開してください。',aiStageReason+'已阻止提交这次候选。请确认能保留商品种类、份量和价格条件的名称，再继续同步此平台。',aiStageReason+'已阻止提交這次候選。請確認能保留商品種類、份量及價格條件的名稱，再繼續同步此平台。'),retry:false};
   if(error.includes('menu_name_ai_exhausted'))return {kind:'content',title:label('プラットフォームに受け付けられる名称を作成できませんでした','暂未生成平台能接受的名称','暫未產生平台能接受的名稱'),action:action('複数の候補を試しました。対象名とプラットフォームの文字・長さ制限を確認し、送信する名称を調整してください。Uber 原本を変更する必要はありません。','已尝试多个候选。请核对这项名称及平台的字符、长度限制，调整此平台的展示名称；无需修改 Uber 原始菜单。','已嘗試多個候選。請核對這項名稱及平台的字元、長度限制，調整此平台的展示名稱；無需修改 Uber 原始菜單。'),retry:false};
+  if(error.includes('demae_internal_carrier_'))return {kind:'verify',title:label('出前館の内部保管グループを確認する必要があります','需要核对出前馆内部暂存组','需要核對出前館內部暫存組'),action:action('内部保管グループの作成記録と、実際のメンバー・利用先が一致しません。別の商品を選ばないよう書き込みを停止しました。出前館の保管グループと商品・選択肢の ID を確認し、正しい関連付けを修正してください。Uber の原名を変更する必要はありません。','内部暂存组的创建记录与实际成员或引用它的商品不一致。为避免选错商品，已暂停写入。请核对出前馆暂存组及商品、选项的 ID，修正正确的对应关系；无需修改 Uber 原名。','內部暫存組的建立紀錄與實際成員或引用它的商品不一致。為避免選錯商品，已暫停寫入。請核對出前館暫存組及商品、選項的 ID，修正正確的對應關係；無需修改 Uber 原名。'),retry:false};
   if(error.startsWith('uber_source_pending_removal:')) {
     let names='';
     try { names=JSON.parse(error.slice('uber_source_pending_removal:'.length)).map((row:{name?:string})=>row.name).filter(Boolean).join('、'); } catch {}

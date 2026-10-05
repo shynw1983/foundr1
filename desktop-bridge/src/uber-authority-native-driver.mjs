@@ -4,6 +4,7 @@ import {authorityPhysicalId} from './uber-authority-parents.mjs';
 import {sameMenuValue} from './merchant-menu-client.mjs';
 import {DemaeStagedOption} from './demae-staged-option.mjs';
 import {DemaeDraftClient} from './demae-draft-client.mjs';
+import {collectDemaeInternalCarriers,readDemaeInternalCarriers} from './demae-internal-carriers.mjs';
 import {migrateRocketOption,rocketMigrationIdentity} from './rocket-option-migration.mjs';
 
 const ordered=rows=>[...rows].sort((a,b)=>a.sortOrder-b.sortOrder);
@@ -40,17 +41,23 @@ export class AuthorityNativeDriver {
   }
   groupIds(target){
     const ids=(target.source?.groupIds??[]).flatMap(id=>this.ids(this.payload.targets.find(row=>row.sourceKey===`option_group:${id}`)??{kind:'option_group',mappings:[]}));
-    const row=(this.relationshipSnapshot??this.contentSnapshot??[]).find(row=>row.kind==='item'&&this.ids(target).includes(row.id));
-    const carriers=row?.staged?(row.groupIds??[]).filter(id=>this.payload.targets.some(option=>option.kind==='option'&&option.mappings.some(mapping=>mapping.externalParentId===`stage:${id}`))):[];
     const snapshot=this.relationshipSnapshot??this.contentSnapshot??[];
-    return [...new Set([...ids,...carriers])].filter(id=>!(this.platform==='demae_can'&&snapshot.some(row=>row.kind==='option_group'&&row.id===id&&row.staged&&row.childIds.length===0)));
+    const row=snapshot.find(row=>row.kind==='item'&&this.ids(target).includes(row.id));
+    const carriers=this.platform==='demae_can'&&row?.staged&&row.hidden?(row.groupIds??[]).filter(id=>snapshot.some(group=>
+      group.kind==='option_group'&&group.id===id&&group.internalCarrier===true&&group.carrierItemId===row.id)):[];
+    return [...new Set([...ids,...carriers])].filter(id=>!(this.platform==='demae_can'&&snapshot.some(row=>
+      row.kind==='option_group'&&row.id===id&&row.staged&&!row.internalCarrier&&row.childIds.length===0)));
   }
   children(target){return ordered(this.payload.targets.filter(row=>!row.archived&&!row.quarantined&&row.parentId===target.targetId));}
   ownsItem(id){return this.payload.targets.some(target=>target.kind==='item'&&!target.quarantined&&this.ids(target).includes(String(id)));}
   activeChildIds(target,rows){return this.children(target).flatMap(child=>this.ids(child)).filter(id=>!rows.some(row=>row.kind==='option'&&row.id===id&&row.staged&&row.hidden));}
   managedGroup(id,rows) {
-    if(this.platform==='demae_can'&&rows.some(row=>row.kind==='option'&&row.staged&&row.hidden&&row.parentIds.includes(String(id))))return true;
+    if(this.platform==='demae_can'&&rows.some(row=>row.kind==='option_group'&&row.id===String(id)&&row.internalCarrier===true))return true;
     if(this.payload.targets.some(group=>group.kind==='option_group'&&this.ids(group).includes(String(id))))return true;
+    // The private storage item must not adopt an unrecorded carrier merely
+    // because its member is a known option. Require the separate native proof.
+    if(this.platform==='demae_can'&&rows.some(row=>row.kind==='item'&&row.id===String(this.payload.draftCarrierItemCode)
+      &&row.groupIds.includes(String(id))))return false;
     const group=rows.find(row=>row.kind==='option_group'&&row.id===String(id));
     const migrations=Object.values(this.payload.migrationState??{}).filter(state=>state.fromParentId===String(id)
       &&this.payload.targets.some(target=>target.targetId===state.targetId&&!target.quarantined));
@@ -240,33 +247,33 @@ export class AuthorityNativeDriver {
       const liveGroupIds=remote.groups.map(row=>String(row.optionGroupCode));
       const knownGroupIds=this.payload.targets.filter(target=>target.kind==='option_group'&&!target.quarantined).flatMap(target=>[...target.mappings,this.payload.authorityState?.[target.sourceKey]].filter(mapping=>mapping?.externalId).map(mapping=>this.id('option_group',mapping.externalId)));
       const groups=await Promise.all([...new Set([...liveGroupIds,...knownGroupIds])].map(id=>c.group(id)));
+      const internalCarriers=await readDemaeInternalCarriers(c,this.payload,{
+        identities:collectDemaeInternalCarriers(this.payload),groups,liveGroupIds,liveItemIds:itemIds});
+      const allGroups=[...new Map([...groups,...[...internalCarriers.values()].map(row=>row.native)]
+        .map(group=>[String(group.detail.optionGroupCode),group])).values()];
+      const publishedOptionIds=new Set(internalCarriers.size?[...stock.optionList,...await c.options()]
+        .filter(row=>String(row.chainId)===this.merchantId).map(row=>String(row.optionCode)):[]);
       const hiddenConsumers=[...new Map(groups.filter(group=>!liveGroupIds.includes(String(group.detail.optionGroupCode)))
         .flatMap(group=>group.items).map(item=>[String(item.itemCode),item])).values()];
       const drafts=hiddenConsumers.filter(consumer=>!items.some(item=>String(item.itemCode)===String(consumer.itemCode)&&!itemIds.includes(String(item.itemCode))&&Array.isArray(item.categoryItemLinkList)&&item.categoryItemLinkList.length===0));
       if(drafts.length)await c.hiddenGroupItems(drafts);
-      for(const group of groups) {
+      for(const group of allGroups) {
         const id=String(group.detail.optionGroupCode);
         const staged=!liveGroupIds.includes(id);
+        const carrier=internalCarriers.get(id);
         const options=group.options.filter(row=>String(row.applyStartDate).replaceAll('/','-')<=c.today&&String(row.applyEndDate).replaceAll('/','-')>=c.today);
-        rows.push({kind:'option_group',id,name:group.detail.optionGroupName,price:null,childIds:[...new Set(options.map(row=>String(row.optionCode)))],staged,hidden:staged||group.items.every(item=>hidden('item',item.itemCode)),native:group});
-        for(const option of options)rows.push({kind:'option',id:String(option.optionCode),name:option.optionName,price:Number(option.price),hidden:hidden('option',option.optionCode),parentIds:[id],native:option});
-      }
-      for(const category of remote.items.categoryList)rows.push({kind:'category',id:String(category.categoryCode),name:category.categoryName,price:null,childIds:(category.itemList??[]).map(row=>String(row.itemCode)),hidden:(category.itemList??[]).every(item=>hidden('item',item.itemCode)),native:category});
-      const stagedIdentities=[];
-      for(const target of this.payload.targets.filter(row=>row.kind==='option'&&!row.quarantined)) {
-        const candidates=[...target.mappings,this.payload.authorityState?.[target.sourceKey]].filter(Boolean);
-        const seen=new Set();
-        for(const mapping of candidates) {
-          const parent=mapping.externalParentId;
-          if(!parent?.startsWith('stage:')||parent==='stage:__creating__'||seen.has(mapping.externalId))continue;
-          seen.add(mapping.externalId);
-          // A Store-confirmed release retains its creation identity. Fresh live
-          // membership, not the historical carrier pointer, defines placement.
-          if(rows.some(row=>row.kind==='option'&&row.id===this.id('option',mapping.externalId)&&row.parentIds.some(id=>liveGroupIds.includes(id))))continue;
-          stagedIdentities.push({optionCode:this.id('option',mapping.externalId),groupCode:parent.slice(6),marker:target.marker});
+        rows.push({kind:'option_group',id,name:group.detail.optionGroupName,price:null,childIds:[...new Set(options.map(row=>String(row.optionCode)))],staged,hidden:staged||group.items.every(item=>hidden('item',item.itemCode)),native:group,
+          ...(carrier?{internalCarrier:true,carrierItemId:carrier.carrierId}: {})});
+        for(const option of options) {
+          // Keep real live occurrences for a published option. Its private
+          // carrier is still owned, but is not another business placement or
+          // evidence that the option is unavailable.
+          if(carrier&&publishedOptionIds.has(String(option.optionCode)))continue;
+          rows.push({kind:'option',id:String(option.optionCode),name:option.optionName,price:Number(option.price),hidden:carrier?true:hidden('option',option.optionCode),parentIds:[id],native:option,
+            ...(carrier?{staged:true}: {})});
         }
       }
-      for(const actual of await new DemaeStagedOption(c).readAll(stagedIdentities))rows.push({kind:'option',id:String(actual.option.optionCode),name:actual.option.optionName,price:Number(actual.option.price),hidden:true,staged:true,parentIds:[actual.groupCode],native:actual.option});
+      for(const category of remote.items.categoryList)rows.push({kind:'category',id:String(category.categoryCode),name:category.categoryName,price:null,childIds:(category.itemList??[]).map(row=>String(row.itemCode)),hidden:(category.itemList??[]).every(item=>hidden('item',item.itemCode)),native:category});
     }
     return rows;
   }
@@ -439,8 +446,8 @@ export class AuthorityNativeDriver {
         const ownedDraftAdditions=before?.staged&&current?.staged
           &&before.groupIds.every(groupId=>current.groupIds.includes(groupId))
           &&current.groupIds.filter(groupId=>!before.groupIds.includes(groupId)).every(groupId=>
-            this.relationshipSnapshot.some(row=>row.staged&&(row.kind==='option_group'&&row.id===groupId
-              ||row.kind==='option'&&row.hidden&&row.parentIds.includes(groupId)))
+            this.relationshipSnapshot.some(row=>row.staged&&row.kind==='option_group'&&row.id===groupId
+              &&(!row.internalCarrier||row.carrierItemId===id))
             &&this.managedGroup(groupId,this.relationshipSnapshot));
         if(!before||!current||!equalIds(before.parentIds,current.parentIds)
           ||!equalIds(before.groupIds,current.groupIds)&&!ownedDraftAdditions)throw Error('uber_authority_relationship_drift');

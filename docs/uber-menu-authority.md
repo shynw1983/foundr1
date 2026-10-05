@@ -80,6 +80,33 @@ requires a fresh decision. Unsafe or exhausted candidates stop with the affected
 object's name and an actionable explanation; technical codes remain in collapsed
 details. This describes local behavior, not a production rollout record.
 
+Name generation uses a strict structured response containing only the candidate,
+reason and safety decision; source/OS identities are bound by the server. A
+bounded second generation can recover formatting, truncated output or an
+unchanged candidate, but never bypass a failed quantity or product-identity
+check. Failure records retain the exact original platform rejection and bounded
+generation diagnostics, so a manual retry can repair that same rejected target
+without submitting the old rejected name again. Neither failure diagnostics nor
+model-provided text can authorize another target or a stale command revision.
+Older failed jobs without a saved native rejection require a fresh source scan;
+their missing proof is never reconstructed from an AI error or a guessed name.
+
+## Demae private carrier relationships
+
+Demae's unassigned draft pattern can retain private carrier groups after their
+options have been released into business groups. These internal relationships
+must be read and verified independently of current Uber memberships and option
+publication state. The complete identified creation journal and exact native
+IDs establish candidates; the native group marker, members and consumers must
+then confirm ownership and isolation in the private draft pattern. A name prefix
+alone is never ownership proof.
+
+Verified private carrier links are preserved separately from customer-visible
+group ordering. Retired business groups remain subject to normal retirement;
+unknown members, consumers, conflicting receipts or exposed draft carriers stop
+publication before writes. This check does not release stock, publish draft
+items, adopt same-name objects or change the Uber source graph.
+
 ## New-arrival presentation policy — 2026-09-11
 
 `新登場トッピング` is an optional Uber presentation membership. Within one
