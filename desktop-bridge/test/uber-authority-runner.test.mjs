@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runUberAuthorityPublication} from '../src/uber-authority-runner.mjs';
+import {createMenuProgress} from '../src/menu-progress.mjs';
 const target={kind:'item',sourceKey:'item:a',targetId:'a',name:'new',price:227,marker:'FS0123456789abcd',mappings:[{externalId:'1'}]};
 const payload=()=>({authoritativePublication:true,sourceId:'s',storeId:'os',platformKey:'rocket_now',merchantId:'1',revision:1,newItemsHidden:true,imagePolicy:'read_only',targets:[structuredClone(target)]});
 
@@ -39,6 +40,34 @@ test('reports current target before work and counts only completed objects per s
  driver.observe=async t=>[{sourceKey:t.sourceKey,externalId:'1',name:t.name,price:t.price,structureVerified:true}];
  await runUberAuthorityPublication(payload(),driver,async row=>rows.push(row));
  for(const phase of ['content','relationships','verifying'])assert.ok(rows.some(r=>r.phase===phase&&r.completed===1&&r.total===1));
+});
+test('both retirement batches reset inherited counts and advance only after each successful retirement',async()=>{
+ const p=payload(),events=[],rows=[],{driver}=fixture();
+ const archived=(kind,id)=>({...structuredClone(target),kind,targetId:id,sourceKey:`${kind}:${id}`,archived:true,price:null});
+ p.targets.push(archived('option','choice'),archived('item','oldItem'),archived('option_group','group'),archived('category','category'),
+  {...archived('category','quarantined'),quarantined:true});
+ let now=0;const progress=createMenuProgress(async row=>rows.push(row),()=>now+=6000);
+ driver.retire=async t=>{
+  const current=rows.at(-1);events.push(t.sourceKey);
+  assert.equal(current.phase,'retiring');assert.equal(current.total,2);assert.equal(current.completed,events.length%2===1?0:1);
+  assert.equal(current.sourceKey,t.sourceKey);
+ };
+ driver.observe=async t=>t.archived?[{sourceKey:t.sourceKey,exists:false,externalId:'1'}]
+  :[{sourceKey:t.sourceKey,externalId:'1',name:t.name,price:t.price,structureVerified:true}];
+ await runUberAuthorityPublication(p,driver,update=>progress.stage(update));
+ assert.deepEqual(events,['option:choice','item:oldItem','option_group:group','category:category']);
+ const resets=rows.filter(r=>r.phase==='retiring'&&r.completed===0&&!r.sourceKey);
+ assert.equal(resets.length,2);assert.ok(resets.every(r=>r.total===2));
+ assert.equal(rows.filter(r=>r.phase==='retiring'&&r.completed===2).length,2);
+ assert.equal(rows.at(-1).phase,'verifying');assert.equal(rows.at(-1).completed,5);assert.equal(rows.at(-1).total,5);
+});
+test('a failed retirement does not advance its completed count or enter relationships',async()=>{
+ const p=payload(),{driver}=fixture(),rows=[];
+ p.targets.push({...structuredClone(target),kind:'option',sourceKey:'option:old',targetId:'old',archived:true,price:null});
+ driver.retire=async()=>{throw Error('native_guard_failed');};
+ await assert.rejects(()=>runUberAuthorityPublication(p,driver,async row=>rows.push(row)),/native_guard_failed/);
+ assert.deepEqual(rows.at(-1),{phase:'retiring',sourceKey:'option:old',targetName:'new',completed:0,total:1});
+ assert.ok(!rows.some(r=>r.phase==='relationships'));
 });
 test('a successful merchant response without actual changed values is rejected',async()=>{
  const {driver}=fixture();driver.updateContent=async()=>{};

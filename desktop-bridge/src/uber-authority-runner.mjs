@@ -38,6 +38,16 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
     throw error;
   }
   const active=payload.targets.filter(target=>!target.archived&&!target.quarantined);
+  const retireTargets=async targets=>{
+    if(!targets.length)return;
+    let retired=0;
+    await reportProgress({phase:'retiring',completed:0,total:targets.length});
+    for(const target of targets) {
+      await reportProgress({phase:'retiring',sourceKey:target.sourceKey,targetName:target.name,completed:retired,total:targets.length});
+      await driver.retire(target,payload);
+      await reportProgress({phase:'retiring',completed:++retired,total:targets.length});
+    }
+  };
   let completed=0;
   await reportProgress({phase:'content',completed,total:active.length});
   await driver.beginPhase?.('content');
@@ -55,10 +65,7 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
   }
   // Remove retired choices before validating the remaining group membership.
   // Content updates never restore stock; removals cannot expose a new choice.
-  for(const target of payload.targets.filter(target=>target.archived&&!target.quarantined&&['option','item'].includes(target.kind))) {
-    await reportProgress({phase:'retiring',sourceKey:target.sourceKey,targetName:target.name});
-    await driver.retire(target,payload);
-  }
+  await retireTargets(payload.targets.filter(target=>target.archived&&!target.quarantined&&['option','item'].includes(target.kind)));
   // Relationship changes come last, after children are persisted and hidden.
   const relationshipTotal=active.filter(target=>['option_group','item','category'].includes(target.kind)).length;
   completed=0;
@@ -72,10 +79,7 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
       await reportProgress({phase:'relationships',completed:++completed,total:relationshipTotal});
     }
   }
-  for(const kind of ['option_group','category'])for(const target of payload.targets.filter(target=>target.archived&&!target.quarantined&&target.kind===kind)) {
-    await reportProgress({phase:'retiring',sourceKey:target.sourceKey,targetName:target.name});
-    await driver.retire(target,payload);
-  }
+  await retireTargets(['option_group','category'].flatMap(kind=>payload.targets.filter(target=>target.archived&&!target.quarantined&&target.kind===kind)));
   if(typeof driver.updateCategoryOrder==='function') {
     await reportProgress({phase:'relationships',completed:relationshipTotal,total:relationshipTotal,orderScope:'categories'});
     await driver.updateCategoryOrder(payload);

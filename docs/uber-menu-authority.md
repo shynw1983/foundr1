@@ -116,6 +116,24 @@ unknown members, consumers, conflicting receipts or exposed draft carriers stop
 publication before writes. This check does not release stock, publish draft
 items, adopt same-name objects or change the Uber source graph.
 
+### Read-only retirement fast path
+
+Demae historical options, groups and categories are checked again on each run.
+An exact native ID may skip the per-object full snapshot only when fresh,
+complete native reads prove that no retirement write is needed: an option has
+no live-group membership in any dated period and is absent from the live
+pattern's option list; a group has no consumers; a category is absent from the
+live catalog. An empty or hidden category is not the same as an absent one.
+Malformed or uncertain evidence uses the original full snapshot and retirement
+path. A successful no-op never calls a potentially writing retirement method.
+
+The full preflight and final native snapshot remain mandatory. Actual retirement
+writes retain the original private-carrier, ownership and stock protections;
+actual Demae category-order changes also take a fresh private-carrier snapshot
+before writing. Demae item retirement and Rocket's native behavior are unchanged.
+Retirement progress counts are reset for each of its two batches and advance
+only after an object completes, instead of carrying another phase's totals.
+
 ## New-arrival presentation policy — 2026-09-11
 
 `新登場トッピング` is an optional Uber presentation membership. Within one

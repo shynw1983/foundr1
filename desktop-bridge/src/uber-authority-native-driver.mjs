@@ -557,6 +557,8 @@ export class AuthorityNativeDriver {
   }
   async retire(target) {
     for(const id of this.ids(target)) {
+      if(this.platform==='demae_can'&&['option','option_group','category'].includes(target.kind)
+        &&typeof this.client.retirementNoop==='function'&&await this.client.retirementNoop(target.kind,id)===true)continue;
       const row=(await this.snapshot()).find(row=>row.kind===target.kind&&row.id===id);
       if(target.kind==='option') {await this.client.retireOption(id);continue;}
       if(this.platform==='demae_can') {
@@ -586,6 +588,12 @@ export class AuthorityNativeDriver {
     let index=0;
     const ordered=current.map(id=>expected.includes(id)?expected[index++]:id);
     if(typeof this.client.reorderCategories!=='function')throw Error('uber_authority_category_order_unsupported');
+    if(this.platform==='demae_can') {
+      // No-op retirements do not need a global snapshot, but any subsequent
+      // write still must freshly prove every private carrier is private.
+      const rows=await this.snapshot();
+      if(!equalIds(rows.filter(row=>row.kind==='category').map(row=>String(row.id)),current))throw Error('uber_authority_category_order_identity_mismatch');
+    }
     await this.client.reorderCategories(ordered);
   }
   async observe(target) {

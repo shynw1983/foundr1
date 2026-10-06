@@ -246,3 +246,51 @@ test('each carrier is read once per snapshot without a per-group draft/catalog r
   assert.ok(f.requests.filter(row=>row.path.endsWith('/search/menu-pattern')).length<12);
   assert.equal(f.writes.length,0);
 });
+
+test('already retired Demae group skips its full snapshot and writer, but final native carrier proof remains fresh',async()=>{
+  const f=fixture();f.items.get('15').sizeInfoList[0].sizeOptionGroupLinkList.pop();
+  assert.deepEqual((await f.driver.preflight(f.payload)).issues,[]);
+  const before=f.requests.length;
+  await f.driver.retire(f.archived);
+  const retirementReads=f.requests.slice(before);
+  assert.equal(retirementReads.some(row=>row.path.endsWith('/menu-pattern/live/item-list')),false);
+  assert.equal(retirementReads.filter(row=>row.path.endsWith('/option-group/73/linked-item-list')).length,1);
+  assert.deepEqual(f.writes,[]);
+  await f.driver.beginPhase('verifying');
+  assert.equal(f.requests.slice(before).filter(row=>row.path.endsWith('/menu-pattern/live/item-list')).length,1);
+  assert.equal((await f.driver.observe(f.archived))[0].hidden,true);
+  assert.deepEqual(f.writes,[]);
+});
+
+test('final full publication verification rejects a concurrent live association after a retired-group no-op',async()=>{
+  const f=fixture();f.items.get('15').sizeInfoList[0].sizeOptionGroupLinkList.pop();
+  let noops=0;const proof=f.driver.client.retirementNoop.bind(f.driver.client);
+  f.driver.client.retirementNoop=async(kind,id)=>{const result=await proof(kind,id);if(result)noops++;return result;};
+  await assert.rejects(()=>runUberAuthorityPublication(f.payload,f.driver,async progress=>{
+    if(progress.phase==='verifying'&&progress.completed===0){
+      f.liveGroupIds.push('73');
+      f.items.get('99').sizeInfoList[0].sizeOptionGroupLinkList.push({chainId:1,optionGroupCode:'73',dispOrder:2});
+    }
+  }),/content_unverified:item:99/);
+  assert.equal(noops,1);assert.deepEqual(f.writes,[]);
+});
+
+test('a private carrier becoming live still blocks a writing-capable option retirement before writes',async()=>{
+  const f=fixture();assert.deepEqual((await f.driver.preflight(f.payload)).issues,[]);
+  f.liveGroupIds.push('28');
+  await assert.rejects(()=>f.driver.retire(f.option),/demae_internal_carrier_is_live/);
+  assert.deepEqual(f.writes,[]);
+});
+
+test('global Demae category reorder independently refreshes private-carrier ownership after no-op retirements',async()=>{
+  const f=fixture();f.items.get('15').sizeInfoList[0].sizeOptionGroupLinkList.pop();
+  const catalog=f.driver.client.catalog.bind(f.driver.client);
+  f.driver.client.catalog=async()=>{const result=await catalog();result.items.categoryList.push({chainId:1,categoryCode:'13',categoryName:'second',itemList:[]});return result;};
+  f.payload.targets.push({kind:'category',targetId:'13',sourceKey:'category:13',sortOrder:-1,name:'second',price:null,
+    marker:creationMarker('category:13'),mappings:[{externalId:'13'}]});
+  await f.driver.snapshot();await f.driver.retire(f.archived);
+  f.liveGroupIds.push('28');
+  let reorderCalls=0;f.driver.client.reorderCategories=async()=>{reorderCalls++;};
+  await assert.rejects(()=>f.driver.updateCategoryOrder(),/demae_internal_carrier_is_live/);
+  assert.equal(reorderCalls,0);assert.deepEqual(f.writes,[]);
+});

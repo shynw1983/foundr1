@@ -13,6 +13,45 @@ const date = value => {
   return text;
 };
 
+const proofCode=value=>typeof value==='string'&&/^[A-Za-z0-9_-]+$/.test(value);
+const proofComplete=value=>value!==null&&typeof value==='object'
+  &&['hasMore','isContinueNextPage','truncated','isTruncated'].every(key=>!Object.hasOwn(value,key)||value[key]===false);
+function proofPeriod(row,required=false) {
+  if(!row||typeof row!=='object')return false;
+  const parse=value=>{
+    if(typeof value!=='string'||!/^\d{4}([/-])\d{2}\1\d{2}$/.test(value))return null;
+    const [year,month,day]=value.split(/[/-]/).map(Number);
+    const days=[31,year%4===0&&(year%100!==0||year%400===0)?29:28,31,30,31,30,31,31,30,31,30,31];
+    return year>0&&month>=1&&month<=12&&day>=1&&day<=days[month-1]?value.replaceAll('/','-'):null;
+  };
+  if(!required&&row.applyStartDate===undefined&&row.applyEndDate===undefined)return true;
+  const start=parse(row.applyStartDate),end=parse(row.applyEndDate);
+  return start!==null&&end!==null&&start<=end;
+}
+function proofRows(rows,key,chainId,{periods=false,optionalPeriods=false,scopedSummary=false}={}) {
+  if(!Array.isArray(rows)||!proofComplete(rows))return false;
+  const seen=new Set();
+  return rows.every(row=>{
+    if(!proofComplete(row)||!(scopedSummary&&!Object.hasOwn(row,'chainId')
+      ||['string','number'].includes(typeof row.chainId)&&String(row.chainId)===chainId)||!proofCode(row[key])
+      ||(periods||optionalPeriods)&&!proofPeriod(row,periods))return false;
+    const identity=JSON.stringify([row[key],...(periods?[row.applyStartDate.replaceAll('/','-'),row.applyEndDate.replaceAll('/','-')]:[])]);
+    if(seen.has(identity))return false;
+    seen.add(identity);return true;
+  });
+}
+
+function proofCatalog(catalog,chainId) {
+  const categories=catalog?.items?.categoryList;
+  // These native endpoints return complete arrays, not a paged/search result.
+  // Do not interpret a malformed or explicitly truncated response as absence.
+  if(!proofComplete(catalog?.items)
+    ||!proofRows(categories,'categoryCode',chainId,{optionalPeriods:true,scopedSummary:true}))return false;
+  // Native item-list summaries omit chainId. Their exact chain/pattern path
+  // and fresh assertScope establish scope, never a present conflicting field.
+  return categories.every(category=>proofRows(category.itemList,'itemCode',chainId,{optionalPeriods:true,scopedSummary:true}));
+}
+
 function stockInvariant(snapshot) {
   if(snapshot.itemList.some(row=>!row.itemCode||!Array.isArray(row.linkedShopList)||!Array.isArray(row.stockoutItemList))
     ||snapshot.optionList.some(row=>!row.optionCode||!Array.isArray(row.linkedShopList)||!Array.isArray(row.stockoutOptionList)))throw Error('demae_menu_stock_snapshot_incomplete');
@@ -386,6 +425,36 @@ export class DemaeMenuClient {
     const {items}=await this.catalog();
     if(!items.categoryList.some(row=>String(row.categoryCode)===String(id)))return;
     await this.updateCategory(id,{retire:true});
+  }
+  async retirementNoop(kind,id) {
+    // This is exclusively a fresh read-only proof of an already retired live
+    // relationship. Unknown/incomplete evidence falls back to the existing
+    // full snapshot and native retirement guards; it never authorizes a write.
+    if(!proofCode(id)||!['option','option_group','category'].includes(kind))return false;
+    try {
+      if(kind==='option_group') {
+        await this.assertScope();
+        const group=await this.group(id);
+        return proofRows([group.detail],'optionGroupCode',this.chainId)&&group.detail.optionGroupCode===id
+          &&Array.isArray(group.items)&&proofComplete(group.items)&&group.items.length===0
+          &&proofRows(group.options,'optionCode',this.chainId,{periods:true});
+      }
+      const catalog=await this.catalog();
+      if(!proofCatalog(catalog,this.chainId))return false;
+      if(kind==='category')return !catalog.items.categoryList.some(row=>row.categoryCode===id);
+      if(!proofRows(catalog.groups,'optionGroupCode',this.chainId))return false;
+      // Inspect all member periods, including future ones. A today-only view
+      // would wrongly skip an association which can reappear tomorrow.
+      for(const group of catalog.groups) {
+        const members=await this.transport.request(`${this.base}/option-group/${code(group.optionGroupCode)}/option-item-list`);
+        if(!proofRows(members,'optionCode',this.chainId,{periods:true})
+          ||members.some(row=>row.optionCode===id))return false;
+      }
+      const options=await this.options();
+      return proofRows(options,'optionCode',this.chainId,{periods:true})&&!options.some(row=>row.optionCode===id);
+    } catch {
+      return false;
+    }
   }
   async options() {
     await this.assertScope();
