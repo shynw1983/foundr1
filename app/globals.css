@@ -1,3 +1,13 @@
+/* Resolve the installed Japanese face directly: some Android CJK fallbacks
+   select a serif face for kana on Chinese pages. Keep Chinese glyphs unchanged. */
+@font-face {
+  font-family: "Foundr1 Kana Sans";
+  src: local("NotoSansCJKJP-Regular"), local("NotoSansCJKjp-Regular"), local("Noto Sans CJK JP Regular"), local("Noto Sans JP Regular");
+  font-style: normal;
+  font-weight: 400;
+  unicode-range: U+203B, U+3040-30FF, U+31F0-31FF, U+FF65-FF9F;
+}
+
 :root {
   --bg: #f6f7f9;
   --ink: #1d2430;
@@ -16,8 +26,8 @@
   --violet-soft: #eeeafd;
   --shadow: 0 18px 45px rgba(34, 45, 62, 0.08);
   --font-cjk-ja: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Noto Sans JP", "Noto Sans CJK JP", "Yu Gothic", "YuGothic", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
-  --font-cjk-sc: -apple-system, BlinkMacSystemFont, "Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-cjk-tc: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Noto Sans CJK TC", "Source Han Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --font-cjk-sc: "Foundr1 Kana Sans", -apple-system, BlinkMacSystemFont, "Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-cjk-tc: "Foundr1 Kana Sans", -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Noto Sans CJK TC", "Source Han Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
 }
 
 .store-light-panel { max-width: 900px; margin: 20px auto; color: var(--ink); }
