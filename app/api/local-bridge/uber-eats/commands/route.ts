@@ -593,11 +593,16 @@ export async function POST(request: Request) {
   if (status === "succeeded" && String(commandRows[0].commandType) === "audit_inventory") {
     const payload = commandRows[0].payload as Record<string,unknown>;
     try {
-      if (!authorization.isDesktop || payload.availabilityAuthority !== 'uber_eats' || (commandRows[0].platform !== 'uber_eats' && payload.comparisonAudit !== true)) {
+      if(authorization.isDesktop&&payload.creationHoldAuditForCommandId!==undefined) {
+        const {validateCreationHoldAuditAcknowledgement}=await import('../../../../../lib/uber-creation-hold-releases');
+        await validateCreationHoldAuditAcknowledgement({commandId,storeId:authorization.storeId,platform:String(commandRows[0].platform),payload,result});
+      }else {
+        if (!authorization.isDesktop || payload.availabilityAuthority !== 'uber_eats' || (commandRows[0].platform !== 'uber_eats' && payload.comparisonAudit !== true)) {
         throw new Error('旧形式の読取は無効です。Store から全店同期を実行してください。');
+        }
+        if (commandRows[0].platform === 'uber_eats') auditSummary = await applyUberAvailabilitySync(authorization.storeId, payload, result);
+        await publishPublicMenuUpdatedEvent(authorization.storeId).catch(()=>undefined);
       }
-      if (commandRows[0].platform === 'uber_eats') auditSummary = await applyUberAvailabilitySync(authorization.storeId, payload, result);
-      await publishPublicMenuUpdatedEvent(authorization.storeId).catch(()=>undefined);
     } catch (failure) {
       status = 'failed';
       error = failure instanceof Error ? failure.message : 'uber_availability_sync_failed';

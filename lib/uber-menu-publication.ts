@@ -3,6 +3,7 @@ import { deliveryPlatformRules, projectDeliveryName, projectDeliveryDescription 
 import { authoritativeDeliveryPrice } from './uber-menu-authority.ts';
 import {resolveUberOptionPlacement} from './uber-option-placement.ts';
 import type {MenuNameAdaptation} from './menu-name-adaptation.ts';
+import {isCreationHoldReleased,type UberCreationHoldRelease} from '../desktop-bridge/src/uber-authority-hold-release.mjs';
 
 export type UberPublicationNode = {
   sourceKey: string; kind: string; targetId: string; parentId: string | null;
@@ -64,6 +65,7 @@ export function buildUberPublication(input: {
   optionMigrationPolicy?:'preserve_stock';
   creationIdentities?:UberCreationIdentity[];
   nameAdaptations?:Record<string,UberMenuNameAdaptation>;
+  creationHoldReleases?:UberCreationHoldRelease[];
 }) {
   // Explicit, persisted owner decisions only; never infer exclusions from price.
   // Retain the source in OS while omitting it from downstream relationships.
@@ -87,7 +89,19 @@ export function buildUberPublication(input: {
     archived:isUberPublicationRetired(node),source:publicationSource(node.payload) as Record<string,unknown>,
     quarantined:input.quarantinedSourceKeys?.includes(node.sourceKey)===true,
     mappings:input.mappings.filter(mapping=>mapping.kind===node.kind && mapping.targetId===node.targetId)
-      .flatMap(mapping=>mapping.externalId.split(',').map(id=>id.trim()).filter(Boolean).map(externalId=>({externalId,externalParentId:mapping.externalParentId})))
+      .flatMap(mapping=>mapping.externalId.split(',').map(id=>id.trim()).filter(Boolean).map(externalId=>{
+        const occurrence:{externalId:string;externalParentId:string;created?:boolean;creationHoldRelease?:UberCreationHoldRelease}={externalId,externalParentId:mapping.externalParentId};
+        const proofs=input.creationHoldReleases?.filter(proof=>proof.sourceKey===node.sourceKey&&proof.externalId===externalId)??[];
+        if(proofs.length===1&&isCreationHoldReleased({sourceId:input.sourceId,storeId:input.storeId,platformKey:input.platform,merchantId:input.merchantId},
+          {sourceKey:node.sourceKey,kind:node.kind,targetId:node.targetId,archived:isUberPublicationRetired(node),quarantined:input.quarantinedSourceKeys?.includes(node.sourceKey)},
+          {...occurrence,creationHoldRelease:proofs[0]})) {
+          // The release loader proved this precise creation receipt, not all
+          // historical creations. Preserve provenance without re-arming a
+          // review hold which an explicit inventory operation already released.
+          occurrence.created=true;occurrence.creationHoldRelease=proofs[0];
+        }
+        return occurrence;
+      }))
   };});
   return {authoritativePublication:true,sourceId:input.sourceId,brandId:input.brandId,
     storeId:input.storeId,revision:input.revision,platformKey:input.platform,
@@ -121,7 +135,8 @@ export function verifyUberPublication(payload: Record<string,unknown>, result: R
         if(!row.externalId || row.name!==target.name || (target.price!==null && row.price!==target.price)) throw new Error(`uber_publication_content_mismatch:${target.sourceKey}`);
         const mapped=Array.isArray(target.mappings)?target.mappings as Array<Record<string,unknown>>:[];
         const newEntity=['item','option'].includes(String(target.kind))&&(!mapped.length||mapped.some(mapping=>mapping.externalId===row.externalId&&mapping.created===true));
-        if((row.created===true||newEntity) && row.hidden!==true) throw new Error(`uber_publication_draft_exposed:${target.sourceKey}`);
+        const occurrence=mapped.find(mapping=>mapping.externalId===row.externalId);
+        if((row.created===true||newEntity) && !isCreationHoldReleased(payload,target,occurrence) && row.hidden!==true) throw new Error(`uber_publication_draft_exposed:${target.sourceKey}`);
         if(row.structureVerified!==true) throw new Error(`uber_publication_structure_unverified:${target.sourceKey}`);
       }
     }

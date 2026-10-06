@@ -1,4 +1,5 @@
 import {ensureUberAuthorityObject} from './uber-authority-create.mjs';
+import {isCreationHoldReleased} from './uber-authority-hold-release.mjs';
 
 export function validateAuthorityCommand(payload,platform,merchantId) {
   if(payload?.authoritativePublication!==true||payload.platformKey!==platform
@@ -99,7 +100,9 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
       // A new category/group may contain an already-selling product moved
       // from another parent. Only newly created sellable records must remain
       // hidden; all parent memberships are independently verified above.
-      if(['item','option'].includes(target.kind)&&target.mappings.some(mapping=>mapping.externalId===row.externalId&&mapping.created===true)&&row.hidden!==true)throw Error(`uber_authority_draft_exposed:${target.sourceKey}`);
+      const occurrence=target.mappings.find(mapping=>mapping.externalId===row.externalId);
+      if(['item','option'].includes(target.kind)&&occurrence?.created===true
+        &&!isCreationHoldReleased(payload,target,occurrence)&&row.hidden!==true)throw Error(`uber_authority_draft_exposed:${target.sourceKey}`);
     }
     for(const mapping of target.mappings)if(!rows.some(row=>row.externalId===mapping.externalId))throw Error(`uber_authority_occurrence_unverified:${target.sourceKey}`);
     observations.push(...rows);

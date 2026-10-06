@@ -121,6 +121,64 @@ function optionAliases(row: Pick<UberInventoryOptionRow, "name" | "displayNames"
   return unique([row.name, ...displayNames]);
 }
 
+function assertExactRowIdentity(row: UberInventoryOptionRow | UberInventoryItemRow, kind: "item" | "option") {
+  if (!row || typeof row.id !== "string" || !row.id.trim()
+    || typeof row.brandId !== "string" || !row.brandId.trim()
+    || typeof row.name !== "string" || typeof row.isAvailable !== "boolean"
+    || ("kind" in row && row.kind !== kind)
+    || (kind === "option" && (!("groupKey" in row) || typeof row.groupKey !== "string"
+      || !("optionKey" in row) || typeof row.optionKey !== "string"))
+    || (kind === "item" && ("groupKey" in row || "optionKey" in row))) {
+    throw new Error("inventory_target_identity_invalid");
+  }
+}
+
+/** Use only after the scoped database query and selectInventoryIdentity have
+ * verified one exact OS option ID. Names/quantities are labels here: even a
+ * one-character name or "1杯" must not be filtered or expand to a sibling.
+ * Explicit availability dependencies are resolved separately by the caller. */
+export function resolveExactUberInventoryOption(row: UberInventoryOptionRow) {
+  assertExactRowIdentity(row, "option");
+  const inventoryKey = `option:${row.id}`;
+  return {
+    inventoryKey,
+    ingredientLabel: row.name,
+    targets: [{
+      kind: "option" as const,
+      targetId: row.id,
+      menuOptionId: row.id,
+      brandId: row.brandId,
+      groupKey: row.groupKey,
+      optionKey: row.optionKey,
+      inventoryKey,
+      label: row.name,
+      aliases: optionAliases(row),
+      isAvailable: row.isAvailable
+    } satisfies UberInventoryTarget]
+  };
+}
+
+/** Item counterpart of the exact-ID path; platform IDs and labels never
+ * replace the selected OS identity, including when an import changes them. */
+export function resolveExactUberInventoryItem(row: UberInventoryItemRow) {
+  assertExactRowIdentity(row, "item");
+  const inventoryKey = `item:${row.id}`;
+  return {
+    inventoryKey,
+    ingredientLabel: row.name,
+    targets: [{
+      kind: "item" as const,
+      targetId: row.id,
+      menuCatalogItemId: row.id,
+      brandId: row.brandId,
+      inventoryKey,
+      label: row.name,
+      aliases: optionAliases(row),
+      isAvailable: row.isAvailable
+    } satisfies UberInventoryItemTarget]
+  };
+}
+
 export function resolveUberInventoryTargets(
   ingredientLabel: string,
   rows: UberInventoryOptionRow[]

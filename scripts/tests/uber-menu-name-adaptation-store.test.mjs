@@ -116,7 +116,7 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
    require:name=>{
     if(!name.startsWith('.'))return require(name);
     let dependency=relative(root,resolve(root,dirname(path),name));
-    if(!dependency.endsWith('.ts'))dependency+='.ts';
+    if(!/\.(?:ts|mjs)$/.test(dependency))dependency+='.ts';
     return load(dependency);
    }});
   return exports;

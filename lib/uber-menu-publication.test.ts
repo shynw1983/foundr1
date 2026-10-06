@@ -1,8 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildUberPublication,verifyUberPublication,type UberPublicationNode,type UberMenuNameAdaptation} from './uber-menu-publication.ts';
+import type {UberCreationHoldRelease} from '../desktop-bridge/src/uber-authority-hold-release.mjs';
 const node:UberPublicationNode={sourceKey:'item:a',kind:'item',targetId:'a',parentId:'c',name:'湯',displayNames:{zh:'汤'},price:180,uberPrice:227,description:'Soup',imageUrl:'',sortOrder:0,payload:{}};
 const input={sourceId:'s',storeId:'store',brandId:'b',revision:1,merchantId:'123',nodes:[node],mappings:[]};
+const release=(platform:'rocket_now'|'demae_can',source:UberPublicationNode,externalId:string,externalParentId=''):UberCreationHoldRelease=>({
+  sourceId:input.sourceId,storeId:input.storeId,platform,merchantId:input.merchantId,sourceKey:source.sourceKey,kind:source.kind as 'item'|'option',targetId:source.targetId,
+  externalId,externalParentId,inventoryCommandId:'11111111-1111-4111-8111-111111111111',auditCommandId:'22222222-2222-4222-8222-222222222222',
+  completedAt:'2026-10-05T00:00:00.000Z',capturedAt:'2026-10-05T00:01:00.000Z',verified:true,isAvailable:true,validation:'persisted-native-audit-v1'
+});
 test('Demae hidden identity survives repeated group moves without relaxing isolation',()=>{
  const original={...node,kind:'option',sourceKey:'option:first:a'};
  const before=buildUberPublication({...input,platform:'demae_can',nodes:[original]}).targets[0];
@@ -101,6 +107,47 @@ test('explicit informational-card exclusions do not drop other zero-price produc
   assert.equal(payload.targets[0].price,0);
  }
  assert.equal(nodes.length,2);
+});
+
+test('exact persisted inventory release survives revision changes without releasing another zero-price option',()=>{
+  const first:UberPublicationNode={...node,kind:'option',sourceKey:'option:g:confirmation',targetId:'confirmation',parentId:'g',price:0,uberPrice:0,name:'もちろん!',displayNames:{}};
+  const second={...first,sourceKey:'option:g:other',targetId:'other',name:'他の無料選択肢'};
+  const nodes=[first,second],original=structuredClone(nodes);
+  for(const platform of ['rocket_now','demae_can'] as const)for(const revision of [38,39]) {
+    const proof=release(platform,first,'native-confirmation','parent');
+    const payload=buildUberPublication({...input,revision,platform,nodes,mappings:[
+      {kind:'option',targetId:first.targetId,externalId:'native-confirmation',externalParentId:'parent'},
+      {kind:'option',targetId:second.targetId,externalId:'native-other',externalParentId:'parent'}
+    ],creationHoldReleases:[proof]});
+    assert.equal(payload.targets[0].mappings[0].created,true);
+    assert.equal(payload.targets[0].mappings[0].creationHoldRelease,proof);
+    assert.equal(payload.targets[1].mappings[0].creationHoldRelease,undefined);
+    assert.equal(payload.targets[1].mappings[0].created,undefined); // no blanket historical receipt reclassification
+    const other=payload.targets[1].mappings[0] as Record<string,unknown>;other.created=true;
+    const observations=payload.targets.map(target=>({sourceKey:target.sourceKey,externalId:target.mappings[0].externalId,name:target.name,price:target.price,hidden:false,structureVerified:true}));
+    assert.throws(()=>verifyUberPublication(payload,{observations}),/draft_exposed:option:g:other/);
+    assert.deepEqual(verifyUberPublication(payload,{observations:[observations[0],{...observations[1],hidden:true}]}),{verified:2,observed:2});
+    // A later ordinary stockout is not undone or rejected by this policy.
+    assert.equal(verifyUberPublication(payload,{observations:observations.map(row=>({...row,hidden:true}))}).verified,2);
+    assert.equal(payload.newItemsHidden,true);assert.deepEqual(nodes,original);
+  }
+});
+
+test('approval flags or stale release identities cannot bypass either occurrence or draft verification',()=>{
+  const mappings=[{kind:'item',targetId:node.targetId,externalId:'native-item',externalParentId:'parent'}];
+  const proof=release('rocket_now',node,'native-item','parent');
+  for(const patch of [{validation:'approved-only'},{verified:false},{isAvailable:false},{externalId:'other'},{externalParentId:'other'},{sourceKey:'item:other'},{targetId:'other'},
+    {platform:'demae_can'},{merchantId:'other'},{storeId:'other'},{sourceId:'other'},{kind:'option'},
+    {auditCommandId:proof.inventoryCommandId},{capturedAt:'2026-10-04T00:00:00Z'},{capturedAt:new Date(Date.now()+6*60*1000).toISOString()}]) {
+    const payload=buildUberPublication({...input,platform:'rocket_now',mappings,creationHoldReleases:[{...proof,...patch} as UberCreationHoldRelease]});
+    assert.equal(payload.targets[0].mappings[0].creationHoldRelease,undefined);
+    const mapping=payload.targets[0].mappings[0] as Record<string,unknown>;mapping.created=true;
+    const observation={sourceKey:node.sourceKey,externalId:'native-item',name:payload.targets[0].name,price:227,structureVerified:true,hidden:false};
+    assert.throws(()=>verifyUberPublication(payload,{observations:[observation]}),/draft_exposed/);
+  }
+  const payload=buildUberPublication({...input,platform:'rocket_now',mappings,creationHoldReleases:[proof]});
+  const observation={sourceKey:node.sourceKey,externalId:'native-item',name:payload.targets[0].name,price:227,structureVerified:true,hidden:false};
+  for(const patch of [{externalId:'different-native'},{name:'different name'},{price:1},{structureVerified:false}])assert.throws(()=>verifyUberPublication(payload,{observations:[{...observation,...patch}]}));
 });
 
 test('verified exact name adaptations are reused while unsafe or stale cache entries are ignored',()=>{

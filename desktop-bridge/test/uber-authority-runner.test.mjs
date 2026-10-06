@@ -67,3 +67,25 @@ test('new parents may contain existing selling children, but new options remain 
   else assert.equal((await runUberAuthorityPublication(p,driver,async()=>{})).outcome,'applied');
  }
 });
+
+test('exact proven inventory release permits a historical created occurrence, never another draft or stock write',async()=>{
+ for(const platform of ['rocket_now','demae_can'])for(const hidden of [false,true]) {
+  const p={...payload(),platformKey:platform};
+  const mapping=p.targets[0].mappings[0];mapping.created=true;
+  mapping.creationHoldRelease={sourceId:p.sourceId,storeId:p.storeId,platform,merchantId:p.merchantId,sourceKey:p.targets[0].sourceKey,kind:'item',targetId:'a',externalId:'1',externalParentId:'',
+   inventoryCommandId:'11111111-1111-4111-8111-111111111111',auditCommandId:'22222222-2222-4222-8222-222222222222',completedAt:'2026-10-05T00:00:00Z',capturedAt:'2026-10-05T00:01:00Z',
+   verified:true,isAvailable:true,validation:'persisted-native-audit-v1'};
+  const native={sourceKey:'item:a',externalId:'1',name:'new',price:227,structureVerified:true,hidden};
+  let writes=0;
+  const driver={platform,merchantId:'1',preflight:async()=>({issues:[]}),updateContent:async()=>{},updateRelationships:async()=>{},
+   createHidden:async()=>{writes++;throw Error('cannot create');},observe:async()=>[structuredClone(native)]};
+  assert.equal((await runUberAuthorityPublication(p,driver,async()=>{})).outcome,'applied');assert.equal(writes,0);
+  assert.equal(mapping.created,true);assert.equal(native.hidden,hidden);
+  for(const patch of [{externalId:'other'},{externalParentId:'other'},{targetId:'other'},{sourceKey:'item:other'},{storeId:'other'},{sourceId:'other'},{platform:'other'},
+    {merchantId:'other'},{validation:'approved-only'},{verified:false},{isAvailable:false},{capturedAt:'2026-10-04T00:00:00Z'}]) {
+   const changed=structuredClone(p);Object.assign(changed.targets[0].mappings[0].creationHoldRelease,patch);
+   native.hidden=false;
+   await assert.rejects(()=>runUberAuthorityPublication(changed,driver,async()=>{}),/draft_exposed/);
+  }
+ }
+});

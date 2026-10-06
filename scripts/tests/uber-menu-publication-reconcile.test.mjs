@@ -52,7 +52,7 @@ async function fixture({status='failed',trigger='manual',missing=false}={}) {
   const source=ts.transpileModule(readFileSync(resolve(root,path),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
   runInNewContext(source,{exports,Date,Error,console,process,structuredClone,require:name=>{
    if(!name.startsWith('.'))return require(name);
-   let dependency=relative(root,resolve(root,dirname(path),name));if(!dependency.endsWith('.ts'))dependency+='.ts';return load(dependency);
+   let dependency=relative(root,resolve(root,dirname(path),name));if(!/\.(?:ts|mjs)$/.test(dependency))dependency+='.ts';return load(dependency);
   }});return exports;
  }
  const ids={source:randomUUID(),store:randomUUID(),brand:randomUUID(),capture:randomUUID(),rocket:randomUUID(),demae:randomUUID(),item:randomUUID(),category:randomUUID(),g1:randomUUID(),g2:randomUUID(),o1:randomUUID(),o2:randomUUID()};
@@ -110,9 +110,114 @@ async function fixture({status='failed',trigger='manual',missing=false}={}) {
   race(action){beforeTransaction=action;},
   async finish(){await db.query("update local_bridge_commands set status='succeeded' where platform in ('rocket_now','demae_can')");},
   async external(){return {stock:(await db.query('select * from menu_platform_availability_settings')).rows,receipts:(await db.query('select * from menu_uber_creation_attempts')).rows,migrations:(await db.query('select * from menu_uber_option_migrations')).rows};},
-  async ingest(){const next={...catalog,capturedAt:'2026-10-06T00:10:00Z'};return load('lib/uber-menu-source-sync.ts').ingestUberMenuSource({sourceId:ids.source,storeId:ids.store,commandId:ids.capture,catalog:next});}
+  async ingest(patch={}){const next={...catalog,capturedAt:'2026-10-06T00:10:00Z',...patch};return load('lib/uber-menu-source-sync.ts').ingestUberMenuSource({sourceId:ids.source,storeId:ids.store,commandId:ids.capture,catalog:next});}
  };
 }
+
+// An independently persisted native audit, not an approval flag or a menu
+// snapshot, authorizes this one historical creation's hold release.
+async function creationRelease(h) {
+ const targetId=h.ids.o1,sourceKey='option:g1:b1',externalId='sub_checkbox_101_7876263',externalParentId='101';
+ const inventoryCommandId=randomUUID(),auditCommandId=randomUUID(),now=Date.now();
+ const completedAt=new Date(now-40_000).toISOString(),capturedAt=new Date(now-20_000).toISOString();
+ const target={kind:'option',targetId,knownExternalIds:[externalId]};
+ await h.db.query('update menu_platform_object_mappings set external_id=$1,external_parent_id=$2 where external_platform_id=$3 and target_id=$4',[externalId,externalParentId,h.native.rocket_now,targetId]);
+ await h.db.query("update menu_platform_object_mappings set external_id='101' where external_platform_id=$1 and target_id=$2",[h.native.rocket_now,h.ids.g1]);
+ const old=await h.command('rocket_now');
+ Object.assign(old.payload.targets.find(row=>row.sourceKey===sourceKey).mappings[0],{externalId,externalParentId,created:true});
+ old.payload.targets.find(row=>row.sourceKey==='option_group:g1').mappings[0].externalId='101';
+ old.payload.authorityState[sourceKey]={sourceKey,status:'identified',externalId,externalParentId};
+ // This unrelated held creation must retain its existing guard on same-head replay.
+ old.payload.targets.find(row=>row.sourceKey==='option:g2:b2').mappings[0].created=true;
+ await h.db.query('update local_bridge_commands set payload=$1 where id=$2',[JSON.stringify(old.payload),h.ids.rocket]);
+ await h.db.query("insert into menu_uber_creation_attempts values($1,'rocket_now',$2,'identified',$3,$4,$5)",[h.ids.source,sourceKey,externalId,externalParentId,h.ids.rocket]);
+ const stock={targets:[target],syncSource:'store',isAvailable:true,verifyAvailability:true};
+ const audit={targets:[target],sourceId:h.ids.source,merchantId:'1',creationHoldAuditForCommandId:inventoryCommandId};
+ const result={capturedAt,items:[{...target,found:true,isAvailable:true,externalIds:[externalId],nativeMatchBasis:'external_id',nativeObservations:[{externalId,physicalId:'7876263',found:true,isAvailable:true,matchBasis:'external_id'}]}]};
+ await h.db.query("insert into local_bridge_commands(id,store_id,platform,command_type,status,payload,result,created_at,completed_at) values($1,$2,'rocket_now','set_inventory_availability','succeeded',$3,$4,$5,$6)",
+  [inventoryCommandId,h.ids.store,JSON.stringify(stock),JSON.stringify({outcome:'applied',matchedTargetCount:1,missingTargetCount:0,missingTargets:[],desiredHidden:false}),new Date(now-60_000).toISOString(),completedAt]);
+ await h.db.query("insert into local_bridge_commands(id,store_id,platform,command_type,status,payload,result,created_at,completed_at) values($1,$2,'rocket_now','audit_inventory','succeeded',$3,$4,$5,$6)",
+  [auditCommandId,h.ids.store,JSON.stringify(audit),JSON.stringify(result),new Date(now-30_000).toISOString(),new Date(now-10_000).toISOString()]);
+ const proof={sourceId:h.ids.source,storeId:h.ids.store,platform:'rocket_now',merchantId:'1',kind:'option',targetId,sourceKey,externalId,externalParentId,inventoryCommandId,auditCommandId,completedAt,capturedAt,verified:true,isAvailable:true};
+ await h.db.query("update menu_uber_sources set publish_config=jsonb_set(publish_config,'{rocket_now,creationHoldReleases}',$1)",[JSON.stringify([proof])]);
+ return proof;
+}
+
+async function fullImportSchema(h) {
+ // The ordinary reconciliation fixture deliberately omits write-only columns.
+ // Add the real import contract only for the changed-source regression below.
+ await h.db.exec(`
+ alter table menu_categories add updated_at timestamptz default now();
+ alter table menu_option_groups add selection_type text,add updated_at timestamptz default now();
+ alter table menu_options add option_key text,add updated_at timestamptz default now();
+ alter table menu_catalog_items add category text,add promotion_prefix text default '',add updated_at timestamptz default now();
+ alter table menu_store_settings add updated_at timestamptz default now();
+ alter table menu_platform_target_settings add external_platform_id uuid,add name_override text,add placement_config jsonb default '{}',add updated_at timestamptz default now(),add unique(external_platform_id,target_type,target_id);
+ alter table menu_platform_object_mappings add updated_at timestamptz default now();
+ create table menu_catalog_item_option_groups(menu_catalog_item_id uuid,option_group_id uuid,sort_order int,is_active boolean default true,updated_at timestamptz default now(),primary key(menu_catalog_item_id,option_group_id));
+ `);
+}
+
+test('same-revision OS replay reloads exact persisted release proof, retaining other holds and journals',async()=>{
+ const h=await fixture();try {
+  const proof=await creationRelease(h),before=await h.command('rocket_now'),external=await h.external();
+  assert.equal((await h.ingest()).reconciliation.queued,2);
+  const after=await h.command('rocket_now'),released=after.payload.targets.find(row=>row.sourceKey===proof.sourceKey);
+  assert.equal(after.payload.revision,38);assert.equal(released.mappings[0].created,true);
+  assert.deepEqual(released.mappings[0].creationHoldRelease,{...proof,validation:'persisted-native-audit-v1'});
+  assert.equal(after.payload.targets.find(row=>row.sourceKey==='option:g2:b2').mappings[0].created,true);
+  assert.equal(after.payload.targets.find(row=>row.sourceKey==='option:g2:b2').mappings[0].creationHoldRelease,undefined);
+  assert.deepEqual(after.result,before.result);assert.deepEqual(after.payload.authorityState,before.payload.authorityState);
+  assert.deepEqual(after.payload.migrationState,before.payload.migrationState);assert.deepEqual(await h.external(),external);
+  const observations=after.payload.targets.map(row=>({sourceKey:row.sourceKey,externalId:row.mappings[0].externalId,name:row.name,price:row.price,hidden:row.sourceKey==='option:g2:b2',structureVerified:true}));
+  assert.equal(h.publication.verifyUberPublication(after.payload,{observations}).verified,after.payload.targets.length);
+  observations.find(row=>row.sourceKey==='option:g2:b2').hidden=false;
+  assert.throws(()=>h.publication.verifyUberPublication(after.payload,{observations}),/draft_exposed/);
+ }finally {await h.db.close();}
+});
+
+for(const invalid of ['revoked policy','wrong current parent','failed audit'])test(`replay cannot resurrect an old saved release after ${invalid}`,async()=>{
+ const h=await fixture();try {
+  const proof=await creationRelease(h);assert.equal((await h.reconcile()).queued,2);
+  await h.db.query("update local_bridge_commands set status='failed' where command_type='publish_menu_changes'");
+  await h.db.query("update local_bridge_commands set status='succeeded' where id=$1",[h.ids.capture]);
+  if(invalid==='revoked policy')await h.db.query("update menu_uber_sources set publish_config=publish_config #- '{rocket_now,creationHoldReleases}'");
+  else if(invalid==='wrong current parent') {
+   // An actual mapping move invalidates both the saved command and release;
+   // the reconciliation service must refuse rather than transplant the proof.
+   await h.db.query("update menu_platform_object_mappings set external_parent_id='102' where external_platform_id=$1 and target_id=$2",[h.native.rocket_now,h.ids.o1]);
+  } else await h.db.query("update local_bridge_commands set status='failed' where id=$1",[proof.auditCommandId]);
+  const result=await h.reconcile({captureCommandId:undefined});
+  if(invalid==='wrong current parent'){
+   assert.equal(result.queued,1);assert.ok(result.blocked.some(row=>row.platform==='rocket_now'));
+   assert.equal((await h.command('rocket_now')).status,'failed');
+  }
+  else {
+   assert.equal(result.queued,2);const after=await h.command('rocket_now');
+   const actual=after.payload.targets.find(row=>row.sourceKey===proof.sourceKey);assert.equal(actual.mappings[0].created,true);assert.equal(actual.mappings[0].creationHoldRelease,undefined);
+   const observations=after.payload.targets.map(row=>({sourceKey:row.sourceKey,externalId:row.mappings[0].externalId,name:row.name,price:row.price,hidden:false,structureVerified:true}));
+   assert.throws(()=>h.publication.verifyUberPublication(after.payload,{observations}),/draft_exposed/);
+  }
+ }finally {await h.db.close();}
+});
+
+test('new-revision source import reloads the same exact release without changing any inventory',async()=>{
+ const h=await fixture();try {
+  const proof=await creationRelease(h);await fullImportSchema(h);const external=await h.external();
+  const entities=json(h.catalog.entities);entities[0].description='Independently changed source description';
+  const result=await h.ingest({entities});assert.equal(result.contentChanged,true);assert.equal(result.added,0);
+  const rows=(await h.db.query("select payload from local_bridge_commands where command_type='publish_menu_changes' and payload->>'revision'='39' order by platform")).rows;
+  assert.equal(rows.length,2);const payload=rows.find(row=>row.payload.platformKey==='rocket_now').payload;
+  const released=payload.targets.find(row=>row.sourceKey===proof.sourceKey);assert.equal(released.mappings[0].created,true);
+  assert.deepEqual(released.mappings[0].creationHoldRelease,{...proof,validation:'persisted-native-audit-v1'});
+  // Do not retroactively create new hold flags for unrelated legacy mappings.
+  assert.equal(payload.targets.find(row=>row.sourceKey==='option:g2:b2').mappings[0].created,undefined);
+  assert.equal(payload.targets.find(row=>row.sourceKey==='item:a').description,entities[0].description);
+  assert.deepEqual(await h.external(),external);assert.equal((await h.db.query('select revision from menu_uber_sources')).rows[0].revision,39);
+  assert.deepEqual(payload.targets.find(row=>row.sourceKey==='item:a').source.groupIds,['g1','g2']);
+  assert.equal(payload.targets.find(row=>row.sourceKey==='option_group:g2').sortOrder,0);
+ }finally {await h.db.close();}
+});
 
 test('unchanged manual OS scan queues both legacy failed commands, preserving IDs/results and exact policies',async()=>{
  const h=await fixture();try {

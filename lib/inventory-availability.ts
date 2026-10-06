@@ -11,6 +11,8 @@ import { publishPublicMenuUpdatedEvent } from "./order-realtime";
 import {
   resolveUberInventoryItemTarget,
   resolveUberInventoryTargets,
+  resolveExactUberInventoryItem,
+  resolveExactUberInventoryOption,
   type UberInventoryItemRow,
   type UberInventoryItemTarget,
   type UberInventoryOptionRow,
@@ -68,7 +70,9 @@ export async function loadInventoryAvailabilityTargets(
       order by menu_catalog_items.sort_order
     `;
     const selected=selectInventoryIdentity(rows as UberInventoryItemRow[],ingredientLabel,targetId);
-    resolution = selected?resolveUberInventoryItemTarget(selected.name,[selected]):{inventoryKey:'',ingredientLabel,targets:[]};
+    resolution = selected
+      ? targetId ? resolveExactUberInventoryItem(selected) : resolveUberInventoryItemTarget(selected.name,[selected])
+      : {inventoryKey:'',ingredientLabel,targets:[]};
   } else {
     const rows = await sql`
       select
@@ -94,7 +98,9 @@ export async function loadInventoryAvailabilityTargets(
       order by menu_option_groups.sort_order, menu_options.sort_order
     `;
     const selected=selectInventoryIdentity(rows as UberInventoryOptionRow[],ingredientLabel,targetId);
-    resolution = selected?resolveUberInventoryTargets(selected.name,[selected]):{inventoryKey:'',ingredientLabel,targets:[]};
+    resolution = selected
+      ? targetId ? resolveExactUberInventoryOption(selected) : resolveUberInventoryTargets(selected.name,[selected])
+      : {inventoryKey:'',ingredientLabel,targets:[]};
   }
 
   if (!resolution.targets.length) return resolution;
@@ -118,6 +124,7 @@ async function applyInventoryAvailabilityUnlocked(input: {
   resetPlatformOverrides?: boolean;
   platforms?: InventoryPlatform[];
   platformStates?: Partial<Record<InventoryPlatform, boolean>>;
+  verifyAvailability?: boolean;
   platformOverride?: {
     platform: "foundr1" | InventoryPlatform;
     availability: "follow" | "available" | "unavailable";
@@ -424,6 +431,7 @@ async function applyInventoryAvailabilityUnlocked(input: {
         operation,
         soldOutMode: "indefinite",
         targets: commandTargets,
+        ...(input.verifyAvailability === true ? { verifyAvailability: true } : {}),
         ...(platform === "demae_can" && syncSource === "store" && commandTargets.length
           ? { manualItemRelease: true, verifyAvailability: true, demaeStaging: await loadDemaeStagingHints(storeId) }
           : {})

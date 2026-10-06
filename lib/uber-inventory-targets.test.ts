@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  resolveExactUberInventoryItem,
+  resolveExactUberInventoryOption,
   resolveUberInventoryItemTarget,
   resolveUberInventoryTargets,
+  type UberInventoryItemRow,
   type UberInventoryOptionRow
 } from "./uber-inventory-targets.ts";
+import { selectInventoryIdentity } from "./inventory-target-identity.ts";
 
 function row(input: Partial<UberInventoryOptionRow> & Pick<UberInventoryOptionRow, "id" | "groupKey" | "optionKey" | "name">): UberInventoryOptionRow {
   return {
@@ -15,6 +19,72 @@ function row(input: Partial<UberInventoryOptionRow> & Pick<UberInventoryOptionRo
     ...input
   };
 }
+
+test("exact selected option IDs survive quantity-only, zero/information and one-character labels", () => {
+  const names = ["1杯", "1 杯", "0円", "🥤", "辛", "【ご案内】0", "1杯｜1杯"];
+  for (const name of names) {
+    const selected = row({ id: "approved-option", groupKey: "minimum-order", optionKey: "quantity", externalId: "upstream-id",
+      name, displayNames: { "zh-Hans": "一杯", en: "1 cup" }, isAvailable: false });
+    const result = resolveExactUberInventoryOption(selected);
+    assert.equal(result.inventoryKey, "option:approved-option");
+    assert.equal(result.ingredientLabel, name);
+    assert.equal(result.targets.length, 1);
+    assert.deepEqual(result.targets[0], {
+      kind: "option", targetId: "approved-option", menuOptionId: "approved-option", brandId: "brand",
+      groupKey: "minimum-order", optionKey: "quantity", inventoryKey: "option:approved-option", label: name,
+      aliases: [name, "一杯", "1 cup"], isAvailable: false
+    });
+  }
+  const cup = row({ id: "cup", groupKey: "minimum-order", optionKey: "1-cup", name: "1杯" });
+  assert.equal(resolveUberInventoryTargets(cup.name, [cup]).targets.length, 0, "reproduces the name-heuristic filter; exact-ID path is independent");
+});
+
+test("exact option identity never broadens to same-name, shared-key or noodle siblings", () => {
+  const rows = [
+    row({ id: "selected", groupKey: "noodles", optionKey: "wide-harusame", name: "火鍋春雨（極太）50g" }),
+    row({ id: "same-name", groupKey: "premium", optionKey: "wide-harusame", name: "火鍋春雨（極太）50g" }),
+    row({ id: "replacement", groupKey: "noodle-replacement", optionKey: "replace-wide-harusame", name: "火鍋春雨（極太）50gに変更" }),
+    row({ id: "thin", groupKey: "noodles", optionKey: "thin-harusame", name: "火鍋春雨（細）50g" })
+  ];
+  const selected = selectInventoryIdentity(rows, rows[3].name, "selected");
+  assert.ok(selected);
+  assert.deepEqual(resolveExactUberInventoryOption(selected).targets.map(t => t.targetId), ["selected"]);
+  assert.equal(selectInventoryIdentity(rows, rows[0].name, "unknown-id"), null);
+  assert.equal(selectInventoryIdentity([...rows, { ...rows[0] }], rows[0].name, "selected"), null);
+  assert.equal(selectInventoryIdentity(rows, rows[0].name), null);
+});
+
+test("exact inventory keys remain tied to OS IDs despite imported name, key or external-ID changes", () => {
+  const selected = row({ id: "stable-os", groupKey: "noodles", optionKey: "replace-beef-noodle", externalId: "old-platform", name: "牛筋麺に変更" });
+  const before = resolveExactUberInventoryOption(selected);
+  const after = resolveExactUberInventoryOption({ ...selected, name: "1杯", optionKey: "new", externalId: "new-platform", displayNames: null });
+  assert.equal(after.inventoryKey, before.inventoryKey);
+  assert.equal(after.targets[0].targetId, before.targets[0].targetId);
+  assert.deepEqual(after.targets[0].aliases, ["1杯"]);
+});
+
+test("exact item IDs also retain quantity-only and one-character names without name lookup", () => {
+  for (const name of ["1杯", "辛", "0", "【ご案内】0円"]) {
+    const selected: UberInventoryItemRow = { id: "item-os", brandId: "brand", externalId: "upstream", name, displayNames: { en: "1 cup" }, isAvailable: false };
+    const result = resolveExactUberInventoryItem(selected);
+    assert.equal(result.inventoryKey, "item:item-os");assert.equal(result.ingredientLabel, name);
+    assert.deepEqual(result.targets, [{ kind: "item", targetId: "item-os", menuCatalogItemId: "item-os", brandId: "brand",
+      inventoryKey: "item:item-os", label: name, aliases: [name, "1 cup"], isAvailable: false }]);
+    const changed = resolveExactUberInventoryItem({ ...selected, name: "renamed", externalId: "new-platform" });
+    assert.equal(changed.inventoryKey, result.inventoryKey);
+  }
+});
+
+test("exact resolution rejects wrong-kind and incomplete row identities instead of inferring names", () => {
+  const option = row({ id: "option", groupKey: "minimum-order", optionKey: "quantity", name: "1杯" });
+  const item: UberInventoryItemRow = { id: "item", brandId: "brand", externalId: "item-platform", name: "1杯", displayNames: null, isAvailable: true };
+  assert.throws(() => resolveExactUberInventoryOption(item as UberInventoryOptionRow), /identity_invalid/);
+  assert.throws(() => resolveExactUberInventoryItem(option), /identity_invalid/);
+  assert.throws(() => resolveExactUberInventoryOption({ ...option, kind: "item" } as UberInventoryOptionRow), /identity_invalid/);
+  for (const changes of [{ id: "" }, { brandId: "" }, { isAvailable: undefined }, { groupKey: undefined }, { optionKey: undefined }]) {
+    assert.throws(() => resolveExactUberInventoryOption({ ...option, ...changes } as UberInventoryOptionRow), /identity_invalid/);
+  }
+});
 
 test("keeps thin and extra-wide hot-pot noodles separate", () => {
   const rows = [

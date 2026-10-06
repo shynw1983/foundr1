@@ -3,6 +3,7 @@ import {sql} from './db.ts';
 import {buildUberPublication,type UberPublicationNode,type UberPublicationMapping,type UberMenuNameAdaptation} from './uber-menu-publication.ts';
 import {splitUberName,type UberSourceCatalog} from './uber-menu-authority.ts';
 import {menuSyncIssue} from './menu-sync-status.ts';
+import {loadVerifiedCreationHoldReleases} from './uber-creation-hold-releases.ts';
 
 type Row=Record<string,any>;
 type Platform='rocket_now'|'demae_can';
@@ -98,15 +99,18 @@ function persistedNodes(state:Row):UberPublicationNode[] {
   });
 }
 
-function freshPayload(state:Row,platform:Platform,nodes:UberPublicationNode[]) {
+async function freshPayload(state:Row,platform:Platform,nodes:UberPublicationNode[]) {
   const config=record(state.publish_config?.[platform]);
   if(!config.merchantId||(platform==='demae_can'&&!config.menuPatternCode))throw Error('uber_publication_reconcile_not_configured');
   const receipts=(state.receipts as Row[]).filter(row=>row.platform===platform);
+  const mappings=(state.mappings as Row[]).filter(row=>row.platform===platform).map(({mapping})=>({kind:mapping.target_type,targetId:mapping.target_id,externalId:mapping.external_id,externalParentId:mapping.external_parent_id??''})) as UberPublicationMapping[];
+  const creationHoldReleases=await loadVerifiedCreationHoldReleases({sourceId:state.id,storeId:state.store_id,platform,merchantId:String(config.merchantId),
+    releases:config.creationHoldReleases,nodes,mappings});
   const payload=buildUberPublication({sourceId:state.id,storeId:state.store_id,brandId:state.brand_id,revision:Number(state.revision),platform,
     merchantId:config.merchantId,menuPatternCode:config.menuPatternCode,draftPatternCode:config.draftPatternCode,draftCarrierItemCode:config.draftCarrierItemCode,
     selectionPolicy:config.selectionPolicy,quarantinedSourceKeys:config.quarantinedSourceKeys,excludedSourceKeys:config.excludedSourceKeys,
     optionMigrationPolicy:config.optionMigrationPolicy,nameAdaptations:config.nameAdaptations as Record<string,UberMenuNameAdaptation>,nodes,
-    mappings:(state.mappings as Row[]).filter(row=>row.platform===platform).map(({mapping})=>({kind:mapping.target_type,targetId:mapping.target_id,externalId:mapping.external_id,externalParentId:mapping.external_parent_id??''})) as UberPublicationMapping[],
+    mappings,creationHoldReleases,
     creationIdentities:receipts.map(row=>({sourceKey:row.source_key,status:row.status,externalId:row.external_id,externalParentId:row.external_parent_id}))});
   return {...payload,pendingRemovals:[],authorityState:Object.fromEntries(receipts.map(row=>[row.source_key,{sourceKey:row.source_key,status:row.status,externalId:row.external_id,externalParentId:row.external_parent_id}])),
     migrationState:Object.fromEntries((state.migrations as Row[]).filter(row=>row.platform===platform).map(row=>[row.migration_key,row.state]))} as Row;
@@ -126,7 +130,15 @@ function mergePayload(old:Row,fresh:Row):Row {
     // native verifier's requirement that a newly created entity remain hidden.
     for(const mapping of target.mappings as Row[]) {
       const previous=prior.mappings.find((row:Row)=>pair(row)===pair(mapping));
-      if(previous)Object.assign(mapping,previous);
+      if(previous) {
+        const release=mapping.creationHoldRelease,created=mapping.created===true||previous.created===true;
+        Object.assign(mapping,previous);
+        // Only the newly loaded persisted command/native audit proof may
+        // release a hold; an old payload must not resurrect revoked/stale proof.
+        delete mapping.creationHoldRelease;
+        if(release)mapping.creationHoldRelease=release;
+        if(created)mapping.created=true;
+      }
       else if(!Object.entries(fresh.authorityState as Record<string,Row>).some(([key,receipt])=>receipt.status==='identified'
         &&receipt.externalId===mapping.externalId&&receipt.externalParentId===mapping.externalParentId
         &&(key===target.sourceKey||(target.kind==='option'&&key.startsWith('option:')&&key.split(':').at(-1)===target.sourceKey.split(':').at(-1)))))throw Error('uber_publication_reconcile_identity_changed');
@@ -208,7 +220,7 @@ export async function reconcileUberPublications(input:UberPublicationReconcileIn
         result.blocked.push({platform,code:scheduledRetries>=2?'uber_publication_reconcile_scheduled_limit':'uber_publication_reconcile_manual_required'});continue;
       }
       try {
-        const fresh=freshPayload(state,platform,nodes);
+        const fresh=await freshPayload(state,platform,nodes);
         const payload:Row=current?mergePayload(current.payload,fresh):fresh;
         payload.publicationReconciliation={...record(current?.payload.publicationReconciliation),
           ...(input.captureCommandId?{captureCommandId:input.captureCommandId}:{}),mode:input.mode,

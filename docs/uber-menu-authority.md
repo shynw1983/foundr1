@@ -23,6 +23,15 @@ An already-authorized automatic source does not require a new manual confirmatio
 - OS continues owning stockout/restore. Content import never restores availability.
   New OS items/options and newly created downstream counterparts have a persistent
   unavailable hold, not a today-only stockout.
+  An explicitly approved restore can release that creation hold only for its
+  exact source/OS/native identity. Persisted successful inventory commands and a
+  subsequent independent, per-native-ID availability audit establish the release;
+  an approval flag, a current selling snapshot or a name match alone does not.
+  Publication retains creation receipts and revalidates configured
+  `creationHoldReleases` on both unchanged-source retries and new revisions.
+  The release is not an instruction to keep selling: later ordinary stockouts
+  remain unchanged by menu content synchronization. Other new counterparts
+  retain their holds; zero price never implies an exemption.
 - Authority is explicitly scoped to one configured brand/store, not every brand.
   The nanacha and maamaa frontends continue consuming OS menu IDs and display names.
 
