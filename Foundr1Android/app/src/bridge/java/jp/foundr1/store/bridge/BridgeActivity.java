@@ -222,6 +222,16 @@ public class BridgeActivity extends Activity {
         platformHint.setPadding(0, dp(7), 0, 0);
         platformSection.addView(platformSummary);
         platformSection.addView(platformHint);
+        if (BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_UBER_EATS)) {
+            android.widget.Switch keepBusy = new android.widget.Switch(this);
+            keepBusy.setText("Uber Eats 混雑中を維持（準備時間30分以上）");
+            keepBusy.setTextColor(COLOR_INK);
+            keepBusy.setChecked(BridgeConfig.prefs(this).getBoolean(UberBusyModeKeeper.ENABLED, false));
+            keepBusy.setOnCheckedChangeListener((button, checked) ->
+                BridgeConfig.prefs(this).edit().putBoolean(UberBusyModeKeeper.ENABLED, checked).apply());
+            platformSection.addView(keepBusy);
+            platformSection.addView(text("注文画面で営業中への復帰を検知すると、混雑中の30分以上に戻します。55分ごとに混雑中でも一度営業中へ切り替え、確認後に混雑中へ戻します。操作中・注文処理中は延期し、一時停止・閉店中は変更しません。", 13, COLOR_MUTED, Typeface.NORMAL));
+        }
         if (BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_ROCKET_NOW)) {
             android.widget.Switch autoAccept = new android.widget.Switch(this);
             autoAccept.setText("Rocket Now 自動受諾（推奨時間＋10分・上限まで）");

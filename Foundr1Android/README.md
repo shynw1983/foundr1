@@ -180,6 +180,74 @@ not defer scanning; idle detection depends on accessibility interaction events.
 Android build, standalone idle-policy tests, TypeScript, and diff checks passed.
 The unrelated Next.js production build stalled during compilation and was stopped.
 
+### Uber busy-mode recovery — 2026-09-16
+
+The opt-in Bridge switch `Uber Eats 混雑中を維持（準備時間30分以上）`
+restores the observed Japanese Uber flow: `営業中` → status menu → `混雑中`
+→ `30 分以上` → `準備時間を更新する`. It listens for accessibility events,
+with an independent two-second poll as a fallback. It runs on the tablet and
+does not need ADB or a connected computer after installation.
+
+Update 2026-10-01: the same opt-in switch also refreshes an already-busy session
+approximately every 55 minutes: busy → `営業中` → confirmed normal header → busy
+with `30 分以上`. The timer starts when the enabled worker first runs (and restarts
+after service/process restart or disabling/re-enabling). Every confirmed successful busy update, including an ordinary normal→busy
+recovery, starts the next 55-minute interval. Failed attempts do not postpone
+the deadline. It uses monotonic elapsed time, including
+sleep; overdue work waits for the safe order overview. Paused, closed and unknown
+statuses are never changed. A stale busy header after the normal click is not
+considered confirmation; the full periodic transition times out after 30 seconds
+and retries with the existing backoff. This briefly changes preparation status;
+it does not pause incoming orders.
+
+The worker starts only on the active order overview with no employee-owned
+status/time sheet, pending order recovery or inventory command. It uses exact
+view IDs and labels, verifies the selected 30-minute row before submitting,
+and requires the busy header afterward to report success. It never clicks
+accept, ready, cancel, pause or open-store actions. Staff touch/scroll events
+defer navigation. A pending order closes both worker-owned menu levels before
+yielding; unknown/unchanged screens time out with a 30-second retry backoff.
+History/settings retain the existing 45-second idle return behavior, so the
+two-second detection bound applies when the order overview is visible and
+the service is free, not while another screen or order task owns the tablet.
+
+Historical 2026-09-16 verification: installed and enabled locally on the paired Uber tablet `24075RP89G` with
+Bridge `1.0.54-busy` (versionCode 55). The public Bridge download manifest was
+not changed. Installation preserved the existing binding and accessibility
+service. The final live run logged detection at 12:07:21 JST, selection of 30,
+update dispatch, then confirmed busy at 12:07:25 (`elapsedMs=4617`). The full
+manual normal-status request to observed recovery took 11.05 seconds, including
+Uber's initial state change and network response. The first implementation
+took 9362 ms after detection; indexed view-ID lookup and filtering self-generated
+click events reduced that latency. These measurements are not a delivery SLA.
+
+Offline replay covers the captured status/duration layouts, repeated 55-minute
+refreshes, renewed deadlines after normal recovery, delayed normal confirmation,
+paused/closed/package/platform guards, disabled mode, manual dialogs, staff
+interaction, priority work, two-level modal cleanup, stale/duplicate controls,
+unchanged frames, timeout backoff and unconfirmed selections. Run:
+
+```sh
+JAVA_HOME=<JDK home> node Foundr1Android/tests/uber-busy-mode-replay.mjs
+```
+
+For that historical version, the replay, existing Rocket acceptance/capture
+replays, final Android debug build, Next.js build and diff check passed. No order was accepted, cancelled
+or marked ready by the live busy-state tests.
+
+2026-10-01 verification: the updated busy-mode replay and existing Rocket
+acceptance/capture replays passed. Bridge `1.0.55-busy-refresh` (versionCode 56)
+was built successfully from an identical source snapshot in `/private/tmp`.
+The original workspace build failed on duplicate generated `* 2.class` files;
+the isolated build avoided those caches. No tablet was connected to ADB, so
+this version was not installed or physically verified at that time. The verified APK
+was saved in `outputs/uber-busy-refresh-20261001/`.
+
+2026-10-06 publication: release the same signed `1.0.55-busy-refresh` APK (code 56)
+through `/downloads/bridge/version.json`, with matching versioned, latest and legacy
+APK files. Signature and SHA-256 checks confirm the saved package can upgrade the
+`1.0.54-busy` package. Installation and the 55-minute flow still require tablet verification.
+
 ### Rocket acceptance regression replay
 
 Run `JAVA_HOME=<JDK home> node Foundr1Android/tests/rocket-auto-accept-replay.mjs`

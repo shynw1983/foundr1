@@ -29,6 +29,7 @@ import java.util.Set;
 
 public class UberAccessibilityService extends AccessibilityService {
     private RocketAutoAccept rocketAutoAccept;
+    private UberBusyModeKeeper uberBusyModeKeeper;
     private static final String TAG = "Foundr1BridgeRecovery";
     private static final String UBER_ORDERS_PACKAGE = "com.uber.restaurants";
     private static final String ROCKET_NOW_PACKAGE = "com.cpone.merchant";
@@ -209,6 +210,7 @@ public class UberAccessibilityService extends AccessibilityService {
 
     private void handleAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
+        if (uberBusyModeKeeper != null) uberBusyModeKeeper.onEvent(event);
         String packageName = event.getPackageName().toString();
         int eventType = event.getEventType();
         if (looksLikeUber(packageName) && (
@@ -254,6 +256,10 @@ public class UberAccessibilityService extends AccessibilityService {
         if (!commandActive) trackInventoryStatusClick(event);
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
+        if (uberBusyModeKeeper != null && uberBusyModeKeeper.isNavigating() && !commandActive) {
+            root.recycle();
+            return;
+        }
         if (!commandActive) captureFocusedInventorySelection(packageName, root);
         StringBuilder builder = new StringBuilder();
         JSONArray nodes = new JSONArray();
@@ -577,6 +583,9 @@ public class UberAccessibilityService extends AccessibilityService {
         if (rocketAutoAccept != null) rocketAutoAccept.stop();
         rocketAutoAccept = new RocketAutoAccept(this);
         rocketAutoAccept.start();
+        if (uberBusyModeKeeper != null) uberBusyModeKeeper.stop();
+        uberBusyModeKeeper = new UberBusyModeKeeper(this);
+        uberBusyModeKeeper.start();
         idleScan.noteInteraction(SystemClock.uptimeMillis());
         handler.removeCallbacks(idleScanRunnable);
         handler.postDelayed(idleScanRunnable, 5000L);
@@ -623,6 +632,7 @@ public class UberAccessibilityService extends AccessibilityService {
     @Override
     public void onDestroy() {
         if (rocketAutoAccept != null) rocketAutoAccept.stop();
+        if (uberBusyModeKeeper != null) uberBusyModeKeeper.stop();
         BridgeHealthState.setAccessibilityConnected(this, false);
         if (overlayController != null) {
             overlayController.destroy();
@@ -2017,6 +2027,7 @@ public class UberAccessibilityService extends AccessibilityService {
 
     // A timer is necessary: quiet history/settings pages produce no order events.
     private void scanUberWhenIdle() {
+        if (uberBusyModeKeeper != null && uberBusyModeKeeper.isNavigating()) return;
         long now = SystemClock.uptimeMillis();
         if (!BridgeConfig.supportsPlatform(this, BridgeConfig.PLATFORM_UBER_EATS)) return;
         AccessibilityNodeInfo root = getRootInActiveWindow();
@@ -2075,6 +2086,10 @@ public class UberAccessibilityService extends AccessibilityService {
     }
 
     private void recoverNewOrder() {
+        if (uberBusyModeKeeper != null && uberBusyModeKeeper.isNavigating()) {
+            scheduleRecovery(500L);
+            return;
+        }
         boolean pending = UberRecoveryState.isPending(this);
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) {
