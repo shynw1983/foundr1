@@ -14,7 +14,10 @@ export async function GET(request: Request) {
   const history = sources.length ? await sql`select id::text,platform,status,created_at,updated_at,last_error,attempts,available_at,payload->>'revision' as revision,result->'progress'->>'phase' as phase,result->'progress' as progress,payload->'manualRetryHistory' as retries,
     case when last_error<>'' then (select jsonb_object_agg(target->>'sourceKey',coalesce(target->>'sourceName',target->>'name'))
       from jsonb_array_elements(coalesce(payload->'targets','[]'::jsonb)) target where target->>'sourceKey' is not null) else '{}'::jsonb end as "targetNames"
-    from local_bridge_commands where store_id=${sources[0].store_id} and payload->>'sourceId'=${sources[0].id}::text and (payload->>'authoritativePublication'='true' or payload->>'authoritativeSource'='true') order by created_at desc limit 80` : [];
+    from local_bridge_commands where store_id=${sources[0].store_id} and payload->>'sourceId'=${sources[0].id}::text
+      and ((platform='uber_eats' and command_type='capture_menu_snapshot' and payload->'authoritativeSource'='true'::jsonb)
+        or (platform in ('rocket_now','demae_can') and command_type='publish_menu_changes' and payload->'authoritativePublication'='true'::jsonb))
+    order by created_at desc,id desc limit 80` : [];
   const jobHistory=history.map(({targetNames,...job})=>Object.assign(job,menuSyncIssueContext(String(job.last_error??''),(targetNames??{}) as Record<string,string>)));
   const jobs=jobHistory.filter((row,index)=>jobHistory.findIndex(other=>other.platform===row.platform)===index);
   // Resolve only the current target name, never return the full command payload.
@@ -25,7 +28,14 @@ export async function GET(request: Request) {
       job.progress={...progress,targetName:names[0]?.name??''};
     }
   }
-  const successes=sources.length?await sql`select distinct on(platform) platform,payload->>'revision' as revision,completed_at from local_bridge_commands where store_id=${sources[0].store_id} and payload->>'sourceId'=${sources[0].id}::text and status='succeeded' order by platform,created_at desc`:[];
+  // Inventory/audit commands also carry sourceId. Their successful read or
+  // stock change is not a full menu publication, nor an authoritative capture.
+  const successes=sources.length?await sql`select distinct on(platform) platform,payload->>'revision' as revision,completed_at
+    from local_bridge_commands where store_id=${sources[0].store_id} and payload->>'sourceId'=${sources[0].id}::text
+      and status='succeeded' and completed_at is not null
+      and ((platform='uber_eats' and command_type='capture_menu_snapshot' and payload->'authoritativeSource'='true'::jsonb)
+        or (platform in ('rocket_now','demae_can') and command_type='publish_menu_changes' and payload->'authoritativePublication'='true'::jsonb))
+    order by platform,completed_at desc,created_at desc,id desc`:[];
   const devices=sources.length?await sql`select platform,max(last_seen_at) as last_seen_at from local_bridge_devices where store_id=${sources[0].store_id} and is_enabled=true group by platform`:[];
   const prices = sources.length ? await sql`select o.target_id::text as id,o.kind,o.price_mode as mode,o.last_uber_price::float as "uberPrice",coalesce(i.name,p.name) as name,case when o.kind='item' then i.base_price else p.price_delta end::float as price from menu_uber_objects o left join menu_catalog_items i on o.kind='item' and i.id=o.target_id left join menu_options p on o.kind='option' and p.id=o.target_id where o.source_id=${sources[0].id} and o.kind in ('item','option') and not o.archived order by o.kind,name` : [];
   return Response.json({source:sources[0]??null,runs,jobs,jobHistory,successes,devices,prices,nextCheck:nextMenuCheck()},{headers:{'Cache-Control':'no-store'}});

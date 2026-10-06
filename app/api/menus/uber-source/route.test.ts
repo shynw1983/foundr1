@@ -18,14 +18,16 @@ type Options={
   adapt?:(input:Record<string,unknown>)=>Promise<unknown>;
   reconcile?:(input:Record<string,unknown>)=>Promise<unknown>;
   publish?:()=>Promise<void>;
+  readQuery?:(text:string,values:unknown[])=>Promise<Record<string,unknown>[]>;
 };
 
 function handlers(options:Options={}) {
   const queries:Query[]=[],adaptations:Record<string,unknown>[]=[],reconciliations:Record<string,unknown>[]=[],signals:string[]=[];
   const sql=async(strings:TemplateStringsArray,...values:unknown[])=>{
-    const text=strings.join('?').replace(/\s+/g,' ').trim();
+    const text=strings.map((part,index)=>part+(index<values.length?`$${index+1}`:'')).join('').replace(/\s+/g,' ').trim();
     queries.push({text,values});
     assert.doesNotMatch(text,/^(?:update|insert|delete)/i,'route must delegate mutations to the safe shared services');
+    if(options.readQuery)return options.readQuery(text,values);
     if(text.startsWith('select id::text,store_id::text,revision from menu_uber_sources'))return options.sources??[currentSource];
     if(text.startsWith('select c.platform,c.last_error'))return options.failures??[];
     throw new Error(`Unexpected test query: ${text}`);
@@ -50,7 +52,7 @@ function handlers(options:Options={}) {
     assert.ok(Object.hasOwn(dependencies,name),`unexpected dependency ${name}`);
     return dependencies[name];
   },exported,{exports:exported});
-  return {post:exported.POST as (request:Request)=>Promise<Response>,queries,adaptations,reconciliations,signals};
+  return {get:exported.GET as (request:Request)=>Promise<Response>,post:exported.POST as (request:Request)=>Promise<Response>,queries,adaptations,reconciliations,signals};
 }
 
 const request=(body:unknown)=>new Request('https://example.test/api/menus/uber-source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -173,4 +175,107 @@ test('unexpected service errors and missing job IDs do not leak data or trigger 
   assert.equal(invalid.adaptations.length,0);
   assert.equal(invalid.reconciliations.length,0);
   assert.equal((await invalid.post(request(null))).status,400);
+});
+
+const getRequest=()=>new Request('https://example.test/api/menus/uber-source?brandId=brand-id');
+
+test('GET requires master authorization before any query or command service',async()=>{
+  const h=handlers({authorized:false});
+  const response=await h.get(getRequest());
+  assert.equal(response.status,403);assert.equal(h.queries.length,0);
+  assert.equal(h.adaptations.length,0);assert.equal(h.reconciliations.length,0);assert.equal(h.signals.length,0);
+});
+
+// Execute the real GET SELECTs against an isolated in-memory PostgreSQL engine,
+// not a second implementation of their filtering. No credentials/env files or
+// production database are loaded. The shared SQL test runtime is opt-in.
+const sqlTestOptions={skip:!process.env.PGLITE_MODULE&&'set PGLITE_MODULE for isolated real-SQL GET checks'};
+async function getFixture() {
+  const {PGlite}=await import(process.env.PGLITE_MODULE!);
+  const db=new PGlite();
+  await db.exec(`
+    create table menu_uber_sources(id text primary key,brand_id text,store_id text,uber_store_uuid text,enabled boolean,auto_publish boolean,revision integer,last_checked_at timestamptz,last_error text);
+    create table menu_uber_sync_runs(id text,source_id text,command_id text,revision integer,summary jsonb,created_at timestamptz);
+    create table local_bridge_commands(id text primary key,store_id text,platform text,command_type text,status text,payload jsonb,result jsonb,created_at timestamptz,updated_at timestamptz,completed_at timestamptz,last_error text default '',attempts integer default 0,available_at timestamptz default now());
+    create table local_bridge_devices(store_id text,platform text,last_seen_at timestamptz,is_enabled boolean);
+    create table menu_uber_objects(source_id text,target_id text,kind text,price_mode text,last_uber_price numeric,archived boolean);
+    create table menu_catalog_items(id text,name text,base_price numeric);
+    create table menu_options(id text,name text,price_delta numeric);
+  `);
+  await db.query('insert into menu_uber_sources values($1,$2,$3,\'uber-store\',true,true,39,now(),\'\')',[currentSource.id,'brand-id',currentSource.store_id]);
+  const h=handlers({readQuery:async(text,values)=>(await db.query(text,values)).rows});
+  const add=async(patch:Record<string,unknown>)=>{
+    const row={id:'menu-rocket',storeId:currentSource.store_id,platform:'rocket_now',type:'publish_menu_changes',status:'succeeded',
+      payload:{sourceId:currentSource.id,revision:38,authoritativePublication:true},createdAt:'2026-10-06T00:00:00Z',completedAt:'2026-10-06T00:01:00Z',
+      result:{progress:{phase:'relationships',targetName:'Synthetic menu target'}},...patch};
+    await db.query('insert into local_bridge_commands(id,store_id,platform,command_type,status,payload,result,created_at,updated_at,completed_at) values($1,$2,$3,$4,$5,$6,$7,$8,$8,$9)',
+      [row.id,row.storeId,row.platform,row.type,row.status,JSON.stringify(row.payload),JSON.stringify(row.result),row.createdAt,row.completedAt]);
+  };
+  return {db,h,add,async state(){const response=await h.get(getRequest());assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'no-store');return response.json();}};
+}
+
+test('newer inventory audits cannot replace menu successes or the currently processing menu heads',sqlTestOptions,async()=>{
+  const f=await getFixture();try {
+    await f.add({id:'menu-rocket'});await f.add({id:'menu-demae',platform:'demae_can',completedAt:'2026-10-06T00:02:00Z'});
+    await f.add({id:'capture-uber',platform:'uber_eats',type:'capture_menu_snapshot',payload:{sourceId:currentSource.id,authoritativeSource:true,revision:38}});
+    for(const platform of ['rocket_now','demae_can']) {
+      await f.add({id:`audit-${platform}`,platform,type:'audit_inventory',createdAt:'2026-10-06T04:40:00Z',completedAt:'2026-10-06T04:40:24Z',
+        payload:{sourceId:currentSource.id,creationHoldAuditForCommandId:'stock-command',authoritativePublication:true}});
+      await f.add({id:`current-${platform}`,platform,status:'processing',createdAt:'2026-10-06T04:41:00Z',completedAt:null,
+        payload:{sourceId:currentSource.id,revision:39,authoritativePublication:true}});
+    }
+    const body=await f.state();
+    assert.equal(body.successes.find((row:Record<string,unknown>)=>row.platform==='rocket_now').revision,'38');
+    assert.equal(Date.parse(body.successes.find((row:Record<string,unknown>)=>row.platform==='rocket_now').completed_at),Date.parse('2026-10-06T00:01:00Z'));
+    assert.equal(Date.parse(body.successes.find((row:Record<string,unknown>)=>row.platform==='demae_can').completed_at),Date.parse('2026-10-06T00:02:00Z'));
+    assert.deepEqual(body.jobHistory.map((row:Record<string,unknown>)=>row.id).sort(),['capture-uber','current-demae_can','current-rocket_now','menu-demae','menu-rocket']);
+    for(const platform of ['rocket_now','demae_can'])assert.equal(body.jobs.find((row:Record<string,unknown>)=>row.platform===platform).status,'processing');
+    assert.equal(f.h.signals.length,0);assert.equal(f.h.reconciliations.length,0);
+  }finally {await f.db.close();}
+});
+
+test('GET excludes wrong command/authority/platform and foreign scopes from both menu data sets',sqlTestOptions,async()=>{
+  const f=await getFixture();try {
+    await f.add({id:'valid-menu'});
+    const sourceId=currentSource.id;
+    const invalid=[
+      {type:'audit_inventory'}, {type:'set_inventory_availability'},
+      {payload:{sourceId,authoritativePublication:false}}, {payload:{sourceId}},
+      {payload:{sourceId,authoritativePublication:'true'}}, {payload:{sourceId,authoritativePublication:1}},
+      {payload:{sourceId,authoritativeSource:true}},
+      {platform:'uber_eats'}, {platform:'unknown-platform'},
+      {platform:'rocket_now',type:'capture_menu_snapshot',payload:{sourceId,authoritativeSource:true}},
+      {platform:'uber_eats',type:'capture_menu_snapshot',payload:{sourceId,authoritativePublication:true}},
+      {storeId:'different-store'}, {payload:{sourceId:'different-source',authoritativePublication:true}}
+    ];
+    for(const [index,patch] of invalid.entries())await f.add({id:`invalid-${index}`,createdAt:'2026-10-06T04:40:00Z',completedAt:'2026-10-06T04:40:24Z',...patch});
+    await f.add({id:'valid-failure',status:'failed',createdAt:'2026-10-06T04:41:00Z'});
+    await f.add({id:'incomplete-success',completedAt:null,createdAt:'2026-10-06T04:42:00Z'});
+    const body=await f.state();
+    assert.deepEqual(body.successes.map((row:Record<string,unknown>)=>[row.platform,row.revision]),[['rocket_now','38']]);
+    assert.deepEqual(body.jobHistory.map((row:Record<string,unknown>)=>row.id),['incomplete-success','valid-failure','valid-menu']);
+    assert.equal(body.jobs.length,1);
+  }finally {await f.db.close();}
+});
+
+test('actual menu completion wins over audits and has deterministic completion/creation/ID ordering',sqlTestOptions,async()=>{
+  const f=await getFixture();try {
+    await f.add({id:'old-menu'});
+    await f.add({id:'audit-later',type:'audit_inventory',createdAt:'2026-10-06T04:40:00Z',completedAt:'2026-10-06T04:40:24Z'});
+    for(const platform of ['rocket_now','demae_can','uber_eats']) {
+      const isCapture=platform==='uber_eats';
+      for(const [suffix,revision] of [['a',39],['b',40]] as const)await f.add({id:`real-${platform}-${suffix}`,platform,
+        type:isCapture?'capture_menu_snapshot':'publish_menu_changes',createdAt:'2026-10-06T04:30:00Z',completedAt:'2026-10-06T04:35:00Z',
+        payload:{sourceId:currentSource.id,revision,...(isCapture?{authoritativeSource:true}:{authoritativePublication:true})}});
+    }
+    let body=await f.state();
+    assert.equal(body.successes.length,3);assert.ok(body.successes.every((row:Record<string,unknown>)=>row.revision==='40'));
+    assert.ok(body.jobs.every((row:Record<string,unknown>)=>String(row.id).endsWith('-b')));
+    // Same-revision replay can reuse an older command ID/creation timestamp.
+    // Its fresh native completion, not its original creation, is last success.
+    await f.add({id:'older-command-fresh-completion',createdAt:'2026-10-05T00:00:00Z',completedAt:'2026-10-06T04:39:00Z',
+      payload:{sourceId:currentSource.id,revision:41,authoritativePublication:true}});
+    body=await f.state();assert.equal(body.successes.find((row:Record<string,unknown>)=>row.platform==='rocket_now').revision,'41');
+    assert.equal(f.h.adaptations.length,0);assert.equal(f.h.reconciliations.length,0);assert.equal(f.h.signals.length,0);
+  }finally {await f.db.close();}
 });
