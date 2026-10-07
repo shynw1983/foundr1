@@ -298,7 +298,9 @@ for (;;) {
     console.error(new Date().toISOString(), message);
     if (command?.id) {
       await localStatus.finish(command,message);
-      await api.acknowledge(command.id, "failed", {}, message).catch((ackError) => {
+      await api.acknowledge(command.id, "failed", {}, message, {
+        authoritativePublication: command.payload?.authoritativePublication === true
+      }).catch((ackError) => {
         console.error(new Date().toISOString(), "acknowledgement failed", ackError instanceof Error ? ackError.message : ackError);
       });
     } else {localStatus.state.serviceError=publicError(message);await localStatus.save();}

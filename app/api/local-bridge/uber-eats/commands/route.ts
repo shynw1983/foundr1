@@ -2,7 +2,7 @@ import { sql } from "../../../../../lib/db";
 import { reconcileInventoryCommandsSql } from "../../../../../lib/inventory-command-supersession";
 import { applyUberAvailabilitySync } from "../../../../../lib/inventory-manual-sync";
 import { menuSyncIssue } from "../../../../../lib/menu-sync-status";
-import { findRejectedMenuNameTarget } from "../../../../../lib/menu-name-adaptation";
+import { findRejectedMenuNameTargets } from "../../../../../lib/menu-name-adaptation";
 import { mergePlatformSnapshotEntries } from "../../../../../lib/menu-platform-snapshot-merge";
 import { ingestUberMenuSource } from "../../../../../lib/uber-menu-source-sync";
 import { publishPublicMenuUpdatedEvent } from "../../../../../lib/order-realtime";
@@ -15,6 +15,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function cleanText(value: unknown, maxLength = 1000) {
   return String(value ?? "").trim().slice(0, maxLength);
@@ -633,7 +634,7 @@ export async function POST(request: Request) {
 
   let nameAdapted=false;
   if(status==='failed'&&commandPayload.authoritativePublication===true&&authorization.isDesktop
-    &&Number(commandRows[0].attempts)<3&&findRejectedMenuNameTarget(commandPayload,error)) {
+    &&Number(commandRows[0].attempts)<3&&findRejectedMenuNameTargets(commandPayload,error).length) {
     const {adaptRejectedUberMenuName,MenuNameAdaptationConflict,MenuNameAdaptationFailure}=await import('../../../../../lib/uber-menu-name-adaptation-store');
     try {
       const adaptation=await adaptRejectedUberMenuName({commandId,storeId:authorization.storeId,

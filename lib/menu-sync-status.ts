@@ -48,7 +48,7 @@ export function menuSyncIssueContext(error='',targetNames:Record<string,string>=
     const mapped=sourceKey&&Object.prototype.hasOwnProperty.call(targetNames,sourceKey)?targetNames[sourceKey]:undefined;
     const name=displayName(mapped)
       ??[detail.sourceName,detail.name,detail.targetName].map(displayName).find(value=>value!==undefined);
-    const stage=typeof detail.stage==='string'&&/^(input_validation|configuration|http|response_json|response_status|output_incomplete|output_refusal|output_json|output_schema|candidate_name|candidate_unchanged|candidate_repeated|candidate_quantities|candidate_identity|candidate_unsafe|request|deadline|candidate_limit)$/.test(detail.stage)?detail.stage:undefined;
+    const stage=typeof detail.stage==='string'&&/^(input_validation|configuration|http|response_json|response_status|output_incomplete|output_refusal|output_json|output_schema|candidate_name|candidate_contract|candidate_unchanged|candidate_repeated|candidate_quantities|candidate_identity|candidate_unsafe|request|deadline|candidate_limit)$/.test(detail.stage)?detail.stage:undefined;
     if(sourceKey||code||name||stage)issues.push({...(sourceKey?{sourceKey}:{}),...(code?{code}:{}),...(name?{name}:{}),...(stage?{stage}:{})});
   }
   return {issues};
@@ -83,6 +83,7 @@ export function menuSyncIssue(error = '',language='ja',context:MenuIssueContext=
     :aiStage==='candidate_identity'?label('候補の商品種類・識別情報が元の対象と一致しませんでした。','候选的商品种类或身份信息与原项目不一致。','候選的商品種類或身分資訊與原項目不一致。')
     :['candidate_unchanged','candidate_repeated'].includes(aiStage??'')?label('元の名称と同じ、またはすでに試した候補でした。','候选仍与原名相同，或重复了已经尝试的名称。','候選仍與原名相同，或重複了已經嘗試的名稱。')
     :aiStage==='candidate_name'?label('候補がプラットフォームの名称条件を満たしていませんでした。','候选未满足平台的名称格式或长度要求。','候選未滿足平台的名稱格式或長度要求。')
+    :aiStage==='candidate_contract'?label('候補にもこのプラットフォームで使用できない文字列が残っていました。','候选中仍包含此平台不允许的文字片段。','候選中仍包含此平台不允許的文字片段。')
     :aiStage==='configuration'?label('AI サービスの設定を確認する必要があります。','需要检查 AI 服务配置。','需要檢查 AI 服務設定。'):'';
   if(error.includes('menu_name_ai_retry_prepared'))return {kind:'verify',title:label('AI がこのプラットフォーム向けの名称を用意しました','AI 已生成适合该平台的名称','AI 已產生適合該平台的名稱'),action:action('再試行を予約しました。保存・読み取り確認が完了すると同期結果に表示されます。','已安排重试，正在等待平台保存并回读确认；完成后会更新同步结果。','已安排重試，正在等待平台儲存及回讀確認；完成後會更新同步結果。'),retry:true};
   if(error.includes('menu_name_ai_candidate_prepared'))return {kind:'verify',title:label('AI の名称候補を保存しました','AI 名称候选已保存','AI 名稱候選已儲存'),action:action('まだ実行していません。他の処理が完了したら、このプラットフォームを再試行して保存・読み取り確認を行ってください。','尚未执行同步。其他任务完成后，请重试此平台，保存并回读确认候选。','尚未執行同步。其他工作完成後，請重試此平台，儲存並回讀確認候選。'),retry:true};
@@ -117,6 +118,12 @@ export function menuSyncIssue(error = '',language='ja',context:MenuIssueContext=
   if (/login|unauthori[sz]ed|session.*expir/i.test(error)) return {kind:'login',title:label('ログインの確認が必要です','需要确认登录状态','需要確認登入狀態'),action:action('Bridge の専用画面でログインしてから再試行してください。','请在 Bridge 专用窗口登录后重试同步。','請在 Bridge 專用視窗登入後重試同步。'),retry:true};
   if (/403|access.denied|forbidden/i.test(error)) return {kind:'access',title:label('管理画面へのアクセスが拒否されました','平台拒绝访问管理页面','平台拒絕存取管理頁面'),action:action('Bridge の専用画面で店舗とメニュー編集権限を確認してから再試行してください。','请在 Bridge 专用窗口核对门店及菜单编辑权限后重试。','請在 Bridge 專用視窗核對門店及菜單編輯權限後重試。'),retry:true};
   if (/uncertain|not_isolated|identity|ambiguous|unverified|draft_exposed/i.test(error)) return {kind:'verify',title:label('保存結果・非公開状態の確認が必要です','需要核对保存结果及隐藏状态','需要核對儲存結果及隱藏狀態'),action:action('接続・保存結果を確認して再試行してください。既存の作成記録を使って読み取り確認し、確認できない場合は書き込みを停止します。','请确认连接与保存结果后重试。重试会依据现有创建记录重新读取，确认不了时会暂停写入。','請確認連線與儲存結果後重試。重試會依據現有建立紀錄重新讀取，無法確認時會暫停寫入。'),retry:true};
+  if(error.startsWith('uber_authority_preflight_blocked:')
+    &&details.some(row=>row.code==='native_name_prohibited_substring')
+    &&details.every(row=>['native_name_prohibited_substring','native_group_name_too_long'].includes(row.code??'')))return {
+      kind:'content',title:label('出前館の名称条件に合わせる必要があります','名称需要适配出前馆的文字限制','名稱需要適配出前館的文字限制'),
+      action:action('書き込み前に停止しました。出前館の同期を再試行すると、この対象の表示名を AI で調整し、保存後に読み取り確認します。Uber の原名、価格や販売状態を変更する必要はありません。','已在写入前暂停。请重试出前馆同步，系统会用 AI 调整这些项目的平台展示名，并在保存后回读确认；无需修改 Uber 原名、价格或销售状态。','已在寫入前暫停。請重試出前館同步，系統會用 AI 調整這些項目的平台展示名，並在儲存後回讀確認；無需修改 Uber 原名、價格或銷售狀態。'),retry:true
+    };
   if (/特殊文字|special.character|(?:native_group_)?name_too_long|projected_name/i.test(error)) return {kind:'content',title:label('このプラットフォームでは現在の名称を保存できません','此平台无法保存当前名称','此平台無法儲存目前名稱'),action:action('文字・長さ制限に合わせた名称が必要です。AI の名称調整を含めて同期をやり直してください。Uber の原名を変更する必要はありません。','需要符合该平台字符、长度限制的名称。请重新同步以使用 AI 名称调整；无需修改 Uber 原名。','需要符合該平台字元、長度限制的名稱。請重新同步以使用 AI 名稱調整；無需修改 Uber 原名。'),retry:!/empty_projected_name/i.test(error)};
   if (/price_invalid|quantity|selection_policy_requires_confirmation/i.test(error)) return {kind:'content',title:label('価格・選択数の送信内容を確認する必要があります','需要核对提交的价格或可选数量','需要核對提交的價格或可選數量'),action:action('Uber の価格・選択条件と送信内容を照合してください。プラットフォームに合う変換を確認し、最新メニューから同期をやり直してください。','请核对 Uber 价格、选择条件与实际提交内容，确认平台转换正确后，从最新菜单重新同步。','請核對 Uber 價格、選擇條件及實際提交內容，確認平台轉換正確後，從最新菜單重新同步。'),retry:false};
   if (/preflight_blocked|unique.constraint/i.test(error)) return {kind:'content',title:label('同期前の確認で解決が必要な項目が見つかりました','同步前发现需要处理的项目','同步前發現需要處理的項目'),action:action('現在のメニューを再読み取りし、商品・グループの対応関係と送信内容を確認してください。問題の項目を解決してから同期を再開してください。','请重新读取当前菜单，核对商品、分组的对应关系和提交内容，处理这些项目后继续同步。','請重新讀取目前菜單，核對商品、分組的對應關係及提交內容，處理這些項目後繼續同步。'),retry:false};

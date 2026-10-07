@@ -18,7 +18,7 @@ const root=resolve(dirname(new URL(import.meta.url).pathname),'../..');
 const json=value=>JSON.parse(JSON.stringify(value));
 const defer=()=>{let release;const promise=new Promise(resolve=>{release=resolve;});return {promise,release};};
 
-async function fixture({kind='option_group',attempts=1,status='processing'}={}) {
+async function fixture({kind='option_group',attempts=1,status='processing',platform='rocket_now',batch=false}={}) {
  const db=new PGlite();
  await db.exec(`
   create table menu_uber_sources(id uuid primary key,brand_id uuid,store_id uuid,revision integer,enabled boolean,auto_publish boolean,publish_config jsonb,updated_at timestamptz default now());
@@ -42,29 +42,38 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
  const secondary={sourceKey:'option:other:second',kind:'option',targetId:ids.option,parentId:ids.target,
   name:'刀削麺100g',price:170,sortOrder:2,source:{quantity:100},
   mappings:[{externalId:'native-secondary',externalParentId:'native-other',created:true}]};
+ if(batch) {
+  const name='ひとくち台湾豚ソーセージ｜一口台湾猪肉肠｜한입 대만식 돼지고기 소시지｜Bite-Sized Taiwanese Pork Sausage';
+  for(const target of [primary,secondary])Object.assign(target,{kind:'option',name,
+   sourceName:'ひとくち台湾豚ソーセージ',price:316});
+  primary.sourceKey='option:first-group:first';primary.parentId=randomUUID();
+  secondary.sourceKey='option:second-group:second';secondary.parentId=randomUUID();
+ }
  const payload={authoritativePublication:true,sourceId:ids.source,storeId:ids.store,brandId:ids.brand,revision:37,
-  platformKey:'rocket_now',merchantId:'118575',targets:[primary,secondary],imagePolicy:'read_only',newItemsHidden:true,
+  platformKey:platform,merchantId:platform==='rocket_now'?'118575':'0076',targets:[primary,secondary],imagePolicy:'read_only',newItemsHidden:true,
   authorityState:{[secondary.sourceKey]:{status:'identified',externalId:'native-secondary',externalParentId:'stage:0010'}},
   migrationState:{migration:{sourceKey:secondary.sourceKey,phase:'complete',fromId:'old',newId:'native-secondary'}},
   manualRetryHistory:[{at:'2026-10-04T00:00:00Z',error:'previous issue',attempts:1}]};
  const config={rocket_now:{merchantId:'118575',priceMode:'uber',otherSetting:'preserve'},demae_can:{merchantId:'0076',selectionPolicy:'preserve_native'}};
  await db.query('insert into menu_uber_sources(id,brand_id,store_id,revision,enabled,auto_publish,publish_config) values($1,$2,$3,37,true,true,$4)',[ids.source,ids.brand,ids.store,JSON.stringify(config)]);
- await db.query('insert into local_bridge_commands(id,store_id,platform,status,attempts,payload,result,last_error,claimed_by_device_id,claimed_at,claim_expires_at) values($1,$2,\'rocket_now\',$3,$4,$5,$6,\'original rejection\',$7,$8,now()+interval \'30 minutes\')',
-  [ids.command,ids.store,status,attempts,JSON.stringify(payload),JSON.stringify({receipt:'receipt-kept',progress:{sourceKey:primary.sourceKey}}),ids.device,claim.claimedAt]);
- await db.query("insert into menu_external_platforms(id,brand_id,platform_key) values($1,$2,'rocket_now')",[ids.platform,ids.brand]);
- await db.query("insert into menu_uber_creation_attempts values($1,'rocket_now',$2,'identified','native-secondary','stage:0010',$3)",[ids.source,secondary.sourceKey,ids.command]);
+ await db.query('insert into local_bridge_commands(id,store_id,platform,status,attempts,payload,result,last_error,claimed_by_device_id,claimed_at,claim_expires_at) values($1,$2,$3,$4,$5,$6,$7,\'original rejection\',$8,$9,now()+interval \'30 minutes\')',
+  [ids.command,ids.store,platform,status,attempts,JSON.stringify(payload),JSON.stringify({receipt:'receipt-kept',progress:{sourceKey:primary.sourceKey}}),ids.device,claim.claimedAt]);
+ await db.query('insert into menu_external_platforms(id,brand_id,platform_key) values($1,$2,$3)',[ids.platform,ids.brand,platform]);
+ await db.query("insert into menu_uber_creation_attempts values($1,$2,$3,'identified','native-secondary','stage:0010',$4)",[ids.source,platform,secondary.sourceKey,ids.command]);
  await db.query("insert into menu_platform_availability_settings values($1,'unavailable')",[ids.target]);
- await db.query("insert into menu_uber_option_migrations values($1,'rocket_now','migration',$2)",[ids.source,JSON.stringify(payload.migrationState.migration)]);
- let gate,aiFailure;
- const requests=[],reconciliations=[];
+ await db.query("insert into menu_uber_option_migrations values($1,$2,'migration',$3)",[ids.source,platform,JSON.stringify(payload.migrationState.migration)]);
+ let gate,aiFailure,aiHandler;
+ const requests=[],reconciliations=[],mutations=[];
  const mocks={
   'lib/menu-name-adaptation.ts':{
    async requestMenuNameAdaptation(input) {
     requests.push(json(input));
     if(gate)await gate.promise;
     if(aiFailure)throw aiFailure;
+    if(aiHandler)return aiHandler(input,requests.length);
     return {sourceKey:input.sourceKey,targetId:input.targetId,inputName:input.inputName,
-     name:kind==='item'?'四川風麻辣湯330円から':'お願い：商品合計1,600円からで',
+     name:batch?input.inputName.replace('Bite-Sized Taiwanese Pork Sausage','Taiwanese Pork Sausage Bites'):
+      kind==='item'?'四川風麻辣湯330円から':'お願い：商品合計1,600円からで',
      reason:'Keep the minimum amount meaning',model:'test-model',policyVersion:'contextual-name-v1'};
    }
   }
@@ -92,17 +101,23 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
    manualRetryHistory:[...before.payload.manualRetryHistory,{at:new Date().toISOString(),error:before.last_error,
     attempts:before.attempts,status:before.status,reason:'manual_source_verification'}]};
   await db.query("update local_bridge_commands set status='pending',attempts=0,available_at=now(),completed_at=null,claimed_by_device_id=null,claimed_at=null,claim_expires_at=null,payload=$1,last_error='',updated_at=now() where id=$2",[JSON.stringify(next),ids.command]);
-  return {queued:1,blocked:[],jobs:[{id:ids.command,platform:'rocket_now'}]};
+  return {queued:1,blocked:[],jobs:[{id:ids.command,platform}]};
  }};
  // Neon tagged queries are lazy; transaction statements must not run before
  // BEGIN. This adapter exercises exactly their emitted SQL on local Postgres.
  const sql=(parts,...params)=>{
   const text=parts.map((part,index)=>part+(index<params.length?`$${index+1}`:'')).join('');
-  return {text,params,then(resolve,reject){return db.query(text,params).then(result=>result.rows).then(resolve,reject);}};
+  return {text,params,then(resolve,reject){
+   if(/^\s*(?:update|insert|delete)\b/i.test(text))mutations.push(text);
+   return db.query(text,params).then(result=>result.rows).then(resolve,reject);
+  }};
  };
  sql.transaction=statements=>db.transaction(async tx=>{
   const results=[];
-  for(const statement of statements)results.push((await tx.query(statement.text,statement.params)).rows);
+  for(const statement of statements) {
+   if(/^\s*(?:update|insert|delete)\b/i.test(statement.text))mutations.push(statement.text);
+   results.push((await tx.query(statement.text,statement.params)).rows);
+  }
   return results;
  });
  mocks['lib/db.ts']={sql};
@@ -124,17 +139,23 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
  // The exact native rejection classifier is production code too. Stub only
  // generation, not its field/identity or authentication-error checks.
  const helper=load('lib/menu-name-adaptation.ts',true);
- mocks['lib/menu-name-adaptation.ts'].findRejectedMenuNameTarget=helper.findRejectedMenuNameTarget;
+ const generation=mocks['lib/menu-name-adaptation.ts'].requestMenuNameAdaptation;
+ Object.assign(mocks['lib/menu-name-adaptation.ts'],helper,{requestMenuNameAdaptation:generation});
  const service=load('lib/uber-menu-name-adaptation-store.ts');
  const publication=load('lib/uber-menu-publication-store.ts');
- const input={commandId:ids.command,storeId:ids.store,platform:'rocket_now',status,claim,
-  error:`uber_authority_content_failed:${primary.sourceKey}:${primary.name}:merchant_menu_request_failed:200:10036:productName contains special characters`};
+ const nameIssues=payload.targets.map(target=>({sourceKey:target.sourceKey,code:'native_name_prohibited_substring',
+  rule:'demae-option-size-substring',fragment:'size'}));
+ const input={commandId:ids.command,storeId:ids.store,platform,status,claim,
+  error:batch?`uber_authority_preflight_blocked:${nameIssues.length}:${JSON.stringify(nameIssues)}`:
+   `uber_authority_content_failed:${primary.sourceKey}:${primary.name}:merchant_menu_request_failed:200:10036:productName contains special characters`};
  await db.query('update local_bridge_commands set last_error=$1 where id=$2',[input.error,ids.command]);
  const command=async()=>(await db.query('select * from local_bridge_commands where id=$1',[ids.command])).rows[0];
  const source=async()=>(await db.query('select * from menu_uber_sources where id=$1',[ids.source])).rows[0];
  const external=async()=>({receipts:(await db.query('select * from menu_uber_creation_attempts')).rows,stock:(await db.query('select * from menu_platform_availability_settings')).rows});
- const setCandidate=async candidate=>db.query("update menu_uber_sources set publish_config=jsonb_set(publish_config,'{rocket_now}',publish_config->'rocket_now'||jsonb_build_object('nameAdaptations',jsonb_build_object($1::text,$2::jsonb)))",[primary.sourceKey,JSON.stringify(candidate)]);
- return {db,ids,claim,payload,config,primary,input,service,publication,requests,reconciliations,command,source,external,setCandidate,
+ const setCandidate=async candidate=>db.query('update menu_uber_sources set publish_config=jsonb_set(publish_config,array[$1],publish_config->$1||jsonb_build_object(\'nameAdaptations\',jsonb_build_object($2::text,$3::jsonb)))',[platform,primary.sourceKey,JSON.stringify(candidate)]);
+ return {db,ids,claim,payload,config,primary,secondary,nameIssues,input,service,publication,helper,requests,reconciliations,mutations,command,source,external,setCandidate,
+  publicationBuilder:load('lib/uber-menu-publication.ts'),
+  generate(handler){aiHandler=handler;},
   menuSyncIssue:load('lib/menu-sync-status.ts').menuSyncIssue,
   defer(){gate=defer();return gate;},
   failAI(code='menu_name_ai_invalid',diagnostic={stage:'output_json',model:'test-model',attempts:[]}) {
@@ -144,7 +165,7 @@ async function fixture({kind='option_group',attempts=1,status='processing'}={}) 
    method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:ids.command,...body})}));},
   manual(language='zh-Hans'){return load('app/api/menus/uber-source/route.ts').POST(new Request('http://isolated.test/api/menus/uber-source',{
    method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({brandId:ids.brand,action:'retry',jobId:ids.command,language})}));},
-  async waitForRequests(count=1){for(let i=0;i<100&&requests.length<count;i++)await new Promise(resolve=>setTimeout(resolve,1));assert.equal(requests.length,count);}
+  async waitForRequests(count=1){for(let i=0;i<100&&requests.length<count;i++)await new Promise(resolve=>setTimeout(resolve,1));assert.ok(requests.length>=count);}
  };
 }
 
@@ -474,4 +495,325 @@ test('confirmation cannot verify a changed saved name, input, source name or tar
    assert.equal((await h.source()).publish_config.rocket_now.nameAdaptations[h.primary.sourceKey].verified,false);
   }
  }finally {await h.db.close();}
+});
+
+const batchFixture=options=>fixture({kind:'option',platform:'demae_can',batch:true,...options});
+const batchError=issues=>`uber_authority_preflight_blocked:${issues.length}:${JSON.stringify(issues)}`;
+const batchCandidate=input=>({sourceKey:input.sourceKey,targetId:input.targetId,inputName:input.inputName,
+ name:input.inputName.replace('Bite-Sized Taiwanese Pork Sausage','Taiwanese Pork Sausage Bites'),
+ reason:'Preserve the product and each unaffected language',model:'test-model',policyVersion:'contextual-name-v1'});
+const persisted=async h=>({command:await h.command(),source:await h.source(),external:await h.external(),
+ migrations:(await h.db.query('select * from menu_uber_option_migrations')).rows});
+
+test('two independent same-name options prepare atomically for the original command without sharing identities',async()=>{
+ const h=await batchFixture();
+ try {
+  const before=await persisted(h);
+  const prepared=await h.service.adaptRejectedUberMenuName({...h.input,result:{nativePreflight:'preserved'}});
+  const after=await persisted(h);
+  assert.equal(h.requests.length,2);
+  assert.deepEqual(h.requests.map(row=>[row.sourceKey,row.targetId]),h.payload.targets.map(row=>[row.sourceKey,row.targetId]));
+  assert.equal(prepared.sourceKey,h.primary.sourceKey);assert.equal(prepared.remainingNameIssues,0);
+  assert.deepEqual(json(prepared.adaptedTargets.map(row=>row.sourceKey)),h.payload.targets.map(row=>row.sourceKey));
+  assert.equal(after.command.id,before.command.id);assert.equal(after.command.status,'pending');
+  assert.equal(after.command.attempts,before.command.attempts);assert.equal(after.command.claimed_at,null);
+  assert.equal(after.command.claimed_by_device_id,null);assert.equal(after.command.claim_expires_at,null);
+  assert.equal(after.command.result.receipt,'receipt-kept');assert.equal(after.command.result.nativePreflight,'preserved');
+  assert.deepEqual(after.external,before.external);assert.deepEqual(after.migrations,before.migrations);
+  const restored=json(after.command.payload);
+  for(let index=0;index<restored.targets.length;index++) {
+   const target=restored.targets[index],old=before.command.payload.targets[index];
+   assert.equal(target.name,batchCandidate(h.requests[index]).name);
+   assert.equal(target.nameProjection,old.name);assert.equal(target.nameAdaptation.verified,false);
+   assert.deepEqual(target.nameAdaptation.attemptedNames,[target.name]);
+   assert.equal(target.nameAdaptation.sourceKey,old.sourceKey);assert.equal(target.nameAdaptation.targetId,old.targetId);
+   assert.deepEqual(target.name.split('｜').slice(0,3),old.name.split('｜').slice(0,3));
+   target.name=old.name;delete target.nameAdaptation;delete target.nameProjection;
+  }
+  assert.deepEqual(restored,before.command.payload);
+  assert.deepEqual(after.source.publish_config.rocket_now,before.source.publish_config.rocket_now);
+  const slots=after.source.publish_config.demae_can.nameAdaptations;
+  assert.deepEqual(Object.keys(slots).sort(),h.payload.targets.map(row=>row.sourceKey).sort());
+  assert.equal(h.mutations.length,2,'the batch has one source update and one same-command update');
+ } finally {await h.db.close();}
+});
+
+test('a failed-mode batch saves two candidates but never queues by itself',async()=>{
+ const h=await batchFixture({status:'failed'});
+ try {
+  const before=await h.command();
+  const prepared=await h.service.adaptRejectedUberMenuName(h.input),after=await h.command();
+  assert.equal(prepared.adaptedTargets.length,2);assert.equal(after.status,'failed');
+  assert.equal(after.id,before.id);assert.equal(after.attempts,before.attempts);
+  assert.equal(after.available_at.getTime(),before.available_at.getTime());
+  assert.deepEqual(after.result.receipt,before.result.receipt);
+ } finally {await h.db.close();}
+});
+
+for(const change of ['revision','claim','attempt','receipt','capture','auto_publish','config'])test(`two-target batch: deferred ${change} rejects the entire stale preparation`,async()=>{
+ const h=await batchFixture();
+ try {
+  const gate=h.defer(),operation=h.service.adaptRejectedUberMenuName(h.input);
+  await h.waitForRequests();
+  if(change==='revision')await h.db.exec('update menu_uber_sources set revision=38');
+  if(change==='claim')await h.db.exec("update local_bridge_commands set claimed_at=claimed_at+interval '1 minute'");
+  if(change==='attempt')await h.db.exec('update local_bridge_commands set attempts=2');
+  if(change==='receipt')await h.db.exec("update local_bridge_commands set payload=jsonb_set(payload,'{authorityState,newReceipt}',jsonb_build_object('status','identified','externalId','new-real-id'))");
+  if(change==='capture')await h.db.query("insert into local_bridge_commands(id,store_id,platform,status,attempts,payload) values($1,$2,'uber_eats','pending',0,$3)",
+   [randomUUID(),h.ids.store,JSON.stringify({sourceId:h.ids.source,authoritativeSource:true})]);
+  if(change==='auto_publish')await h.db.exec('update menu_uber_sources set auto_publish=false');
+  if(change==='config')await h.db.exec("update menu_uber_sources set publish_config=jsonb_set(publish_config,'{demae_can,otherSetting}','\"changed while AI pending\"')");
+  const latest=await persisted(h);
+  gate.release();await assert.rejects(operation,error=>error instanceof h.service.MenuNameAdaptationConflict);
+  assert.deepEqual(await persisted(h),latest);assert.equal(h.mutations.length,0);
+ } finally {await h.db.close();}
+});
+
+test('duplicate two-target acknowledgements cannot persist two batches or consume another queue attempt',async()=>{
+ const h=await batchFixture();
+ try {
+  const gate=h.defer(),first=h.service.adaptRejectedUberMenuName(h.input),second=h.service.adaptRejectedUberMenuName(h.input);
+  await h.waitForRequests(2);gate.release();
+  const results=await Promise.allSettled([first,second]);
+  assert.equal(results.filter(row=>row.status==='fulfilled').length,1);
+  assert.equal(results.filter(row=>row.status==='rejected'&&row.reason instanceof h.service.MenuNameAdaptationConflict).length,1);
+  const after=await h.command();assert.equal(after.status,'pending');assert.equal(after.attempts,1);
+  assert.equal(Object.keys((await h.source()).publish_config.demae_can.nameAdaptations).length,2);
+  assert.equal(h.mutations.length,2);
+ } finally {await h.db.close();}
+});
+
+for(const unsafeSecond of [false,true])test(`two batch AI requests start concurrently and wait for both outcomes (${unsafeSecond?'second unsafe':'both safe'})`,async()=>{
+ const h=await batchFixture();
+ try {
+  const gates=[defer(),defer()],before=await persisted(h);
+  h.generate(async(input,index)=>{
+   await gates[index-1].promise;
+   if(index===2&&unsafeSecond)throw Object.assign(new Error('menu_name_ai_unsafe'),{code:'menu_name_ai_unsafe',
+    diagnostic:{stage:'candidate_identity',model:'test-model',attempts:[]}});
+   return batchCandidate(input);
+  });
+  const operation=h.service.adaptRejectedUberMenuName(h.input);
+  await h.waitForRequests(2);assert.equal(h.requests.length,2,'both requests start without waiting for the first AI answer');
+  gates[0].release();
+  await new Promise(resolve=>setTimeout(resolve,1));
+  assert.equal(h.mutations.length,0);assert.deepEqual(await persisted(h),before,'first answer never creates a partial persisted candidate');
+  gates[1].release();
+  if(unsafeSecond) {
+   await assert.rejects(operation,error=>error instanceof h.service.MenuNameAdaptationFailure);
+   const after=await persisted(h);
+   assert.deepEqual(after.command.payload,before.command.payload);assert.deepEqual(after.source,before.source);
+   assert.equal(after.command.result.nameAdaptationDiagnostic.sourceKey,h.secondary.sourceKey);
+   assert.deepEqual(after.external,before.external);assert.deepEqual(after.migrations,before.migrations);
+  } else {
+   const prepared=await operation;assert.equal(prepared.adaptedTargets.length,2);assert.equal((await h.command()).status,'pending');
+  }
+ } finally {await h.db.close();}
+});
+
+for(const failure of ['unsafe','identity','generation'])test(`second batch candidate ${failure} leaves every name, receipt, stock and queue state untouched`,async()=>{
+ const h=await batchFixture();
+ try {
+  const before=await persisted(h);
+  h.generate((input,index)=>{
+   if(index===1)return batchCandidate(input);
+   if(failure==='identity')return {...batchCandidate(input),targetId:randomUUID()};
+   const code=failure==='unsafe'?'menu_name_ai_unsafe':'menu_name_ai_unavailable';
+   throw Object.assign(new Error(code),{code,diagnostic:{stage:failure==='unsafe'?'candidate_identity':'http',model:'test-model',attempts:[]}});
+  });
+  await assert.rejects(h.service.adaptRejectedUberMenuName(h.input),error=>error instanceof h.service.MenuNameAdaptationFailure);
+  const after=await persisted(h);
+  assert.equal(h.requests.length,2);assert.deepEqual(after.command.payload,before.command.payload);
+  assert.deepEqual(after.source,before.source);assert.deepEqual(after.external,before.external);assert.deepEqual(after.migrations,before.migrations);
+  assert.equal(after.command.status,before.command.status);assert.equal(after.command.attempts,before.command.attempts);
+  assert.equal(after.command.claimed_at.getTime(),before.command.claimed_at.getTime());
+  assert.equal(after.command.available_at.getTime(),before.command.available_at.getTime());
+  assert.equal(after.command.result.receipt,before.command.result.receipt);
+  assert.equal(after.command.result.nameAdaptation,undefined);
+  assert.equal(after.command.result.nameAdaptationDiagnostic.sourceKey,h.secondary.sourceKey);
+  assert.ok(h.mutations.every(statement=>/^\s*update local_bridge_commands set\s+result=coalesce/i.test(statement)),
+   'only the bounded server failure diagnostic may be saved; no candidate/config/payload/queue update');
+ } finally {await h.db.close();}
+});
+
+for(const problem of ['mixed non-name issue','unknown name rule','forged contract rule','forged contract fragment','missing contract proof','declared count mismatch',
+ 'duplicate source key','missing source key','empty mapping','empty external id','physical alias','target alias','payload key duplicate',
+ 'unreported key duplicate','unreported target duplicate','archived target','quarantined target','saved name no longer violates',
+ 'unfinished migration'])test(`batch ${problem} cannot use a name repair to bypass an unresolved identity or non-name failure`,async()=>{
+ const h=await batchFixture();
+ try {
+  const payload=json(h.payload),issues=json(h.nameIssues);
+  if(problem==='mixed non-name issue')issues.push({sourceKey:h.primary.sourceKey,code:'item_group_migration_required'});
+  if(problem==='unknown name rule')issues[1].code='native_name_prohibited_future_rule';
+  if(problem==='forged contract rule')issues[1].rule='demae-option-unverified-rule';
+  if(problem==='forged contract fragment')issues[1].fragment='not-size';
+  if(problem==='missing contract proof')delete issues[1].fragment;
+  if(problem==='duplicate source key')issues.push({...issues[0]});
+  if(problem==='missing source key')issues[1].sourceKey='option:unknown:missing';
+  if(problem==='empty mapping')payload.targets[1].mappings=[];
+  if(problem==='empty external id')payload.targets[1].mappings[0].externalId='';
+  if(problem==='physical alias')payload.targets[1].mappings=json(payload.targets[0].mappings);
+  if(problem==='target alias')payload.targets[1].targetId=payload.targets[0].targetId;
+  if(problem==='payload key duplicate')payload.targets.push({...json(payload.targets[0]),targetId:randomUUID(),mappings:[{externalId:'another-native',externalParentId:'another-parent'}]});
+  if(problem==='unreported key duplicate'||problem==='unreported target duplicate') {
+   const other={...json(payload.targets[0]),sourceKey:'option:ordinary:unreported',targetId:randomUUID(),name:'Ordinary Sausage',
+    mappings:[{externalId:'unreported-native-1',externalParentId:'ordinary-parent'}]};
+   const duplicate={...json(other),sourceKey:problem==='unreported key duplicate'?other.sourceKey:'option:other:unreported',
+    targetId:problem==='unreported target duplicate'?other.targetId:randomUUID(),mappings:[{externalId:'unreported-native-2',externalParentId:'another-parent'}]};
+   payload.targets.push(other,duplicate);
+  }
+  if(problem==='archived target')payload.targets[1].archived=true;
+  if(problem==='quarantined target')payload.targets[1].quarantined=true;
+  if(problem==='saved name no longer violates')payload.targets[1].name='Taiwanese Pork Sausage Bites';
+  if(problem==='unfinished migration')payload.migrationState.migration.phase='creating';
+  const error=problem==='declared count mismatch'?`uber_authority_preflight_blocked:${issues.length+1}:${JSON.stringify(issues)}`:batchError(issues);
+  await h.db.query('update local_bridge_commands set payload=$1,last_error=$2',[JSON.stringify(payload),error]);
+  const before=await persisted(h);
+  assert.equal(await h.service.adaptRejectedUberMenuName({...h.input,error}),false);
+  assert.equal(h.requests.length,0);assert.equal(h.mutations.length,0);assert.deepEqual(await persisted(h),before);
+ } finally {await h.db.close();}
+});
+
+test('generic Demae HTTP400 cannot become a name failure even when the saved option contains size',async()=>{
+ const h=await batchFixture();
+ try {
+  const error=`uber_authority_content_failed:${h.primary.sourceKey}:${h.primary.name}:merchant_menu_request_failed:400:MWA0012`;
+  await h.db.query('update local_bridge_commands set last_error=$1',[error]);
+  const before=await persisted(h);
+  assert.equal(await h.service.adaptRejectedUberMenuName({...h.input,error}),false);
+  assert.equal(h.requests.length,0);assert.equal(h.mutations.length,0);assert.deepEqual(await persisted(h),before);
+ } finally {await h.db.close();}
+});
+
+for(const alias of ['across reported targets','within one target','unreported active owner','wrong chain','wrong kind'])test(`Demae physical mapping normalization rejects ${alias} before any AI or adaptation write`,async()=>{
+ const h=await batchFixture();
+ try {
+  const payload=json(h.payload);payload.merchantId='410649';
+  payload.targets[0].mappings=[{externalId:'itemList_41064900000264true',externalParentId:'stage:0094'}];
+  payload.targets[1].mappings=[{externalId:'00000263',externalParentId:'stage:0093',created:true}];
+  if(alias==='across reported targets')payload.targets[1].mappings[0].externalId='00000264';
+  if(alias==='within one target')payload.targets[0].mappings.push({externalId:'00000264',externalParentId:'stage:0094'});
+  if(alias==='unreported active owner')payload.targets.push({...json(payload.targets[0]),sourceKey:'option:ordinary:unreported',
+   targetId:randomUUID(),name:'Ordinary Sausage',mappings:[{externalId:'00000264',externalParentId:'stage:0094'}]});
+  if(alias==='wrong chain')payload.targets[0].mappings[0].externalId='itemList_99999900000264true';
+  if(alias==='wrong kind')payload.targets[0].mappings[0].externalId='itemList_41064900000264false';
+  await h.db.query('update local_bridge_commands set payload=$1',[JSON.stringify(payload)]);
+  const before=await persisted(h);
+  assert.equal(await h.service.adaptRejectedUberMenuName(h.input),false);
+  assert.equal(h.requests.length,0);assert.equal(h.mutations.length,0);assert.deepEqual(await persisted(h),before);
+ } finally {await h.db.close();}
+});
+
+test('a two-target repair cannot exceed the shared three-execution queue cap',async()=>{
+ const h=await batchFixture({attempts:3});
+ try {
+  const before=await persisted(h);
+  assert.equal(await h.service.adaptRejectedUberMenuName(h.input),false);
+  assert.equal(h.requests.length,0);assert.equal(h.mutations.length,0);assert.deepEqual(await persisted(h),before);
+ } finally {await h.db.close();}
+});
+
+test('a larger definite-name preflight prepares only the first two payload targets and reports the remaining issue',async()=>{
+ const h=await batchFixture();
+ try {
+  const payload=json(h.payload),third={...json(h.secondary),sourceKey:'option:third-group:third',targetId:randomUUID(),parentId:randomUUID(),
+   mappings:[{externalId:'native-third',externalParentId:'third-parent'}]};
+  payload.targets.push(third);
+  // Raw failure ordering must not decide which two physical records are changed.
+  const issues=[...h.nameIssues,{...h.nameIssues[0],sourceKey:third.sourceKey}].reverse(),error=batchError(issues);
+  await h.db.query('update local_bridge_commands set payload=$1,last_error=$2',[JSON.stringify(payload),error]);
+  const prepared=await h.service.adaptRejectedUberMenuName({...h.input,error}),after=await h.command();
+  assert.deepEqual(h.requests.map(row=>row.sourceKey),payload.targets.slice(0,2).map(row=>row.sourceKey));
+  assert.deepEqual(json(prepared.adaptedTargets.map(row=>row.sourceKey)),payload.targets.slice(0,2).map(row=>row.sourceKey));
+  assert.equal(prepared.remainingNameIssues,1);assert.deepEqual(after.payload.targets[2],third);
+  assert.equal(after.attempts,1);assert.equal(after.status,'pending');
+  assert.equal(Object.keys((await h.source()).publish_config.demae_can.nameAdaptations).length,2);
+ } finally {await h.db.close();}
+});
+
+test('an exhausted second target stops AI for the entire batch before any first candidate is generated',async()=>{
+ const h=await batchFixture();
+ try {
+  const saved={...batchCandidate({sourceKey:h.secondary.sourceKey,targetId:h.secondary.targetId,inputName:h.secondary.name}),
+   sourceName:h.secondary.sourceName,verified:false,attemptedNames:['first rejected','second rejected'],
+   rejectionReason:h.input.error,createdAt:'2026-10-05T00:00:00Z'};
+  await h.db.query("update menu_uber_sources set publish_config=jsonb_set(publish_config,'{demae_can,nameAdaptations}',jsonb_build_object($1::text,$2::jsonb),true)",
+   [h.secondary.sourceKey,JSON.stringify(saved)]);
+  const before=await persisted(h);
+  await assert.rejects(h.service.adaptRejectedUberMenuName(h.input),/menu_name_ai_exhausted/);
+  const after=await persisted(h);
+  assert.equal(h.requests.length,0);assert.deepEqual(after.command.payload,before.command.payload);
+  assert.deepEqual(after.source,before.source);assert.equal(after.command.status,before.command.status);
+  assert.equal(after.command.result.nameAdaptationDiagnostic.sourceKey,h.secondary.sourceKey);
+ } finally {await h.db.close();}
+});
+
+test('the real failed ACK hands off one atomic two-target batch and cannot inject its own adaptation records',async()=>{
+ const h=await batchFixture();
+ try {
+  const before=await h.command();
+  const response=await h.ack({status:'failed',error:h.input.error,result:{nativePreflight:'confirmed-name-only',
+   nameAdaptationDiagnostic:{sourceKey:'forged'},nameAdaptation:{adaptedTargets:[{sourceKey:'forged',adaptedName:'forged'}]}}});
+  assert.equal(response.status,200);
+  const after=await h.command();assert.equal(after.id,before.id);assert.equal(after.status,'pending');assert.equal(after.attempts,1);
+  assert.equal(after.result.nameAdaptationDiagnostic,undefined);
+  assert.equal(after.result.nativePreflight,'confirmed-name-only');
+  assert.deepEqual(after.result.nameAdaptation.adaptedTargets.map(row=>row.sourceKey),h.payload.targets.map(row=>row.sourceKey));
+  assert.doesNotMatch(JSON.stringify(after.result.nameAdaptation),/forged/);assert.equal(h.requests.length,2);
+ } finally {await h.db.close();}
+});
+
+test('both independent candidates are confirmed only after every native occurrence passes the ordinary full verifier',async()=>{
+ const h=await batchFixture();
+ try {
+  await h.service.adaptRejectedUberMenuName(h.input);
+  await h.db.exec("update local_bridge_commands set status='processing'");
+  const command=await h.command();
+  const observations=command.payload.targets.map(target=>({sourceKey:target.sourceKey,externalId:target.mappings[0].externalId,
+   name:target.name,price:target.price,hidden:true,structureVerified:true}));
+  const args={commandId:h.ids.command,storeId:h.ids.store,platform:'demae_can',progress:{}};
+  const assertUnverified=async()=>{
+   const slots=(await h.source()).publish_config.demae_can.nameAdaptations;
+   assert.deepEqual(Object.values(slots).map(row=>row.verified),[false,false]);
+  };
+  for(const invalid of [observations.slice(0,1),observations.map((row,index)=>index===1?{...row,externalId:'wrong-native'}:row),
+   observations.map((row,index)=>index===1?{...row,name:h.primary.name}:row),
+   observations.map((row,index)=>index===1?{...row,structureVerified:false}:row)]) {
+   await assert.rejects(h.publication.recordUberPublicationProgress({...args,result:{observations:invalid}}));
+   await assertUnverified();
+  }
+  await h.publication.recordUberPublicationProgress({...args,result:{observations}});
+  assert.deepEqual(Object.values((await h.source()).publish_config.demae_can.nameAdaptations).map(row=>row.verified),[true,true]);
+ } finally {await h.db.close();}
+});
+
+test('a future payload can reuse both name slots only after real full verification confirms their exact identities',async()=>{
+ const h=await batchFixture();
+ try {
+  await h.service.adaptRejectedUberMenuName(h.input);
+  const command=await h.command();
+  const nodes=h.payload.targets.map(target=>({sourceKey:target.sourceKey,kind:'option',targetId:target.targetId,parentId:target.parentId,
+   name:target.sourceName,displayNames:{zh:'一口台湾猪肉肠',ko:'한입 대만식 돼지고기 소시지',en:'Bite-Sized Taiwanese Pork Sausage'},
+   uberPrice:316,price:316,description:target.description??'',imageUrl:'',sortOrder:target.sortOrder,payload:target.source}));
+  const mappings=h.payload.targets.flatMap(target=>target.mappings.map(mapping=>({...mapping,kind:'option',targetId:target.targetId})));
+  const build=async overrides=>h.publicationBuilder.buildUberPublication({sourceId:h.ids.source,storeId:h.ids.store,brandId:h.ids.brand,
+   revision:37,platform:'demae_can',merchantId:'0076',nodes,mappings,
+   nameAdaptations:(await h.source()).publish_config.demae_can.nameAdaptations,...overrides});
+  const unconfirmed=await build();
+  assert.deepEqual(unconfirmed.targets.map(target=>target.name),h.payload.targets.map(target=>target.name));
+  assert.ok(unconfirmed.targets.every(target=>!target.nameAdaptation));
+  await h.db.exec("update local_bridge_commands set status='processing'");
+  await h.publication.recordUberPublicationProgress({commandId:h.ids.command,storeId:h.ids.store,platform:'demae_can',progress:{},
+   result:{observations:command.payload.targets.map(target=>({sourceKey:target.sourceKey,externalId:target.mappings[0].externalId,
+    name:target.name,price:target.price,hidden:true,structureVerified:true}))}});
+  const confirmed=await build();
+  assert.deepEqual(confirmed.targets.map(target=>target.name),command.payload.targets.map(target=>target.name));
+  assert.ok(confirmed.targets.every(target=>target.nameAdaptation?.verified===true));
+  for(const patch of [{targetId:randomUUID()},{name:'別の商品'},
+   {displayNames:{...nodes[1].displayNames,en:'Taiwanese Chicken Sausage'}}]) {
+   const altered=await build({nodes:[nodes[0],{...nodes[1],...patch}]});
+   assert.equal(altered.targets[0].name,command.payload.targets[0].name);
+   assert.equal(altered.targets[1].nameAdaptation,undefined,'a cache slot never crosses target, source or projection identity');
+  }
+ } finally {await h.db.close();}
 });

@@ -20,6 +20,44 @@ function fixture() {
  return {payload,driver,rows,writes};
 }
 
+test('Demae preflight identifies both independent same-name options and blocks the batch without mutation',async()=>{
+ const {payload,rows}=fixture();payload.platformKey='demae_can';payload.menuPatternCode='live';
+ const first=payload.targets[2];first.sourceKey='option:g:first';first.name='Bite-Sized Taiwanese Pork Sausage';
+ const second={...structuredClone(first),targetId:'second',sourceKey:'option:g:second',mappings:[{externalId:'5'}]};
+ payload.targets.push(second);rows[1].childIds.push('5');rows.push({...structuredClone(rows[2]),id:'5'});
+ const driver=new AuthorityNativeDriver({},payload);let reads=0,writes=0;
+ driver.snapshot=async()=>{reads++;return structuredClone(rows);};
+ for(const method of ['updateCategory','updateGroup','updateOption','updateItem','createHiddenOption','retireOption'])driver.client[method]=async()=>{writes++;throw Error('must not write');};
+ const before={payload:structuredClone(payload),rows:structuredClone(rows)};
+ const phases=[];
+ await assert.rejects(()=>runUberAuthorityPublication(payload,driver,async progress=>phases.push(progress)),error=>{
+  assert.match(error.message,/uber_authority_preflight_blocked/);
+  assert.deepEqual(error.issues,[first,second].map(target=>({sourceKey:target.sourceKey,code:'native_name_prohibited_substring',rule:'demae-option-size-substring',fragment:'size'})));
+  return true;
+ });
+ assert.equal(reads,1);assert.equal(writes,0);
+ assert.deepEqual(phases.map(progress=>progress.phase),['preflight','blocked']);
+ assert.deepEqual(phases[1].issues.map(issue=>issue.sourceKey),[first.sourceKey,second.sourceKey]);
+ assert.deepEqual(payload,before.payload);assert.deepEqual(rows,before.rows);
+});
+
+test('Demae naming preflight ignores retired and quarantined options but preserves its existing group limit',async()=>{
+ const {payload,rows}=fixture();payload.platformKey='demae_can';payload.menuPatternCode='live';
+ const archived=payload.targets[2];archived.archived=true;archived.name='Bite-Sized archived';
+ const quarantined={...structuredClone(archived),targetId:'quarantine',sourceKey:'option:g:quarantine',archived:false,quarantined:true,mappings:[{externalId:'5'}]};
+ payload.targets.push(quarantined);
+ payload.targets[0].name='Size category';payload.targets[3].name='Size item';
+ payload.targets[1].name='Size group '+ '長'.repeat(40);
+ const driver=new AuthorityNativeDriver({},payload);driver.snapshot=async()=>structuredClone(rows);
+ const before=structuredClone(payload);
+ const issues=(await driver.preflight(payload)).issues;
+ assert.deepEqual(issues,[{sourceKey:payload.targets[1].sourceKey,code:'native_group_name_too_long'}]);
+ assert.deepEqual(payload,before);
+ payload.targets[1].name='Size group '+ '長'.repeat(39);
+ assert.equal(payload.targets[1].name.length,50);
+ assert.deepEqual((await driver.preflight(payload)).issues,[]);
+});
+
 test('confirmed retirement retains Demae carrier ownership without trusting unknown groups',()=>{
  const target={kind:'item',sourceKey:'item:beef',targetId:'beef',source:{groupIds:[]},mappings:[{externalId:'00000015'}]};
  const option={kind:'option',sourceKey:'option:fruit:mango',targetId:'mango',archived:true,mappings:[{externalId:'00000210',externalParentId:'stage:0044'}]};

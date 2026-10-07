@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   findRejectedMenuNameTarget,
+  findRejectedMenuNameTargets,
   MENU_NAME_ADAPTATION_POLICY_VERSION,
   MenuNameAdaptationError,
   requestMenuNameAdaptation,
@@ -50,6 +51,121 @@ function fakeRequest(candidate: Record<string, unknown>, inspect?: (request: Rec
 function safe(name: string, patch: Record<string, unknown> = {}) {
   return { safe: true, name, reason: "金額の下限を自然な表現で保持しました。", ...patch };
 }
+
+const sausageName = "ひとくち台湾豚ソーセージ｜一口台湾猪肉肠｜한입 대만식 돼지고기 소시지｜Bite-Sized Taiwanese Pork Sausage";
+const sausageCandidate = "ひとくち台湾豚ソーセージ｜一口台湾猪肉肠｜한입 대만식 돼지고기 소시지｜Taiwanese Pork Sausage Bites";
+const contractIssue = (sourceKey: string) => ({ sourceKey, code: "native_name_prohibited_substring",
+  rule: "demae-option-size-substring", fragment: "size" });
+const preflightError = (issues: unknown[]) => `uber_authority_preflight_blocked:${issues.length}:${JSON.stringify(issues)}`;
+
+test("confirmed name preflight resolves independent same-name targets in payload order, never error order", () => {
+  const first = { ...target, kind: "option", sourceKey: "option:g1:o1", targetId: "os1", name: sausageName };
+  const second = { ...first, sourceKey: "option:g2:o2", targetId: "os2" };
+  const data = { ...payload, platformKey: "demae_can", targets: [first, second] };
+  const error = preflightError([contractIssue(second.sourceKey), contractIssue(first.sourceKey)]);
+  assert.deepEqual(findRejectedMenuNameTargets(data, error).map(row => [row.sourceKey, row.targetId]),
+    [[first.sourceKey, first.targetId], [second.sourceKey, second.targetId]]);
+  assert.equal(findRejectedMenuNameTarget(data, error), null);
+  assert.equal(findRejectedMenuNameTarget({ ...data, targets: [first] }, preflightError([contractIssue(first.sourceKey)]))?.inputName, sausageName);
+});
+
+test("every issue including those beyond the first two is revalidated against exact native contract", () => {
+  const items = [1, 2, 3].map(index => ({ ...target, kind: "option", sourceKey: `option:g${index}:o`, targetId: `os${index}`, name: sausageName }));
+  const data = { ...payload, platformKey: "demae_can", targets: items };
+  const issues = items.map(row => contractIssue(row.sourceKey));
+  assert.equal(findRejectedMenuNameTargets(data, preflightError(issues)).length, 3);
+  for (const replacement of [
+    { ...issues[2], code: "group_membership_migration_required" },
+    { ...issues[2], rule: "invented-rule" }, { ...issues[2], fragment: "Pork" },
+    { sourceKey: issues[2].sourceKey, code: issues[2].code },
+    { ...issues[2], sourceKey: "option:missing" }
+  ]) assert.deepEqual(findRejectedMenuNameTargets(data, preflightError([...issues.slice(0, 2), replacement])), []);
+  assert.deepEqual(findRejectedMenuNameTargets(data, preflightError([issues[0], issues[0]])), []);
+  assert.deepEqual(findRejectedMenuNameTargets(data, `uber_authority_preflight_blocked:3:${JSON.stringify(issues.slice(0, 2))}`), []);
+  for (const change of [
+    { name: sausageCandidate }, { kind: "item" }, { archived: true }, { quarantined: true },
+    { targetId: items[0].targetId }
+  ]) assert.deepEqual(findRejectedMenuNameTargets({ ...data, targets: [...items.slice(0, 2), { ...items[2], ...change }] }, preflightError(issues)), []);
+  assert.deepEqual(findRejectedMenuNameTargets({ ...data, targets: [...items, items[0]] }, preflightError(issues)), []);
+  const extra = { ...items[0], sourceKey: "option:extra:one", targetId: "extra-os-one", name: "Other" };
+  for (const duplicate of [
+    { ...extra, targetId: "extra-os-two" }, { ...extra, sourceKey: "option:extra:two" }
+  ]) assert.deepEqual(findRejectedMenuNameTargets({ ...data, targets: [...items, extra, duplicate] }, preflightError(issues)), []);
+  assert.deepEqual(findRejectedMenuNameTargets({ ...data, platformKey: "rocket_now" }, preflightError(issues)), []);
+  const prefix = `uber_authority_content_failed:${items[0].sourceKey}:${sausageName}:`;
+  assert.deepEqual(findRejectedMenuNameTargets(data, prefix + "merchant_menu_request_failed:400:MWA0012::{}"), []);
+});
+
+test("AI may contextually rephrase only confirmed size morphology, preserving all other language segments", async () => withApiKey(async () => {
+  const result = await requestMenuNameAdaptation(input({ platform: "demae_can", kind: "option", inputName: sausageName }), {
+    request: fakeRequest(safe(sausageCandidate), body => {
+      const user = (body.input as Array<{ content: Array<{ text: string }> }>)[1].content[0].text;
+      assert.deepEqual(JSON.parse(user).confirmedNameContract, [contractIssue("")].map(({ sourceKey: _key, ...rule }) => rule));
+    })
+  });
+  assert.equal(result.name, sausageCandidate);
+  assert.equal(result.sourceKey, target.sourceKey);
+  assert.equal(result.targetId, target.targetId);
+  assert.equal(result.diagnostic?.attempts.length, 1);
+}));
+
+test("size repair cannot change ingredients, location, untouched languages, delimiter order or compounds", async () => withApiKey(async () => {
+  for (const candidate of [
+    sausageCandidate.replace("Pork", "Beef"), sausageCandidate.replace("Taiwanese ", ""),
+    sausageCandidate.replace("Pork", "Porkless"), sausageCandidate.replace("Taiwanese", "NonTaiwanese"),
+    sausageCandidate.replace("Sausage", "Sausagefree"), sausageCandidate.replace("Pork", "No Pork"),
+    sausageCandidate.replace("Pork", "Pork-free"), sausageCandidate.replace("Pork", "Pork without"),
+    sausageCandidate.replace("Pork", "Pork not"), sausageCandidate.replace("Pork", "Pork non"),
+    sausageCandidate.replace("Pork", "Pork less"),
+    sausageCandidate.replace("台湾猪肉", "台湾牛肉"), sausageCandidate.replace("돼지고기", "소고기"),
+    sausageCandidate.replace("ひとくち", "一口"), sausageCandidate.replaceAll("｜", "|"),
+    sausageCandidate.split("｜").reverse().join("｜")
+  ]) {
+    let calls = 0;
+    await assert.rejects(requestMenuNameAdaptation(input({ platform: "demae_can", kind: "option", inputName: sausageName }), {
+      request: fakeRequest(safe(candidate), () => { calls++; })
+    }), error => error instanceof MenuNameAdaptationError && error.code === "menu_name_ai_unsafe" && error.diagnostic.stage === "candidate_identity");
+    assert.equal(calls, 1);
+  }
+  for (const compound of ["Porksize Sausage", "Oversized Pork Sausage"]) {
+    let calls = 0;
+    await assert.rejects(requestMenuNameAdaptation(input({ platform: "demae_can", kind: "option", inputName: compound }), {
+      request: fakeRequest(safe("Pork Sausage Bites"), () => { calls++; })
+    }), error => error instanceof MenuNameAdaptationError && error.diagnostic.stage === "candidate_identity");
+    assert.equal(calls, 1);
+  }
+  // The confirmed rule is platform/kind specific; it cannot relax Rocket names.
+  await assert.rejects(requestMenuNameAdaptation(input({ kind: "option", inputName: sausageName }), {
+    request: fakeRequest(safe(sausageCandidate))
+  }), error => error instanceof MenuNameAdaptationError && error.diagnostic.stage === "candidate_identity");
+}));
+
+test("size repair retains numeric and unit sequences and never regenerates an unsafe meaning", async () => withApiKey(async () => {
+  const name = "台湾豚50g｜Bite-Sized Taiwanese Pork Sausage 50g 10〜20個";
+  const good = "台湾豚50g｜Taiwanese Pork Sausage Bites 50g 10〜20個";
+  for (const candidate of [good.replaceAll("50g", "50kg"), good.replace("10〜20", "20〜10")]) {
+    let calls = 0;
+    await assert.rejects(requestMenuNameAdaptation(input({ platform: "demae_can", kind: "option", inputName: name }), {
+      request: fakeRequest(safe(candidate), () => { calls++; })
+    }), error => error instanceof MenuNameAdaptationError && error.diagnostic.stage === "candidate_quantities");
+    assert.equal(calls, 1);
+  }
+}));
+
+test("candidate still violating the confirmed contract regenerates once but never reaches submission", async () => withApiKey(async () => {
+  let calls = 0;
+  const request: typeof fetch = async () => Response.json({ status: "completed", output_text: JSON.stringify(safe(
+    ++calls === 1 ? sausageName.replace("Bite-Sized", "Bite Sized") : sausageCandidate)) });
+  const result = await requestMenuNameAdaptation(input({ platform: "demae_can", kind: "option", inputName: sausageName }), { request });
+  assert.equal(calls, 2);
+  assert.equal(result.name, sausageCandidate);
+  assert.equal(result.diagnostic?.attempts[0].stage, "candidate_contract");
+  calls = 0;
+  await assert.rejects(requestMenuNameAdaptation(input({ platform: "demae_can", kind: "option", inputName: sausageName }), {
+    request: fakeRequest(safe(sausageName.replace("Bite-Sized", "Bite Sized")), () => { calls++; })
+  }), error => error instanceof MenuNameAdaptationError && error.diagnostic.stage === "candidate_contract" && error.diagnostic.attempts.length === 2);
+  assert.equal(calls, 2);
+}));
 
 test("repair finds only an exact rejected saved target and preserves original context", () => {
   const result = findRejectedMenuNameTarget(payload, prefix + nativeRejection);

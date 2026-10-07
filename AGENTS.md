@@ -61,6 +61,17 @@ maamaa Web予約 supports customer-side cancellation/refund requests until 30 mi
 
 ## Commands
 
+### Menu synchronization handoff
+
+After handling a menu synchronization incident, follow the closure checklist in
+[Mac Bridge menu-sync lessons](desktop-bridge/docs/menu-sync-lessons.md). Record verified
+causes, platform/field scope, naming cautions, unresolved hypotheses and native evidence;
+turn reusable confirmed restrictions into shared checks and regression tests for the
+ordinary OS-to-Bridge flow. A one-off production edit or chat explanation is not a
+runtime repair. Confirm exact-target name candidates only after normal native verification.
+Report server deployment and installed Mac runtime separately; never declare uninstalled
+code active or relax identity/stock protections to make a batch green.
+
 Use these commands from the repository root:
 
 ```bash

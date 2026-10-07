@@ -11,7 +11,7 @@ export class BridgeApiClient {
     return `${this.config.serverUrl}/api/local-bridge/uber-eats/commands?${params}`;
   }
 
-  async request(url, init = {}) {
+  async request(url, init = {}, { timeoutMs = 20000 } = {}) {
     const response = await fetch(url, {
       ...init,
       headers: {
@@ -20,7 +20,7 @@ export class BridgeApiClient {
         ...(init.body ? { "Content-Type": "application/json" } : {}),
         ...(init.headers ?? {})
       },
-      signal: AbortSignal.timeout(20000)
+      signal: AbortSignal.timeout(timeoutMs)
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(`Foundr1 HTTP ${response.status}: ${body.error ?? "request failed"}`);
@@ -31,11 +31,13 @@ export class BridgeApiClient {
     return (await this.request(this.commandUrl())).command ?? null;
   }
 
-  async acknowledge(commandId, status, result = {}, error = "") {
+  async acknowledge(commandId, status, result = {}, error = "", { authoritativePublication = false } = {}) {
+    // Failed authoritative ACKs may prepare AI candidates (24s) and persist a
+    // claim-guarded retry. Progress and ordinary ACKs retain the 20s deadline.
     return this.request(this.commandUrl(), {
       method: "POST",
       body: JSON.stringify({ commandId, status, result, error })
-    });
+    }, { timeoutMs: status === "failed" && authoritativePublication === true ? 45000 : 20000 });
   }
 
   async reportProgress(commandId, progress, error = "") {

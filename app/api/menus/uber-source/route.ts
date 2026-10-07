@@ -6,6 +6,8 @@ import { reconcileUberPublications } from '../../../../lib/uber-menu-publication
 import { publishBridgeCommandAvailable } from '../../../../lib/local-bridge-realtime';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// A manual retry may prepare bounded name candidates before normal reconciliation.
+export const maxDuration = 60;
 export async function GET(request: Request) {
   if (!await requireMasterOsSession()) return Response.json({error:'権限がありません。'},{status:403});
   const brandId = new URL(request.url).searchParams.get('brandId') ?? '';

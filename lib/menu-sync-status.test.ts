@@ -90,6 +90,33 @@ test('a prepared AI retry does not claim platform acceptance',()=>{
  assert.match(issue.title,/已生成/);assert.match(issue.action,/等待平台保存并回读确认/);
  assert.doesNotMatch(issue.title+issue.action,/同步成功|已完成|同步完成/);
 });
+test('confirmed Demae name restrictions explain name-only recovery without exposing rule codes',()=>{
+ const error='uber_authority_preflight_blocked:2:'+JSON.stringify([
+  {sourceKey:'option:g1:sausage',code:'native_name_prohibited_substring',rule:'demae-option-size-substring',fragment:'size'},
+  {sourceKey:'option:g2:sausage',code:'native_name_prohibited_substring',rule:'demae-option-size-substring',fragment:'size'}
+ ]);
+ const context=menuSyncIssueContext(error,{'option:g1:sausage':'台湾香肠','option:g2:sausage':'台湾香肠（新登场）'});
+ for(const language of ['ja','zh-Hans','zh-Hant']) {
+  const issue=menuSyncIssue(error,language,context)!;
+  assert.equal(issue.retry,true);assert.equal(issue.kind,'content');assert.match(issue.action,/台湾香肠/);
+  assert.doesNotMatch(issue.title+issue.action,/native_name_|demae-option-|option:g|同步成功/);
+ }
+ assert.match(menuSyncIssue(error,'zh-Hans',context)!.action,/无需修改 Uber 原名、价格或销售状态/);
+ const mixed='uber_authority_preflight_blocked:2:'+JSON.stringify([
+  {sourceKey:'option:g1:sausage',code:'native_name_prohibited_substring'},
+  {sourceKey:'option:g2:other',code:'mapped_object_missing'}
+ ]);
+ assert.notEqual(menuSyncIssue(mixed,'zh-Hans')!.retry,true);
+ assert.match(menuSyncIssue('merchant_menu_request_failed:400:MWA0012::{}','zh-Hans')!.title,/输入校验/);
+});
+test('unsafe platform-name candidates are explained as local rejection, not a saved result',()=>{
+ const error='menu_name_ai_invalid:'+JSON.stringify({name:'台湾香肠',sourceKey:'option:g:s',stage:'candidate_contract'});
+ const context=menuSyncIssueContext(error,{'option:g:s':'台湾香肠'});
+ assert.equal(context.issues[0].stage,'candidate_contract');
+ const issue=menuSyncIssue(error,'zh-Hans',context)!;
+ assert.match(issue.action,/不允许的文字片段/);assert.match(issue.action,/没有提交给平台/);
+ assert.doesNotMatch(issue.action,/candidate_contract|option:g:s|已保存/);
+});
 test('saved manual candidate does not claim a retry was queued',()=>{
  const error='menu_name_ai_candidate_prepared:'+JSON.stringify({name:'请求组',adaptedName:'请求'});
  const issue=menuSyncIssue(error,'zh-Hans')!;

@@ -65,6 +65,12 @@ An already-authorized automatic source does not require a new manual confirmatio
 
 ## Contextual downstream name adaptation
 
+Reusable incident conclusions and the required post-task closure checklist live in
+[Mac Bridge menu-sync lessons](../desktop-bridge/docs/menu-sync-lessons.md). Confirmed
+field restrictions belong in the shared Bridge/server name contract, not only in
+one-off data fixes. Unknown backend errors remain diagnostic clues rather than
+permission to rename; source names, identities and stock protections stay authoritative.
+
 Uber source names are not edited to satisfy another platform's character rules.
 If Rocket Now or Demae explicitly rejects the name of one exactly identified
 publication target, or Demae preflight confirms one exact group's native name-length

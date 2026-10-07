@@ -7,6 +7,7 @@ import {DemaeDraftClient} from './demae-draft-client.mjs';
 import {collectDemaeInternalCarriers,readDemaeInternalCarriers} from './demae-internal-carriers.mjs';
 import {migrateRocketOption,rocketMigrationIdentity} from './rocket-option-migration.mjs';
 import {nativeMenuOrder} from './native-menu-order.mjs';
+import {inspectMenuNameContract} from './menu-name-contract.mjs';
 
 const ordered=rows=>[...rows].sort((a,b)=>a.sortOrder-b.sortOrder);
 const equalIds=(a,b)=>sameMenuValue(a.map(String),b.map(String));
@@ -385,6 +386,7 @@ export class AuthorityNativeDriver {
     for(const target of payload.targets.filter(row=>!row.quarantined)) {
       if(!target.archived&&!target.name.trim())issues.push({sourceKey:target.sourceKey,code:'empty_projected_name'});
       if(!target.archived&&this.platform==='demae_can'&&target.kind==='option_group'&&target.name.length>50)issues.push({sourceKey:target.sourceKey,code:'native_group_name_too_long'});
+      if(!target.archived)for(const issue of inspectMenuNameContract(this.platform,target.kind,target.name))issues.push({sourceKey:target.sourceKey,...issue});
       if(this.platform==='demae_can'&&target.kind==='option_group'&&!target.archived&&target.source?.min!==undefined&&payload.selectionPolicy!=='preserve_native')issues.push({sourceKey:target.sourceKey,code:'selection_policy_requires_confirmation'});
       for(const id of this.ids(target)) {
         const key=`${target.kind}:${id}`,other=owners.get(key);
