@@ -69,11 +69,29 @@ export function buildUberPublication(input: {
 }) {
   // Explicit, persisted owner decisions only; never infer exclusions from price.
   // Retain the source in OS while omitting it from downstream relationships.
+  // Determine presentation aliases before exclusions remove their real primary.
+  // An excluded normal group must not turn its alias into a new ingredient.
+  const placements=resolveUberOptionPlacement(input.nodes.filter(n=>!input.quarantinedSourceKeys?.includes(n.sourceKey)),input.mappings);
   const excluded=new Set(input.excludedSourceKeys??[]);
-  const placements=resolveUberOptionPlacement(input.nodes.filter(n=>!excluded.has(n.sourceKey)
-    &&!input.quarantinedSourceKeys?.includes(n.sourceKey)),input.mappings);
+  const excludedGroupIds=new Set((input.excludedSourceKeys??[])
+    .filter(key=>key.startsWith('option_group:')).map(key=>key.slice('option_group:'.length)));
+  const excludedParentIds=new Set(input.nodes.filter(node=>node.kind==='option_group'&&excluded.has(node.sourceKey))
+    .map(node=>node.targetId));
+  // A group policy covers its exact descendants, including options introduced
+  // in a later capture. Parent identities, never names or prices, define scope.
+  let added=true;
+  while(added) {
+    added=false;
+    for(const node of input.nodes)if(node.kind==='option'&&node.parentId!==null&&excludedParentIds.has(node.parentId)) {
+      if(!excluded.has(node.sourceKey)){excluded.add(node.sourceKey);added=true;}
+      if(!excludedParentIds.has(node.targetId)){excludedParentIds.add(node.targetId);added=true;}
+    }
+  }
   for(const alias of placements)excluded.add(alias.sourceKey);
   const targets=input.nodes.filter(node=>!excluded.has(node.sourceKey)).map(node=>{
+    const source=publicationSource(node.payload) as Record<string,unknown>;
+    if(node.kind==='item'&&Array.isArray(source.groupIds))
+      source.groupIds=source.groupIds.filter(id=>!excludedGroupIds.has(String(id)));
     const nameProjection=nativePublicationName(input.platform,node);
     const saved=input.nameAdaptations?.[node.sourceKey];
     const adaptation=saved?.verified===true&&saved.sourceKey===node.sourceKey&&saved.targetId===node.targetId
@@ -86,7 +104,7 @@ export function buildUberPublication(input: {
     price:['item','option'].includes(node.kind) && !isUberPublicationRetired(node)
       ? authoritativeDeliveryPrice(input.platform,node.uberPrice as number,node.price as number) : null,
     description:projectDeliveryDescription(input.platform,node.description),sortOrder:node.sortOrder,
-    archived:isUberPublicationRetired(node),source:publicationSource(node.payload) as Record<string,unknown>,
+    archived:isUberPublicationRetired(node),source,
     quarantined:input.quarantinedSourceKeys?.includes(node.sourceKey)===true,
     mappings:input.mappings.filter(mapping=>mapping.kind===node.kind && mapping.targetId===node.targetId)
       .flatMap(mapping=>mapping.externalId.split(',').map(id=>id.trim()).filter(Boolean).map(externalId=>{

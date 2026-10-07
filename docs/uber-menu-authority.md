@@ -106,6 +106,23 @@ model-provided text can authorize another target or a stale command revision.
 Older failed jobs without a saved native rejection require a fresh source scan;
 their missing proof is never reconstructed from an AI error or a guessed name.
 
+## Owner-approved downstream group exclusions
+
+An explicit platform-specific `excludedSourceKeys` group decision also excludes
+its descendants by stable OS parent identity, including later-added choices.
+The downstream item projection drops that exact group's Uber ID from `groupIds`;
+Uber and OS source content are not mutated. Other platform configurations are
+independent. This keeps both normal publication and Demae inventory-release
+staging from referencing a group intentionally omitted on that platform.
+
+Demae's current native editor defines RADIO as required single-choice and
+CHECKBOX as optional multiple-choice, not optional single-choice. On 2026-10-08
+the owner chose to omit the October sauce group only on Demae rather than add a
+dummy free choice or change its other-platform behavior. Existing native group
+and option records remain recoverable; clear every dated consumer link and
+preserve prices, stock, creation receipts and private carriers. An exclusion
+does not authorize source retirement or deletion of similarly named objects.
+
 ## Demae private carrier relationships
 
 Demae's unassigned draft pattern can retain private carrier groups after their

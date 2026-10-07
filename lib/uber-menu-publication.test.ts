@@ -109,6 +109,96 @@ test('explicit informational-card exclusions do not drop other zero-price produc
  assert.equal(nodes.length,2);
 });
 
+test('explicit group exclusion closes over exact child identities including a later fourth option',()=>{
+ const group:UberPublicationNode={...node,kind:'option_group',sourceKey:'option_group:boost',targetId:'boost-os',parentId:null,
+  name:'10月限定',displayNames:{},price:null,uberPrice:null,payload:{id:'boost',optionIds:['one','two','three']},sortOrder:140};
+ const otherGroup:UberPublicationNode={...group,sourceKey:'option_group:other',targetId:'other-os',name:'基本配料',payload:{id:'other',optionIds:['one']},sortOrder:150};
+ const product:UberPublicationNode={...node,payload:{id:'a',groupIds:['other','boost'],quantityInfo:{defaultValue:{minPermitted:1}},other:'keep'}};
+ const children:UberPublicationNode[]=['one','two','three','four'].map((id,index)=>({...node,kind:'option',sourceKey:`option:boost:${id}`,
+  targetId:`boost-${id}`,parentId:group.targetId,name:`${index+1}杯`,displayNames:{},price:100*(index+1),uberPrice:100*(index+1),
+  sortOrder:index*10,payload:{id,groupId:'boost',stock:'unchanged'}}));
+ // Identical entity/name/price under another group is not excluded by inference.
+ const unrelated:UberPublicationNode={...children[0],sourceKey:'option:other:one',targetId:'other-one',parentId:otherGroup.targetId,payload:{id:'one',groupId:'other'},sortOrder:70};
+ const nodes=[product,group,...children,otherGroup,unrelated],original=structuredClone(nodes);
+ const baseline=buildUberPublication({...input,nodes,platform:'demae_can',quarantinedSourceKeys:[unrelated.sourceKey]});
+ const publication=buildUberPublication({...input,nodes,platform:'demae_can',excludedSourceKeys:[group.sourceKey],quarantinedSourceKeys:[unrelated.sourceKey]});
+ const persistedPolicy=buildUberPublication({...input,nodes,platform:'demae_can',
+  excludedSourceKeys:[group.sourceKey,...children.slice(0,3).map(child=>child.sourceKey)],quarantinedSourceKeys:[unrelated.sourceKey]});
+ assert.deepEqual(persistedPolicy,publication); // existing three + future fourth
+ assert.deepEqual(publication.targets.map(target=>target.sourceKey),[product.sourceKey,otherGroup.sourceKey,unrelated.sourceKey]);
+ assert.deepEqual(publication.targets[0].source,{id:'a',groupIds:['other'],quantityInfo:{defaultValue:{minPermitted:1}},other:'keep'});
+ for(const remaining of publication.targets) {
+  const prior=structuredClone(baseline.targets.find(target=>target.sourceKey===remaining.sourceKey)!);
+  if(remaining.kind==='item')prior.source.groupIds=['other'];
+  assert.deepEqual(remaining,prior); // names, prices, IDs, ordering and quarantine
+ }
+ assert.equal(publication.targets[2].quarantined,true);
+ assert.deepEqual(nodes,original);
+ const rocket=buildUberPublication({...input,nodes,platform:'rocket_now'});
+ assert.ok(rocket.targets.some(target=>target.sourceKey===group.sourceKey));
+ assert.equal(rocket.targets.filter(target=>children.some(child=>child.sourceKey===target.sourceKey)).length,4);
+ assert.deepEqual(rocket.targets.find(target=>target.kind==='item')!.source.groupIds,['other','boost']);
+ assert.deepEqual(nodes,original);
+});
+
+test('group exclusion filters only configured group references and preserves promotion-primary placement',()=>{
+ const group:UberPublicationNode={...node,kind:'option_group',sourceKey:'option_group:excluded',targetId:'excluded-os',parentId:null,
+  name:'取り扱わない組',displayNames:{},price:null,uberPrice:null,payload:{id:'excluded'}};
+ const regular:UberPublicationNode={...group,sourceKey:'option_group:regular',targetId:'regular-os',name:'基本配料',payload:{id:'regular'}};
+ const promotion:UberPublicationNode={...group,sourceKey:'option_group:promotion',targetId:'promotion-os',name:'新登場トッピング',payload:{id:'promotion'}};
+ const option:UberPublicationNode={...node,kind:'option',sourceKey:'option:regular:shared',targetId:'regular-shared',parentId:regular.targetId,
+  name:'豆腐',displayNames:{},price:0,uberPrice:0,payload:{id:'shared',groupId:'regular'},sortOrder:30};
+ const alias:UberPublicationNode={...option,sourceKey:'option:promotion:shared',targetId:'promotion-shared',parentId:promotion.targetId};
+ const removed:UberPublicationNode={...option,sourceKey:'option:excluded:unique',targetId:'excluded-child',parentId:group.targetId,payload:{id:'unique',groupId:'excluded'}};
+ const product={...node,payload:{id:'a',groupIds:['regular','excluded','promotion']}};
+ const nodes=[product,group,removed,regular,promotion,option,alias],original=structuredClone(nodes);
+ const mappings=[{kind:'option',targetId:option.targetId,externalId:'222',externalParentId:'regular-parent'}];
+ const baseline=buildUberPublication({...input,nodes,mappings,platform:'demae_can'});
+ const projected=buildUberPublication({...input,nodes,mappings,platform:'demae_can',excludedSourceKeys:[group.sourceKey]});
+ assert.equal(projected.targets.some(target=>target.sourceKey===alias.sourceKey),false);
+ assert.equal(projected.targets.some(target=>target.sourceKey===option.sourceKey),true);
+ assert.deepEqual(projected.targets.find(target=>target.kind==='item')!.source.groupIds,['regular','promotion']);
+ const expected=baseline.targets.filter(target=>![group.sourceKey,removed.sourceKey].includes(target.sourceKey)).map(target=>{
+  const result=structuredClone(target);if(result.kind==='item')result.source.groupIds=['regular','promotion'];return result;
+ });
+ assert.deepEqual(projected.targets,expected);
+ assert.deepEqual(nodes,original);
+});
+
+test('item projection removes an explicitly excluded group reference even if the group node is already absent',()=>{
+ const product={...node,payload:{id:'a',groupIds:['kept','absent-excluded']}};
+ const publication=buildUberPublication({...input,nodes:[product],platform:'demae_can',excludedSourceKeys:['option_group:absent-excluded']});
+ assert.deepEqual(publication.targets[0].source.groupIds,['kept']);
+ assert.deepEqual(product.payload.groupIds,['kept','absent-excluded']);
+});
+
+test('excluding a normal primary cannot resurrect its unmapped promotion alias as a new option',()=>{
+ const normal:UberPublicationNode={...node,kind:'option_group',sourceKey:'option_group:normal',targetId:'normal-os',parentId:null,
+  name:'基本配料',displayNames:{},price:null,uberPrice:null,payload:{id:'normal'}};
+ const promotion:UberPublicationNode={...normal,sourceKey:'option_group:promotion',targetId:'promotion-os',name:'新登場トッピング',payload:{id:'promotion'}};
+ const primary:UberPublicationNode={...node,kind:'option',sourceKey:'option:normal:shared',targetId:'primary',parentId:normal.targetId,
+  name:'豆腐',displayNames:{},price:100,uberPrice:100,payload:{id:'shared',groupId:'normal'}};
+ const alias:UberPublicationNode={...primary,sourceKey:'option:promotion:shared',targetId:'alias',parentId:promotion.targetId,payload:{id:'shared',groupId:'promotion'}};
+ const genuine:UberPublicationNode={...alias,sourceKey:'option:promotion:new',targetId:'genuine-new',name:'新食材',payload:{id:'new',groupId:'promotion'}};
+ const product={...node,payload:{id:'a',groupIds:['normal','promotion']}};
+ const nodes=[product,normal,primary,promotion,alias,genuine],original=structuredClone(nodes);
+ const mappings=[{kind:'option',targetId:primary.targetId,externalId:'222',externalParentId:'normal-parent'}];
+ const projected=buildUberPublication({...input,platform:'demae_can',nodes,mappings,excludedSourceKeys:[normal.sourceKey]});
+ assert.equal(projected.targets.some(target=>target.sourceKey===normal.sourceKey),false);
+ assert.equal(projected.targets.some(target=>target.sourceKey===primary.sourceKey),false);
+ assert.equal(projected.targets.some(target=>target.sourceKey===alias.sourceKey),false);
+ assert.equal(projected.targets.some(target=>target.sourceKey===genuine.sourceKey),true);
+ assert.deepEqual(projected.targets.find(target=>target.kind==='item')!.source.groupIds,['promotion']);
+ assert.deepEqual(nodes,original);
+ const mappedAlias={kind:'option',targetId:alias.targetId,externalId:'333',externalParentId:'promotion-parent'};
+ assert.throws(()=>buildUberPublication({...input,platform:'demae_can',nodes,mappings:[...mappings,mappedAlias],
+  excludedSourceKeys:[normal.sourceKey,alias.sourceKey]}),/既存の公開先/);
+ const rocket=buildUberPublication({...input,platform:'rocket_now',nodes,mappings});
+ assert.equal(rocket.targets.some(target=>target.sourceKey===primary.sourceKey),true);
+ assert.equal(rocket.targets.some(target=>target.sourceKey===alias.sourceKey),false);
+ assert.equal(rocket.targets.some(target=>target.sourceKey===genuine.sourceKey),true);
+});
+
 test('exact persisted inventory release survives revision changes without releasing another zero-price option',()=>{
   const first:UberPublicationNode={...node,kind:'option',sourceKey:'option:g:confirmation',targetId:'confirmation',parentId:'g',price:0,uberPrice:0,name:'もちろん!',displayNames:{}};
   const second={...first,sourceKey:'option:g:other',targetId:'other',name:'他の無料選択肢'};
