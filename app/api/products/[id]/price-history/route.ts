@@ -1,13 +1,20 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
+import { assertProductViewable } from "../../../../../lib/product-catalog-access";
+import { isHeadquarterCatalogRole } from "../../../../../lib/product-catalog-policy";
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  if (!isHeadquarterCatalogRole(session.role)) {
+    return Response.json({ error: "購入価格の履歴を表示する権限がありません。" }, { status: 403 });
+  }
 
   const { id } = await context.params;
   const productId = String(id ?? "").trim();
   if (!productId) return Response.json({ error: "商品を指定してください。" }, { status: 400 });
+  const access = await assertProductViewable(session, productId);
+  if (!access.ok) return Response.json({ error: access.error }, { status: access.status });
 
   const productRows = await sql`
     select id::text, name, reference_price::float as "referencePrice", unit

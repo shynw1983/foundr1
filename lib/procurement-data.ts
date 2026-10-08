@@ -1,6 +1,9 @@
 import { getSessionStoreScope } from "./api-auth";
 import type { EmployeeSession } from "./auth";
 import { sql } from "./db";
+import { getProductCatalogAccessSnapshot } from "./product-catalog-access";
+import { isHeadquarterCatalogRole } from "./product-catalog-policy";
+import { scopeProcurementCatalogResponse } from "./procurement-catalog-response";
 
 type DateParts = {
   year: number;
@@ -226,6 +229,13 @@ export async function getProcurementDashboardData(
           coalesce(import_other_cost_jpy, 0)::float as "importOtherCostJpy",
           coalesce(photo_url, '') as "photoUrl",
           coalesce(brand_scope, 'unset') as "brandScope",
+          products.catalog_visibility as "catalogVisibility",
+          products.is_orderable as "isOrderable",
+          coalesce((
+            select jsonb_agg(grants.store_id::text order by grants.store_id)
+            from product_catalog_store_grants grants
+            where grants.product_id = products.id
+          ), '[]'::jsonb) as "catalogStoreIds",
           coalesce((
             select suppliers.name
             from product_supplier_options
@@ -343,6 +353,7 @@ export async function getProcurementDashboardData(
       ` : Promise.resolve(undefined),
       includeMasterData ? sql`
         select
+          products.id::text as "productId",
           products.name as product,
           brands.name as brand,
           product_brand_usages.usage_note as usage,
@@ -365,6 +376,7 @@ export async function getProcurementDashboardData(
       ` : Promise.resolve(undefined),
       includeMasterData ? sql`
         select
+          products.id::text as "productId",
           products.name as product,
           json_agg(
             json_build_object(
@@ -401,7 +413,7 @@ export async function getProcurementDashboardData(
                 and scoped_store_brands.store_id::text = any(${scope.storeIds})
             )
           )
-        group by products.name
+        group by products.id, products.name
         order by products.name
       ` : Promise.resolve(undefined),
       includeMasterData ? sql`
@@ -495,8 +507,7 @@ export async function getProcurementDashboardData(
           coalesce(nullif(purchase_order_items.requested_unit, ''), nullif(purchase_order_items.temporary_product_unit, ''), products.unit, '個') as unit,
           coalesce(
             purchase_order_items.actual_quantity::float,
-            purchase_actuals.actual_quantity::float,
-            purchase_order_items.requested_quantity::float
+            purchase_actuals.actual_quantity::float
           ) as "actualQuantity",
           coalesce(
             purchase_order_items.actual_price::text,
@@ -515,6 +526,18 @@ export async function getProcurementDashboardData(
           ) as purchased,
           purchase_order_items.status = 'unavailable' as unavailable,
           purchase_order_items.store_feedback_confirmed_at is not null as "storeFeedbackConfirmed",
+          coalesce(purchase_order_items.price_feedback_confirmation = jsonb_build_object(
+            'actualPrice', coalesce(purchase_order_items.actual_price, purchase_actuals.actual_price),
+            'referencePrice', products.reference_price,
+            'productId', coalesce(purchase_order_items.product_id::text, ''),
+            'unit', purchase_order_items.requested_unit
+          ), false) as "priceFeedbackConfirmed",
+          coalesce(purchase_order_items.quantity_feedback_confirmation = jsonb_build_object(
+            'actualQuantity', coalesce(purchase_order_items.actual_quantity, purchase_actuals.actual_quantity),
+            'requestedQuantity', purchase_order_items.requested_quantity,
+            'productId', coalesce(purchase_order_items.product_id::text, ''),
+            'unit', purchase_order_items.requested_unit
+          ), false) as "quantityFeedbackConfirmed",
           case
             when purchase_order_items.status = 'in_delivery' then 'in_delivery'
             when purchase_order_items.status = 'received' then 'received'
@@ -696,7 +719,7 @@ export async function getProcurementDashboardData(
     deadline: formatDeadlineForToday(order.deadlineAt, order.deadlineLabel, order.createdAt)
   }));
 
-  return {
+  const data = {
     stores,
     brands,
     products,
@@ -715,4 +738,19 @@ export async function getProcurementDashboardData(
     priceSignals,
     currentUserId: session?.id ?? ""
   };
+  if (!session) return { ...data, procurementDetailsVisible: true };
+  const headquarters = isHeadquarterCatalogRole(session.role);
+  const access = includeMasterData
+    ? await getProductCatalogAccessSnapshot(session, (products ?? []).map((product) => String(product.id)))
+    : { visibleProductIds: [], orderableStoreIdsByProductId: {} };
+  const catalogPublicationStores = headquarters && includeMasterData ? await sql`
+    select stores.id::text as id, stores.name,
+      coalesce(array_agg(brands.name order by brands.name) filter (where brands.name is not null), '{}') as brands
+    from stores
+    left join store_brands on store_brands.store_id = stores.id
+    left join brands on brands.id = store_brands.brand_id
+    group by stores.id
+    order by stores.name
+  ` : undefined;
+  return { ...scopeProcurementCatalogResponse(data, access, headquarters), catalogPublicationStores };
 }

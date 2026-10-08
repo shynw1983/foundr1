@@ -1,6 +1,8 @@
 import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { roleHasPermission } from "../../../lib/role-permissions";
+import { normalizeInventoryCount } from "../../../lib/inventory-observation-policy";
+import { assertProductViewableAtStore, getVisibleProductIdsForStore } from "../../../lib/product-catalog-access";
 
 const exceptionCodes = new Set(["", "low", "out", "too_much", "damaged", "quality"]);
 
@@ -67,7 +69,7 @@ export async function GET(request: Request) {
         inventory_items.last_counted_at as "lastCountedAt",
         coalesce(employees.name, '') as "lastCountedBy",
         case
-          when inventory_items.last_counted_at is null then '未確認'
+          when inventory_items.current_quantity is null or inventory_items.last_counted_at is null then '未確認'
           when inventory_items.last_counted_at < now() - interval '7 days' then '要確認'
           when inventory_items.last_counted_at < now() - interval '3 days' then '確認推奨'
           else '確認済み'
@@ -100,7 +102,7 @@ export async function GET(request: Request) {
         products.name as "productName",
         inventory_locations.name as "locationName",
         inventory_checks.quantity::float as quantity,
-        inventory_items.count_unit as "countUnit",
+        inventory_checks.count_unit as "countUnit",
         inventory_checks.record_type as "recordType",
         inventory_checks.exception_code as "exceptionCode",
         inventory_checks.note,
@@ -116,8 +118,12 @@ export async function GET(request: Request) {
       limit 20
     `
   ]);
-
-  return Response.json({ stores, selectedStoreId: storeId, locations, items, products, recentChecks });
+  const visibleProductIds = new Set(await getVisibleProductIdsForStore(session, storeId));
+  return Response.json({
+    stores, selectedStoreId: storeId, locations, items,
+    products: products.filter((product) => visibleProductIds.has(String(product.id))),
+    recentChecks
+  });
 }
 
 export async function POST(request: Request) {
@@ -240,6 +246,8 @@ export async function POST(request: Request) {
 
     if (!productId) return Response.json({ error: "商品を選択してください。" }, { status: 400 });
     if (!locationId) return Response.json({ error: "保存済みの保管場所を選択してください。" }, { status: 400 });
+    const access = await assertProductViewableAtStore(session, storeId, productId);
+    if (!access.ok) return Response.json({ error: access.error }, { status: access.status });
 
     const [productRows, locationRows] = await Promise.all([
       sql`select id, unit from products where id = ${productId}::uuid limit 1`,
@@ -264,6 +272,18 @@ export async function POST(request: Request) {
       )
       on conflict (store_id, product_id, location_id)
       do update set
+        current_quantity = case
+          when inventory_items.count_unit = excluded.count_unit then inventory_items.current_quantity
+          else null
+        end,
+        last_counted_at = case
+          when inventory_items.count_unit = excluded.count_unit then inventory_items.last_counted_at
+          else null
+        end,
+        last_counted_by = case
+          when inventory_items.count_unit = excluded.count_unit then inventory_items.last_counted_by
+          else null
+        end,
         count_unit = excluded.count_unit,
         safety_stock = excluded.safety_stock,
         status = 'active',
@@ -316,16 +336,15 @@ export async function POST(request: Request) {
       ...(toLowIds.length ? [
         sql`
           update inventory_items
-          set exception_code = 'low', exception_note = '', last_counted_at = now(),
-              last_counted_by = ${session.id}::uuid, updated_at = now()
+          set exception_code = 'low', exception_note = '', updated_at = now()
           where store_id = ${storeId}::uuid and id::text = any(${toLowIds})
         `,
         sql`
           insert into inventory_checks (
-            inventory_item_id, store_id, product_id, quantity, record_type,
+            inventory_item_id, store_id, product_id, quantity, count_unit, record_type,
             exception_code, note, recorded_by
           )
-          select id, store_id, product_id, current_quantity, 'exception', 'low', 'クイック操作', ${session.id}::uuid
+          select id, store_id, product_id, current_quantity, count_unit, 'exception', 'low', 'クイック操作', ${session.id}::uuid
           from inventory_items
           where store_id = ${storeId}::uuid and id::text = any(${toLowIds})
         `
@@ -333,16 +352,15 @@ export async function POST(request: Request) {
       ...(toClearIds.length ? [
         sql`
           update inventory_items
-          set exception_code = '', exception_note = '', last_counted_at = now(),
-              last_counted_by = ${session.id}::uuid, updated_at = now()
+          set exception_code = '', exception_note = '', updated_at = now()
           where store_id = ${storeId}::uuid and id::text = any(${toClearIds})
         `,
         sql`
           insert into inventory_checks (
-            inventory_item_id, store_id, product_id, quantity, record_type,
+            inventory_item_id, store_id, product_id, quantity, count_unit, record_type,
             exception_code, note, recorded_by
           )
-          select id, store_id, product_id, current_quantity, 'exception', '', 'クイック操作', ${session.id}::uuid
+          select id, store_id, product_id, current_quantity, count_unit, 'exception', '', 'クイック操作', ${session.id}::uuid
           from inventory_items
           where store_id = ${storeId}::uuid and id::text = any(${toClearIds})
         `
@@ -357,7 +375,8 @@ export async function POST(request: Request) {
   if (!itemId) return Response.json({ error: "在庫商品が見つかりません。" }, { status: 404 });
 
   const itemRows = await sql`
-    select id, store_id::text as "storeId", product_id::text as "productId", safety_stock::float as "safetyStock"
+    select id, store_id::text as "storeId", product_id::text as "productId",
+      count_unit as "countUnit", safety_stock::float as "safetyStock"
     from inventory_items
     where id = ${itemId}::uuid and store_id = ${storeId}::uuid and status = 'active'
     limit 1
@@ -366,33 +385,48 @@ export async function POST(request: Request) {
   if (!item) return Response.json({ error: "在庫商品が見つかりません。" }, { status: 404 });
 
   if (action === "count") {
-    const quantity = normalizeNonNegativeNumber(body.quantity, Number.NaN);
-    if (!Number.isFinite(quantity)) {
-      return Response.json({ error: "在庫量を選択してください。" }, { status: 400 });
+    const quantity = normalizeInventoryCount(body.quantity);
+    if (quantity === null) {
+      return Response.json({ error: "在庫量を0以上の数値で入力してください。" }, { status: 400 });
     }
-    const derivedException = quantity === 0 ? "out" : quantity <= Number(item.safetyStock) ? "low" : "";
-
-    await sql`
-      update inventory_items
-      set
-        current_quantity = ${quantity},
-        exception_code = ${derivedException},
-        exception_note = '',
-        last_counted_at = now(),
-        last_counted_by = ${session.id}::uuid,
-        updated_at = now()
-      where id = ${itemId}::uuid
-    `;
-    await sql`
-      insert into inventory_checks (
-        inventory_item_id, store_id, product_id, quantity, record_type,
-        exception_code, note, recorded_by
-      ) values (
-        ${itemId}::uuid, ${storeId}::uuid, ${String(item.productId)}::uuid,
-        ${quantity}, 'count', ${derivedException}, '', ${session.id}::uuid
+    const expectedCountUnit = String(body.countUnit ?? "").trim();
+    if (!expectedCountUnit) {
+      return Response.json({ error: "画面を更新して、在庫の単位を再確認してください。" }, { status: 409 });
+    }
+    const recordedCounts = await sql`
+      with counted as (
+        update inventory_items
+        set
+          current_quantity = ${quantity}::numeric,
+          exception_code = case
+            when ${quantity}::numeric = 0 then 'out'
+            when ${quantity}::numeric <= inventory_items.safety_stock then 'low'
+            else ''
+          end,
+          exception_note = '',
+          last_counted_at = now(),
+          last_counted_by = ${session.id}::uuid,
+          updated_at = now()
+        where id = ${itemId}::uuid
+          and store_id = ${storeId}::uuid
+          and status = 'active'
+          and count_unit = ${expectedCountUnit}
+        returning id, store_id, product_id, current_quantity, count_unit, exception_code
       )
+      insert into inventory_checks (
+        inventory_item_id, store_id, product_id, quantity, count_unit, record_type,
+        exception_code, note, recorded_by
+      )
+      select id, store_id, product_id, current_quantity, count_unit,
+        'count', exception_code, '', ${session.id}::uuid
+      from counted
+      returning inventory_item_id::text as "itemId", quantity::float as quantity,
+        count_unit as "countUnit", exception_code as "exceptionCode"
     `;
-    return Response.json({ ok: true });
+    if (!recordedCounts[0]) {
+      return Response.json({ error: "画面を更新して、在庫の単位を再確認してください。" }, { status: 409 });
+    }
+    return Response.json({ ok: true, count: recordedCounts[0] });
   }
 
   if (action === "exception") {
@@ -402,29 +436,26 @@ export async function POST(request: Request) {
       return Response.json({ error: "異常の種類を確認してください。" }, { status: 400 });
     }
 
-    await sql`
+    await sql.transaction([sql`
       update inventory_items
       set
         current_quantity = case when ${exceptionCode} = 'out' then 0 else current_quantity end,
         exception_code = ${exceptionCode},
         exception_note = ${note},
-        last_counted_at = now(),
-        last_counted_by = ${session.id}::uuid,
         updated_at = now()
       where id = ${itemId}::uuid
-    `;
-    await sql`
+    `, sql`
       insert into inventory_checks (
-        inventory_item_id, store_id, product_id, quantity, record_type,
+        inventory_item_id, store_id, product_id, quantity, count_unit, record_type,
         exception_code, note, recorded_by
       )
       select
         id, store_id, product_id,
-        case when ${exceptionCode} = 'out' then 0 else current_quantity end,
+        case when ${exceptionCode} = 'out' then 0 else current_quantity end, count_unit,
         'exception', ${exceptionCode}, ${note}, ${session.id}::uuid
       from inventory_items
       where id = ${itemId}::uuid
-    `;
+    `]);
     return Response.json({ ok: true });
   }
 

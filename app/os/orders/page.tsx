@@ -15,9 +15,14 @@ import {
   stores
 } from "../../../lib/mock-data";
 import { normalizeDecimalInput } from "../../../lib/number-input";
+import { findProductByIdentity } from "../../../lib/product-identity";
+import { applyProcurementFeedbackConfirmation, createProcurementConfirmationSnapshot, procurementConfirmationSnapshotMatches, type ProcurementConfirmationSnapshot } from "../../../lib/procurement-confirmation-policy";
 
 type Product = typeof initialProducts[number];
-type ProductWithCategory = Product & {
+type ProductWithCategory = Omit<Product, "referencePrice"> & {
+  referencePrice?: number | null;
+  orderableStoreIds?: string[];
+  procurementDetailsVisible?: boolean;
   id?: string;
   subcategory?: string;
   productBrandName?: string;
@@ -25,6 +30,7 @@ type ProductWithCategory = Product & {
   variantName?: string;
 };
 type StoreItem = typeof stores[number] & {
+  id?: string;
   defaultProcurementStaffId?: string;
 };
 type PurchaseOrder = typeof orders[number] & {
@@ -65,11 +71,13 @@ type PurchaseOrderItem = {
   brandName?: string;
   referencePrice?: number;
   requestedQuantity: number;
-  actualQuantity?: number;
+  actualQuantity?: number | null;
   actualPrice?: string;
   unit: string;
   unavailable?: boolean;
   storeFeedbackConfirmed?: boolean;
+  priceFeedbackConfirmed?: boolean;
+  quantityFeedbackConfirmed?: boolean;
   note?: string;
   priceExceptionNote?: string;
   deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
@@ -128,6 +136,7 @@ type PendingStoreConfirmationAction = {
     itemId: string;
     kind: StoreFeedback["kind"];
     requestedQuantity?: number;
+    expectedConfirmation?: ProcurementConfirmationSnapshot;
   };
 };
 
@@ -172,7 +181,7 @@ function getLivePurchaseOrderStatus(order: PurchaseOrder, items: PurchaseOrderIt
 }
 
 function getStoreFeedbackConfirmLabel(kind?: StoreFeedback["kind"]) {
-  if (kind === "price") return "確認して非表示";
+  if (kind === "price") return "価格差異を確認";
   if (kind === "quantity") return "数量差異を確認";
   if (kind === "unavailable") return "購入不可を確認";
   if (kind === "note") return "連絡内容を確認";
@@ -367,15 +376,12 @@ function getProductBrands(product: ProductWithCategory) {
 
 function getProductsForStore(products: ProductWithCategory[], storeList: StoreItem[], storeName: string) {
   const store = storeList.find((item) => item.name === storeName);
-  const storeBrands = store?.brands ?? [];
-
-  if (storeBrands.length !== 1) return products;
-
-  const [storeBrand] = storeBrands;
-
+  if (!store) return [];
+  const storeBrands = store.brands ?? [];
   return products.filter((product) => {
+    if (product.orderableStoreIds) return Boolean(store.id && product.orderableStoreIds.includes(store.id));
     const productBrands = getProductBrands(product);
-    return productBrands.includes("共通") || productBrands.includes(storeBrand);
+    return productBrands.includes("共通") || storeBrands.some((brand) => productBrands.includes(brand));
   });
 }
 
@@ -470,8 +476,8 @@ function createStoreFeedbackItems(
 ) {
   const orderMap = new Map(purchaseOrders.map((order) => [order.id, order]));
   const feedbackItems = purchaseOrderItems.flatMap<StoreFeedback>((item) => {
-    const actualQuantity = item.actualQuantity ?? item.requestedQuantity;
-    const quantityDiff = actualQuantity - item.requestedQuantity;
+    const actualQuantity = item.actualQuantity;
+    const quantityDiff = actualQuantity === undefined || actualQuantity === null ? null : actualQuantity - item.requestedQuantity;
     const order = orderMap.get(item.orderId);
     const store = order?.store ?? "店舗未設定";
     const baseId = item.id ?? `${item.orderId}-${item.productName}`;
@@ -495,11 +501,9 @@ function createStoreFeedbackItems(
 
     if (item.unavailable) return items;
 
-    if (actualPrice > 0 && referencePrice > 0 && ["in_delivery", "delivered", "received"].includes(item.deliveryStatus ?? "")) {
+    if (!item.priceFeedbackConfirmed && actualPrice > 0 && referencePrice > 0 && ["in_delivery", "delivered", "received"].includes(item.deliveryStatus ?? "")) {
       const diffRate = Math.round(((actualPrice - referencePrice) / referencePrice) * 1000) / 10;
-      if (Math.abs(diffRate) < priceExceptionPercentThreshold) return items;
-
-      items.push({
+      if (Math.abs(diffRate) >= priceExceptionPercentThreshold) items.push({
         id: `${baseId}-price`,
         itemId: item.id,
         kind: "price",
@@ -512,7 +516,7 @@ function createStoreFeedbackItems(
       });
     }
 
-    if (quantityDiff !== 0 && ["in_delivery", "delivered", "received"].includes(item.deliveryStatus ?? "")) {
+    if (!item.quantityFeedbackConfirmed && quantityDiff !== null && quantityDiff !== 0 && ["in_delivery", "delivered", "received"].includes(item.deliveryStatus ?? "")) {
       items.push({
         id: `${baseId}-quantity`,
         itemId: item.id,
@@ -570,6 +574,7 @@ export default function OrdersPage() {
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [procurementStaffAvailability, setProcurementStaffAvailability] = useState<ProcurementStaffUnavailableSlot[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
+  const [procurementDetailsVisible, setProcurementDetailsVisible] = useState(false);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("未完了");
   const [query, setQuery] = useState("");
@@ -598,8 +603,10 @@ export default function OrdersPage() {
       staffOptions?: StaffOption[];
       procurementStaffAvailability?: ProcurementStaffUnavailableSlot[];
       currentUserId?: string;
+      procurementDetailsVisible?: boolean;
     };
 
+    setProcurementDetailsVisible(data.procurementDetailsVisible === true);
     if (data.stores) setStoresData(data.stores);
     if (data.products) {
       setProducts(data.products);
@@ -826,7 +833,11 @@ export default function OrdersPage() {
       .then(() => {
         void loadDashboardData();
       })
-      .catch((error: Error) => {
+      .catch((error: Error & { status?: number }) => {
+        if (error.status && [400, 403, 404, 409].includes(error.status)) {
+          removePendingStoreConfirmationAction(action.id, action.updatedAt);
+          void loadDashboardData();
+        }
         if (!options.silentFailure) {
           window.alert(error.message || "確認状態を保存できませんでした。通信が戻ると自動で再保存します。");
         }
@@ -1035,14 +1046,17 @@ export default function OrdersPage() {
     if (!item.itemId || !item.kind) return;
 
     const orderItem = purchaseOrderItems.find((candidate) => candidate.id === item.itemId);
-    if (!orderItem && item.kind === "quantity") return;
+    if (!orderItem && (item.kind === "quantity" || item.kind === "price")) return;
+    const expectedConfirmation = orderItem ? createProcurementConfirmationSnapshot(item.kind, orderItem) : undefined;
+    if ((item.kind === "quantity" || item.kind === "price") && !expectedConfirmation) return;
     const action: PendingStoreConfirmationAction = {
       id: `feedback:${item.itemId}:${item.kind}`,
       type: "feedback_confirmed",
       feedback: {
         itemId: item.itemId,
         kind: item.kind,
-        requestedQuantity: orderItem?.requestedQuantity
+        requestedQuantity: orderItem?.requestedQuantity,
+        expectedConfirmation
       },
       updatedAt: Date.now()
     };
@@ -1054,8 +1068,7 @@ export default function OrdersPage() {
   }
 
   function createDraftFromOrderItem(item: PurchaseOrderItem, index: number): OrderItemDraft {
-    const product = products.find((candidate) => candidate.id === item.productId) ??
-      products.find((candidate) => candidate.name === item.productName);
+    const product = findProductByIdentity(item.productId, item.productName, products);
 
     return {
       id: Date.now() + index,
@@ -1362,7 +1375,7 @@ export default function OrdersPage() {
                         <span className="order-product-info">
                           <strong>{product.name}</strong>
                           <small>{product.variantName || product.productBrandName || product.mainSupplier || "詳細未設定"}</small>
-                          <span>{product.unit} · {product.storageType || "保管未設定"} · ¥{product.referencePrice}</span>
+                          <span>{product.unit} · {product.storageType || "保管未設定"}{procurementDetailsVisible && product.procurementDetailsVisible !== false && product.referencePrice !== null && product.referencePrice !== undefined ? ` · ¥${product.referencePrice}` : ""}</span>
                         </span>
                         {selectedItem ? <em>{selectedItem.quantity}</em> : null}
                       </button>
@@ -1413,7 +1426,7 @@ export default function OrdersPage() {
                   <div className="empty-state">商品カードをクリックして追加してください</div>
                 ) : null}
               </div>
-              <EstimatedAmountBox amount={draftEstimatedAmount} />
+              {procurementDetailsVisible ? <EstimatedAmountBox amount={draftEstimatedAmount} /> : null}
             </div>
             <div className="inline-create-actions">
               <button type="submit" className="primary-button" disabled={isSubmittingOrder}>
@@ -1479,10 +1492,12 @@ export default function OrdersPage() {
                       <span className="muted-label">担当</span>
                       <strong>{formatOrderAssignees(order)}</strong>
                     </div>
-                    <div>
-                      <span className="muted-label">概算金額</span>
-                      <strong>{formatEstimatedAmount(estimatedAmount)}</strong>
-                    </div>
+                    {procurementDetailsVisible ? (
+                      <div>
+                        <span className="muted-label">概算金額</span>
+                        <strong>{formatEstimatedAmount(estimatedAmount)}</strong>
+                      </div>
+                    ) : null}
                     <div>
                       <span className="muted-label">優先度</span>
                       <strong>{order.priority}</strong>
@@ -1798,7 +1813,7 @@ export default function OrdersPage() {
                   商品を追加
                 </button>
               </div>
-              <EstimatedAmountBox amount={editingEstimatedAmount} />
+              {procurementDetailsVisible ? <EstimatedAmountBox amount={editingEstimatedAmount} /> : null}
             </div>
 
             <div className="modal-actions">
@@ -1856,11 +1871,13 @@ async function performStoreConfirmationAction(action: PendingStoreConfirmationAc
 
   const feedback = action.feedback;
   if (!feedback?.itemId || !feedback.kind) throw new Error("確認対象が見つかりません。");
-  const payload = feedback.kind === "quantity"
-    ? { itemId: feedback.itemId, actualQuantity: feedback.requestedQuantity }
+  const payload = feedback.expectedConfirmation
+    ? { itemId: feedback.itemId, confirmFeedbackKind: feedback.kind, expectedConfirmation: feedback.expectedConfirmation }
     : feedback.kind === "price"
       ? { itemId: feedback.itemId, clearActualPrice: true }
-      : { itemId: feedback.itemId, confirmStoreFeedback: true };
+      : feedback.kind === "quantity"
+        ? { itemId: feedback.itemId, actualQuantity: feedback.requestedQuantity }
+        : { itemId: feedback.itemId, confirmFeedbackKind: feedback.kind };
   const response = await fetch("/api/procurement/items", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -1868,7 +1885,7 @@ async function performStoreConfirmationAction(action: PendingStoreConfirmationAc
   });
   if (response.ok) return;
   const body = await response.json().catch(() => ({})) as { error?: string };
-  throw new Error(body.error ?? "確認状態を保存できませんでした。");
+  throw Object.assign(new Error(body.error ?? "確認状態を保存できませんでした。"), { status: response.status });
 }
 
 function readPendingStoreConfirmationActions() {
@@ -1963,7 +1980,8 @@ function normalizePendingStoreConfirmationAction(value: unknown): PendingStoreCo
     feedback: {
       itemId,
       kind,
-      requestedQuantity: Number(feedback?.requestedQuantity) || undefined
+      requestedQuantity: Number(feedback?.requestedQuantity) || undefined,
+      expectedConfirmation: feedback?.expectedConfirmation
     },
     updatedAt: Number(action.updatedAt) || Date.now()
   };
@@ -1992,11 +2010,13 @@ function applyPendingStoreConfirmationsToItems(
 
     for (const feedback of feedbackActions.values()) {
       if (feedback.itemId !== item.id) continue;
-      nextItem = feedback.kind === "quantity"
-        ? { ...nextItem, actualQuantity: nextItem.requestedQuantity }
-        : feedback.kind === "price"
-          ? { ...nextItem, actualPrice: "" }
-          : { ...nextItem, storeFeedbackConfirmed: true };
+      const kind = feedback.kind;
+      if (!kind) continue;
+      if (feedback.expectedConfirmation && !procurementConfirmationSnapshotMatches(
+        feedback.expectedConfirmation,
+        createProcurementConfirmationSnapshot(kind, nextItem)
+      )) continue;
+      nextItem = applyProcurementFeedbackConfirmation(nextItem, kind);
     }
 
     return nextItem;
@@ -2135,8 +2155,7 @@ function formatOrderAssignees(order: PurchaseOrder) {
 }
 
 function findProductForEstimate(productId: string | undefined, productName: string, productList: ProductWithCategory[]) {
-  return productList.find((product) => product.id === productId)
-    ?? productList.find((product) => product.name === productName);
+  return findProductByIdentity(productId, productName, productList);
 }
 
 function getReferencePrice(product: ProductWithCategory | undefined) {

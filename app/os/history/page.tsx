@@ -8,6 +8,7 @@ import { ModalHistoryScope, useModalHistory } from "../components/useModalHistor
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { orders, products as initialProducts } from "../../../lib/mock-data";
+import { getProcurementQuantityMetrics, isPurchasedProcurementStatus, normalizeRecordedProcurementQuantity } from "../../../lib/procurement-confirmation-policy";
 
 type Product = typeof initialProducts[number];
 type ProductWithSpec = Product & {
@@ -28,7 +29,7 @@ type PurchaseOrderItem = {
   productName: string;
   brandName?: string;
   requestedQuantity: number;
-  actualQuantity?: number;
+  actualQuantity?: number | null;
   actualPrice?: string;
   purchasedDate?: string;
   supplierLocationName?: string;
@@ -75,7 +76,7 @@ type HistoryRow = {
   productBrand: string;
   supplier: string;
   requestedQuantity: number;
-  actualQuantity: number;
+  actualQuantity: number | null;
   actualPrice: string;
   purchasedDate: string;
   supplierLocationName: string;
@@ -108,14 +109,18 @@ type HistoryReportRow = {
   productSpec: string;
   unit: string;
   totalActualQuantity: number;
+  recordedPurchaseCount: number;
+  missingPurchasedQuantityCount: number;
+  purchasedOrderIds: Set<string>;
   totalRequestedQuantity: number;
   orderIds: Set<string>;
   unavailableCount: number;
   latestDeadline: string;
 };
-type DisplayHistoryReportRow = Omit<HistoryReportRow, "orderIds"> & {
+type DisplayHistoryReportRow = Omit<HistoryReportRow, "orderIds" | "purchasedOrderIds"> & {
+  purchasedOrderCount: number;
   orderCount: number;
-  averageActualQuantity: number;
+  averageActualQuantity: number | null;
 };
 type ReceiptStatusFilter = "すべて" | "未アップロード" | "未確認" | "確認済み";
 type ReceiptRow = {
@@ -137,7 +142,7 @@ type ReceiptRow = {
 };
 type HistoryView = "orders" | "usage" | "items" | "purchases" | "receipts";
 type PurchaseHistoryRow = HistoryRow & {
-  amount: number;
+  amount: number | null;
   unitPrice: number;
 };
 type PurchaseSupplierSummaryRow = {
@@ -393,7 +398,7 @@ function createHistoryRows(
       productBrand: item.brandName ?? product?.brand ?? order?.brand ?? "共通",
       supplier: item.supplier || product?.mainSupplier || "未設定",
       requestedQuantity: item.requestedQuantity,
-      actualQuantity: item.actualQuantity ?? item.requestedQuantity,
+      actualQuantity: normalizeRecordedProcurementQuantity(item.actualQuantity),
       actualPrice: item.actualPrice ?? "",
       purchasedDate: item.purchasedDate || getOrderDateKey(order),
       supplierLocationName: item.supplierLocationName ?? "",
@@ -419,9 +424,7 @@ function parsePurchasePrice(value: string) {
 function createPurchaseHistoryRows(rows: HistoryRow[]) {
   return rows
     .filter((row) =>
-      row.status !== "未購入" &&
-      row.status !== "購入不可" &&
-      row.actualQuantity > 0
+      isPurchasedProcurementStatus(row.status)
     )
     .map<PurchaseHistoryRow>((row) => {
       const unitPrice = parsePurchasePrice(row.actualPrice);
@@ -429,7 +432,7 @@ function createPurchaseHistoryRows(rows: HistoryRow[]) {
       return {
         ...row,
         unitPrice,
-        amount: Math.round(unitPrice * row.actualQuantity)
+        amount: row.actualQuantity !== null && unitPrice > 0 ? Math.round(unitPrice * row.actualQuantity) : null
       };
     })
     .sort((a, b) =>
@@ -454,8 +457,8 @@ function createPurchaseSupplierSummaryRows(rows: PurchaseHistoryRow[]) {
     };
 
     current.itemCount += 1;
-    current.totalAmount += row.amount;
-    current.totalQuantity += row.actualQuantity;
+    current.totalAmount += row.amount ?? 0;
+    current.totalQuantity += row.actualQuantity ?? 0;
     current.orderIds.add(row.orderId);
     summaryMap.set(row.supplier, current);
   });
@@ -487,14 +490,23 @@ function createHistoryReportRows(rows: HistoryRow[]) {
       productSpec: row.productSpec,
       unit: row.unit,
       totalActualQuantity: 0,
+      recordedPurchaseCount: 0,
+      missingPurchasedQuantityCount: 0,
+      purchasedOrderIds: new Set<string>(),
       totalRequestedQuantity: 0,
       orderIds: new Set<string>(),
       unavailableCount: 0,
       latestDeadline: ""
     };
 
-    current.totalActualQuantity += row.actualQuantity;
-    current.totalRequestedQuantity += row.requestedQuantity;
+    const quantities = getProcurementQuantityMetrics(row);
+    if (quantities.purchasedQuantity !== null) {
+      current.totalActualQuantity += quantities.purchasedQuantity;
+      current.recordedPurchaseCount += 1;
+      current.purchasedOrderIds.add(row.orderId);
+    }
+    if (quantities.missingPurchasedQuantity) current.missingPurchasedQuantityCount += 1;
+    current.totalRequestedQuantity += quantities.requestedQuantity;
     current.orderIds.add(row.orderId);
     current.unavailableCount += row.status === "購入不可" ? 1 : 0;
     current.latestDeadline = row.deadline > current.latestDeadline ? row.deadline : current.latestDeadline;
@@ -503,11 +515,13 @@ function createHistoryReportRows(rows: HistoryRow[]) {
 
   return Array.from(reportMap.values()).map<DisplayHistoryReportRow>((row) => {
     const orderCount = row.orderIds.size;
+    const purchasedOrderCount = row.purchasedOrderIds.size;
 
     return {
       ...row,
       orderCount,
-      averageActualQuantity: orderCount > 0 ? row.totalActualQuantity / orderCount : 0
+      purchasedOrderCount,
+      averageActualQuantity: purchasedOrderCount > 0 ? row.totalActualQuantity / purchasedOrderCount : null
     };
   }).sort((a, b) =>
     (b.totalActualQuantity - a.totalActualQuantity) ||
@@ -649,11 +663,13 @@ function createReceiptRows(purchaseOrders: PurchaseOrder[], rows: HistoryRow[], 
   );
 }
 
-function formatQuantity(value: number) {
+function formatQuantity(value: number | null) {
+  if (value === null) return "未記録";
   return value.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
 }
 
-function formatMoney(value: number) {
+function formatMoney(value: number | null) {
+  if (value === null) return "未計算";
   if (!value) return "-";
   return `¥${Math.round(value).toLocaleString("ja-JP")}`;
 }
@@ -745,7 +761,7 @@ function HistoryCorrectionDialog({
     productName: row.productName,
     correctRequestedQuantity: false,
     requestedQuantity: String(row.requestedQuantity),
-    actualQuantity: String(row.actualQuantity),
+    actualQuantity: row.actualQuantity === null ? "" : String(row.actualQuantity),
     actualPrice: row.actualPrice,
     unit: row.unit,
     supplier: row.supplier === "未設定" ? "" : row.supplier,
@@ -764,7 +780,7 @@ function HistoryCorrectionDialog({
   const actualQuantity = Number(draft.actualQuantity);
   const requestedQuantity = Number(draft.requestedQuantity);
   const hasValidRequestedQuantity = !draft.correctRequestedQuantity || (Number.isFinite(requestedQuantity) && requestedQuantity > 0);
-  const canSave = !isSaving && Number.isFinite(actualQuantity) && actualQuantity > 0 && hasValidRequestedQuantity && (draft.productId || draft.productName.trim());
+  const canSave = !isSaving && draft.actualQuantity.trim() !== "" && Number.isFinite(actualQuantity) && actualQuantity > 0 && hasValidRequestedQuantity && (draft.productId || draft.productName.trim());
 
   function updateDraft(next: Partial<HistoryCorrectionDraft>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -1006,7 +1022,8 @@ export default function ProcurementHistoryPage() {
   const purchaseHistoryRows = createPurchaseHistoryRows(filteredRows);
   const allPurchaseSupplierSummaryRows = createPurchaseSupplierSummaryRows(purchaseHistoryRows);
   const purchaseSupplierSummaryRows = allPurchaseSupplierSummaryRows.slice(0, 8);
-  const purchaseHistoryTotalAmount = purchaseHistoryRows.reduce((sum, row) => sum + row.amount, 0);
+  const purchaseHistoryTotalAmount = purchaseHistoryRows.reduce((sum, row) => sum + (row.amount ?? 0), 0);
+  const purchaseHistoryMissingQuantityCount = purchaseHistoryRows.filter((row) => row.actualQuantity === null).length;
   const purchaseHistoryMissingPriceCount = purchaseHistoryRows.filter((row) => row.unitPrice <= 0).length;
   const filteredReceiptRows = receiptRows.filter((row) => {
     const targetText = [row.orderId, row.store, row.brand, row.supplier, row.status].join(" ");
@@ -1188,7 +1205,7 @@ export default function ProcurementHistoryPage() {
             発注履歴
           </button>
           <button type="button" className={historyView === "usage" ? "is-active" : ""} onClick={() => setHistoryView("usage")}>
-            商品使用量
+            発注・購入数量
           </button>
           <button type="button" className={historyView === "items" ? "is-active" : ""} onClick={() => setHistoryView("items")}>
             明細一覧
@@ -1347,7 +1364,7 @@ export default function ProcurementHistoryPage() {
                               {item.note ? <small>{item.note}</small> : null}
                             </div>
                             <div className="history-order-quantity">
-                              <strong>{item.actualQuantity} / {item.requestedQuantity} {item.unit}</strong>
+                              <strong>{formatQuantity(item.actualQuantity)} / {item.requestedQuantity} {item.unit}</strong>
                               {item.actualPrice ? <p>実単価 {item.actualPrice}</p> : null}
                             </div>
                             <div className="history-owner-actions">
@@ -1381,8 +1398,8 @@ export default function ProcurementHistoryPage() {
           <section className="panel history-report-panel">
             <div className="panel-title product-master-title">
               <div>
-                <h3>商品使用量レポート</h3>
-                <p>現在の絞り込み条件で、店舗別の商品使用傾向を確認</p>
+                <h3>発注・購入数量レポート</h3>
+                <p>依頼期限ごとの発注量と記録済み購入量を店舗別に確認</p>
               </div>
               <span className="source-indicator">{reportRows.length} 件表示</span>
             </div>
@@ -1417,7 +1434,7 @@ export default function ProcurementHistoryPage() {
                 </div>
               </div>
               <div className="history-report-card">
-                <h4>{storeFilter === "すべて" ? "使用量ランキング" : `${storeFilter} の使用量ランキング`}</h4>
+                <h4>{storeFilter === "すべて" ? "購入数量ランキング" : `${storeFilter} の購入数量ランキング`}</h4>
                 <div className="history-report-list">
                   {reportRows.map((row, index) => (
                     <article className="history-report-ranking-row" key={row.id}>
@@ -1430,9 +1447,10 @@ export default function ProcurementHistoryPage() {
                         <p>{row.store} · 最終 {row.latestDeadline || "未設定"}</p>
                       </div>
                       <div className="history-report-quantity">
-                        <strong>{formatQuantity(row.totalActualQuantity)} {row.unit}</strong>
+                        <strong>{row.recordedPurchaseCount > 0 ? `${formatQuantity(row.totalActualQuantity)} ${row.unit}` : "購入数量未記録"}</strong>
                         <small>依頼合計 {formatQuantity(row.totalRequestedQuantity)} {row.unit} · 依頼回数 {row.orderCount} 回</small>
-                        <small>平均 {formatQuantity(row.averageActualQuantity)} {row.unit} / 回{row.unavailableCount ? ` · 不可 ${row.unavailableCount} 回` : ""}</small>
+                        <small>記録済み平均 {formatQuantity(row.averageActualQuantity)} {row.unit} / 購入発注{row.unavailableCount ? ` · 不可 ${row.unavailableCount} 回` : ""}</small>
+                        {row.missingPurchasedQuantityCount > 0 ? <small>購入数量未入力 {row.missingPurchasedQuantityCount} 件</small> : null}
                       </div>
                     </article>
                   ))}
@@ -1475,7 +1493,7 @@ export default function ProcurementHistoryPage() {
                     {row.note ? <small>{row.note}</small> : null}
                   </div>
                   <span>{row.supplier}</span>
-                  <strong>{row.actualQuantity} / {row.requestedQuantity} {row.unit}</strong>
+                  <strong>{formatQuantity(row.actualQuantity)} / {row.requestedQuantity} {row.unit}</strong>
                   <div className="history-owner-actions">
                     <span className={`status-pill ${statusTone[row.status]}`}>{row.status}</span>
                     {canCorrectHistory ? (
@@ -1508,7 +1526,8 @@ export default function ProcurementHistoryPage() {
               <span className="source-indicator">{purchaseHistoryRows.length} 件</span>
             </div>
             <div className="receipt-summary-strip">
-              <span>購入金額 {formatMoney(purchaseHistoryTotalAmount)}</span>
+              <span>記録済み購入金額 {formatMoney(purchaseHistoryTotalAmount)}</span>
+              <span>数量未入力 {purchaseHistoryMissingQuantityCount} 件</span>
               <span>発注先 {allPurchaseSupplierSummaryRows.length} 件</span>
               <span>単価未入力 {purchaseHistoryMissingPriceCount} 件</span>
             </div>

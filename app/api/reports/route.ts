@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { roleHasPermission } from "../../../lib/role-permissions";
+import { isHeadquarterCatalogRole } from "../../../lib/product-catalog-policy";
 
 type ReportRow = {
   id: string;
@@ -94,12 +95,11 @@ export async function GET() {
         and coalesce(purchase_order_items.actual_price, purchase_actuals.actual_price) > 0
         and products.reference_price > 0
         and coalesce(purchase_order_items.actual_price, purchase_actuals.actual_price) <> products.reference_price
-        and not exists (
-          select 1
-          from purchase_exceptions
-          where purchase_exceptions.purchase_order_item_id = purchase_order_items.id
-            and purchase_exceptions.exception_type = 'price'
-            and purchase_exceptions.status = 'resolved'
+        and purchase_order_items.price_feedback_confirmation is distinct from jsonb_build_object(
+          'actualPrice', coalesce(purchase_order_items.actual_price, purchase_actuals.actual_price),
+          'referencePrice', products.reference_price,
+          'productId', coalesce(purchase_order_items.product_id::text, ''),
+          'unit', purchase_order_items.requested_unit
         )
     `,
     sql`
@@ -141,12 +141,11 @@ export async function GET() {
         and purchase_order_items.status in ('in_delivery', 'delivered', 'received')
         and coalesce(purchase_order_items.actual_quantity, purchase_actuals.actual_quantity) is not null
         and coalesce(purchase_order_items.actual_quantity, purchase_actuals.actual_quantity) <> purchase_order_items.requested_quantity
-        and not exists (
-          select 1
-          from purchase_exceptions
-          where purchase_exceptions.purchase_order_item_id = purchase_order_items.id
-            and purchase_exceptions.exception_type = 'quantity'
-            and purchase_exceptions.status = 'resolved'
+        and purchase_order_items.quantity_feedback_confirmation is distinct from jsonb_build_object(
+          'actualQuantity', coalesce(purchase_order_items.actual_quantity, purchase_actuals.actual_quantity),
+          'requestedQuantity', purchase_order_items.requested_quantity,
+          'productId', coalesce(purchase_order_items.product_id::text, ''),
+          'unit', purchase_order_items.requested_unit
         )
     `,
     sql`
@@ -182,7 +181,9 @@ export async function GET() {
       return b.createdLabel.localeCompare(a.createdLabel);
     });
 
-  return NextResponse.json({ reports });
+  return NextResponse.json({ reports: isHeadquarterCatalogRole(session.role) ? reports : reports.map((report) =>
+    report.type === "price" ? { ...report, message: "価格について本部へ確認してください。", resolutionNote: "" } : report
+  ) });
 }
 
 export async function DELETE(request: Request) {
@@ -233,7 +234,25 @@ export async function DELETE(request: Request) {
   }
 
   if (type === "price" || type === "quantity") {
-    await sql`
+    await sql.transaction([sql`
+      update purchase_order_items items
+      set
+        price_feedback_confirmation = case when ${type} = 'price' then jsonb_build_object(
+          'actualPrice', coalesce(items.actual_price, (
+            select actual_price from purchase_actuals where purchase_order_item_id = items.id order by recorded_at desc limit 1
+          )),
+          'referencePrice', (select reference_price from products where id = items.product_id),
+          'productId', coalesce(items.product_id::text, ''), 'unit', items.requested_unit
+        ) else items.price_feedback_confirmation end,
+        quantity_feedback_confirmation = case when ${type} = 'quantity' then jsonb_build_object(
+          'actualQuantity', coalesce(items.actual_quantity, (
+            select actual_quantity from purchase_actuals where purchase_order_item_id = items.id order by recorded_at desc limit 1
+          )),
+          'requestedQuantity', items.requested_quantity,
+          'productId', coalesce(items.product_id::text, ''), 'unit', items.requested_unit
+        ) else items.quantity_feedback_confirmation end
+      where items.id = ${itemId}
+    `, sql`
       insert into purchase_exceptions (
         purchase_order_id,
         purchase_order_item_id,
@@ -254,7 +273,7 @@ export async function DELETE(request: Request) {
         now(),
         ${"履歴一覧から非表示"}
       )
-    `;
+    `]);
 
     return NextResponse.json({ ok: true });
   }

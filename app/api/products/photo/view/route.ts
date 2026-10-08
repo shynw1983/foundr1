@@ -1,7 +1,9 @@
 import { get } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
-import { canAccessStore, requireOsSession } from "../../../../../lib/api-auth";
+import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
+import { assertProductViewable } from "../../../../../lib/product-catalog-access";
+import { isHeadquarterCatalogRole } from "../../../../../lib/product-catalog-policy";
 
 const comparisonPhotoRoles = new Set(["owner", "manager"]);
 const fieldNotePhotoRoles = new Set(["owner", "manager", "store_owner", "store_manager", "staff"]);
@@ -67,7 +69,36 @@ function sanitizeFilename(value: string) {
 }
 
 async function canReadBlobPath(session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>, pathname: string) {
-  if (pathname.startsWith("products/")) return true;
+  if (pathname.startsWith("products/")) {
+    if (isHeadquarterCatalogRole(session.role)) return true;
+    const products = await sql`
+      select id::text as id, photo_url as "photoUrl" from products
+      where position(${pathname} in photo_url) > 0
+        or position(${encodeURIComponent(pathname)} in photo_url) > 0
+    `;
+    for (const product of products) {
+      let storedPath = "";
+      try {
+        const url = new URL(String(product.photoUrl), "https://foundr1.invalid");
+        storedPath = url.searchParams.get("pathname") ?? url.pathname.replace(/^\//, "");
+      } catch { continue; }
+      if (storedPath !== pathname) continue;
+      if ((await assertProductViewable(session, String(product.id))).ok) return true;
+      // Existing stock and completed store transactions remain identifiable after unpublishing.
+      const scope = await getSessionStoreScope(session);
+      const held = await sql`
+        select 1 where exists (
+          select 1 from inventory_items
+          where product_id::text = ${String(product.id)} and store_id::text = any(${scope.storeIds})
+        ) or exists (
+          select 1 from purchase_order_items items join purchase_orders orders on orders.id = items.purchase_order_id
+          where items.product_id::text = ${String(product.id)} and orders.store_id::text = any(${scope.storeIds})
+        )
+      `;
+      if (held.length) return true;
+    }
+    return false;
+  }
   if (pathname.startsWith("field-notes/")) return fieldNotePhotoRoles.has(session.role);
   if (pathname.startsWith("product-comparisons/")) return comparisonPhotoRoles.has(session.role);
 

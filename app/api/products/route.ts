@@ -1,5 +1,7 @@
 import { requireMasterOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
+import { normalizeCatalogVisibility, productCatalogVisibilities, resolveProductCatalogConfiguration } from "../../../lib/product-catalog-policy";
+import { roleHasPermission } from "../../../lib/role-permissions";
 
 type ProductPayload = {
   id?: string;
@@ -41,15 +43,58 @@ type ProductPayload = {
   photoUrl?: string;
   storageType?: string;
   usageType?: string;
+  catalogVisibility?: string;
+  isOrderable?: boolean;
+  catalogStoreIds?: string[];
 };
 
 export async function PUT(request: Request) {
   const session = await requireMasterOsSession();
-  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  if (!session || !(await roleHasPermission(session.role, "products.manage"))) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as ProductPayload;
-  const id = String(body.id ?? "").trim();
+  const requestedId = String(body.id ?? "").trim();
   const currentName = String(body.currentName ?? "").trim();
+  const existingRows = requestedId || currentName ? await sql`
+    select products.id::text as id, products.catalog_visibility as "catalogVisibility", products.is_orderable as "isOrderable",
+      coalesce((select array_agg(grants.store_id::text) from product_catalog_store_grants grants where grants.product_id = products.id), '{}'::text[]) as "catalogStoreIds"
+    from products
+    where (${requestedId !== ""} and products.id::text = ${requestedId})
+      or (${requestedId === ""} and products.name = ${currentName})
+  ` : [];
+  if ((requestedId || currentName) && existingRows.length === 0) {
+    return Response.json({ error: "商品が見つかりません。" }, { status: 404 });
+  }
+  if (existingRows.length > 1) {
+    return Response.json({ error: "同名の商品が複数あります。商品IDを指定して編集してください。" }, { status: 409 });
+  }
+  const id = String(existingRows[0]?.id ?? "");
+  if (body.catalogVisibility !== undefined && !productCatalogVisibilities.includes(body.catalogVisibility as typeof productCatalogVisibilities[number])) {
+    return Response.json({ error: "商品公開範囲が不正です。" }, { status: 400 });
+  }
+  if (body.isOrderable !== undefined && typeof body.isOrderable !== "boolean") {
+    return Response.json({ error: "発注可否が不正です。" }, { status: 400 });
+  }
+  if (body.catalogStoreIds !== undefined && (!Array.isArray(body.catalogStoreIds) || body.catalogStoreIds.some((value) =>
+    typeof value !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim())
+  ))) {
+    return Response.json({ error: "公開する店舗を正しく指定してください。" }, { status: 400 });
+  }
+  const catalogConfiguration = resolveProductCatalogConfiguration({
+    catalogVisibility: body.catalogVisibility === undefined ? undefined : normalizeCatalogVisibility(body.catalogVisibility),
+    isOrderable: body.isOrderable,
+    catalogStoreIds: body.catalogStoreIds?.map((value) => value.trim().toLowerCase())
+  }, existingRows[0] ? {
+    catalogVisibility: normalizeCatalogVisibility(existingRows[0].catalogVisibility),
+    isOrderable: existingRows[0].isOrderable === true,
+    catalogStoreIds: Array.isArray(existingRows[0].catalogStoreIds) ? existingRows[0].catalogStoreIds.map(String) : []
+  } : undefined);
+  if (catalogConfiguration.catalogStoreIds.length > 0) {
+    const storeRows = await sql`select id::text as id from stores where id::text = any(${catalogConfiguration.catalogStoreIds})`;
+    if (storeRows.length !== catalogConfiguration.catalogStoreIds.length) {
+      return Response.json({ error: "公開する店舗が見つかりません。" }, { status: 400 });
+    }
+  }
   const name = String(body.name ?? "").trim();
   const productBrandName = String(body.productBrandName ?? "").trim();
   const manufacturer = String(body.manufacturer ?? "").trim();
@@ -164,48 +209,7 @@ export async function PUT(request: Request) {
         where id = ${id}
         returning id
       `
-    : currentName
-      ? await sql`
-        update products
-        set
-          name = ${name},
-          product_brand_name = ${productBrandName},
-          manufacturer = ${manufacturer},
-          category = ${category},
-          subcategory = ${subcategory},
-          unit = ${unit},
-          reference_price = ${Number.isFinite(referencePrice) ? referencePrice : 0},
-          origin_countries = ${originCountries},
-          package_quantity = ${packageQuantity},
-          package_quantity_unit = ${packageQuantity ? packageQuantityUnit || unit : ""},
-          product_family_name = ${productFamilyName},
-          variant_name = ${variantName},
-          is_default_variant = ${isDefaultVariant},
-          variant_sort_order = ${variantSortOrder},
-          spec_note = ${specNote},
-          japanese_note = ${japaneseNote},
-          photo_url = ${photoUrl},
-          brand_scope = ${brandScope},
-          is_imported = ${isImported},
-          import_origin_country = ${importOriginCountry},
-          import_currency = ${importCurrency},
-          import_original_price = ${importOriginalPrice},
-          import_exchange_rate = ${importExchangeRate},
-          import_price_jpy = ${importPriceJpy},
-          import_freight_rate_original_per_kg = ${importFreightRateOriginalPerKg},
-          import_freight_rate_jpy_per_kg = ${importFreightRateJpyPerKg},
-          import_weight_strategy = ${importWeightStrategy},
-          import_weight_kg = ${importWeightKg},
-          import_freight_cost_jpy = ${importFreightCostJpy},
-          import_tax_cost_jpy = ${importTaxCostJpy},
-          import_other_cost_jpy = ${importOtherCostJpy},
-          storage_type = ${storageType},
-          usage_type = ${usageType},
-          updated_at = now()
-        where name = ${currentName}
-        returning id
-      `
-      : await sql`
+    : await sql`
         insert into products (
           name,
           product_brand_name,
@@ -287,7 +291,14 @@ export async function PUT(request: Request) {
     return Response.json({ error: "商品が見つかりません。" }, { status: 404 });
   }
 
-  await sql`delete from product_brand_usages where product_id = ${productId}`;
+  const specificBrandNames = brandScope === "specific"
+    ? selectedBrands.filter((item) => item !== "未設定" && item !== "共通")
+    : [];
+  await sql`
+    delete from product_brand_usages
+    where product_id = ${productId}
+      and brand_id not in (select id from brands where name = any(${specificBrandNames}))
+  `;
   if (brandScope === "specific") {
     for (const brandName of selectedBrands.filter((item) => item !== "未設定" && item !== "共通")) {
       await sql`
@@ -299,6 +310,24 @@ export async function PUT(request: Request) {
       `;
     }
   }
+
+  await sql`
+    with policy as (
+      update products set catalog_visibility = ${catalogConfiguration.catalogVisibility},
+        is_orderable = ${catalogConfiguration.isOrderable}
+      where id = ${productId}
+      returning id
+    ), removed_grants as (
+      delete from product_catalog_store_grants
+      where product_id = ${productId}
+        and store_id::text <> all(${catalogConfiguration.catalogStoreIds})
+      returning product_id
+    )
+    insert into product_catalog_store_grants (product_id, store_id)
+    select policy.id, grant_store.store_id::uuid
+    from policy cross join unnest(${catalogConfiguration.catalogStoreIds}::text[]) as grant_store(store_id)
+    on conflict do nothing
+  `;
 
   await sql`
     delete from product_supplier_options
@@ -350,21 +379,30 @@ function parseOptionalInteger(value: unknown) {
 
 export async function DELETE(request: Request) {
   const session = await requireMasterOsSession();
-  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  if (!session || !(await roleHasPermission(session.role, "products.manage"))) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as { id?: string; productName?: string };
-  const id = String(body.id ?? "").trim();
+  const requestedId = String(body.id ?? "").trim();
+  const productName = String(body.productName ?? "").trim();
 
-  if (!id && !body.productName) {
+  if (!requestedId && !productName) {
     return Response.json({ error: "product id is required" }, { status: 400 });
   }
+  const productRows = await sql`
+    select id::text as id from products
+    where (${requestedId !== ""} and id::text = ${requestedId})
+      or (${requestedId === ""} and name = ${productName})
+  `;
+  if (productRows.length === 0) return Response.json({ error: "商品が見つかりません。" }, { status: 404 });
+  if (productRows.length > 1) {
+    return Response.json({ error: "同名の商品が複数あります。商品IDを指定して削除してください。" }, { status: 409 });
+  }
+  const id = String(productRows[0].id);
 
   const linkedItems = await sql`
     select count(*)::int as count
     from purchase_order_items
-    join products on products.id = purchase_order_items.product_id
-    where (${id || null}::uuid is not null and products.id = ${id || null})
-       or (${id || null}::uuid is null and products.name = ${body.productName ?? ""})
+    where purchase_order_items.product_id = ${id}
   `;
 
   if (Number(linkedItems[0]?.count ?? 0) > 0) {
@@ -373,11 +411,17 @@ export async function DELETE(request: Request) {
       { status: 409 }
     );
   }
+  const inventoryReferences = await sql`
+    select exists(select 1 from inventory_items where product_id = ${id})
+      or exists(select 1 from inventory_checks where product_id = ${id}) as linked
+  `;
+  if (inventoryReferences[0]?.linked === true) {
+    return Response.json({ error: "在庫記録のある商品は削除できません。発注停止を使用してください。" }, { status: 409 });
+  }
 
   await sql`
     delete from products
-    where (${id || null}::uuid is not null and id = ${id || null})
-       or (${id || null}::uuid is null and name = ${body.productName ?? ""})
+    where id = ${id}
   `;
 
   return Response.json({ ok: true });

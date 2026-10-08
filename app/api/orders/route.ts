@@ -4,6 +4,7 @@ import { sql } from "../../../lib/db";
 import { sendPurchaseOrderLarkNotification } from "../../../lib/lark";
 import { publishOsNotificationEvent } from "../../../lib/notification-realtime";
 import { roleHasPermission } from "../../../lib/role-permissions";
+import { assertProductsOrderable } from "../../../lib/product-catalog-access";
 
 function toTokyoDateParts(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -96,6 +97,9 @@ async function validateOrderInput(session: EmployeeSession, storeName: string, p
   }
 
   const uniqueProductIds = Array.from(new Set(productIds.filter(Boolean)));
+  if (uniqueProductIds.length > 0 && (productIds.length !== productNames.length || productIds.some((id) => !id))) {
+    return { error: Response.json({ error: "画面を更新して、すべての商品IDを確認してください。" }, { status: 409 }) };
+  }
   const productRows = uniqueProductIds.length > 0
     ? await sql`
     select id, name
@@ -107,6 +111,9 @@ async function validateOrderInput(session: EmployeeSession, storeName: string, p
     from products
     where name = any(${Array.from(new Set(productNames))})
   `;
+  if (uniqueProductIds.length === 0 && new Set(productRows.map((row) => String(row.name))).size !== productRows.length) {
+    return { error: Response.json({ error: "同名の商品が複数あります。商品IDを指定して発注してください。" }, { status: 409 }) };
+  }
   const productIdsByName = new Map(productRows.map((row) => [String(row.name), String(row.id)]));
   const validProductIds = new Set(productRows.map((row) => String(row.id)));
   const missingProducts = uniqueProductIds.length > 0
@@ -122,6 +129,8 @@ async function validateOrderInput(session: EmployeeSession, storeName: string, p
     };
   }
 
+  const access = await assertProductsOrderable(session, storeId, [...validProductIds]);
+  if (!access.ok) return { error: Response.json({ error: access.error }, { status: access.status }) };
   return { storeId, productIdsByName, validProductIds };
 }
 

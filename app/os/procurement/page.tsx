@@ -2,6 +2,7 @@
 
 import { Boxes, CalendarDays, ChevronDown, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
+import { useOsTranslation } from "../components/OsTranslationProvider";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
@@ -17,9 +18,13 @@ import {
 } from "../../../lib/mock-data";
 import { normalizeDecimalInput } from "../../../lib/number-input";
 import { createStoreFallbackPoller } from "../../../lib/store-polling-client";
+import { normalizeRecordedProcurementQuantity } from "../../../lib/procurement-confirmation-policy";
+import { createProductIdentityLookup, findProductByIdentity, findProductByIdentityFromLookup, productIdentityKey, type ProductIdentityLookup } from "../../../lib/product-identity";
 
-type Product = typeof initialProducts[number] & {
+type Product = Omit<typeof initialProducts[number], "referencePrice"> & {
   id?: string;
+  referencePrice?: number | null;
+  procurementDetailsVisible?: boolean;
   subcategory?: string;
   productBrandName?: string;
   productFamilyName?: string;
@@ -30,6 +35,7 @@ type Product = typeof initialProducts[number] & {
   usageType?: string;
 };
 type ProductSupplierGroup = Omit<typeof initialProductSupplierOptions[number], "options"> & {
+  productId?: string;
   options: Array<typeof initialProductSupplierOptions[number]["options"][number] & { purchaseUrl?: string }>;
 };
 type Supplier = typeof initialSuppliers[number];
@@ -53,7 +59,8 @@ type DashboardOrderItem = {
   productId?: string;
   productName: string;
   requestedQuantity: number;
-  actualQuantity?: number;
+  actualQuantity?: number | null;
+  actualQuantityRecordedExplicitly?: boolean;
   actualPrice?: string;
   supplierLocationName?: string;
   unit: string;
@@ -71,7 +78,8 @@ type ProcurementTaskItem = {
   productId?: string;
   productName: string;
   requestedQuantity: number;
-  actualQuantity: number;
+  actualQuantity: number | null;
+  actualQuantityRecordedExplicitly?: boolean;
   actualPrice: string;
   supplierLocationName: string;
   unit: string;
@@ -118,15 +126,13 @@ type OnlineSupplierFulfillmentGroup = {
   state: DeliveryState;
 };
 type ProcurementStatusFilter = "未完了" | "購入待ち" | "一部購入済み" | "到着日入力待ち" | "到着待ち" | "配送待ち" | "配送中" | "一部納品済み" | "確認待ち" | "完了" | "すべて";
-type ProductLookup = {
-  byId: Map<string, Product>;
-  byName: Map<string, Product>;
-};
+type ProductLookup = ProductIdentityLookup<Product>;
 type ProcurementAmountSummary = {
   amount: number;
   isPending: boolean;
   estimatedPriceCount?: number;
   missingPriceCount?: number;
+  missingQuantityCount?: number;
 };
 type DashboardSyncState = "loading" | "synced" | "refreshing" | "error";
 type AdditionalPurchaseDraft = {
@@ -249,9 +255,7 @@ function createProcurementTaskItems(
   productList: Product[],
   purchaseOrderItems: DashboardOrderItem[]
 ): ProcurementTaskItem[] {
-  if (productList.length === 0) return [];
-
-  const productByName = new Map(productList.map((product) => [product.name, product]));
+  const productLookup = createProductIdentityLookup(productList);
   const itemsByOrderId = new Map<string, DashboardOrderItem[]>();
   purchaseOrderItems.forEach((item) => {
     const items = itemsByOrderId.get(item.orderId) ?? [];
@@ -259,12 +263,12 @@ function createProcurementTaskItems(
     itemsByOrderId.set(item.orderId, items);
   });
 
-  return purchaseOrders.flatMap((order, orderIndex) => {
+  return purchaseOrders.flatMap((order) => {
     const orderItems = itemsByOrderId.get(order.id) ?? [];
 
     if (orderItems.length > 0) {
       return orderItems.map((item, itemIndex) => {
-        const product = productByName.get(item.productName);
+        const product = findProductByIdentityFromLookup(item.productId, item.productName, productLookup);
 
         return {
           id: item.id ?? `${order.id}-${item.productName}-${itemIndex}`,
@@ -272,7 +276,10 @@ function createProcurementTaskItems(
           productId: item.productId,
           productName: item.productName,
           requestedQuantity: item.requestedQuantity,
-          actualQuantity: item.unavailable ? 0 : item.actualQuantity ?? item.requestedQuantity,
+          actualQuantity: item.unavailable ? 0 : normalizeRecordedProcurementQuantity(item.actualQuantity),
+          actualQuantityRecordedExplicitly: item.actualQuantityRecordedExplicitly === undefined
+            ? normalizeRecordedProcurementQuantity(item.actualQuantity) !== null
+            : item.actualQuantityRecordedExplicitly === true,
           actualPrice: item.actualPrice ?? "",
           supplierLocationName: item.supplierLocationName ?? "",
           unit: item.unit,
@@ -287,55 +294,28 @@ function createProcurementTaskItems(
       });
     }
 
-    if (purchaseOrderItems.length > 0) return [];
-
-    return Array.from({ length: Math.max(1, order.items) }, (_, itemIndex) => {
-      const product = productList[(orderIndex + itemIndex) % productList.length];
-      const quantity = itemIndex + 1;
-
-      return {
-        id: `${order.id}-${itemIndex}`,
-        orderId: order.id,
-        productId: undefined,
-        productName: product.name,
-        requestedQuantity: quantity,
-        actualQuantity: quantity,
-        actualPrice: "",
-        supplierLocationName: "",
-        unit: product.unit,
-        supplier: "",
-        purchased: false,
-        unavailable: false,
-        note: "",
-        priceExceptionNote: "",
-        deliveryStatus: "pending",
-        deliveryBatchId: undefined
-      };
-    });
+    return [];
   });
 }
 
 function getProcurementSupplier(
   productName: string,
   productList: Product[],
-  supplierOptions: ProductSupplierGroup[]
+  supplierOptions: ProductSupplierGroup[],
+  productId?: string
 ) {
-  const product = productList.find((item) => item.name === productName);
-  const mainOption = supplierOptions
-    .find((group) => group.product === productName)
-    ?.options.find((option) => option.role === "メイン");
+  const product = findProductByIdentity(productId, productName, productList);
+  const mainOption = findProductSupplierGroup({ productId, productName }, supplierOptions)?.options.find((option) => option.role === "メイン");
 
   return product?.mainSupplier || mainOption?.supplier || "未設定";
 }
 
 function findProcurementProduct(item: ProcurementTaskItem, productList: Product[]) {
-  return productList.find((product) => product.id === item.productId)
-    ?? productList.find((product) => product.name === item.productName);
+  return findProductByIdentity(item.productId, item.productName, productList);
 }
 
 function findProcurementProductFromLookup(item: ProcurementTaskItem, productLookup: ProductLookup) {
-  return (item.productId ? productLookup.byId.get(item.productId) : undefined)
-    ?? productLookup.byName.get(item.productName);
+  return findProductByIdentityFromLookup(item.productId, item.productName, productLookup);
 }
 
 function getProductFamilyLabel(product: Product | undefined, fallbackName: string) {
@@ -343,8 +323,8 @@ function getProductFamilyLabel(product: Product | undefined, fallbackName: strin
 }
 
 function getAlternativeVariantOptions(item: ProcurementTaskItem, products: Product[]) {
-  const currentProduct = products.find((product) => product.id === item.productId)
-    ?? products.find((product) => product.name === item.productName);
+  const currentProduct = findProductByIdentity(item.productId, item.productName, products);
+  if (!currentProduct) return [];
   const familyName = getProductFamilyLabel(currentProduct, item.productName);
   const normalizedFamilyName = familyName.trim().toLowerCase();
 
@@ -395,6 +375,15 @@ function normalizeSupplierName(value?: string) {
   return supplier;
 }
 
+function findProductSupplierGroup(
+  item: Pick<ProcurementTaskItem, "productId" | "productName">,
+  supplierOptions: ProductSupplierGroup[]
+) {
+  if (item.productId) return supplierOptions.find((group) => group.productId === item.productId);
+  const matches = supplierOptions.filter((group) => group.product === item.productName);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 function getSupplierChoicesForItem(
   item: ProcurementTaskItem,
   product: Product | undefined,
@@ -409,9 +398,7 @@ function getSupplierChoicesForItem(
 
   addChoice(product?.mainSupplier, "メイン発注先");
   addChoice(product?.backupSupplier, "予備発注先");
-  supplierOptions
-    .find((group) => group.product === item.productName)
-    ?.options.forEach((option) => addChoice(option.supplier, option.role));
+  findProductSupplierGroup(item, supplierOptions)?.options.forEach((option) => addChoice(option.supplier, option.role));
   addChoice(item.supplier, "現在");
 
   return Array.from(choices.values());
@@ -421,8 +408,7 @@ function getPurchaseUrlForItem(item: ProcurementTaskItem, supplierOptions: Produ
   const supplier = normalizeSupplierName(item.supplier);
   if (!supplier) return "";
 
-  return supplierOptions
-    .find((group) => group.product === item.productName)
+  return findProductSupplierGroup(item, supplierOptions)
     ?.options.find((option) => normalizeSupplierName(option.supplier) === supplier)
     ?.purchaseUrl ?? "";
 }
@@ -472,8 +458,27 @@ function setDeferredSupplierNote(note: string, fromSupplier: string, toSupplier:
   return [nextNote, line].filter(Boolean).join("\n");
 }
 
-function getEffectiveProcurementSupplier(item: Pick<ProcurementTaskItem, "supplier" | "note" | "productName">, supplierByProductName: Map<string, string>) {
-  return getTemporarySupplierNote(item.note) || item.supplier || supplierByProductName.get(item.productName) || "未設定";
+function getEffectiveProcurementSupplier(item: Pick<ProcurementTaskItem, "supplier" | "note" | "productName" | "productId">, supplierByProductName: Map<string, string>) {
+  return getTemporarySupplierNote(item.note) || item.supplier || supplierByProductName.get(productIdentityKey(item.productId, item.productName)) || "未設定";
+}
+
+function createProcurementSupplierLookup(productList: Product[], supplierOptions: ProductSupplierGroup[]) {
+  const lookup = createProductIdentityLookup(productList);
+  const supplierMap = new Map<string, string>();
+  for (const product of productList) {
+    if (product.id) supplierMap.set(productIdentityKey(product.id, product.name), getProcurementSupplier(product.name, productList, supplierOptions, product.id));
+  }
+  for (const [name] of lookup.byName) {
+    supplierMap.set(productIdentityKey(undefined, name), getProcurementSupplier(name, productList, supplierOptions));
+  }
+  for (const group of supplierOptions) {
+    const key = productIdentityKey(group.productId, group.product);
+    if (supplierMap.get(key) && supplierMap.get(key) !== "未設定") continue;
+    if (!group.productId && supplierOptions.filter((candidate) => candidate.product === group.product).length !== 1) continue;
+    const mainOption = group.options.find((option) => option.role === "メイン");
+    if (mainOption?.supplier) supplierMap.set(key, mainOption.supplier);
+  }
+  return supplierMap;
 }
 
 function formatSupplierRole(role: string) {
@@ -488,7 +493,7 @@ function groupTasksBySupplier(
   productList: Product[],
   supplierOptions: ProductSupplierGroup[]
 ) {
-  const supplierByProductName = new Map(productList.map((product) => [product.name, getProcurementSupplier(product.name, productList, supplierOptions)]));
+  const supplierByProductName = createProcurementSupplierLookup(productList, supplierOptions);
   return items.reduce<Array<{ supplier: string; items: ProcurementTaskItem[] }>>((groups, item) => {
     const supplier = getEffectiveProcurementSupplier(item, supplierByProductName);
     const existingGroup = groups.find((group) => group.supplier === supplier);
@@ -711,6 +716,7 @@ async function saveProcurementTaskItem(item: ProcurementTaskItem) {
       purchased: item.purchased,
       unavailable: item.unavailable,
       actualQuantity: item.actualQuantity,
+      actualQuantityRecordedExplicitly: item.actualQuantity !== null && item.actualQuantityRecordedExplicitly === true ? true : undefined,
       actualPrice: item.actualPrice,
       supplierLocationName: item.supplierLocationName,
       note: item.note,
@@ -724,7 +730,7 @@ async function saveProcurementTaskItem(item: ProcurementTaskItem) {
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? "発注明細を保存できませんでした。");
+    throw Object.assign(new Error(body.error ?? "発注明細を保存できませんでした。"), { status: response.status });
   }
 }
 
@@ -844,6 +850,7 @@ async function saveOrderDeliveryState(orderId: string, supplier: string, state: 
 }
 
 export default function ProcurementPage() {
+  const { t } = useOsTranslation();
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [, startStatusTransition] = useTransition();
   const itemSaveChainsRef = useRef<Record<string, Promise<void>>>({});
@@ -857,6 +864,7 @@ export default function ProcurementPage() {
   const lastDashboardLoadedAtRef = useRef(0);
   const lastFullDashboardLoadedAtRef = useRef(0);
   const [products, setProducts] = useState<Product[]>([]);
+  const [procurementDetailsVisible, setProcurementDetailsVisible] = useState(false);
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierLocations, setSupplierLocations] = useState<SupplierLocation[]>([]);
@@ -885,25 +893,9 @@ export default function ProcurementPage() {
   const [calendarSlots, setCalendarSlots] = useState<ProcurementTimeSlot[]>([]);
   const [calendarNote, setCalendarNote] = useState("");
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
-  const productLookup = useMemo<ProductLookup>(() => ({
-    byId: new Map(products.flatMap((product) => product.id ? [[product.id, product] as const] : [])),
-    byName: new Map(products.map((product) => [product.name, product]))
-  }), [products]);
+  const productLookup = useMemo<ProductLookup>(() => createProductIdentityLookup(products), [products]);
   const supplierByName = useMemo(() => new Map(suppliers.map((supplier) => [supplier.name, supplier])), [suppliers]);
-  const supplierByProductName = useMemo(() => {
-    const supplierMap = new Map<string, string>();
-
-    products.forEach((product) => {
-      if (product.mainSupplier) supplierMap.set(product.name, product.mainSupplier);
-    });
-    productSupplierOptions.forEach((group) => {
-      if (supplierMap.has(group.product)) return;
-      const mainOption = group.options.find((option) => option.role === "メイン");
-      if (mainOption?.supplier) supplierMap.set(group.product, mainOption.supplier);
-    });
-
-    return supplierMap;
-  }, [products, productSupplierOptions]);
+  const supplierByProductName = useMemo(() => createProcurementSupplierLookup(products, productSupplierOptions), [products, productSupplierOptions]);
 
   useEffect(() => {
     if (!purchaseOrders.length) return;
@@ -974,6 +966,7 @@ export default function ProcurementPage() {
         deliveryBatches?: DeliveryBatch[];
         staffOptions?: StaffOption[];
         procurementStaffAvailability?: ProcurementStaffUnavailableSlot[];
+        procurementDetailsVisible?: boolean;
       };
       const data = includeMasterData || !cachedMasterData
         ? responseData
@@ -996,6 +989,7 @@ export default function ProcurementPage() {
       }
 
       if (data.products) setProducts(data.products);
+      if (data.procurementDetailsVisible !== undefined) setProcurementDetailsVisible(data.procurementDetailsVisible === true);
       if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
       if (data.suppliers) setSuppliers(data.suppliers);
       if (data.supplierLocations) setSupplierLocations(data.supplierLocations);
@@ -1167,7 +1161,7 @@ export default function ProcurementPage() {
       });
 
       entries.forEach((entry) => {
-        void queueProcurementTaskItemSave(entry.item, entry.updatedAt, { alreadyPending: true, silentFailure: true });
+        void queueProcurementTaskItemSave(entry.item, entry.updatedAt, { alreadyPending: true, silentFailure: true }).catch(() => undefined);
       });
     };
 
@@ -1278,12 +1272,22 @@ export default function ProcurementPage() {
         scheduleDashboardRefresh();
       })
       .catch((error: unknown) => {
+        const status = error instanceof Error && "status" in error ? Number(error.status) : 0;
+        const terminalFailure = [400, 403, 404, 409].includes(status);
+        if (terminalFailure) {
+          discardRejectedPendingProcurementTaskItem(item.id, updatedAt);
+          if (recentProcurementTaskItemsRef.current[item.id]?.updatedAt === updatedAt) {
+            delete recentProcurementTaskItemsRef.current[item.id];
+          }
+          scheduleDashboardRefresh();
+        }
         if (!options.silentFailure) {
           const message = error instanceof Error && error.message
             ? error.message
             : "保存できませんでした。通信が戻ると自動で再保存します。";
-          window.alert(message);
+          window.alert(t(message));
         }
+        if (terminalFailure) throw error;
       })
       .finally(() => {
         if (itemSaveChainsRef.current[item.id] === nextSave) {
@@ -1366,10 +1370,13 @@ export default function ProcurementPage() {
   function updateProcurementTaskItem(id: string, next: Partial<ProcurementTaskItem>) {
     const currentItem = procurementTaskItemsRef.current.find((item) => item.id === id);
     if (!currentItem) return;
-    const updatedItem: ProcurementTaskItem = { ...currentItem, ...next };
-    if (next.unavailable === true) updatedItem.actualQuantity = 0;
+    const updatedItem = applyProcurementTaskItemUpdate(currentItem, next);
+    if (next.purchased === true && !currentItem.purchased && !canStartProcurementPurchase(updatedItem.actualQuantity)) {
+      window.alert(t("購入済みにする前に実際の購入数量を入力してください。"));
+      return;
+    }
 
-    void queueProcurementTaskItemSave(updatedItem);
+    void queueProcurementTaskItemSave(updatedItem).catch(() => undefined);
 
     setProcurementTaskItems((items) => {
       const nextItems = items.map((item) => item.id === id ? updatedItem : item);
@@ -1391,6 +1398,7 @@ export default function ProcurementPage() {
         purchased: true,
         unavailable: false,
         actualQuantity: purchasedQuantity,
+        actualQuantityRecordedExplicitly: true,
         actualPrice: currentItem.actualPrice,
         supplierLocationName: currentItem.supplierLocationName,
         note: currentItem.note,
@@ -1523,8 +1531,8 @@ export default function ProcurementPage() {
 
     void Promise.all(targetItems.map((item) => queueProcurementTaskItemSave(item, Date.now(), { silentFailure: true })))
       .then(() => showNotice(`${supplier} を納品済みにしました。`))
-      .catch(() => {
-        window.alert("到着状態を保存できませんでした。通信が戻ると自動で再保存します。");
+      .catch((error: unknown) => {
+        window.alert(t(error instanceof Error ? error.message : "到着状態を保存できませんでした。通信が戻ると自動で再保存します。"));
       });
   }
 
@@ -2028,7 +2036,7 @@ export default function ProcurementPage() {
                       </div>
                       <p className="procurement-store-line">
                         <span>{order.store} / {order.brand}{order.buyerName ? ` · 購入担当 ${order.buyerName}` : ""}</span>
-                        <b>概算 {formatProcurementAmountSummary(estimatedAmount)}</b>
+                        {procurementDetailsVisible ? <b>概算 {formatProcurementAmountSummary(estimatedAmount, t)}</b> : null}
                       </p>
                     </div>
                     <div className="procurement-order-summary">
@@ -2113,15 +2121,15 @@ export default function ProcurementPage() {
                                   </button>
                                 </div>
                                 <div className="supplier-group-amounts">
-                                  <span className="is-estimated">購入見込み {formatProcurementAmountSummary(supplierEstimatedAmount)}</span>
+                                  {procurementDetailsVisible ? <span className="is-estimated">購入見込み {formatProcurementAmountSummary(supplierEstimatedAmount, t)}</span> : null}
                                   {supplierPurchasedCount > 0 ? (
-                                    <span className="is-purchased">購入済み {formatProcurementAmountSummary(supplierPurchasedAmount)}</span>
+                                    <span className="is-purchased">購入済み {formatProcurementAmountSummary(supplierPurchasedAmount, t)}</span>
                                   ) : supplierUnavailableCount > 0 ? (
                                     <span className="is-skipped">購入なし / 見送り</span>
                                   ) : null}
                                   {supplierPendingCount > 0 ? <span className="is-open">未購入 {supplierPendingCount}</span> : null}
-                                  {supplierReadyToDeliverAmount.amount > 0 || supplierReadyToDeliverAmount.isPending ? (
-                                    <span className="is-ready">配送待ち {formatProcurementAmountSummary(supplierReadyToDeliverAmount)}</span>
+                                  {supplierReadyToDeliverAmount.amount > 0 || supplierReadyToDeliverAmount.isPending || (supplierReadyToDeliverAmount.missingQuantityCount ?? 0) > 0 ? (
+                                    <span className="is-ready">配送待ち {formatProcurementAmountSummary(supplierReadyToDeliverAmount, t)}</span>
                                   ) : null}
                                 </div>
                                 <div className="supplier-group-meta">
@@ -2169,7 +2177,7 @@ export default function ProcurementPage() {
                               {!isSupplierCollapsed ? (
                                 <div className="procurement-task-list" id={supplierPanelId}>
                                   {group.items.map((item) => {
-                                  const quantityDiff = item.actualQuantity - item.requestedQuantity;
+                                  const quantityDiff = item.actualQuantity === null ? null : item.actualQuantity - item.requestedQuantity;
                                   const product = findProcurementProductFromLookup(item, productLookup);
                                   const photoSrc = getProductPhotoSrc(product?.photoUrl);
                                   const productSpec = product?.variantName || product?.specNote;
@@ -2180,8 +2188,8 @@ export default function ProcurementPage() {
                                   const isAdditionalPurchase = isAdditionalPurchaseNote(item.note);
                                   const isRemainingFollow = isRemainingFollowNote(item.note);
                                   const isDeliveryLocked = isDeliveryLockedItem(item);
-                                  const remainingQuantity = Math.max(0, item.requestedQuantity - item.actualQuantity);
-                                  const needsRemainingFollow = !item.unavailable && !isDeliveryLocked && item.actualQuantity > 0 && item.actualQuantity < item.requestedQuantity;
+                                  const remainingQuantity = item.actualQuantity === null ? null : Math.max(0, item.requestedQuantity - item.actualQuantity);
+                                  const needsRemainingFollow = !item.unavailable && !isDeliveryLocked && item.actualQuantity !== null && item.actualQuantity > 0 && item.actualQuantity < item.requestedQuantity;
                                   return (
                                     <div className={item.purchased || item.unavailable ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
                                       <label className="task-check">
@@ -2228,9 +2236,9 @@ export default function ProcurementPage() {
                                         </div>
                                         {productSpec ? <small>{productSpec}</small> : null}
                                         <small>{isAdditionalPurchase ? "追加" : "依頼"} {item.requestedQuantity} {item.unit}</small>
-                                        <small>
+                                        {procurementDetailsVisible && product?.procurementDetailsVisible !== false ? <small>
                                           参考価格 {referencePrice > 0 ? `${formatEstimatedAmount(referencePrice)} / ${item.unit}` : "未設定"}
-                                        </small>
+                                        </small> : null}
                                         {purchaseUrl ? (
                                           <a className="purchase-link-button" href={purchaseUrl} target="_blank" rel="noreferrer">
                                             購入ページ
@@ -2240,18 +2248,20 @@ export default function ProcurementPage() {
                                       <label className="task-actual">
                                         <span>実数</span>
                                         <select
-                                          value={item.actualQuantity}
+                                          value={item.actualQuantity ?? ""}
                                           onChange={(event) =>
-                                            updateProcurementTaskItem(item.id, { actualQuantity: Number(event.target.value) })
+                                            updateProcurementTaskItem(item.id, { actualQuantity: normalizeRecordedProcurementQuantity(event.target.value) })
                                           }
                                         >
+                                          <option value="" disabled>未記録</option>
+                                          {item.actualQuantity !== null && !actualQuantityOptions.includes(item.actualQuantity) ? <option value={item.actualQuantity}>{item.actualQuantity}</option> : null}
                                           {actualQuantityOptions.map((quantity) => (
                                             <option value={quantity} key={quantity}>{quantity}</option>
                                           ))}
                                         </select>
                                       </label>
-                                      <div className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
-                                        {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
+                                      <div className={quantityDiff === null || quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
+                                        {quantityDiff === null ? "実数未記録" : quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
                                       </div>
                                       <button
                                         type="button"
@@ -2359,7 +2369,7 @@ export default function ProcurementPage() {
           item={activeExceptionItem}
           products={products}
           choices={getSupplierChoicesForItem(activeExceptionItem, findProcurementProduct(activeExceptionItem, products), productSupplierOptions)}
-          plannedSupplier={getProcurementSupplier(activeExceptionItem.productName, products, productSupplierOptions)}
+          plannedSupplier={getProcurementSupplier(activeExceptionItem.productName, products, productSupplierOptions, activeExceptionItem.productId)}
           onChange={(next) => updateProcurementTaskItem(activeExceptionItem.id, next)}
           onSplit={(purchasedQuantity, remainingSupplier) => void splitProcurementTaskItem(activeExceptionItem.id, purchasedQuantity, remainingSupplier)}
           onClose={() => setActiveExceptionItemId(null)}
@@ -2763,10 +2773,9 @@ function ExceptionReportDialog({
 }) {
   useModalHistory(true, onClose, "procurement-exception-report");
 
-  const quantityDiff = item.actualQuantity - item.requestedQuantity;
+  const quantityDiff = item.actualQuantity === null ? null : item.actualQuantity - item.requestedQuantity;
   const [temporarySupplier, setTemporarySupplier] = useState(getTemporarySupplierNote(item.note));
-  const currentProduct = products.find((product) => product.id === item.productId)
-    ?? products.find((product) => product.name === item.productName);
+  const currentProduct = findProductByIdentity(item.productId, item.productName, products);
   const familyName = getProductFamilyLabel(currentProduct, item.productName);
   const variantOptions = getAlternativeVariantOptions(item, products);
   const selectedVariantId = item.productId ?? "";
@@ -2777,7 +2786,7 @@ function ExceptionReportDialog({
   const currentSupplier = getTemporarySupplierNote(item.note) || item.supplier || plannedSupplier;
   const isDeliveryLocked = isDeliveryLockedItem(item);
   const normalizedTemporaryVariantName = temporaryVariantName.trim();
-  const defaultSplitQuantity = item.actualQuantity > 0 && item.actualQuantity < item.requestedQuantity
+  const defaultSplitQuantity = item.actualQuantity !== null && item.actualQuantity > 0 && item.actualQuantity < item.requestedQuantity
     ? item.actualQuantity
     : Math.max(1, item.requestedQuantity - 1);
   const [splitPurchasedQuantity, setSplitPurchasedQuantity] = useState(defaultSplitQuantity);
@@ -2788,7 +2797,7 @@ function ExceptionReportDialog({
   const previousDeferredReason = getDeferredSupplierNote(item.note).split("/").at(-1)?.trim();
   const [deferReason, setDeferReason] = useState(previousDeferredReason || "価格が高いため");
   const [adjustmentMode, setAdjustmentMode] = useState<"basic" | "product" | "supplier" | "defer" | "split" | "unavailable">(
-    item.unavailable ? "unavailable" : quantityDiff < 0 && !isDeliveryLocked ? "split" : "basic"
+    item.unavailable ? "unavailable" : quantityDiff !== null && quantityDiff < 0 && !isDeliveryLocked ? "split" : "basic"
   );
   const splitRemainingQuantity = Math.max(0, item.requestedQuantity - splitPurchasedQuantity);
   const canSplitRemaining = !isDeliveryLocked && !item.unavailable && splitPurchasedQuantity > 0 && splitPurchasedQuantity < item.requestedQuantity;
@@ -2907,10 +2916,10 @@ function ExceptionReportDialog({
         <div className="exception-summary">
           <strong>{item.productName}</strong>
           <span>依頼 {item.requestedQuantity} {item.unit}</span>
-          <span>実数 {item.actualQuantity} {item.unit}</span>
+          <span>実数 {item.actualQuantity === null ? "未記録" : `${item.actualQuantity} ${item.unit}`}</span>
           <span>実際の購入先 {currentSupplier}</span>
-          <span className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
-            {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
+          <span className={quantityDiff === null || quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
+            {quantityDiff === null ? "実数未記録" : quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
           </span>
         </div>
         <div className="edit-fields">
@@ -3238,6 +3247,21 @@ function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
+function applyProcurementTaskItemUpdate(currentItem: ProcurementTaskItem, next: Partial<ProcurementTaskItem>): ProcurementTaskItem {
+  const updatedItem = { ...currentItem, ...next };
+  if (next.actualQuantity !== undefined) updatedItem.actualQuantityRecordedExplicitly = normalizeRecordedProcurementQuantity(next.actualQuantity) !== null;
+  if (next.unavailable === true) {
+    updatedItem.actualQuantity = 0;
+    updatedItem.actualQuantityRecordedExplicitly = true;
+  }
+  return updatedItem;
+}
+
+function canStartProcurementPurchase(actualQuantity: unknown) {
+  const quantity = normalizeRecordedProcurementQuantity(actualQuantity);
+  return quantity !== null;
+}
+
 function calculateProcurementOrderEstimatedAmount(items: ProcurementTaskItem[], productLookup: ProductLookup): ProcurementAmountSummary {
   const productLookupReady = isProductLookupReady(productLookup);
   return items.reduce<ProcurementAmountSummary>((summary, item) => {
@@ -3260,6 +3284,8 @@ function calculateProcurementOrderCurrentAmount(items: ProcurementTaskItem[], pr
   const productLookupReady = isProductLookupReady(productLookup);
   return items.reduce<ProcurementAmountSummary>((summary, item) => {
     if (!item.purchased || item.unavailable) return summary;
+    const quantity = normalizeRecordedProcurementQuantity(item.actualQuantity);
+    if (quantity === null) return { ...summary, missingQuantityCount: (summary.missingQuantityCount ?? 0) + 1 };
 
     const product = findProcurementProductFromLookup(item, productLookup);
     const actualPrice = parseProcurementAmount(item.actualPrice);
@@ -3272,16 +3298,14 @@ function calculateProcurementOrderCurrentAmount(items: ProcurementTaskItem[], pr
     const unitPrice = actualPrice > 0 ? actualPrice : hasReferencePrice ? referencePrice : 0;
     if (unitPrice <= 0) {
       return {
+        ...summary,
         amount: summary.amount,
-        isPending: summary.isPending,
-        estimatedPriceCount: summary.estimatedPriceCount,
         missingPriceCount: (summary.missingPriceCount ?? 0) + 1
       };
     }
 
-    const quantity = Number.isFinite(item.actualQuantity) ? item.actualQuantity : 0;
-
     return {
+      ...summary,
       amount: summary.amount + Math.max(0, quantity) * unitPrice,
       isPending: summary.isPending,
       estimatedPriceCount: actualPrice > 0 ? summary.estimatedPriceCount : (summary.estimatedPriceCount ?? 0) + 1,
@@ -3318,7 +3342,16 @@ function formatEstimatedAmount(amount: number) {
   }).format(Math.round(amount));
 }
 
-function formatProcurementAmountSummary(summary: ProcurementAmountSummary) {
+function formatProcurementAmountSummary(
+  summary: ProcurementAmountSummary,
+  translate: (value: string, values?: Record<string, string | number>) => string = (value, values) =>
+    value.replace(/\{(\w+)\}/g, (token, key: string) => String(values?.[key] ?? token))
+): string {
+  if ((summary.missingQuantityCount ?? 0) > 0) {
+    const missingLabel = translate("数量未入力 {count} 件", { count: summary.missingQuantityCount ?? 0 });
+    if (summary.amount <= 0) return missingLabel;
+    return `${formatProcurementAmountSummary({ ...summary, missingQuantityCount: 0 }, translate)} + ${missingLabel}`;
+  }
   if ((summary.missingPriceCount ?? 0) > 0) {
     if (summary.amount <= 0) return "参考価格未設定";
     const amountLabel = (summary.estimatedPriceCount ?? 0) > 0 ? `約 ${formatEstimatedAmount(summary.amount)}` : formatEstimatedAmount(summary.amount);
@@ -3390,7 +3423,8 @@ function readPendingProcurementTaskItems() {
           productId: item.productId ? String(item.productId) : undefined,
           productName: String(item.productName ?? ""),
           requestedQuantity: Number(item.requestedQuantity ?? 0),
-          actualQuantity: Number(item.actualQuantity ?? item.requestedQuantity ?? 0),
+          actualQuantity: normalizeRecordedProcurementQuantity(item.actualQuantity),
+          actualQuantityRecordedExplicitly: item.actualQuantityRecordedExplicitly === true,
           actualPrice: String(item.actualPrice ?? ""),
           supplierLocationName: String(item.supplierLocationName ?? ""),
           unit: String(item.unit ?? ""),
@@ -3437,6 +3471,14 @@ function replacePendingProcurementTaskItems(pendingItems: Record<string, Pending
   }
 }
 
+function discardRejectedPendingProcurementTaskItem(itemId: string, updatedAt: number) {
+  const pendingItems = readPendingProcurementTaskItems();
+  if (pendingItems[itemId]?.updatedAt !== updatedAt) return false;
+  delete pendingItems[itemId];
+  replacePendingProcurementTaskItems(pendingItems);
+  return true;
+}
+
 function normalizeComparablePrice(value: unknown) {
   const normalized = String(value ?? "").replace(/[¥￥,\s]/g, "").trim();
   if (!normalized) return "";
@@ -3454,7 +3496,8 @@ function serverDashboardItemConfirmsPendingItem(
   const batchConfirmed = !pendingItem.deliveryBatchId
     || String(serverItem.deliveryBatchId ?? "") === String(pendingItem.deliveryBatchId);
 
-  return Number(serverItem.actualQuantity ?? serverItem.requestedQuantity ?? 0) === Number(pendingItem.actualQuantity)
+  const pendingQuantity = normalizeRecordedProcurementQuantity(pendingItem.actualQuantity);
+  return (pendingQuantity === null || normalizeRecordedProcurementQuantity(serverItem.actualQuantity) === pendingQuantity)
     && normalizeComparablePrice(serverItem.actualPrice) === normalizeComparablePrice(pendingItem.actualPrice)
     && String(serverItem.supplierLocationName ?? "") === pendingItem.supplierLocationName
     && Boolean(serverItem.purchased) === pendingItem.purchased
@@ -3503,7 +3546,8 @@ function applyPendingProcurementTaskItemsToDashboardItems(
 
     return {
       ...item,
-      actualQuantity: pendingItem.actualQuantity,
+      actualQuantity: pendingItem.actualQuantity ?? item.actualQuantity,
+      actualQuantityRecordedExplicitly: pendingItem.actualQuantityRecordedExplicitly === true,
       actualPrice: pendingItem.actualPrice,
       supplierLocationName: pendingItem.supplierLocationName,
       purchased: pendingItem.purchased,

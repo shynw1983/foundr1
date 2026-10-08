@@ -17,6 +17,10 @@ const tables = [
   "store_terminal_login_requests",
   "employee_scopes",
   "products",
+  "product_catalog_store_grants",
+  "inventory_locations",
+  "inventory_items",
+  "inventory_checks",
   "product_brand_usages",
   "suppliers",
   "supplier_locations",
@@ -44,6 +48,10 @@ const tables = [
 ];
 
 const requiredColumns = {
+  products: ["catalog_visibility", "is_orderable"],
+  product_catalog_store_grants: ["product_id", "store_id"],
+  purchase_order_items: ["price_feedback_confirmation", "quantity_feedback_confirmation"],
+  inventory_checks: ["count_unit"],
   employees: [
     "my_number"
   ],

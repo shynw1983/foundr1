@@ -24,6 +24,8 @@ import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList, type OsNavItem } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
+import { useOsTranslation } from "../components/OsTranslationProvider";
+import { inventoryCountException, inventoryNeedsOrder, normalizeInventoryCount } from "../../../lib/inventory-observation-policy";
 
 type StoreOption = { id: string; name: string };
 type LocationOption = {
@@ -93,7 +95,7 @@ const quantityOptions = [
   { value: 1, label: "1" },
   { value: 2, label: "2" },
   { value: 3, label: "3" },
-  { value: 5, label: "5以上" }
+  { value: 5, label: "5" }
 ];
 
 const exceptionLabels: Record<string, string> = {
@@ -118,6 +120,7 @@ const emptyLocationDraft = {
 };
 
 export default function InventoryPage() {
+  const { t } = useOsTranslation();
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [data, setData] = useState<InventoryPayload>({
     stores: [],
@@ -170,10 +173,10 @@ export default function InventoryPage() {
     showNotice(successMessage);
   }
 
-  async function recordCount(item: InventoryItem, quantity: number) {
-    if (isSaving) return;
+  async function recordCount(item: InventoryItem, quantity: number): Promise<boolean> {
+    if (isSaving) return false;
     const previous = data.items;
-    const exceptionCode = quantity === 0 ? "out" : quantity <= item.safetyStock ? "low" : "";
+    const exceptionCode = inventoryCountException(quantity, item.safetyStock);
     setData((current) => ({
       ...current,
       items: current.items.map((candidate) => candidate.id === item.id
@@ -189,14 +192,27 @@ export default function InventoryPage() {
     }));
     setIsSaving(item.id);
     try {
-      await postInventory({ action: "count", itemId: item.id, quantity }, `${item.productName}の在庫を記録しました。`);
+      await postInventory({ action: "count", itemId: item.id, quantity, countUnit: item.countUnit }, `${item.productName}の在庫を記録しました。`);
       await loadInventory(storeId);
+      return true;
     } catch (error) {
       setData((current) => ({ ...current, items: previous }));
-      window.alert(error instanceof Error ? error.message : "在庫情報を保存できませんでした。");
+      window.alert(t(error instanceof Error ? error.message : "在庫情報を保存できませんでした。"));
+      return false;
     } finally {
       setIsSaving("");
     }
+  }
+
+  async function recordExactCount(event: FormEvent<HTMLFormElement>, item: InventoryItem) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const quantity = normalizeInventoryCount(new FormData(form).get("quantity"));
+    if (quantity === null) {
+      window.alert(t("在庫量を0以上の数値で入力してください。"));
+      return;
+    }
+    if (await recordCount(item, quantity)) form.reset();
   }
 
   async function recordException(item: InventoryItem, exceptionCode: string) {
@@ -290,7 +306,7 @@ export default function InventoryPage() {
   }, [data.items, locationFilter, query]);
 
   const summary = useMemo(() => ({
-    needsOrder: data.items.filter((item) => item.currentQuantity !== null && item.currentQuantity <= item.safetyStock).length,
+    needsOrder: data.items.filter(inventoryNeedsOrder).length,
     needsCheck: data.items.filter((item) => item.confidenceLabel !== "確認済み").length,
     exceptions: data.items.filter((item) => ["too_much", "damaged", "quality"].includes(item.exceptionCode)).length
   }), [data.items]);
@@ -360,7 +376,7 @@ export default function InventoryPage() {
             <article>
               <span>発注を確認</span>
               <strong>{summary.needsOrder}</strong>
-              <small>安全在庫以下</small>
+              <small>{t("安全在庫以下・不足の報告")}</small>
             </article>
             <article>
               <span>現場確認が必要</span>
@@ -564,7 +580,7 @@ export default function InventoryPage() {
           ) : (
             <section className="inventory-list">
               {filteredItems.map((item) => {
-                const needsOrder = item.currentQuantity !== null && item.currentQuantity <= item.safetyStock;
+                const needsOrder = inventoryNeedsOrder(item);
                 const hasOtherException = ["too_much", "damaged", "quality"].includes(item.exceptionCode);
                 return (
                   <article className={`inventory-item${needsOrder ? " is-low" : ""}${hasOtherException ? " has-exception" : ""}`} key={item.id}>
@@ -577,12 +593,13 @@ export default function InventoryPage() {
                         </div>
                         <span>{item.locationName} ・ 安全在庫 {formatQuantity(item.safetyStock)}{item.countUnit}</span>
                       </div>
-                      <div className="inventory-current">
-                        <small>現在</small>
+                      <div className="inventory-current" style={{ flex: "0 1 auto", minWidth: 0, maxWidth: "55%", overflowWrap: "anywhere", textAlign: "right" }}>
+                        <small>{t("記録数量")}</small>
                         <strong>{item.currentQuantity === null ? "未確認" : `${formatQuantity(item.currentQuantity)}${item.countUnit}`}</strong>
                         <span className={item.confidenceLabel === "確認済み" ? "is-fresh" : ""}>
-                          {item.lastCountedLabel ? `${item.lastCountedLabel} ${item.lastCountedBy}` : item.confidenceLabel}
+                          {t(item.confidenceLabel)}
                         </span>
+                        {item.lastCountedLabel ? <span>{t("最終実数確認")} {item.lastCountedLabel} {item.lastCountedBy}</span> : null}
                       </div>
                     </div>
 
@@ -600,6 +617,27 @@ export default function InventoryPage() {
                         </button>
                       ))}
                     </div>
+
+                    <form className="inventory-exception-row" onSubmit={(event) => void recordExactCount(event, item)}>
+                      <label style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, minWidth: 0 }}>
+                        <span>{t("実数入力")}</span>
+                        <input
+                          name="quantity"
+                          type="number"
+                          min="0"
+                          max="9999999999.99"
+                          step="0.01"
+                          inputMode="decimal"
+                          placeholder={t("数量")}
+                          aria-label={`${item.productName} ${t("在庫量")}`}
+                          disabled={isSaving === item.id}
+                          required
+                          style={{ width: 112, maxWidth: "100%" }}
+                        />
+                        <span>{item.countUnit}</span>
+                      </label>
+                      <button className="secondary-button" type="submit" disabled={Boolean(isSaving)}>{t("数えて保存")}</button>
+                    </form>
 
                     <div className="inventory-exception-row">
                       <span>見つけたことを記録</span>
@@ -642,7 +680,9 @@ export default function InventoryPage() {
                     <span>
                       {check.recordType === "exception"
                         ? exceptionLabels[check.exceptionCode] ?? "異常解消"
-                        : `${formatQuantity(check.quantity ?? 0)}${check.countUnit}`}
+                        : check.quantity === null
+                          ? t("未確認")
+                          : `${formatQuantity(check.quantity)}${check.countUnit || `（${t("単位未記録")}）`}`}
                     </span>
                     <small>{check.recordedBy}</small>
                   </article>

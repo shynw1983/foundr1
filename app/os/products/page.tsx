@@ -18,9 +18,11 @@ import {
 } from "../../../lib/mock-data";
 import { normalizeDecimalInput } from "../../../lib/number-input";
 import { originCountryOptions } from "../../../lib/origin-countries";
+import { isHeadquarterCatalogRole, normalizeCatalogVisibility, type ProductCatalogVisibility } from "../../../lib/product-catalog-policy";
 
 type Product = typeof initialProducts[number];
-type ProductWithCategory = Product & {
+type ProductWithCategory = Omit<Product, "referencePrice"> & {
+  referencePrice: number | null;
   id?: string;
   subcategory?: string;
   originCountries?: string[];
@@ -49,10 +51,13 @@ type ProductWithCategory = Product & {
   importFreightCostJpy?: number | string;
   importTaxCostJpy?: number | string;
   importOtherCostJpy?: number | string;
+  catalogVisibility?: ProductCatalogVisibility;
+  isOrderable?: boolean;
+  catalogStoreIds?: string[];
 };
 type ProductDraft = Omit<ProductWithCategory, "referencePrice"> & { referencePrice: number | string };
 type Supplier = typeof initialSuppliers[number];
-type StoreItem = typeof initialStores[number];
+type StoreItem = typeof initialStores[number] & { id?: string };
 type ProductEditTarget = { type: "product"; value: ProductDraft; originalName?: string };
 type CategoryItem = { name: string; sortOrder?: number };
 type SubcategoryItem = { category: string; name: string; sortOrder?: number };
@@ -183,6 +188,16 @@ const productSummaryFieldOptions = [
   { value: "unitPrice", label: "規格単価" },
   { value: "importCost", label: "輸入コスト" }
 ];
+const procurementSummaryFields = new Set(["mainSupplier", "backupSupplier", "referencePrice", "unitPrice", "importCost"]);
+const catalogVisibilityOptions: Array<{ value: ProductCatalogVisibility; label: string }> = [
+  { value: "internal", label: "本部のみ" },
+  { value: "brand_stores", label: "適用ブランドの店舗に公開" },
+  { value: "selected_stores", label: "指定店舗に公開" }
+];
+
+function getCatalogVisibilityLabel(value: unknown) {
+  return catalogVisibilityOptions.find((option) => option.value === normalizeCatalogVisibility(value))?.label ?? "本部のみ";
+}
 
 function getProductPhotoSrc(photoUrl?: string) {
   if (!photoUrl) return "";
@@ -200,10 +215,10 @@ function getProductPhotoSrc(photoUrl?: string) {
   return photoUrl;
 }
 
-function parseReferencePrice(value: number | string) {
+function parseReferencePrice(value: number | string | null | undefined) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
 
-  const normalizedValue = normalizeDecimalInput(value);
+  const normalizedValue = normalizeDecimalInput(String(value ?? ""));
   const price = Number(normalizedValue);
 
   return Number.isFinite(price) ? price : 0;
@@ -596,6 +611,8 @@ export default function ProductsPage() {
   const [candidateEdits, setCandidateEdits] = useState<Record<string, Partial<ProductCandidate>>>({});
   const [priceHistory, setPriceHistory] = useState<ProductPriceHistoryState | null>(null);
   const [canManageProducts, setCanManageProducts] = useState(false);
+  const [procurementDetailsVisible, setProcurementDetailsVisible] = useState(false);
+  const [catalogPublicationStores, setCatalogPublicationStores] = useState<StoreItem[]>([]);
 
   useCloseOnOutside(productSummaryPickerRef, () => setIsProductSummaryPickerOpen(false), isProductSummaryPickerOpen);
 
@@ -615,7 +632,7 @@ export default function ProductsPage() {
           };
         };
       };
-      setCanManageProducts(body.employee?.permissions?.includes("products.manage") === true);
+      setCanManageProducts(isHeadquarterCatalogRole(body.employee?.role ?? "") && body.employee?.permissions?.includes("products.manage") === true);
       const savedSummaryFields = body.employee?.uiPreferences?.productMasterSummaryFields;
       if (Array.isArray(savedSummaryFields) && savedSummaryFields.length > 0) {
         const validFields = savedSummaryFields.filter((field) =>
@@ -637,6 +654,8 @@ export default function ProductsPage() {
       suppliers?: Supplier[];
       productCategories?: CategoryItem[];
       productSubcategories?: SubcategoryItem[];
+      procurementDetailsVisible?: boolean;
+      catalogPublicationStores?: StoreItem[];
     };
 
     if (data.brands) setBrandsData(data.brands);
@@ -645,6 +664,8 @@ export default function ProductsPage() {
     if (data.suppliers) setSuppliers(data.suppliers);
     if (data.productCategories) setCategoryMaster(data.productCategories);
     if (data.productSubcategories) setSubcategoryMaster(data.productSubcategories);
+    setProcurementDetailsVisible(data.procurementDetailsVisible === true);
+    setCatalogPublicationStores(data.catalogPublicationStores ?? data.stores ?? []);
     setDataSource("neon");
   }
 
@@ -672,6 +693,8 @@ export default function ProductsPage() {
   const productCategories = categoryMaster.length > 0
     ? categoryMaster.map((category) => category.name)
     : Array.from(new Set(products.map((product) => product.category)));
+  const visibleSummaryFields = productSummaryFields.filter((field) => procurementDetailsVisible || !procurementSummaryFields.has(field));
+  const visibleSummaryFieldOptions = productSummaryFieldOptions.filter((option) => procurementDetailsVisible || !procurementSummaryFields.has(option.value));
   const storeOptions = storesData.map((store) => store.name);
   const brandOptions = uniqueOptions([
     "未設定",
@@ -890,6 +913,9 @@ export default function ProductsPage() {
         photoUrl: "",
         storageType: "常温",
         usageType: "ingredient",
+        catalogVisibility: "internal",
+        isOrderable: true,
+        catalogStoreIds: [],
         isImported: false,
         importOriginCountry: "中国",
         importCurrency: "CNY",
@@ -950,6 +976,7 @@ export default function ProductsPage() {
       value: {
         ...product,
         id: undefined,
+        referencePrice: product.referencePrice ?? "",
         photoUrl: ""
       }
     });
@@ -981,6 +1008,7 @@ export default function ProductsPage() {
   }
 
   async function openProductPriceHistory(product: ProductWithCategory) {
+    if (!procurementDetailsVisible) return;
     if (!product.id) {
       window.alert("保存済みの商品だけ価格履歴を確認できます。");
       return;
@@ -1179,7 +1207,7 @@ export default function ProductsPage() {
               <Search size={17} />
               <input
                 value={query}
-                placeholder="商品・分類・発注先を検索"
+                placeholder={procurementDetailsVisible ? "商品・分類・発注先を検索" : "商品・分類を検索"}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
@@ -1286,7 +1314,7 @@ export default function ProductsPage() {
                     updateProductSort(nextKey, nextDirection);
                   }}
                 >
-                  {productSortOptions.map((option) => (
+                  {productSortOptions.filter((option) => procurementDetailsVisible || !["referencePrice", "unitPrice"].includes(option.key)).map((option) => (
                     <option value={`${option.key}:${option.direction}`} key={`${option.key}-${option.direction}`}>
                       {option.label}
                     </option>
@@ -1310,7 +1338,7 @@ export default function ProductsPage() {
               >
                 <summary>基本情報表示</summary>
                 <div>
-                  {productSummaryFieldOptions.map((option) => (
+                  {visibleSummaryFieldOptions.map((option) => (
                     <label key={option.value}>
                       <input
                         type="checkbox"
@@ -1380,7 +1408,7 @@ export default function ProductsPage() {
                   ))}
                 </select>
               </label>
-              <label>
+              {procurementDetailsVisible ? <label>
                 <span>発注先</span>
                 <select value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
                   <option value="すべて">すべて</option>
@@ -1389,11 +1417,11 @@ export default function ProductsPage() {
                     <option value={supplierName} key={supplierName}>{supplierName}</option>
                   ))}
                 </select>
-              </label>
+              </label> : null}
               <label>
                 <span>未入力項目</span>
                 <select value={missingInfoFilter} onChange={(event) => setMissingInfoFilter(event.target.value)}>
-                  {missingProductInfoOptions.map((option) => (
+                  {missingProductInfoOptions.filter((option) => procurementDetailsVisible || ["すべて", "spec"].includes(option.value)).map((option) => (
                     <option value={option.value} key={option.value}>{option.label}</option>
                   ))}
                 </select>
@@ -1437,7 +1465,7 @@ export default function ProductsPage() {
               const representative = group.representative;
               const photoProduct = group.products.find((product) => product.photoUrl) ?? representative;
               const titleJapaneseNote = getProductTitleJapaneseNote(representative, group.familyName);
-              const groupSummaryItems = productSummaryFields
+              const groupSummaryItems = visibleSummaryFields
                 .filter((field) => !(field === "japaneseNote" && titleJapaneseNote))
                 .map((field) => {
                   const option = productSummaryFieldOptions.find((item) => item.value === field);
@@ -1497,7 +1525,7 @@ export default function ProductsPage() {
                       {group.products.map((product) => {
                         const displaySpec = getProductDisplaySpec(product);
                         const unitPriceLabel = formatProductUnitPrice(product);
-                        const summaryItems = productSummaryFields
+                        const summaryItems = visibleSummaryFields
                           .map((field) => {
                             const option = productSummaryFieldOptions.find((item) => item.value === field);
                             const value = getProductSummaryFieldValue(product, field, unitPriceLabel);
@@ -1521,8 +1549,10 @@ export default function ProductsPage() {
                                 <span>{product.name || "未設定の商品"}</span>
                                 <div className="product-variant-badges">
                                   {product.isDefaultVariant ? <span className="status-pill">標準バリエーション</span> : null}
-                                  {product.isImported ? <span className="status-pill is-watch">海外輸入</span> : null}
-                                  {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
+                                  {procurementDetailsVisible ? <span className="status-pill">{getCatalogVisibilityLabel(product.catalogVisibility)}</span> : null}
+                                  {product.isOrderable === false ? <span className="status-pill is-warning">発注停止</span> : null}
+                                  {procurementDetailsVisible && product.isImported ? <span className="status-pill is-watch">海外輸入</span> : null}
+                                  {procurementDetailsVisible && isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
                                 </div>
                               </div>
                             </div>
@@ -1533,13 +1563,13 @@ export default function ProductsPage() {
                                   <strong>{item.value}</strong>
                                 </span>
                               ))}
-                              {!shownSummaryLabels.has("メイン発注先") ? (
+                              {procurementDetailsVisible && !shownSummaryLabels.has("メイン発注先") ? (
                                 <span>
                                   <small>メイン発注先</small>
                                   <strong>{product.mainSupplier || "未設定"}</strong>
                                 </span>
                               ) : null}
-                              {!shownSummaryLabels.has("規格単価") ? (
+                              {procurementDetailsVisible && !shownSummaryLabels.has("規格単価") ? (
                                 <span>
                                   <small>規格単価</small>
                                   <strong>{unitPriceLabel}</strong>
@@ -1547,14 +1577,14 @@ export default function ProductsPage() {
                               ) : null}
                             </div>
                             <div className="row-actions">
-                              <button className="text-button" type="button" onClick={() => void openProductPriceHistory(product)}>
+                              {procurementDetailsVisible ? <button className="text-button" type="button" onClick={() => void openProductPriceHistory(product)}>
                                 価格推移
-                              </button>
+                              </button> : null}
                               {canManageProducts ? (
                                 <>
                                   <button
                                     className="text-button"
-                                    onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
+                                    onClick={() => setEditTarget({ type: "product", value: { ...product, referencePrice: product.referencePrice ?? "" }, originalName: product.name })}
                                   >
                                     編集
                                   </button>
@@ -1599,7 +1629,7 @@ export default function ProductsPage() {
                                   <dt>日本語メモ</dt>
                                   <dd>{getDisplayJapaneseNote(product) || "未設定"}</dd>
                                 </div>
-                                <div>
+                                {procurementDetailsVisible ? <div>
                                   <dt>メイン発注先</dt>
                                   <dd>
                                     {product.mainSupplier || "未設定"}
@@ -1609,8 +1639,8 @@ export default function ProductsPage() {
                                       </a>
                                     ) : null}
                                   </dd>
-                                </div>
-                                <div>
+                                </div> : null}
+                                {procurementDetailsVisible ? <div>
                                   <dt>予備発注先</dt>
                                   <dd>
                                     {product.backupSupplier || "未設定"}
@@ -1620,7 +1650,7 @@ export default function ProductsPage() {
                                       </a>
                                     ) : null}
                                   </dd>
-                                </div>
+                                </div> : null}
                                 <div>
                                   <dt>原産地</dt>
                                   <dd>{product.originCountries?.length ? product.originCountries.join(" / ") : "未設定"}</dd>
@@ -1629,11 +1659,11 @@ export default function ProductsPage() {
                                   <dt>数量</dt>
                                   <dd>{formatPackageQuantity(product)}</dd>
                                 </div>
-                                <div>
+                                {procurementDetailsVisible ? <div>
                                   <dt>海外輸入</dt>
                                   <dd>{product.isImported ? formatProductImportCost(product) : "対象外"}</dd>
-                                </div>
-                                {product.isImported ? (
+                                </div> : null}
+                                {procurementDetailsVisible && product.isImported ? (
                                   <>
                                     <div>
                                       <dt>輸入元・通貨</dt>
@@ -1788,7 +1818,7 @@ export default function ProductsPage() {
         ) : null}
       </section>
 
-      {priceHistory ? (
+      {procurementDetailsVisible && priceHistory ? (
         <ProductPriceHistoryDialog
           history={priceHistory}
           onClose={() => setPriceHistory(null)}
@@ -1799,6 +1829,7 @@ export default function ProductsPage() {
           target={editTarget}
           suppliers={suppliers}
           brands={brandsData}
+          stores={catalogPublicationStores}
           categoryOptions={productCategories}
           subcategoryOptions={subcategoryMaster
             .filter((subcategory) => subcategory.category === editTarget.value.category)
@@ -1985,6 +2016,7 @@ function ProductEditDialog({
   target,
   suppliers,
   brands,
+  stores,
   categoryOptions,
   subcategoryOptions,
   onChange,
@@ -1995,6 +2027,7 @@ function ProductEditDialog({
   target: ProductEditTarget;
   suppliers: Supplier[];
   brands: typeof import("../../../lib/mock-data").brands;
+  stores: StoreItem[];
   categoryOptions: string[];
   subcategoryOptions: string[];
   onChange: (target: ProductEditTarget) => void;
@@ -2005,6 +2038,9 @@ function ProductEditDialog({
   useModalHistory(true, onClose, "products-edit");
 
   const fields = getProductFields(target.value, suppliers, brands, categoryOptions, subcategoryOptions);
+  const catalogStoreIds = target.value.catalogStoreIds ?? [];
+  const selectablePublicationStores = stores.filter((store) => Boolean(store.id));
+  const unseenPublicationStoreCount = catalogStoreIds.filter((id) => !selectablePublicationStores.some((store) => store.id === id)).length;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadStatus, setUploadStatus] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -2334,6 +2370,27 @@ function ProductEditDialog({
           </div>
         </div>
         <div className="edit-fields">
+          <label>
+            <span>商品公開範囲</span>
+            <select
+              value={normalizeCatalogVisibility(target.value.catalogVisibility)}
+              onChange={(event) => onChange({ ...target, value: { ...target.value, catalogVisibility: normalizeCatalogVisibility(event.target.value) } })}
+            >
+              {catalogVisibilityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <small>公開先と適用ブランドの両方に一致する店舗に表示されます。</small>
+          </label>
+          <label>
+            <span>発注可否</span>
+            <select
+              value={target.value.isOrderable === false ? "stopped" : "orderable"}
+              onChange={(event) => onChange({ ...target, value: { ...target.value, isOrderable: event.target.value === "orderable" } })}
+            >
+              <option value="orderable">発注可</option>
+              <option value="stopped">発注停止</option>
+            </select>
+            <small>発注停止でも商品情報と履歴は残ります。</small>
+          </label>
           <div className="product-generated-name-preview">
             <span>自動生成名</span>
             <strong>{generatedProductName || "商品名とバリエーション名から自動生成"}</strong>
@@ -2403,6 +2460,36 @@ function ProductEditDialog({
               )}
             </label>
           ))}
+          {normalizeCatalogVisibility(target.value.catalogVisibility) === "selected_stores" ? (
+            <fieldset className="origin-country-picker">
+              <legend>公開する店舗</legend>
+              <small>適用ブランドが一致する選択店舗に公開します。</small>
+              <div className="origin-country-list">
+                {selectablePublicationStores.map((store) => (
+                  <label key={store.id}>
+                    <input
+                      type="checkbox"
+                      style={{ accentColor: "var(--green)" }}
+                      checked={catalogStoreIds.includes(store.id!)}
+                      onChange={(event) => onChange({
+                        ...target,
+                        value: {
+                          ...target.value,
+                          catalogStoreIds: event.target.checked
+                            ? Array.from(new Set([...catalogStoreIds, store.id!]))
+                            : catalogStoreIds.filter((id) => id !== store.id)
+                        }
+                      })}
+                    />
+                    <span>{store.name}</span>
+                  </label>
+                ))}
+                {selectablePublicationStores.length === 0 ? <small>選択できる店舗がありません。</small> : null}
+              </div>
+              {unseenPublicationStoreCount > 0 ? <small>一覧外の公開店舗 {unseenPublicationStoreCount} 件は維持されます。</small> : null}
+              {catalogStoreIds.length === 0 ? <small>店舗を選択するまで、店舗側には公開されません。</small> : null}
+            </fieldset>
+          ) : null}
           <div className="product-spec-grid">
             <fieldset className="origin-country-picker product-spec-origin">
               <span>原産地</span>

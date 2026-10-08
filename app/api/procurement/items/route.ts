@@ -3,9 +3,11 @@ import { sql } from "../../../../lib/db";
 import { publishOsNotificationEvent } from "../../../../lib/notification-realtime";
 import { publishStoreOperationalEvent } from "../../../../lib/order-realtime";
 import { roleHasPermission } from "../../../../lib/role-permissions";
+import { assertProductsOrderable } from "../../../../lib/product-catalog-access";
+import { isHeadquarterCatalogRole } from "../../../../lib/product-catalog-policy";
+import { normalizeRecordedProcurementQuantity, resolveProcurementFeedbackConfirmation, type ProcurementFeedbackKind } from "../../../../lib/procurement-confirmation-policy";
 
 const additionalPurchaseNotePrefix = "追加購入";
-const priceExceptionPercentThreshold = 5;
 
 export async function POST(request: Request) {
   const session = await requireWritableOsSession();
@@ -47,6 +49,12 @@ export async function POST(request: Request) {
 
   if (!await canAccessStore(session, order.storeId)) {
     return Response.json({ error: "この依頼に追加購入を登録する権限がありません。" }, { status: 403 });
+  }
+  if (productId) {
+    const access = await assertProductsOrderable(session, String(order.storeId), [productId]);
+    if (!access.ok) return Response.json({ error: access.error }, { status: access.status });
+  } else if (!isHeadquarterCatalogRole(session.role)) {
+    return Response.json({ error: "臨時購入品は本部へ登録を依頼してください。" }, { status: 403 });
   }
 
   const productRows = productId
@@ -138,6 +146,7 @@ export async function PATCH(request: Request) {
     purchased?: boolean;
     unavailable?: boolean;
     actualQuantity?: number;
+    actualQuantityRecordedExplicitly?: boolean;
     actualPrice?: string;
     supplierLocationName?: string;
     note?: string;
@@ -145,6 +154,7 @@ export async function PATCH(request: Request) {
     deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
     clearActualPrice?: boolean;
     confirmStoreFeedback?: boolean;
+    confirmFeedbackKind?: ProcurementFeedbackKind;
     historyCorrection?: boolean;
     correctRequestedQuantity?: boolean;
     splitRemaining?: boolean;
@@ -185,6 +195,7 @@ export async function PATCH(request: Request) {
       coalesce(nullif(purchase_order_items.temporary_product_name, ''), products.name, '臨時購入品') as "productName",
       coalesce(products.reference_price::float, 0) as "referencePrice",
       purchase_order_items.status as "currentStatus",
+      purchase_actuals.id is not null as "currentHasPurchaseActual",
       coalesce(purchase_order_items.procurement_note, '') as "currentNote",
       coalesce(purchase_order_items.note, '') as "requestNote",
       coalesce(purchase_order_items.procurement_note, '') like ${`${additionalPurchaseNotePrefix}%`} as "isAdditionalPurchase",
@@ -194,8 +205,7 @@ export async function PATCH(request: Request) {
       purchase_order_items.requested_unit as "requestedUnit",
       coalesce(
         purchase_order_items.actual_quantity::float,
-        purchase_actuals.actual_quantity::float,
-        purchase_order_items.requested_quantity::float
+        purchase_actuals.actual_quantity::float
       ) as "currentActualQuantity",
       coalesce(
         purchase_order_items.actual_price::float,
@@ -207,6 +217,7 @@ export async function PATCH(request: Request) {
     left join products on products.id = purchase_order_items.product_id
     left join lateral (
       select
+        purchase_actuals.id,
         purchase_actuals.actual_quantity,
         purchase_actuals.actual_price
       from purchase_actuals
@@ -219,6 +230,110 @@ export async function PATCH(request: Request) {
   `;
   const itemDetail = detailRows[0];
 
+  const confirmation = resolveProcurementFeedbackConfirmation(body, {
+    currentStatus: String(itemDetail?.currentStatus ?? ""),
+    requestedQuantity: Number(itemDetail?.requestedQuantity ?? 0)
+  });
+  if (confirmation && "error" in confirmation) {
+    return Response.json({ error: confirmation.error }, { status: confirmation.status ?? 400 });
+  }
+  if (confirmation) {
+    const kind = confirmation.kind;
+    const confirmedRows = await sql`
+      with facts as (
+        select
+          purchase_order_items.id,
+          purchase_order_items.purchase_order_id,
+          purchase_order_items.status,
+          purchase_order_items.price_feedback_confirmation as previous_price_snapshot,
+          purchase_order_items.quantity_feedback_confirmation as previous_quantity_snapshot,
+          purchase_order_items.store_feedback_confirmed_at as previous_store_confirmation,
+          coalesce(nullif(purchase_order_items.temporary_product_name, ''), products.name, '臨時購入品') as product_name,
+          coalesce(purchase_order_items.procurement_note, '') as procurement_note,
+          jsonb_build_object(
+            'actualPrice', coalesce(purchase_order_items.actual_price, purchase_actuals.actual_price),
+            'referencePrice', products.reference_price,
+            'productId', coalesce(purchase_order_items.product_id::text, ''),
+            'unit', purchase_order_items.requested_unit
+          ) as price_snapshot,
+          jsonb_build_object(
+            'actualQuantity', coalesce(purchase_order_items.actual_quantity, purchase_actuals.actual_quantity),
+            'requestedQuantity', purchase_order_items.requested_quantity,
+            'productId', coalesce(purchase_order_items.product_id::text, ''),
+            'unit', purchase_order_items.requested_unit
+          ) as quantity_snapshot
+        from purchase_order_items
+        left join products on products.id = purchase_order_items.product_id
+        left join lateral (
+          select actual_quantity, actual_price
+          from purchase_actuals
+          where purchase_actuals.purchase_order_item_id = purchase_order_items.id
+          order by recorded_at desc
+          limit 1
+        ) purchase_actuals on true
+        where purchase_order_items.id = ${body.itemId}
+          and (
+            (${kind} = 'price' and purchase_order_items.status in ('in_delivery', 'delivered', 'received')
+              and coalesce(purchase_order_items.actual_price, purchase_actuals.actual_price) > 0
+              and products.reference_price > 0)
+            or (${kind} = 'quantity' and purchase_order_items.status in ('in_delivery', 'delivered', 'received')
+              and coalesce(purchase_order_items.actual_quantity, purchase_actuals.actual_quantity) is not null)
+            or (${kind} = 'unavailable' and purchase_order_items.status = 'unavailable')
+            or (${kind} = 'note' and coalesce(purchase_order_items.procurement_note, '') <> '' and purchase_order_items.status in ('in_delivery', 'delivered', 'received'))
+          )
+        for update of purchase_order_items
+      ), eligible as (
+        select * from facts
+        where ${confirmation.expectedSnapshot === undefined}
+          or case
+            when ${kind} = 'price' then facts.price_snapshot = ${JSON.stringify(confirmation.expectedSnapshot ?? null)}::jsonb
+            when ${kind} = 'quantity' then facts.quantity_snapshot = ${JSON.stringify(confirmation.expectedSnapshot ?? null)}::jsonb
+            else true
+          end
+      ), confirmed as (
+        update purchase_order_items
+        set
+          price_feedback_confirmation = case when ${kind} = 'price' then facts.price_snapshot else purchase_order_items.price_feedback_confirmation end,
+          quantity_feedback_confirmation = case when ${kind} = 'quantity' then facts.quantity_snapshot else purchase_order_items.quantity_feedback_confirmation end,
+          store_feedback_confirmed_at = case when ${kind} in ('note', 'unavailable') then now() else purchase_order_items.store_feedback_confirmed_at end,
+          store_feedback_confirmed_by = case when ${kind} in ('note', 'unavailable') then ${session.id}::uuid else purchase_order_items.store_feedback_confirmed_by end
+        from eligible facts
+        where purchase_order_items.id = facts.id
+        returning purchase_order_items.id, facts.purchase_order_id, facts.product_name,
+          facts.procurement_note, facts.price_snapshot, facts.quantity_snapshot,
+          facts.previous_price_snapshot, facts.previous_quantity_snapshot, facts.previous_store_confirmation
+      ), recorded as (
+        insert into purchase_exceptions (
+          purchase_order_id, purchase_order_item_id, exception_type, message,
+          resolution_note, needs_store_confirmation, affects_operation,
+          status, resolved_by, resolved_at, updated_at
+        )
+        select
+          confirmed.purchase_order_id, confirmed.id, ${kind},
+          case
+            when ${kind} = 'price' then concat('実際 ¥', confirmed.price_snapshot->>'actualPrice', ' / 基準 ¥', confirmed.price_snapshot->>'referencePrice')
+            when ${kind} = 'quantity' then concat('依頼 ', confirmed.quantity_snapshot->>'requestedQuantity', ' / 実数 ', confirmed.quantity_snapshot->>'actualQuantity', ' ', confirmed.quantity_snapshot->>'unit')
+            when ${kind} = 'unavailable' then concat(confirmed.product_name, ' は本依頼で購入不可として店舗確認済みです。 ', confirmed.procurement_note)
+            else confirmed.procurement_note
+          end,
+          '店舗確認済み', true, ${kind} = 'unavailable', 'resolved', ${session.id}::uuid, now(), now()
+        from confirmed
+        where case
+          when ${kind} = 'price' then confirmed.previous_price_snapshot is distinct from confirmed.price_snapshot
+          when ${kind} = 'quantity' then confirmed.previous_quantity_snapshot is distinct from confirmed.quantity_snapshot
+          else confirmed.previous_store_confirmation is null
+        end
+        returning id
+      )
+      select id::text from confirmed
+    `;
+    if (!confirmedRows[0]) {
+      return Response.json({ error: "確認対象の状態が変わりました。最新の内容を確認してください。" }, { status: 409 });
+    }
+    await publishStoreOperationalEvent(String(itemDetail.storeId), "procurement.updated").catch(() => undefined);
+    return Response.json({ ok: true, confirmedFeedbackKind: kind });
+  }
+
   const currentStatus = String(itemDetail?.currentStatus ?? "");
   const isDeliveryLocked = ["in_delivery", "delivered", "received"].includes(currentStatus);
   const isHistoryCorrection = body.historyCorrection === true;
@@ -226,7 +341,18 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "履歴修正の権限がありません。" }, { status: 403 });
   }
   const requestedDeliveryStatus = String(body.deliveryStatus ?? "");
-  const actualQuantity = Number.isFinite(body.actualQuantity) ? body.actualQuantity : null;
+  const actualQuantity = normalizeRecordedProcurementQuantity(body.actualQuantity);
+  if (body.actualQuantity !== undefined && body.actualQuantity !== null && actualQuantity === null) {
+    return Response.json({ error: "実際の購入数量を正しい数値で入力してください。" }, { status: 400 });
+  }
+  if (
+    !isHistoryCorrection && actualQuantity !== null &&
+    normalizeRecordedProcurementQuantity(itemDetail?.currentActualQuantity) === null &&
+    body.actualQuantityRecordedExplicitly !== true
+  ) {
+    return Response.json({ error: "確認対象の状態が変わりました。最新の内容を確認してください。" }, { status: 409 });
+  }
+  const recordedActualQuantity = actualQuantity ?? normalizeRecordedProcurementQuantity(itemDetail?.currentActualQuantity);
   const splitRemaining = body.splitRemaining === true;
   const splitPurchasedQuantity = splitRemaining && actualQuantity !== null ? Math.max(0, Number(actualQuantity)) : null;
   const currentRequestedQuantity = Number(itemDetail?.requestedQuantity ?? 0);
@@ -236,7 +362,7 @@ export async function PATCH(request: Request) {
     : isHistoryCorrection && body.correctRequestedQuantity === true && Number.isFinite(body.requestedQuantity)
     ? Math.max(0, Number(body.requestedQuantity))
     : null;
-  const hasActualPrice = body.actualPrice !== undefined || body.clearActualPrice === true;
+  const hasActualPrice = body.actualPrice !== undefined;
   const actualPriceText = String(body.actualPrice ?? "").trim();
   const normalizedActualPrice = actualPriceText.replace(/[¥￥,\s]/g, "");
   const actualPrice = normalizedActualPrice ? Number(normalizedActualPrice) : null;
@@ -251,6 +377,26 @@ export async function PATCH(request: Request) {
     (!nextProductId && nextProductName && String(itemDetail?.currentTemporaryProductName ?? "") !== nextProductName) ||
     (nextUnit && String(itemDetail?.requestedUnit ?? "") !== nextUnit)
   );
+  if (productActuallyChanged) {
+    if (nextProductId) {
+      const access = await assertProductsOrderable(session, String(itemRows[0].storeId), [nextProductId]);
+      if (!access.ok) return Response.json({ error: access.error }, { status: access.status });
+    } else if (!isHeadquarterCatalogRole(session.role)) {
+      return Response.json({ error: "臨時購入品は本部へ登録を依頼してください。" }, { status: 403 });
+    }
+  }
+  const addsCurrentSkuDemand = splitRemaining || (
+    !isHistoryCorrection && requestedQuantity !== null && requestedQuantity > Number(itemDetail?.requestedQuantity ?? 0)
+  );
+  if (addsCurrentSkuDemand) {
+    const demandedProductId = String(itemDetail?.currentProductId ?? "");
+    if (demandedProductId) {
+      const access = await assertProductsOrderable(session, String(itemRows[0].storeId), [demandedProductId]);
+      if (!access.ok) return Response.json({ error: access.error }, { status: access.status });
+    } else if (!isHeadquarterCatalogRole(session.role)) {
+      return Response.json({ error: "臨時購入品は本部へ登録を依頼してください。" }, { status: 403 });
+    }
+  }
   if (
     isDeliveryLocked &&
     !isHistoryCorrection &&
@@ -267,7 +413,6 @@ export async function PATCH(request: Request) {
   }
   const shouldClearPriceException = body.purchased !== undefined || hasActualPrice || hasNote;
   const shouldResetStoreFeedbackConfirmation =
-    body.confirmStoreFeedback !== true &&
     !isHistoryCorrection &&
     ((hasNote && note !== itemDetail?.currentNote) || (body.unavailable === true && itemDetail?.currentStatus !== "unavailable"));
   const deliveryStatus = ["in_delivery", "delivered", "received"].includes(body.deliveryStatus ?? "")
@@ -277,6 +422,12 @@ export async function PATCH(request: Request) {
   const supplierLocationName = String(body.supplierLocationName ?? "").trim();
   const hasSupplierInput = supplierName.length > 0;
   const isRecordingPurchase = body.purchased === true && body.unavailable !== true;
+  const alreadyPurchased = itemDetail?.currentHasPurchaseActual === true
+    || ["purchased", "in_delivery", "delivered", "received"].includes(currentStatus);
+  if (isRecordingPurchase && !alreadyPurchased && recordedActualQuantity === null) {
+    return Response.json({ error: "購入済みにする前に実際の購入数量を入力してください。" }, { status: 400 });
+  }
+  const purchaseRecordPrice = hasActualPrice ? actualPrice : normalizeRecordedProcurementQuantity(itemDetail?.currentActualPrice);
   const supplierRows = supplierName
     ? isRecordingPurchase
       ? await sql`
@@ -383,43 +534,6 @@ export async function PATCH(request: Request) {
   }
 
   if (itemDetail) {
-    if (body.clearActualPrice === true) {
-      const currentActualPrice = Number(itemDetail.currentActualPrice ?? 0);
-      const referencePrice = Number(itemDetail.referencePrice ?? 0);
-      if (currentActualPrice > 0 && referencePrice > 0) {
-        const diffRate = Math.round(((currentActualPrice - referencePrice) / referencePrice) * 1000) / 10;
-        if (Math.abs(diffRate) >= priceExceptionPercentThreshold) {
-          await sql`
-            insert into purchase_exceptions (
-              purchase_order_id,
-              purchase_order_item_id,
-              exception_type,
-              message,
-              resolution_note,
-              needs_store_confirmation,
-              affects_operation,
-              status,
-              resolved_by,
-              resolved_at,
-              updated_at
-            ) values (
-              ${itemDetail.purchaseOrderId},
-              ${itemDetail.itemId},
-              'price',
-              ${`実際 ¥${formatPriceForMessage(currentActualPrice)} / 基準 ¥${formatPriceForMessage(referencePrice)} (${diffRate > 0 ? "+" : ""}${diffRate}%)`},
-              '店舗確認済み',
-              true,
-              false,
-              'resolved',
-              ${session.id},
-              now(),
-              now()
-            )
-          `;
-        }
-      }
-    }
-
     if (body.unavailable === true && itemDetail.currentStatus !== "unavailable") {
       await sql`
         insert into purchase_exceptions (
@@ -464,66 +578,6 @@ export async function PATCH(request: Request) {
         )
       `;
     }
-
-    if (body.confirmStoreFeedback === true) {
-      if (itemDetail.currentStatus === "unavailable") {
-        await sql`
-          insert into purchase_exceptions (
-            purchase_order_id,
-            purchase_order_item_id,
-            exception_type,
-            message,
-            resolution_note,
-            needs_store_confirmation,
-            affects_operation,
-            status,
-            resolved_by,
-            resolved_at,
-            updated_at
-          ) values (
-            ${itemDetail.purchaseOrderId},
-            ${itemDetail.itemId},
-            'unavailable',
-            ${`${itemDetail.productName} は本依頼で購入不可として店舗確認済みです。${itemDetail.currentNote ? ` 理由: ${itemDetail.currentNote}` : ""}`},
-            '店舗確認済み',
-            true,
-            true,
-            'resolved',
-            ${session.id},
-            now(),
-            now()
-          )
-        `;
-      } else if (itemDetail.currentNote) {
-        await sql`
-          insert into purchase_exceptions (
-            purchase_order_id,
-            purchase_order_item_id,
-            exception_type,
-            message,
-            resolution_note,
-            needs_store_confirmation,
-            affects_operation,
-            status,
-            resolved_by,
-            resolved_at,
-            updated_at
-          ) values (
-            ${itemDetail.purchaseOrderId},
-            ${itemDetail.itemId},
-            'note',
-            ${itemDetail.currentNote},
-            '店舗確認済み',
-            true,
-            false,
-            'resolved',
-            ${session.id},
-            now(),
-            now()
-          )
-        `;
-      }
-    }
   }
 
   await sql`
@@ -549,7 +603,7 @@ export async function PATCH(request: Request) {
       end,
       actual_price = case
         when ${body.unavailable === true} then null
-        when ${hasActualPrice} then ${body.clearActualPrice === true ? null : Number.isFinite(actualPrice) ? actualPrice : null}
+        when ${hasActualPrice} then ${Number.isFinite(actualPrice) ? actualPrice : null}
         else actual_price
       end,
       procurement_note = case
@@ -582,12 +636,10 @@ export async function PATCH(request: Request) {
         else selected_supplier_id
       end,
       store_feedback_confirmed_at = case
-        when ${body.confirmStoreFeedback === true} then now()
         when ${shouldResetStoreFeedbackConfirmation} then null
         else store_feedback_confirmed_at
       end,
       store_feedback_confirmed_by = case
-        when ${body.confirmStoreFeedback === true} then ${session.id}
         when ${shouldResetStoreFeedbackConfirmation} then null
         else store_feedback_confirmed_by
       end
@@ -685,22 +737,6 @@ export async function PATCH(request: Request) {
     ));
   }
 
-  if (body.clearActualPrice === true) {
-    await sql`
-      update purchase_actuals
-      set
-        actual_price = null,
-        price_is_exception = false
-      where purchase_order_item_id = ${body.itemId}
-    `;
-
-    await sql`
-      delete from price_records
-      where source = 'purchase_actual'
-        and receipt_note = ${body.itemId}
-    `;
-  }
-
   if (body.purchased === false || body.unavailable === true) {
     await sql`
       delete from purchase_actuals
@@ -735,16 +771,16 @@ export async function PATCH(request: Request) {
         purchase_order_items.id,
         coalesce(${supplierId}::uuid, purchase_order_items.selected_supplier_id),
         ${supplierLocationId}::uuid,
-        coalesce(${actualQuantity}, purchase_order_items.requested_quantity),
+        coalesce(${actualQuantity}::numeric, purchase_order_items.actual_quantity, ${recordedActualQuantity}::numeric),
         purchase_order_items.requested_unit,
-        ${Number.isFinite(actualPrice) ? actualPrice : null},
+        ${Number.isFinite(purchaseRecordPrice) ? purchaseRecordPrice : null},
         false,
-        ${note}
+        ${hasNote ? note : itemDetail?.currentNote ?? ""}
       from purchase_order_items
       where purchase_order_items.id = ${body.itemId}
     `;
 
-    if (Number.isFinite(actualPrice)) {
+    if (Number.isFinite(purchaseRecordPrice)) {
       await sql`
         delete from price_records
         where source = 'purchase_actual'
@@ -764,7 +800,7 @@ export async function PATCH(request: Request) {
         select
           purchase_order_items.product_id,
           coalesce(${supplierId}::uuid, purchase_order_items.selected_supplier_id),
-          ${actualPrice},
+          ${purchaseRecordPrice},
           purchase_order_items.requested_unit,
           'purchase_actual',
           ${body.itemId},
