@@ -19,13 +19,19 @@ import {
   UserCog
 } from "lucide-react";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
+import { ReplenishmentPanel } from "../../../components/ReplenishmentPanel";
+import { StockReceiptPanel } from "../../../components/StockReceiptPanel";
+import { QuickInventoryList } from "../../../components/QuickInventoryList";
+import type { InventoryQuickCheck, InventoryQuickCheckBasis, InventoryQuickCheckSubmission } from "../../../lib/inventory-quick-policy";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList, type OsNavItem } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 import { useOsTranslation } from "../components/OsTranslationProvider";
-import { inventoryCountException, inventoryNeedsOrder, normalizeInventoryCount } from "../../../lib/inventory-observation-policy";
+import { inventoryCountException, inventoryNeedsOrder } from "../../../lib/inventory-observation-policy";
+
+import { parseInventoryCountQuantity, type ProductInventoryUnitConversion, type ProductUnitConversionSnapshot } from "../../../lib/product-unit-conversions";
 
 type StoreOption = { id: string; name: string };
 type LocationOption = {
@@ -36,7 +42,7 @@ type LocationOption = {
   positionName: string;
   locationType: string;
 };
-type ProductOption = { id: string; name: string; category: string; unit: string; storageType: string };
+type ProductOption = { id: string; name: string; category: string; unit: string; storageType: string; inventoryUnitConversions?: ProductInventoryUnitConversion[]; inventoryUnitChoices?: ProductUnitConversionSnapshot[] };
 type InventoryItem = {
   id: string;
   storeId: string;
@@ -46,6 +52,15 @@ type InventoryItem = {
   locationId: string;
   locationName: string;
   countUnit: string;
+  currentConversion?: ProductUnitConversionSnapshot | null;
+  countConversionSnapshot?: ProductUnitConversionSnapshot | null;
+  stockConversionSnapshot?: ProductUnitConversionSnapshot | null;
+  stockRevision?: number;
+  lastCountedQuantity?: number | null;
+  lastReceivedAt?: string | null;
+  conversionChanged?: boolean;
+  purchaseEquivalent?: { quantity: number; unit: string } | null;
+  unitChoices?: ProductUnitConversionSnapshot[];
   safetyStock: number;
   currentQuantity: number | null;
   exceptionCode: string;
@@ -54,6 +69,10 @@ type InventoryItem = {
   lastCountedBy: string;
   confidenceLabel: string;
   lastCountedLabel: string;
+  quickCheckBasis?: InventoryQuickCheckBasis;
+  quickCheck?: InventoryQuickCheck | null;
+  canQuickCheck?: boolean;
+  effectiveStockStatus?: "available" | "low_stock" | "unavailable";
 };
 type RecentCheck = {
   id: string;
@@ -61,11 +80,15 @@ type RecentCheck = {
   locationName: string;
   quantity: number | null;
   countUnit: string;
+  unitConversionSnapshot?: ProductUnitConversionSnapshot | null;
+  purchaseEquivalent?: { quantity: number; unit: string } | null;
   recordType: string;
   exceptionCode: string;
   note: string;
   recordedBy: string;
   createdLabel: string;
+  quickStatus?: "enough" | "low" | "out";
+  quickEstimate?: { kind: string; quantity?: number; purchaseUnit?: string | null } | null;
 };
 type InventoryPayload = {
   stores: StoreOption[];
@@ -91,7 +114,7 @@ const navItems: OsNavItem[] = [
 
 const quantityOptions = [
   { value: 0, label: "0" },
-  { value: 0.5, label: "半分" },
+  { value: 0.5, label: "0.5" },
   { value: 1, label: "1" },
   { value: 2, label: "2" },
   { value: 3, label: "3" },
@@ -120,7 +143,8 @@ const emptyLocationDraft = {
 };
 
 export default function InventoryPage() {
-  const { t } = useOsTranslation();
+  const { t, language } = useOsTranslation();
+  const stockLabels = stockLabelsForLanguage(language);
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [data, setData] = useState<InventoryPayload>({
     stores: [],
@@ -130,34 +154,70 @@ export default function InventoryPage() {
     recentChecks: []
   });
   const [storeId, setStoreId] = useState("");
+  const [inventoryMode, setInventoryMode] = useState<"quick" | "precise">("quick");
+  const [receiptsOpen, setReceiptsOpen] = useState(false);
+  const [quickSaveError, setQuickSaveError] = useState("");
+  const activeInventoryStore = useRef(storeId);
+  activeInventoryStore.current = storeId;
+  const [replenishmentOpen, setReplenishmentOpen] = useState(false);
+  const [replenishmentRefreshKey, setReplenishmentRefreshKey] = useState(0);
   const [locationFilter, setLocationFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const inventoryLoadSequence = useRef(0);
   const [isSaving, setIsSaving] = useState("");
   const [showSetup, setShowSetup] = useState(false);
+  const [setupProductId, setSetupProductId] = useState("");
+  const [setupCountUnit, setSetupCountUnit] = useState("");
+  const [setupCustomUnit, setSetupCustomUnit] = useState("");
+  const setupProduct = data.products.find(product => product.id === setupProductId);
+  const setupUnitChoices = setupProduct?.inventoryUnitChoices ?? [];
+  const setupConversion = setupUnitChoices.find(choice => choice.countUnit === setupCountUnit);
   const [showLocationSettings, setShowLocationSettings] = useState(false);
   const [locationDraft, setLocationDraft] = useState(emptyLocationDraft);
 
   useEffect(() => {
-    void loadInventory();
+    try { if (localStorage.getItem("foundr1-os:inventory-mode-v1") === "precise") setInventoryMode("precise"); } catch { /* Quick mode is the usable default. */ }
+    const loadLinkedStore = () => {
+      const linkedStoreId = new URLSearchParams(window.location.search).get("storeId")?.trim() ?? "";
+      setLocationFilter("all");
+      setLocationDraft(emptyLocationDraft);
+      setReceiptsOpen(false); setQuickSaveError("");
+      void loadInventory(linkedStoreId);
+    };
+    loadLinkedStore();
+    window.addEventListener("popstate", loadLinkedStore);
+    return () => { window.removeEventListener("popstate", loadLinkedStore); ++inventoryLoadSequence.current; };
   }, []);
 
-  async function loadInventory(nextStoreId?: string) {
+  async function loadInventory(nextStoreId?: string, preserveCurrentItems = false) {
+    const sequence = ++inventoryLoadSequence.current;
     setIsLoading(true);
     const targetStoreId = nextStoreId ?? storeId;
-    const response = await fetch(`/api/inventory${targetStoreId ? `?storeId=${encodeURIComponent(targetStoreId)}` : ""}`, {
-      cache: "no-store"
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({})) as { error?: string };
-      window.alert(body.error ?? "在庫情報を読み込めませんでした。");
-      setIsLoading(false);
-      return;
+    setLoadError("");
+    setStoreId(targetStoreId);
+    if (nextStoreId !== undefined && !preserveCurrentItems) setData((current) => ({ stores: current.stores, locations: [], products: [], items: [], recentChecks: [] }));
+    try {
+      const response = await fetch(`/api/inventory${targetStoreId ? `?storeId=${encodeURIComponent(targetStoreId)}` : ""}`, { cache: "no-store" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "在庫情報を読み込めませんでした。");
+      }
+      const payload = await response.json() as InventoryPayload;
+      if (sequence !== inventoryLoadSequence.current) return;
+      if (targetStoreId && payload.selectedStoreId !== targetStoreId) throw new Error("在庫情報を読み込めませんでした。");
+      setData(payload);
+      setReplenishmentRefreshKey(key => key + 1);
+      setStoreId(payload.selectedStoreId ?? targetStoreId);
+    } catch (failure) {
+      if (sequence !== inventoryLoadSequence.current) return;
+      setLoadError(failure instanceof Error ? failure.message : "在庫情報を読み込めませんでした。");
+      setData((current) => ({ stores: current.stores, locations: [], products: [], items: [], recentChecks: [] }));
+      setStoreId(targetStoreId);
+    } finally {
+      if (sequence === inventoryLoadSequence.current) setIsLoading(false);
     }
-    const payload = await response.json() as InventoryPayload;
-    setData(payload);
-    setStoreId(payload.selectedStoreId ?? nextStoreId ?? "");
-    setIsLoading(false);
   }
 
   async function postInventory(body: Record<string, unknown>, successMessage: string) {
@@ -167,10 +227,41 @@ export default function InventoryPage() {
       body: JSON.stringify({ ...body, storeId })
     });
     if (!response.ok) {
-      const responseBody = await response.json().catch(() => ({})) as { error?: string };
+      const responseBody = await response.json().catch(() => ({})) as { error?: string; code?: string };
+      if (responseBody.code === "stock_revision_changed") throw new Error(stockLabels.stockChanged);
       throw new Error(responseBody.error ?? "在庫情報を保存できませんでした。");
     }
     showNotice(successMessage);
+  }
+
+  function changeMode(mode: "quick" | "precise") {
+    setInventoryMode(mode);
+    try { localStorage.setItem("foundr1-os:inventory-mode-v1", mode); } catch { /* Keep the selected mode usable without storage. */ }
+  }
+
+  async function reloadIfCurrentStore(submittedStore: string) {
+    if (activeInventoryStore.current === submittedStore) await loadInventory(submittedStore, true);
+  }
+
+  async function recordQuickChecks(checks: InventoryQuickCheckSubmission[]) {
+    if (isSaving || !checks.length) return false;
+    const submittedStore = storeId;
+    setIsSaving("quick"); setQuickSaveError("");
+    try {
+      const response = await fetch("/api/inventory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "batch_quick_check", storeId: submittedStore, checks }) });
+      const body = await response.json().catch(() => ({}));
+      if (activeInventoryStore.current !== submittedStore) return false;
+      if (!response.ok) {
+        if (response.status === 409) await reloadIfCurrentStore(submittedStore);
+        throw new Error(body.error ?? "かんたん確認を保存できませんでした。再試行してください。");
+      }
+      showNotice(t("{count} 件の目視状態を保存しました。", { count: checks.length }));
+      await reloadIfCurrentStore(submittedStore);
+      return true;
+    } catch (error) {
+      if (activeInventoryStore.current === submittedStore) setQuickSaveError(error instanceof Error ? error.message : "かんたん確認を保存できませんでした。再試行してください。");
+      return false;
+    } finally { setIsSaving(""); }
   }
 
   async function recordCount(item: InventoryItem, quantity: number): Promise<boolean> {
@@ -183,6 +274,11 @@ export default function InventoryPage() {
         ? {
             ...candidate,
             currentQuantity: quantity,
+            lastCountedQuantity: quantity,
+            purchaseEquivalent: null,
+            countConversionSnapshot: item.currentConversion ?? null,
+            stockConversionSnapshot: item.currentConversion ?? null,
+            conversionChanged: false,
             exceptionCode,
             exceptionNote: "",
             confidenceLabel: "確認済み",
@@ -192,12 +288,13 @@ export default function InventoryPage() {
     }));
     setIsSaving(item.id);
     try {
-      await postInventory({ action: "count", itemId: item.id, quantity, countUnit: item.countUnit }, `${item.productName}の在庫を記録しました。`);
+      await postInventory({ action: "count", itemId: item.id, quantity, countUnit: item.countUnit, expectedConversion: item.currentConversion ?? null, expectedStockRevision: item.stockRevision }, `${item.productName}の在庫を記録しました。`);
       await loadInventory(storeId);
       return true;
     } catch (error) {
       setData((current) => ({ ...current, items: previous }));
       window.alert(t(error instanceof Error ? error.message : "在庫情報を保存できませんでした。"));
+      if (error instanceof Error && error.message === stockLabels.stockChanged) await loadInventory(storeId);
       return false;
     } finally {
       setIsSaving("");
@@ -207,9 +304,9 @@ export default function InventoryPage() {
   async function recordExactCount(event: FormEvent<HTMLFormElement>, item: InventoryItem) {
     event.preventDefault();
     const form = event.currentTarget;
-    const quantity = normalizeInventoryCount(new FormData(form).get("quantity"));
+    const quantity = parseInventoryCountQuantity(new FormData(form).get("quantity"));
     if (quantity === null) {
-      window.alert(t("在庫量を0以上の数値で入力してください。"));
+      window.alert(t("数量は0以上、小数は6桁までです。分数は正確に記録できる値を入力するか、1/X単位を選んでください。"));
       return;
     }
     if (await recordCount(item, quantity)) form.reset();
@@ -242,11 +339,12 @@ export default function InventoryPage() {
         action: "configure",
         productId: formData.get("productId"),
         locationId: formData.get("locationId"),
-        countUnit: formData.get("countUnit"),
+        countUnit: setupCountUnit === "__custom__" ? setupCustomUnit : setupCountUnit,
         safetyStock: formData.get("safetyStock")
       }, "在庫確認の商品を追加しました。");
       form.reset();
       setShowSetup(false);
+      setSetupProductId(""); setSetupCountUnit(""); setSetupCustomUnit("");
       await loadInventory(storeId);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "商品を追加できませんでした。");
@@ -306,10 +404,10 @@ export default function InventoryPage() {
   }, [data.items, locationFilter, query]);
 
   const summary = useMemo(() => ({
-    needsOrder: data.items.filter(inventoryNeedsOrder).length,
-    needsCheck: data.items.filter((item) => item.confidenceLabel !== "確認済み").length,
+    needsOrder: data.items.filter(inventoryItemNeedsOrder).length,
+    needsCheck: data.items.filter((item) => inventoryMode === "quick" ? !item.quickCheck || item.quickCheck.state !== "fresh" : item.confidenceLabel !== "確認済み" || item.conversionChanged).length,
     exceptions: data.items.filter((item) => ["too_much", "damaged", "quality"].includes(item.exceptionCode)).length
-  }), [data.items]);
+  }), [data.items, inventoryMode]);
 
   return (
     <main className="shell inventory-page">
@@ -338,15 +436,20 @@ export default function InventoryPage() {
               <span>店舗</span>
               <select
                 value={storeId}
-                disabled={isLoading}
+                disabled={isLoading || Boolean(isSaving)}
                 onChange={(event) => {
                   const nextStoreId = event.target.value;
                   setStoreId(nextStoreId);
                   setLocationFilter("all");
                   setLocationDraft(emptyLocationDraft);
+                  setReceiptsOpen(false); setQuickSaveError("");
+                  const url = new URL(window.location.href);
+                  url.searchParams.set("storeId", nextStoreId);
+                  window.history.replaceState(window.history.state, "", url);
                   void loadInventory(nextStoreId);
                 }}
               >
+                {storeId && !data.stores.some((store) => store.id === storeId) ? <option value={storeId} disabled>{t("選択してください")}</option> : null}
                 {data.stores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
               </select>
             </label>
@@ -372,6 +475,15 @@ export default function InventoryPage() {
         </header>
 
         <div className="inventory-content">
+          {inventoryMode === "precise" ? <p className="inventory-unit-summary" data-i18n-ignore>{stockLabels.bookNotice}</p> : null}
+          {loadError ? <p className="inline-alert" role="alert">{t(loadError)}</p> : null}
+          <div className="inventory-mode-switch" role="group" aria-label={t("在庫確認の方法")} data-i18n-ignore>
+            <button type="button" aria-pressed={inventoryMode === "quick"} className={inventoryMode === "quick" ? "is-active" : ""} onClick={() => changeMode("quick")}><CheckCircle2 size={16} />{t("かんたん確認")}</button>
+            <button type="button" aria-pressed={inventoryMode === "precise"} className={inventoryMode === "precise" ? "is-active" : ""} onClick={() => changeMode("precise")}><ClipboardList size={16} />{t("数量で棚卸")}</button>
+          </div>
+          {inventoryMode === "quick" ? <p className="inventory-unit-notice" data-i18n-ignore>{t("日常は目視で十分です。数えるのは、必要なときだけ。正確な数量と目安は分けて残します。")}</p> : null}
+          {!loadError && storeId ? <details className="panel inventory-receipts-fold" open={receiptsOpen} onToggle={event => setReceiptsOpen(event.currentTarget.open)} data-i18n-ignore><summary><PackagePlus size={17} />{t("到着した商品を入庫する")}</summary>{receiptsOpen ? <StockReceiptPanel storeId={storeId} onRecorded={() => void reloadIfCurrentStore(storeId)} /> : null}</details> : null}
+          {!loadError && storeId ? <ReplenishmentPanel storeId={storeId} refreshKey={replenishmentRefreshKey} open={replenishmentOpen} onOpenChange={setReplenishmentOpen} /> : null}
           <section className="inventory-summary" aria-label="在庫状況">
             <article>
               <span>発注を確認</span>
@@ -381,7 +493,7 @@ export default function InventoryPage() {
             <article>
               <span>現場確認が必要</span>
               <strong>{summary.needsCheck}</strong>
-              <small>未確認・古い記録</small>
+              <small data-i18n-ignore>{t(inventoryMode === "quick" ? "未目視・もう一度確認" : "未確認・古い記録")}</small>
             </article>
             <article>
               <span>その他の異常</span>
@@ -497,10 +609,14 @@ export default function InventoryPage() {
                   <p>商品、保存済みの保管場所、数える単位、安全在庫を設定します。</p>
                 </div>
               </div>
+              <p className="inventory-unit-notice" data-i18n-ignore>{t("棚卸単位を変更すると、記録数量の再確認が必要です。安全在庫も選択した単位で設定してください。")}</p>
               <div className="inventory-setup-grid">
                 <label>
                   <span>商品</span>
-                  <select name="productId" required defaultValue="">
+                  <select name="productId" required value={setupProductId} onChange={event => {
+                    const next = data.products.find(product => product.id === event.target.value);
+                    setSetupProductId(event.target.value); setSetupCountUnit(next?.unit ?? ""); setSetupCustomUnit("");
+                  }}>
                     <option value="">商品を選択</option>
                     {data.products.map((product) => (
                       <option value={product.id} key={product.id}>{product.category}｜{product.name}</option>
@@ -520,11 +636,17 @@ export default function InventoryPage() {
                 </label>
                 <label>
                   <span>数える単位</span>
-                  <input name="countUnit" defaultValue="袋" placeholder="袋・箱・本・パック" />
+                  <select name="countUnit" value={setupCountUnit} disabled={!setupProductId} required onChange={event => setSetupCountUnit(event.target.value)}>
+                    <option value="">{t("棚卸単位を選択")}</option>
+                    {setupUnitChoices.map(choice => <option value={choice.countUnit} key={choice.countUnit}>{choice.countUnit}</option>)}
+                    <option value="__custom__">{t("その他（換算未設定）")}</option>
+                  </select>
+                  {setupCountUnit === "__custom__" ? <input value={setupCustomUnit} maxLength={40} required placeholder={t("棚卸単位を入力")} onChange={event => setSetupCustomUnit(event.target.value)} /> : null}
+                  <small data-i18n-ignore>{setupConversion ? t("1 {purchaseUnit} = {quantity} {countUnit}", {purchaseUnit:setupConversion.purchaseUnit,quantity:formatQuantity(setupConversion.unitsPerPurchase) + (setupConversion.countUnit.startsWith("1/") ? " ×" : ""),countUnit:setupConversion.countUnit}) : setupProductId ? t("購入単位との換算は未設定です。") : ""}</small>
                 </label>
                 <label>
                   <span>安全在庫</span>
-                  <input name="safetyStock" type="number" min="0" step="0.5" defaultValue="1" inputMode="decimal" />
+                  <input name="safetyStock" type="number" min="0" step="0.000001" defaultValue="1" inputMode="decimal" />
                 </label>
                 <button className="primary-button" type="submit" disabled={isSaving === "setup"}>
                   {isSaving === "setup" ? "追加中..." : "追加する"}
@@ -555,6 +677,8 @@ export default function InventoryPage() {
             </label>
           </section>
 
+          {quickSaveError ? <p className="inline-alert" role="alert" data-i18n-ignore>{t(quickSaveError)}</p> : null}
+          {inventoryMode === "quick" && filteredItems.length > 0 ? <QuickInventoryList key={storeId} storeId={storeId} items={filteredItems} saving={Boolean(isSaving)} onSave={recordQuickChecks} /> : null}
           {filteredItems.length === 0 ? (
             <section className="panel inventory-empty">
               <PackageSearch size={30} />
@@ -577,10 +701,10 @@ export default function InventoryPage() {
                 </button>
               ) : null}
             </section>
-          ) : (
+          ) : inventoryMode === "precise" ? (
             <section className="inventory-list">
               {filteredItems.map((item) => {
-                const needsOrder = inventoryNeedsOrder(item);
+                const needsOrder = inventoryItemNeedsOrder(item);
                 const hasOtherException = ["too_much", "damaged", "quality"].includes(item.exceptionCode);
                 return (
                   <article className={`inventory-item${needsOrder ? " is-low" : ""}${hasOtherException ? " has-exception" : ""}`} key={item.id}>
@@ -591,16 +715,25 @@ export default function InventoryPage() {
                           {needsOrder ? <span className="inventory-status is-warning">発注確認</span> : null}
                           {hasOtherException ? <span className="inventory-status is-danger">{exceptionLabels[item.exceptionCode]}</span> : null}
                         </div>
-                        <span>{item.locationName} ・ 安全在庫 {formatQuantity(item.safetyStock)}{item.countUnit}</span>
+                        <span>{item.locationName} ・ 安全在庫 {formatCountWithUnit(item.safetyStock, item.countUnit)}</span>
                       </div>
                       <div className="inventory-current" style={{ flex: "0 1 auto", minWidth: 0, maxWidth: "55%", overflowWrap: "anywhere", textAlign: "right" }}>
-                        <small>{t("記録数量")}</small>
-                        <strong>{item.currentQuantity === null ? "未確認" : `${formatQuantity(item.currentQuantity)}${item.countUnit}`}</strong>
+                        <small data-i18n-ignore>{item.stockRevision === 0 ? t("元の記録数量") : stockLabels.currentStock}</small>
+                        <strong>{item.currentQuantity === null ? "未確認" : formatCountWithUnit(item.currentQuantity, item.countUnit)}</strong>
                         <span className={item.confidenceLabel === "確認済み" ? "is-fresh" : ""}>
                           {t(item.confidenceLabel)}
                         </span>
                         {item.lastCountedLabel ? <span>{t("最終実数確認")} {item.lastCountedLabel} {item.lastCountedBy}</span> : null}
+                        <span data-i18n-ignore>{item.stockRevision === 0 ? t("元の記録数量") : stockLabels.lastCountedQuantity} {item.lastCountedQuantity === null || item.lastCountedQuantity === undefined ? t("未確認") : formatCountWithUnit(item.lastCountedQuantity, item.countUnit)}</span>
+                        {item.stockRevision === 0 ? <span data-i18n-ignore>{t("入庫の前に実数を棚卸で確認してください。")}</span> : null}
+                        {item.lastReceivedAt ? <span data-i18n-ignore>{stockLabels.lastReceipt} {formatStockTimestamp(item.lastReceivedAt)}</span> : null}
                       </div>
+                    </div>
+
+                    <div className="inventory-unit-summary" data-i18n-ignore>
+                      <span>{item.currentConversion ? t("1 {purchaseUnit} = {quantity} {countUnit}", { purchaseUnit: item.currentConversion.purchaseUnit, quantity: formatQuantity(item.currentConversion.unitsPerPurchase) + (item.currentConversion.countUnit.startsWith("1/") ? " ×" : ""), countUnit: item.currentConversion.countUnit }) : t("購入単位との換算は未設定です。")}</span>
+                      {item.purchaseEquivalent ? <small>{t("記録時の購入単位換算：約 {quantity} {unit}", { quantity: formatEquivalentQuantity(item.purchaseEquivalent.quantity), unit: item.purchaseEquivalent.unit })}</small> : null}
+                      {item.conversionChanged ? <small className="inventory-unit-warning">{t("換算設定が変更されています。数量を再確認してください。")}</small> : null}
                     </div>
 
                     <div className="inventory-quantity-row" aria-label={`${item.productName}の在庫量`}>
@@ -623,12 +756,10 @@ export default function InventoryPage() {
                         <span>{t("実数入力")}</span>
                         <input
                           name="quantity"
-                          type="number"
-                          min="0"
-                          max="9999999999.99"
-                          step="0.01"
+                          type="text"
                           inputMode="decimal"
-                          placeholder={t("数量")}
+                          placeholder={t("例：3、0.5、1/4")}
+                          maxLength={30}
                           aria-label={`${item.productName} ${t("在庫量")}`}
                           disabled={isSaving === item.id}
                           required
@@ -666,7 +797,7 @@ export default function InventoryPage() {
                 );
               })}
             </section>
-          )}
+          ) : null}
 
           {data.recentChecks.length > 0 ? (
             <details className="panel inventory-history">
@@ -678,12 +809,13 @@ export default function InventoryPage() {
                     <strong>{check.productName}</strong>
                     <span>{check.locationName}</span>
                     <span>
-                      {check.recordType === "exception"
+                      {check.recordType === "quick_check" ? t(({ enough: "足りる", low: "残りわずか", out: "ない" } as Record<string, string>)[check.quickStatus ?? ""] ?? "目視確認") : check.recordType === "exception"
                         ? exceptionLabels[check.exceptionCode] ?? "異常解消"
                         : check.quantity === null
                           ? t("未確認")
-                          : `${formatQuantity(check.quantity)}${check.countUnit || `（${t("単位未記録")}）`}`}
+                          : formatCountWithUnit(check.quantity, check.countUnit || `（${t("単位未記録")}）`)}
                     </span>
+                    {check.recordType === "quick_check" ? <small data-i18n-ignore>{t("目視（実数棚卸ではありません）")}{check.quickEstimate ? " · " + (check.quickEstimate.kind === "small" ? t("少量（目安）") : t("約 {quantity} {unit}（目安）", { quantity: check.quickEstimate.quantity ?? "", unit: check.quickEstimate.purchaseUnit ?? "" })) : ""}</small> : check.purchaseEquivalent ? <small data-i18n-ignore>{t("記録時の購入単位換算：約 {quantity} {unit}", { quantity: formatEquivalentQuantity(check.purchaseEquivalent.quantity), unit: check.purchaseEquivalent.unit })}</small> : null}
                     <small>{check.recordedBy}</small>
                   </article>
                 ))}
@@ -699,4 +831,41 @@ export default function InventoryPage() {
 
 function formatQuantity(value: number) {
   return Number.isInteger(value) ? String(value) : String(value).replace(/\.0+$/, "");
+}
+
+function inventoryItemNeedsOrder(item: InventoryItem) {
+  return item.effectiveStockStatus !== undefined ? item.effectiveStockStatus !== "available" : inventoryNeedsOrder(item);
+}
+
+function formatEquivalentQuantity(value: number) {
+  return new Intl.NumberFormat("ja-JP", { maximumSignificantDigits: 8 }).format(value);
+}
+
+function formatCountWithUnit(value: number, unit: string) {
+  return `${formatQuantity(value)}${unit.startsWith("1/") ? " × " : " "}${unit}`;
+}
+
+function stockLabelsForLanguage(language: string) {
+  if (language === "zh-Hans") return {
+    currentStock: "当前库存", lastCountedQuantity: "最近清点数量", lastReceipt: "最近入库",
+    bookNotice: "当前库存由最近清点和入库记录计算，尚未自动扣减使用量。",
+    stockChanged: "库存或单位设置已被入库、其他清点等操作更新。请查看最新数据并重新确认数量。"
+  };
+  if (language === "zh-Hant") return {
+    currentStock: "目前庫存", lastCountedQuantity: "最近清點數量", lastReceipt: "最近入庫",
+    bookNotice: "目前庫存由最近清點和入庫紀錄計算，尚未自動扣減使用量。",
+    stockChanged: "庫存或單位設定已被入庫、其他清點等操作更新。請查看最新資料並重新確認數量。"
+  };
+  return {
+    currentStock: "現在庫", lastCountedQuantity: "最終棚卸数量", lastReceipt: "最終入庫",
+    bookNotice: "現在庫は最後の棚卸と入庫記録から算出しています。使用量は自動控除していません。",
+    stockChanged: "入庫・別の棚卸・単位設定などで在庫が更新されています。最新の情報を確認して数量を再確認してください。"
+  };
+}
+
+function formatStockTimestamp(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"
+  }).format(date);
 }

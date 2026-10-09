@@ -18,9 +18,11 @@ const tables = [
   "employee_scopes",
   "products",
   "product_catalog_store_grants",
+  "menu_product_links",
   "inventory_locations",
   "inventory_items",
   "inventory_checks",
+  "inventory_stock_receipts",
   "product_brand_usages",
   "suppliers",
   "supplier_locations",
@@ -30,6 +32,7 @@ const tables = [
   "purchase_actuals",
   "purchase_exceptions",
   "procurement_staff_unavailable_slots",
+  "procurement_order_templates",
   "price_records",
   "os_audit_logs",
   "os_notifications",
@@ -48,10 +51,15 @@ const tables = [
 ];
 
 const requiredColumns = {
-  products: ["catalog_visibility", "is_orderable"],
+  menu_product_links: ["menu_catalog_item_id", "menu_option_id", "product_id"],
+  purchase_orders: ["replenishment_source"],
+  products: ["catalog_visibility", "is_orderable", "inventory_unit_conversions"],
   product_catalog_store_grants: ["product_id", "store_id"],
   purchase_order_items: ["price_feedback_confirmation", "quantity_feedback_confirmation"],
-  inventory_checks: ["count_unit"],
+  inventory_items: ["count_conversion_snapshot", "stock_quantity", "stock_conversion_snapshot", "stock_revision", "last_received_at", "quick_status", "quick_checked_at", "quick_checked_by", "quick_checked_by_name", "quick_estimate", "quick_basis", "quick_revision", "quick_superseded_at"],
+  inventory_stock_receipts: ["request_id", "purchase_order_item_id", "inventory_item_id", "purchase_quantity", "conversion_snapshot", "source_snapshot", "request_payload"],
+  inventory_checks: ["count_unit", "unit_conversion_snapshot", "quick_check_snapshot"],
+  procurement_order_templates: ["store_id", "name", "items", "created_by", "status"],
   employees: [
     "my_number"
   ],

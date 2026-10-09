@@ -1,3 +1,5 @@
+import { resolveProductUnitConversion, convertPurchaseToCountQuantity, type ProductUnitConfigurationInput } from "./product-unit-conversions.ts";
+
 export const productCatalogVisibilities = ["internal", "brand_stores", "selected_stores"] as const;
 export type ProductCatalogVisibility = typeof productCatalogVisibilities[number];
 
@@ -93,15 +95,7 @@ export function evaluateProductOrderability(
   return { allowed: true };
 }
 
-/** Convert only the product's explicit packaging relation; never infer units from a name. */
-export function convertPurchaseQuantityToStockUnit(
-  quantity: number,
-  product: { unit: string; packageQuantity?: number | string | null; packageQuantityUnit?: string | null },
-  stockUnit: string
-) {
-  if (!Number.isFinite(quantity) || quantity < 0) return null;
-  if (product.unit === stockUnit) return quantity;
-  const packageQuantity = Number(product.packageQuantity);
-  if (product.packageQuantityUnit !== stockUnit || !Number.isFinite(packageQuantity) || packageQuantity <= 0) return null;
-  return quantity * packageQuantity;
+/** Use the shared, explicit unit relation; never infer units from a name. */
+export function convertPurchaseQuantityToStockUnit(quantity: number, product: ProductUnitConfigurationInput, stockUnit: string) {
+  return convertPurchaseToCountQuantity(quantity, resolveProductUnitConversion(product, stockUnit));
 }

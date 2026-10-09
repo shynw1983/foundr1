@@ -1,0 +1,11 @@
+.editor{grid-column:1/-1;min-width:0;margin:0;padding:14px;border:1px solid var(--line,#dfe5e2);border-radius:12px;display:grid;gap:10px}
+.editor legend{font-weight:600;padding:0 5px}.editor p{margin:0;font-size:12px;line-height:1.6}.editor small{font-size:11px;color:var(--muted,#65736d)}
+.row{display:grid;grid-template-columns:minmax(125px,.7fr) minmax(110px,1fr) minmax(140px,1.3fr) auto;gap:10px;align-items:end;min-width:0}
+.row label{min-width:0}.row input,.row select{width:100%;min-width:0}.row button{margin-bottom:4px}.row input[readonly]{background:var(--surface-soft,#f4f7f5)}
+.reference{display:flex;flex-direction:column;gap:4px;padding:10px;background:var(--surface-soft,#f4f7f5);border-radius:8px;font-size:12px}
+.notice{padding:10px;border:1px solid var(--line,#dfe5e2);border-radius:8px;background:var(--surface-soft,#f4f7f5)}.notice p{margin-bottom:8px}.error{color:var(--danger,#b42318)}
+.summary,.compact{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:12px;overflow-wrap:anywhere}.summaryLabel{color:var(--muted,#65736d);font-weight:500}.compact{padding:8px 0}.compact>span:not(:first-child){font-size:11px}
+@media(max-width:720px){.row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.row button{justify-self:start;margin:0}.editor{padding:10px}.row label:nth-child(3){grid-column:1/-1}}
+
+.row button > span{color:inherit}
+.row input:focus,.row select:focus{outline:2px solid var(--green);outline-offset:1px;border-color:var(--green)}

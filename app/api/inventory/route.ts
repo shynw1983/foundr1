@@ -1,8 +1,24 @@
 import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { roleHasPermission } from "../../../lib/role-permissions";
-import { normalizeInventoryCount } from "../../../lib/inventory-observation-policy";
 import { assertProductViewableAtStore, getVisibleProductIdsForStore } from "../../../lib/product-catalog-access";
+import {
+  canQuickCheckInventoryRole,
+  createInventoryQuickCheckBasis,
+  effectiveQuickInventoryStockStatus,
+  normalizeInventoryQuickCheckEstimate,
+  readInventoryQuickCheck,
+  validInventoryQuickCheckBasis,
+  type InventoryQuickCheckSubmission
+} from "../../../lib/inventory-quick-policy";
+import {
+  convertCountToPurchaseQuantity,
+  listProductUnitConversions,
+  parseInventoryCountQuantity,
+  resolveProductUnitConversion,
+  unitConversionSnapshotsEqual,
+  type ProductUnitConversionSnapshot
+} from "../../../lib/product-unit-conversions";
 
 const exceptionCodes = new Set(["", "low", "out", "too_much", "damaged", "quality"]);
 
@@ -15,6 +31,7 @@ async function requireInventorySession() {
 export async function GET(request: Request) {
   const session = await requireInventorySession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const canQuickCheck = canQuickCheckInventoryRole(session.role);
 
   const requestedStoreId = new URL(request.url).searchParams.get("storeId")?.trim() ?? "";
   if (requestedStoreId && !(await canAccessStore(session, requestedStoreId))) {
@@ -36,7 +53,7 @@ export async function GET(request: Request) {
 
   const storeId = requestedStoreId || String(stores[0]?.id ?? "");
   if (!storeId) {
-    return Response.json({ stores: [], locations: [], items: [], products: [], recentChecks: [] });
+    return Response.json({ stores: [], locations: [], items: [], products: [], recentChecks: [], canQuickCheck });
   }
 
   const [locations, items, products, recentChecks] = await Promise.all([
@@ -62,15 +79,32 @@ export async function GET(request: Request) {
         inventory_items.location_id::text as "locationId",
         inventory_locations.name as "locationName",
         inventory_items.count_unit as "countUnit",
+        inventory_items.count_conversion_snapshot as "countConversionSnapshot",
+        products.unit as "purchaseUnit",
+        products.package_quantity::float as "packageQuantity",
+        coalesce(products.package_quantity_unit, '') as "packageQuantityUnit",
+        products.package_quantity_unit as "rawPackageQuantityUnit",
+        products.inventory_unit_conversions as "inventoryUnitConversions",
         inventory_items.safety_stock::float as "safetyStock",
-        inventory_items.current_quantity::float as "currentQuantity",
+        inventory_items.stock_quantity::float as "currentQuantity",
+        inventory_items.current_quantity::float as "lastCountedQuantity",
+        inventory_items.stock_conversion_snapshot as "stockConversionSnapshot",
+        inventory_items.stock_revision as "stockRevision",
+        inventory_items.last_received_at::text as "lastReceivedAt",
+        inventory_items.quick_status as "quickStatus",
+        inventory_items.quick_checked_at::text as "quickCheckedAt",
+        inventory_items.quick_checked_by_name as "quickCheckedBy",
+        inventory_items.quick_estimate as "quickEstimate",
+        inventory_items.quick_basis as "quickBasis",
+        inventory_items.quick_revision as "quickRevision",
+        inventory_items.quick_superseded_at::text as "quickSupersededAt",
         inventory_items.exception_code as "exceptionCode",
         inventory_items.exception_note as "exceptionNote",
         inventory_items.last_counted_at as "lastCountedAt",
         coalesce(employees.name, '') as "lastCountedBy",
         case
           when inventory_items.current_quantity is null or inventory_items.last_counted_at is null then '未確認'
-          when inventory_items.last_counted_at < now() - interval '7 days' then '要確認'
+          when inventory_items.stock_revision = 0 or inventory_items.last_counted_at < now() - interval '7 days' then '要確認'
           when inventory_items.last_counted_at < now() - interval '3 days' then '確認推奨'
           else '確認済み'
         end as "confidenceLabel",
@@ -84,6 +118,7 @@ export async function GET(request: Request) {
       left join employees on employees.id = inventory_items.last_counted_by
       where inventory_items.store_id = ${storeId}::uuid
         and inventory_items.status = 'active'
+        and inventory_locations.status = 'active'
       order by inventory_locations.sort_order, inventory_locations.name, products.category, products.name
     `,
     sql`
@@ -92,6 +127,9 @@ export async function GET(request: Request) {
         products.name,
         products.category,
         products.unit,
+        products.package_quantity::float as "packageQuantity",
+        coalesce(products.package_quantity_unit, '') as "packageQuantityUnit",
+        products.inventory_unit_conversions as "inventoryUnitConversions",
         coalesce(products.storage_type, '') as "storageType"
       from products
       order by products.category, products.name
@@ -103,7 +141,11 @@ export async function GET(request: Request) {
         inventory_locations.name as "locationName",
         inventory_checks.quantity::float as quantity,
         inventory_checks.count_unit as "countUnit",
+        inventory_checks.unit_conversion_snapshot as "unitConversionSnapshot",
         inventory_checks.record_type as "recordType",
+        inventory_checks.quick_check_snapshot as "quickCheckSnapshot",
+        inventory_checks.quick_check_snapshot->>'status' as "quickStatus",
+        inventory_checks.quick_check_snapshot->'estimate' as "quickEstimate",
         inventory_checks.exception_code as "exceptionCode",
         inventory_checks.note,
         coalesce(employees.name, '') as "recordedBy",
@@ -120,9 +162,36 @@ export async function GET(request: Request) {
   ]);
   const visibleProductIds = new Set(await getVisibleProductIdsForStore(session, storeId));
   return Response.json({
-    stores, selectedStoreId: storeId, locations, items,
-    products: products.filter((product) => visibleProductIds.has(String(product.id))),
-    recentChecks
+    stores, selectedStoreId: storeId, locations, canQuickCheck,
+    items: items.map((item) => {
+      const product = inventoryProductConfiguration(item);
+      const currentConversion = resolveProductUnitConversion(product, String(item.countUnit));
+      const countConversionSnapshot = item.countConversionSnapshot as ProductUnitConversionSnapshot | null;
+      const stockConversionSnapshot = item.stockConversionSnapshot as ProductUnitConversionSnapshot | null;
+      const quickCheckBasis = createInventoryQuickCheckBasis(item);
+      const quickCheck = readInventoryQuickCheck(item, quickCheckBasis);
+      const { purchaseUnit, packageQuantity, packageQuantityUnit, rawPackageQuantityUnit, inventoryUnitConversions,
+        quickStatus, quickCheckedAt, quickCheckedBy, quickEstimate, quickBasis, quickSupersededAt, ...facts } = item;
+      return {
+        ...facts, currentConversion, countConversionSnapshot, stockConversionSnapshot,
+        quickCheckBasis, quickCheck, canQuickCheck,
+        effectiveStockStatus: effectiveQuickInventoryStockStatus({
+          quantity: item.currentQuantity as number | null, safetyStock: item.safetyStock as number | null,
+          exceptionCode: String(item.exceptionCode ?? ""), lastCountedAt: item.lastCountedAt ? String(item.lastCountedAt) : null,
+          countUnit: String(item.countUnit ?? ""), quickCheck
+        }),
+        conversionChanged: Boolean(stockConversionSnapshot && !unitConversionSnapshotsEqual(stockConversionSnapshot, currentConversion)),
+        purchaseEquivalent: inventoryPurchaseEquivalent(item.currentQuantity, stockConversionSnapshot),
+        unitChoices: listProductUnitConversions(product)
+      };
+    }),
+    products: products.filter((product) => visibleProductIds.has(String(product.id))).map((product) => ({
+      ...product, inventoryUnitChoices: listProductUnitConversions(inventoryProductConfiguration(product))
+    })),
+    recentChecks: recentChecks.map((check) => ({
+      ...check,
+      purchaseEquivalent: inventoryPurchaseEquivalent(check.quantity, check.unitConversionSnapshot as ProductUnitConversionSnapshot | null)
+    }))
   });
 }
 
@@ -143,9 +212,12 @@ export async function POST(request: Request) {
     countUnit?: string;
     safetyStock?: number | string;
     quantity?: number | string;
+    expectedConversion?: ProductUnitConversionSnapshot | null;
+    expectedStockRevision?: number;
     exceptionCode?: string;
     lowItemIds?: string[];
     clearLowItemIds?: string[];
+    checks?: InventoryQuickCheckSubmission[];
     note?: string;
   };
   const action = String(body.action ?? "");
@@ -153,6 +225,84 @@ export async function POST(request: Request) {
 
   if (!storeId || !(await canAccessStore(session, storeId))) {
     return Response.json({ error: "この店舗を操作する権限がありません。" }, { status: 403 });
+  }
+
+  if (action === "batch_quick_check") {
+    if (!canQuickCheckInventoryRole(session.role)) return Response.json({ error: "権限がありません。" }, { status: 403 });
+    const rawChecks = body.checks;
+    if (!Array.isArray(rawChecks) || rawChecks.length < 1 || rawChecks.length > 500) {
+      return Response.json({ error: "確認する商品を1〜500件選択してください。" }, { status: 400 });
+    }
+    const checks: InventoryQuickCheckSubmission[] = [];
+    const seen = new Set<string>();
+    for (const check of rawChecks) {
+      const itemId = String(check?.itemId ?? "").trim();
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(itemId)
+        || seen.has(itemId) || !["enough", "low", "out"].includes(check?.status)
+        || !validInventoryQuickCheckBasis(check?.expectedBasis)) {
+        return Response.json({ error: "商品・確認状態・更新情報を再確認してください。" }, { status: 400 });
+      }
+      const estimate = normalizeInventoryQuickCheckEstimate(check.estimate, check.expectedBasis.unitConfiguration.unit);
+      if (estimate === false) return Response.json({ error: "概算数量と購入単位を再確認してください。" }, { status: 400 });
+      checks.push({ itemId, status: check.status, expectedBasis: check.expectedBasis, estimate });
+      seen.add(itemId);
+    }
+    // Lock the product before the inventory row, consistently with physical
+    // counts and receipts. Every explicit row must match before any row writes.
+    const recorded = await sql`
+      with requested as materialized (
+        select * from jsonb_to_recordset(${JSON.stringify(checks)}::jsonb)
+          as checks("itemId" text, status text, "expectedBasis" jsonb, estimate jsonb)
+      ), locked_products as materialized (
+        select products.id, products.unit, products.package_quantity, products.package_quantity_unit, products.inventory_unit_conversions
+        from products
+        where products.id in (
+          select items.product_id from inventory_items items join requested on items.id::text = requested."itemId"
+          where items.store_id = ${storeId}::uuid and items.status = 'active'
+        )
+        order by products.id for share of products
+      ), locked_items as materialized (
+        select items.*, requested.status as requested_status, requested.estimate, requested."expectedBasis",
+          jsonb_build_object(
+            'storeId', items.store_id::text, 'productId', items.product_id::text, 'locationId', items.location_id::text,
+            'stockRevision', items.stock_revision, 'quickRevision', items.quick_revision,
+            'countUnit', items.count_unit, 'safetyStock', items.safety_stock,
+            'unitConfiguration', jsonb_build_object('unit', locked_products.unit, 'packageQuantity', locked_products.package_quantity,
+              'packageQuantityUnit', locked_products.package_quantity_unit, 'inventoryUnitConversions', coalesce(locked_products.inventory_unit_conversions, '[]'::jsonb))
+          ) as current_basis
+        from locked_products join inventory_items items on items.product_id = locked_products.id
+        join requested on items.id::text = requested."itemId"
+        join inventory_locations locations on locations.id = items.location_id and locations.store_id = items.store_id
+        join stores on stores.id = items.store_id
+        where items.store_id = ${storeId}::uuid and items.status = 'active' and locations.status = 'active' and stores.status = 'active'
+        order by items.id for update of items
+      ), eligible as materialized (
+        select * from locked_items
+        where current_basis = "expectedBasis"
+      ), observed as (
+        update inventory_items items
+        set quick_status = eligible.requested_status,
+          quick_checked_at = clock_timestamp(), quick_checked_by = ${session.id}::uuid, quick_checked_by_name = ${session.name ?? ""},
+          quick_estimate = eligible.estimate,
+          quick_basis = jsonb_set(eligible.current_basis, '{quickRevision}', to_jsonb(items.quick_revision + 1)),
+          quick_revision = items.quick_revision + 1, quick_superseded_at = null,
+          exception_code = case when eligible.requested_status = 'enough' and items.exception_code in ('low', 'out') then '' else items.exception_code end,
+          updated_at = now()
+        from eligible
+        where items.id = eligible.id and (select count(*) from eligible) = ${checks.length}::integer
+        returning items.id, items.store_id, items.product_id, items.count_unit,
+          jsonb_build_object('status', items.quick_status, 'checkedAt', items.quick_checked_at, 'checkedBy', items.quick_checked_by_name,
+            'basis', items.quick_basis, 'estimate', items.quick_estimate) as snapshot
+      )
+      insert into inventory_checks (inventory_item_id, store_id, product_id, quantity, count_unit, record_type,
+        exception_code, note, recorded_by, unit_conversion_snapshot, quick_check_snapshot)
+      select id, store_id, product_id, null, count_unit, 'quick_check', '', '', ${session.id}::uuid, null, snapshot
+      from observed returning inventory_item_id::text as "itemId"
+    `;
+    if (recorded.length !== checks.length) return Response.json({
+      error: "在庫・確認状態・単位設定が更新されています。画面を更新して確認し直してください。", code: "quick_check_basis_changed"
+    }, { status: 409 });
+    return Response.json({ ok: true, updatedCount: recorded.length });
   }
 
   if (action === "save_location") {
@@ -250,7 +400,8 @@ export async function POST(request: Request) {
     if (!access.ok) return Response.json({ error: access.error }, { status: access.status });
 
     const [productRows, locationRows] = await Promise.all([
-      sql`select id, unit from products where id = ${productId}::uuid limit 1`,
+      sql`select id, unit, package_quantity::float as "packageQuantity", coalesce(package_quantity_unit, '') as "packageQuantityUnit",
+        inventory_unit_conversions as "inventoryUnitConversions" from products where id = ${productId}::uuid limit 1`,
       sql`
         select id
         from inventory_locations
@@ -264,12 +415,15 @@ export async function POST(request: Request) {
 
     const countUnit = String(body.countUnit ?? "").trim() || String(productRows[0].unit ?? "袋");
     await sql`
+      with locked_product as materialized (
+        select id from products where id = ${productId}::uuid for share
+      )
       insert into inventory_items (
         store_id, product_id, location_id, count_unit, safety_stock, updated_at
-      ) values (
-        ${storeId}::uuid, ${productId}::uuid, ${locationId}::uuid,
+      ) select
+        ${storeId}::uuid, locked_product.id, ${locationId}::uuid,
         ${countUnit}, ${safetyStock}, now()
-      )
+      from locked_product
       on conflict (store_id, product_id, location_id)
       do update set
         current_quantity = case
@@ -284,6 +438,19 @@ export async function POST(request: Request) {
           when inventory_items.count_unit = excluded.count_unit then inventory_items.last_counted_by
           else null
         end,
+        count_conversion_snapshot = case
+          when inventory_items.count_unit = excluded.count_unit then inventory_items.count_conversion_snapshot
+          else null
+        end,
+        stock_quantity = case
+          when inventory_items.count_unit = excluded.count_unit then inventory_items.stock_quantity
+          else null
+        end,
+        stock_conversion_snapshot = case
+          when inventory_items.count_unit = excluded.count_unit then inventory_items.stock_conversion_snapshot
+          else null
+        end,
+        stock_revision = inventory_items.stock_revision + case when inventory_items.count_unit = excluded.count_unit then 0 else 1 end,
         count_unit = excluded.count_unit,
         safety_stock = excluded.safety_stock,
         status = 'active',
@@ -336,15 +503,15 @@ export async function POST(request: Request) {
       ...(toLowIds.length ? [
         sql`
           update inventory_items
-          set exception_code = 'low', exception_note = '', updated_at = now()
+          set exception_code = 'low', exception_note = '', quick_superseded_at = clock_timestamp(), quick_revision = quick_revision + 1, updated_at = now()
           where store_id = ${storeId}::uuid and id::text = any(${toLowIds})
         `,
         sql`
           insert into inventory_checks (
             inventory_item_id, store_id, product_id, quantity, count_unit, record_type,
-            exception_code, note, recorded_by
+            exception_code, note, recorded_by, unit_conversion_snapshot
           )
-          select id, store_id, product_id, current_quantity, count_unit, 'exception', 'low', 'クイック操作', ${session.id}::uuid
+          select id, store_id, product_id, current_quantity, count_unit, 'exception', 'low', 'クイック操作', ${session.id}::uuid, count_conversion_snapshot
           from inventory_items
           where store_id = ${storeId}::uuid and id::text = any(${toLowIds})
         `
@@ -358,9 +525,9 @@ export async function POST(request: Request) {
         sql`
           insert into inventory_checks (
             inventory_item_id, store_id, product_id, quantity, count_unit, record_type,
-            exception_code, note, recorded_by
+            exception_code, note, recorded_by, unit_conversion_snapshot
           )
-          select id, store_id, product_id, current_quantity, count_unit, 'exception', '', 'クイック操作', ${session.id}::uuid
+          select id, store_id, product_id, current_quantity, count_unit, 'exception', '', 'クイック操作', ${session.id}::uuid, count_conversion_snapshot
           from inventory_items
           where store_id = ${storeId}::uuid and id::text = any(${toClearIds})
         `
@@ -375,56 +542,102 @@ export async function POST(request: Request) {
   if (!itemId) return Response.json({ error: "在庫商品が見つかりません。" }, { status: 404 });
 
   const itemRows = await sql`
-    select id, store_id::text as "storeId", product_id::text as "productId",
-      count_unit as "countUnit", safety_stock::float as "safetyStock"
-    from inventory_items
-    where id = ${itemId}::uuid and store_id = ${storeId}::uuid and status = 'active'
+    select items.id, items.store_id::text as "storeId", items.product_id::text as "productId",
+      items.count_unit as "countUnit", items.safety_stock::float as "safetyStock",
+      items.stock_revision as "stockRevision", items.stock_quantity::float as "stockQuantity", items.current_quantity::float as "lastCountedQuantity",
+      items.last_received_at as "lastReceivedAt",
+      products.unit as "purchaseUnit", products.package_quantity::float as "packageQuantity",
+      products.package_quantity_unit as "packageQuantityUnit", products.inventory_unit_conversions as "inventoryUnitConversions"
+    from inventory_items items join products on products.id = items.product_id
+    where items.id = ${itemId}::uuid and items.store_id = ${storeId}::uuid and items.status = 'active'
     limit 1
   `;
   const item = itemRows[0];
   if (!item) return Response.json({ error: "在庫商品が見つかりません。" }, { status: 404 });
 
   if (action === "count") {
-    const quantity = normalizeInventoryCount(body.quantity);
+    const quantity = parseInventoryCountQuantity(body.quantity);
     if (quantity === null) {
-      return Response.json({ error: "在庫量を0以上の数値で入力してください。" }, { status: 400 });
+      return Response.json({ error: "在庫量を0以上の数値で入力してください。分数は小数点以下6桁まで正確に表せる値を使い、1/3などは専用の棚卸単位で記録してください。" }, { status: 400 });
     }
     const expectedCountUnit = String(body.countUnit ?? "").trim();
     if (!expectedCountUnit) {
       return Response.json({ error: "画面を更新して、在庫の単位を再確認してください。" }, { status: 409 });
     }
+    const currentConversion = resolveProductUnitConversion(inventoryProductConfiguration(item), expectedCountUnit);
+    const hasStockRevision = Object.prototype.hasOwnProperty.call(body, "expectedStockRevision");
+    if (hasStockRevision && (!Number.isInteger(body.expectedStockRevision) || Number(body.expectedStockRevision) < 0)) {
+      return Response.json({ error: "在庫の更新情報を再取得してください。", code: "stock_revision_changed" }, { status: 409 });
+    }
+    const expectedStockRevision = hasStockRevision ? body.expectedStockRevision : Number(item.stockRevision);
+    if ((hasStockRevision && expectedStockRevision !== Number(item.stockRevision))
+      || (!hasStockRevision && (item.lastReceivedAt !== null || item.stockQuantity !== item.lastCountedQuantity))) {
+      return Response.json({ error: "入庫または別の棚卸で在庫が更新されています。画面を更新して数量を再確認してください。", code: "stock_revision_changed" }, { status: 409 });
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "expectedConversion")
+      && !(body.expectedConversion === null && currentConversion === null)
+      && !unitConversionSnapshotsEqual(body.expectedConversion, currentConversion)) {
+      return Response.json({ error: "購入・棚卸単位の換算設定が変わりました。画面を更新して再確認してください。" }, { status: 409 });
+    }
     const recordedCounts = await sql`
-      with counted as (
+      with locked_product as materialized (
+        select products.id, products.unit as purchase_unit, products.package_quantity,
+          products.package_quantity_unit, products.inventory_unit_conversions
+        from products
+        where products.id = ${item.productId}::uuid
+        for share of products
+      ), locked_count as materialized (
+        select items.id, locked_product.purchase_unit, locked_product.package_quantity,
+          locked_product.package_quantity_unit, locked_product.inventory_unit_conversions
+        from locked_product join inventory_items items on items.product_id = locked_product.id
+        where items.id = ${itemId}::uuid and items.store_id = ${storeId}::uuid
+          and items.status = 'active' and items.count_unit = ${expectedCountUnit}
+        for update of items
+      ), counted as (
         update inventory_items
         set
           current_quantity = ${quantity}::numeric,
+          count_conversion_snapshot = ${currentConversion ? JSON.stringify(currentConversion) : null}::jsonb,
+          stock_quantity = ${quantity}::numeric,
+          stock_conversion_snapshot = ${currentConversion ? JSON.stringify(currentConversion) : null}::jsonb,
+          stock_revision = inventory_items.stock_revision + 1,
+          quick_superseded_at = clock_timestamp(),
           exception_code = case
+            when inventory_items.exception_code in ('quality', 'damaged', 'too_much') then inventory_items.exception_code
             when ${quantity}::numeric = 0 then 'out'
             when ${quantity}::numeric <= inventory_items.safety_stock then 'low'
             else ''
           end,
-          exception_note = '',
+          exception_note = case when inventory_items.exception_code in ('quality', 'damaged', 'too_much') then inventory_items.exception_note else '' end,
           last_counted_at = now(),
           last_counted_by = ${session.id}::uuid,
           updated_at = now()
-        where id = ${itemId}::uuid
+        from locked_count
+        where inventory_items.id = locked_count.id
+          and locked_count.purchase_unit is not distinct from ${item.purchaseUnit}
+          and locked_count.package_quantity is not distinct from ${item.packageQuantity}::numeric
+          and locked_count.package_quantity_unit is not distinct from ${item.packageQuantityUnit}
+          and locked_count.inventory_unit_conversions is not distinct from ${JSON.stringify(item.inventoryUnitConversions ?? [])}::jsonb
+          and inventory_items.id = ${itemId}::uuid
           and store_id = ${storeId}::uuid
           and status = 'active'
           and count_unit = ${expectedCountUnit}
-        returning id, store_id, product_id, current_quantity, count_unit, exception_code
+          and stock_revision = ${expectedStockRevision}::integer
+          and (${hasStockRevision} or (last_received_at is null and stock_quantity is not distinct from current_quantity))
+        returning inventory_items.id, store_id, product_id, current_quantity, count_unit, exception_code, count_conversion_snapshot, stock_revision
       )
       insert into inventory_checks (
         inventory_item_id, store_id, product_id, quantity, count_unit, record_type,
-        exception_code, note, recorded_by
+        exception_code, note, recorded_by, unit_conversion_snapshot
       )
       select id, store_id, product_id, current_quantity, count_unit,
-        'count', exception_code, '', ${session.id}::uuid
+        'count', exception_code, '', ${session.id}::uuid, count_conversion_snapshot
       from counted
       returning inventory_item_id::text as "itemId", quantity::float as quantity,
-        count_unit as "countUnit", exception_code as "exceptionCode"
+        count_unit as "countUnit", exception_code as "exceptionCode", unit_conversion_snapshot as "countConversionSnapshot"
     `;
     if (!recordedCounts[0]) {
-      return Response.json({ error: "画面を更新して、在庫の単位を再確認してください。" }, { status: 409 });
+      return Response.json({ error: "在庫または購入・棚卸単位が更新されています。画面を更新して数量を再確認してください。", code: "stock_revision_changed" }, { status: 409 });
     }
     return Response.json({ ok: true, count: recordedCounts[0] });
   }
@@ -439,20 +652,21 @@ export async function POST(request: Request) {
     await sql.transaction([sql`
       update inventory_items
       set
-        current_quantity = case when ${exceptionCode} = 'out' then 0 else current_quantity end,
         exception_code = ${exceptionCode},
         exception_note = ${note},
+        quick_superseded_at = case when ${exceptionCode} in ('low', 'out') then clock_timestamp() else quick_superseded_at end,
+        quick_revision = quick_revision + case when ${exceptionCode} in ('low', 'out') then 1 else 0 end,
         updated_at = now()
       where id = ${itemId}::uuid
     `, sql`
       insert into inventory_checks (
         inventory_item_id, store_id, product_id, quantity, count_unit, record_type,
-        exception_code, note, recorded_by
+        exception_code, note, recorded_by, unit_conversion_snapshot
       )
       select
         id, store_id, product_id,
-        case when ${exceptionCode} = 'out' then 0 else current_quantity end, count_unit,
-        'exception', ${exceptionCode}, ${note}, ${session.id}::uuid
+        current_quantity, count_unit,
+        'exception', ${exceptionCode}, ${note}, ${session.id}::uuid, count_conversion_snapshot
       from inventory_items
       where id = ${itemId}::uuid
     `]);
@@ -462,10 +676,22 @@ export async function POST(request: Request) {
   return Response.json({ error: "操作を確認できませんでした。" }, { status: 400 });
 }
 
+function inventoryProductConfiguration(row: Record<string, unknown>) {
+  return {
+    unit: String(row.purchaseUnit ?? row.unit ?? ""),
+    packageQuantity: row.packageQuantity as number | null,
+    packageQuantityUnit: String(row.packageQuantityUnit ?? ""),
+    inventoryUnitConversions: row.inventoryUnitConversions
+  };
+}
+
+function inventoryPurchaseEquivalent(quantity: unknown, snapshot: ProductUnitConversionSnapshot | null) {
+  const amount = convertCountToPurchaseQuantity(typeof quantity === "number" ? quantity : NaN, snapshot);
+  return amount === null || !snapshot ? null : { quantity: amount, unit: snapshot.purchaseUnit };
+}
+
 function normalizeNonNegativeNumber(value: unknown, fallback: number) {
-  const normalized = Number(value);
-  if (!Number.isFinite(normalized) || normalized < 0) return fallback;
-  return Math.round(normalized * 100) / 100;
+  return parseInventoryCountQuantity(value) ?? fallback;
 }
 
 function normalizeLocationType(value: unknown) {

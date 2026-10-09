@@ -19,6 +19,9 @@ import {
 import { normalizeDecimalInput } from "../../../lib/number-input";
 import { originCountryOptions } from "../../../lib/origin-countries";
 import { isHeadquarterCatalogRole, normalizeCatalogVisibility, type ProductCatalogVisibility } from "../../../lib/product-catalog-policy";
+import { useOsTranslation } from "../components/OsTranslationProvider";
+import { createProductUnitConfigurationSnapshot, type ProductInventoryUnitConversion, type ProductUnitConfigurationSnapshot } from "../../../lib/product-unit-conversions";
+import ProductUnitConversionsEditor, { normalizeUnitConversionDrafts, ProductUnitConversionsSummary, type InventoryUnitConversionDraft } from "./ProductUnitConversionsEditor";
 
 type Product = typeof initialProducts[number];
 type ProductWithCategory = Omit<Product, "referencePrice"> & {
@@ -54,11 +57,12 @@ type ProductWithCategory = Omit<Product, "referencePrice"> & {
   catalogVisibility?: ProductCatalogVisibility;
   isOrderable?: boolean;
   catalogStoreIds?: string[];
+  inventoryUnitConversions?: ProductInventoryUnitConversion[];
 };
-type ProductDraft = Omit<ProductWithCategory, "referencePrice"> & { referencePrice: number | string };
+type ProductDraft = Omit<ProductWithCategory, "referencePrice" | "inventoryUnitConversions"> & { referencePrice: number | string; inventoryUnitConversions?: InventoryUnitConversionDraft[] };
 type Supplier = typeof initialSuppliers[number];
 type StoreItem = typeof initialStores[number] & { id?: string };
-type ProductEditTarget = { type: "product"; value: ProductDraft; originalName?: string };
+type ProductEditTarget = { type: "product"; value: ProductDraft; originalName?: string; expectedUnitConfiguration?: ProductUnitConfigurationSnapshot; unitConversionsConfirmedFor?: string };
 type CategoryItem = { name: string; sortOrder?: number };
 type SubcategoryItem = { category: string; name: string; sortOrder?: number };
 type EditingCategory = { type: "category"; currentName: string; name: string } | { type: "subcategory"; currentCategory: string; currentName: string; category: string; name: string };
@@ -148,7 +152,7 @@ const sortableProductColumns: Array<{ key: ProductSortKey; label: string }> = [
   { key: "productFamilyName", label: "商品" },
   { key: "category", label: "分類" },
   { key: "subcategory", label: "小分類" },
-  { key: "unit", label: "単位" },
+  { key: "unit", label: "発注・購入単位" },
   { key: "storageType", label: "保管" },
   { key: "referencePrice", label: "参考価格" },
   { key: "unitPrice", label: "規格単価" }
@@ -176,7 +180,7 @@ const productSummaryFieldOptions = [
   { value: "manufacturer", label: "メーカー" },
   { value: "category", label: "大分類" },
   { value: "subcategory", label: "小分類" },
-  { value: "unit", label: "単位" },
+  { value: "unit", label: "発注・購入単位" },
   { value: "productFamilyName", label: "商品" },
   { value: "variantName", label: "バリエーション名" },
   { value: "storageType", label: "保管" },
@@ -573,6 +577,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 ];
 
 export default function ProductsPage() {
+  const { t } = useOsTranslation();
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [returnToOrdersAfterProduct, setReturnToOrdersAfterProduct] = useState(false);
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
@@ -785,6 +790,17 @@ export default function ProductsPage() {
   }, [query, storeFilter, brandFilter, productBrandFilter, productFamilyFilter, supplierFilter, missingInfoFilter, categoryFilter, subcategoryFilter, productPageSize, productSortKey, productSortDirection]);
 
   async function saveProduct(target: ProductEditTarget) {
+    if ((target.value.inventoryUnitConversions?.length ?? 0) > 0 && target.unitConversionsConfirmedFor !== target.value.unit) {
+      window.alert(t("発注・購入単位を変更したため、使用・棚卸単位の換算を再確認してください。"));
+      return;
+    }
+    let inventoryUnitConversions: ProductInventoryUnitConversion[];
+    try {
+      inventoryUnitConversions = normalizeUnitConversionDrafts(target.value.inventoryUnitConversions ?? [], target.value);
+    } catch (error) {
+      window.alert(t(error instanceof Error ? error.message : "使用・棚卸単位と換算数量を確認してください。"));
+      return;
+    }
     const generatedName = buildProductNameFromVariant(target.value) || String(target.value.name ?? "").trim();
     if (!generatedName) {
       window.alert("商品名を入力してください。");
@@ -792,6 +808,7 @@ export default function ProductsPage() {
     }
     const normalizedProduct = {
       ...target.value,
+      inventoryUnitConversions,
       name: generatedName,
       productFamilyName: String(target.value.productFamilyName ?? "").trim() || generatedName,
       variantName: String(target.value.variantName ?? "").trim()
@@ -820,13 +837,16 @@ export default function ProductsPage() {
         id: target.value.id ?? "",
         currentName: target.originalName ?? "",
         ...normalizedProduct,
+        expectedUnitConfiguration: target.expectedUnitConfiguration,
         referencePrice: parseReferencePrice(normalizedProduct.referencePrice)
       })
     });
 
     if (!response.ok) {
       const body = await response.json();
-      window.alert(body.error ?? "商品を保存できませんでした。");
+      window.alert(response.status === 409
+        ? `${t(body.error ?? "商品を保存できませんでした。")}\n${t("下書きは保持しています。最新の商品設定を読み込み、内容を確認してから編集し直してください。")}`
+        : t(body.error ?? "商品を保存できませんでした。"));
       return;
     }
 
@@ -888,6 +908,7 @@ export default function ProductsPage() {
 
     setEditTarget({
       type: "product",
+      unitConversionsConfirmedFor: "個",
       value: {
         name: "",
         productBrandName: "",
@@ -896,6 +917,7 @@ export default function ProductsPage() {
         subcategory: "未分類",
         brand: "未設定",
         unit: "個",
+        inventoryUnitConversions: [],
         referencePrice: 0,
         originCountries: [],
         packageQuantity: "",
@@ -973,8 +995,10 @@ export default function ProductsPage() {
   function copyProductToNewDraft(product: ProductWithCategory) {
     setEditTarget({
       type: "product",
+      unitConversionsConfirmedFor: product.unit,
       value: {
         ...product,
+        inventoryUnitConversions: (product.inventoryUnitConversions ?? []).map((relation) => ({ ...relation })),
         id: undefined,
         referencePrice: product.referencePrice ?? "",
         photoUrl: ""
@@ -990,8 +1014,10 @@ export default function ProductsPage() {
 
     setEditTarget({
       type: "product",
+      unitConversionsConfirmedFor: product.unit,
       value: {
         ...product,
+        inventoryUnitConversions: (product.inventoryUnitConversions ?? []).map((relation) => ({ ...relation })),
         id: undefined,
         name: familyName,
         productFamilyName: familyName,
@@ -1005,6 +1031,19 @@ export default function ProductsPage() {
     });
 
     showNotice("同じ商品に新しいバリエーションを追加します。バリエーション名、数量、発注先、価格を確認してください。", "info");
+  }
+
+  function openExistingProductEditor(product: ProductWithCategory) {
+    try {
+      setEditTarget({
+        type: "product", value: { ...product, referencePrice: product.referencePrice ?? "", inventoryUnitConversions: (product.inventoryUnitConversions ?? []).map((relation) => ({ ...relation })) },
+        originalName: product.name,
+        expectedUnitConfiguration: createProductUnitConfigurationSnapshot(product),
+        unitConversionsConfirmedFor: product.unit
+      });
+    } catch (error) {
+      window.alert(t(error instanceof Error ? error.message : "使用・棚卸単位と換算数量を確認してください。"));
+    }
   }
 
   async function openProductPriceHistory(product: ProductWithCategory) {
@@ -1576,6 +1615,7 @@ export default function ProductsPage() {
                                 </span>
                               ) : null}
                             </div>
+                            <ProductUnitConversionsSummary product={product} compact />
                             <div className="row-actions">
                               {procurementDetailsVisible ? <button className="text-button" type="button" onClick={() => void openProductPriceHistory(product)}>
                                 価格推移
@@ -1584,7 +1624,7 @@ export default function ProductsPage() {
                                 <>
                                   <button
                                     className="text-button"
-                                    onClick={() => setEditTarget({ type: "product", value: { ...product, referencePrice: product.referencePrice ?? "" }, originalName: product.name })}
+                                    onClick={() => openExistingProductEditor(product)}
                                   >
                                     編集
                                   </button>
@@ -1658,6 +1698,14 @@ export default function ProductsPage() {
                                 <div>
                                   <dt>数量</dt>
                                   <dd>{formatPackageQuantity(product)}</dd>
+                                </div>
+                                <div>
+                                  <dt>発注・購入単位</dt>
+                                  <dd>{product.unit}</dd>
+                                </div>
+                                <div>
+                                  <dt>使用・棚卸単位</dt>
+                                  <dd><ProductUnitConversionsSummary product={product} showLabel={false} /></dd>
                                 </div>
                                 {procurementDetailsVisible ? <div>
                                   <dt>海外輸入</dt>
@@ -2112,7 +2160,10 @@ function ProductEditDialog({
 
     onChange({
       ...target,
-      value: nextValue
+      value: nextValue,
+      ...(key === "unit" && value !== target.value.unit ? {
+        unitConversionsConfirmedFor: (target.value.inventoryUnitConversions?.length ?? 0) > 0 ? undefined : value
+      } : {})
     });
   }
 
@@ -2460,6 +2511,15 @@ function ProductEditDialog({
               )}
             </label>
           ))}
+          <ProductUnitConversionsEditor
+            product={target.value}
+            rows={target.value.inventoryUnitConversions ?? []}
+            requiresReconfirmation={(target.value.inventoryUnitConversions?.length ?? 0) > 0 && target.unitConversionsConfirmedFor !== target.value.unit}
+            onChange={(inventoryUnitConversions) => onChange({ ...target, value: { ...target.value, inventoryUnitConversions } })}
+            onReconfirm={(inventoryUnitConversions) => onChange({
+              ...target, value: { ...target.value, inventoryUnitConversions }, unitConversionsConfirmedFor: target.value.unit
+            })}
+          />
           {normalizeCatalogVisibility(target.value.catalogVisibility) === "selected_stores" ? (
             <fieldset className="origin-country-picker">
               <legend>公開する店舗</legend>
@@ -2843,7 +2903,7 @@ function getProductFields(
       options: uniqueOptions([...subcategoryOptions, product.subcategory ?? ""])
     },
     { key: "brand", label: "適用ブランド", options: uniqueOptions(["未設定", "共通", ...brandNames, product.brand]) },
-    { key: "unit", label: "単位" },
+    { key: "unit", label: "発注・購入単位" },
     { key: "referencePrice", label: "参考価格", type: "text", inputMode: "decimal" },
     { key: "variantSortOrder", label: "バリエーション表示順", type: "text", inputMode: "decimal" },
     { key: "mainSupplier", label: "メイン発注先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.mainSupplier]), emptyLabel: "未設定" },

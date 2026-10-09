@@ -6,6 +6,7 @@ import ts from "typescript";
 import * as policy from "./procurement-confirmation-policy.ts";
 import * as numberInput from "./number-input.ts";
 import { isHeadquarterCatalogRole } from "./product-catalog-policy.ts";
+import * as orderLocks from "./replenishment-order-locks.ts";
 
 const deliveredItem = { currentStatus: "delivered", requestedQuantity: 10 };
 const expectedQuantity = { productId: "product", unit: "袋", actualQuantity: 6, requestedQuantity: 10 };
@@ -55,8 +56,7 @@ type Query = { text: string; values: unknown[] };
 function routeHarness(options: { session?: boolean; allowed?: boolean; stale?: boolean; orderable?: boolean; currentStatus?: string; hasPurchaseActual?: boolean; actualQuantity?: number | null; actualPrice?: number | null; requestedQuantity?: number; historyCorrectionAllowed?: boolean } = {}) {
   const queries: Query[] = [];
   let catalogChecks = 0;
-  const sql = (parts: TemplateStringsArray, ...values: unknown[]) => {
-    const text = parts.join("?");
+  const executeQuery = ({ text, values }: Query) => {
     queries.push({ text, values });
     if (text.includes("with facts as")) {
       const serialized = values.find((value) => typeof value === "string" && value.startsWith("{")) as string | undefined;
@@ -80,6 +80,14 @@ function routeHarness(options: { session?: boolean; allowed?: boolean; stale?: b
     if (text.includes("from products") && text.includes("where products.id::text")) return Promise.resolve([{ id: "replacement", name: "代替商品", unit: "袋" }]);
     return Promise.resolve([]);
   };
+  const sql = Object.assign((parts: TemplateStringsArray, ...values: unknown[]) => ({
+    text: parts.join("?"), values,
+    then(resolve: any, reject: any) { return executeQuery(this).then(resolve, reject); }
+  }), { transaction: async (statements: Query[]) => {
+    const results = [];
+    for (const statement of statements) results.push(await executeQuery(statement));
+    return results;
+  } });
   const modules: Record<string, unknown> = {
     "../../../../lib/api-auth": {
       requireWritableOsSession: async () => options.session === false ? null : { id: "employee", role: "staff" },
@@ -97,7 +105,8 @@ function routeHarness(options: { session?: boolean; allowed?: boolean; stale?: b
       }
     },
     "../../../../lib/product-catalog-policy": { isHeadquarterCatalogRole },
-    "../../../../lib/procurement-confirmation-policy": policy
+    "../../../../lib/procurement-confirmation-policy": policy,
+    "../../../../lib/replenishment-order-locks": orderLocks
   };
   const exports: Record<string, (request: Request) => Promise<Response>> = {};
   runInNewContext(ts.transpileModule(readFileSync(new URL("../app/api/procurement/items/route.ts", import.meta.url), "utf8"), {

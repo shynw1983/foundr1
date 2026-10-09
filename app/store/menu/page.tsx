@@ -1,5 +1,6 @@
 "use client";
 import { WholeStoreAvailabilitySync } from "./WholeStoreAvailabilitySync";
+import { ReplenishmentPanel, type ReplenishmentFocus } from "../../../components/ReplenishmentPanel";
 
 import { AlertTriangle, CheckCircle2, ChevronDown, History, ListChecks, RotateCcw, Search, SlidersHorizontal, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -268,7 +269,7 @@ export default function StoreMenuPage() {
   const [categories, setCategories] = useState<StoreMenuCategory[]>([]);
   const [items, setItems] = useState<StoreMenuItem[]>([]);
   const [options, setOptions] = useState<StoreMenuOption[]>([]);
-  const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
+  const [selectedStoreId, setSelectedStoreId] = useState("");
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [settings, setSettings] = useState<StoreMenuSettings>({
@@ -284,6 +285,9 @@ export default function StoreMenuPage() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
   const [message, setMessage] = useState("");
+  const [replenishmentOpen, setReplenishmentOpen] = useState(false);
+  const [replenishmentFocus, setReplenishmentFocus] = useState<ReplenishmentFocus | null>(null);
+  const [replenishmentRefreshKey, setReplenishmentRefreshKey] = useState(0);
   const [storeName, setStoreName] = useState("");
   const [selecting, setSelecting] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -337,6 +341,7 @@ export default function StoreMenuPage() {
       setCategories(nextCategories ?? []);
       setItems(nextItems ?? []);
       setOptions(nextOptions ?? []);
+      setReplenishmentRefreshKey(key => key + 1);
       const responseStoreId = body.selectedStoreId || nextAccess.stores?.[0]?.id || "";
       setSelectedStoreId(responseStoreId);
       setStoreName(nextAccess.stores?.find(store => store.id === responseStoreId)?.name ?? "");
@@ -368,6 +373,8 @@ export default function StoreMenuPage() {
   }
 
   useEffect(() => {
+    // Restore browser storage after hydration so store-specific panels have
+    // the same initial tree on the server and client.
     void load(getStoredStoreSelection());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -645,6 +652,10 @@ export default function StoreMenuPage() {
             ? { ...entry, isAvailable: state.isAvailable, stockStatus: state.isAvailable ? "available" : "unavailable" }
             : entry;
         }));
+        if (patch.stockStatus !== "available") {
+          setReplenishmentFocus({ kind: "item", id: item.id });
+          setReplenishmentOpen(true);
+        }
         return;
       }
       const response = await fetch("/api/store/menu-settings", {
@@ -718,6 +729,10 @@ export default function StoreMenuPage() {
             ? { ...entry, isAvailable: state.isAvailable, stockStatus: state.isAvailable ? "available" : "unavailable" }
             : entry;
         }));
+        if (patch.stockStatus !== "available") {
+          setReplenishmentFocus({ kind: "option", id: option.id });
+          setReplenishmentOpen(true);
+        }
         return;
       }
       const response = await fetch("/api/store/menu-settings", {
@@ -865,6 +880,8 @@ export default function StoreMenuPage() {
         </div>
 
         <WholeStoreAvailabilitySync storeId={selectedStoreId} language={language} disabled={Boolean(savingId)||loading} onApplied={()=>void load(selectedStoreId)} />
+
+        <ReplenishmentPanel storeId={selectedStoreId} refreshKey={replenishmentRefreshKey} open={replenishmentOpen} onOpenChange={setReplenishmentOpen} focus={replenishmentFocus} onClearFocus={() => setReplenishmentFocus(null)} />
 
         <div className="store-menu-controls panel">
           {showOptionCategory && <div className="store-menu-kind-switch" role="group" aria-label={filterCopy.target} data-i18n-ignore>

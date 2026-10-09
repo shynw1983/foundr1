@@ -30,7 +30,8 @@ import {
   UserCog
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MenuProductLinksEditor } from "./MenuProductLinksEditor";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { ModalHistoryScope } from "../components/useModalHistory";
@@ -786,6 +787,32 @@ export default function MenuAdminPage() {
     isBidirectional: false
   });
   const [availabilityLinkSaving, setAvailabilityLinkSaving] = useState(false);
+  const stockLinkNavigationApplied = useRef(false);
+
+  useEffect(() => {
+    if (loading || stockLinkNavigationApplied.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const kind = params.get("menuStockKind");
+    const id = params.get("menuStockTargetId");
+    if (!id || (kind !== "item" && kind !== "option")) return;
+    stockLinkNavigationApplied.current = true;
+    if (kind === "item") {
+      const item = data.items.find(entry => entry.id === id && !entry.storeId);
+      if (!item) { setMessage("対象メニューが見つかりません。最新の一覧を確認してください。"); return; }
+      setActiveBrandId(item.brandId);
+      selectItem(item);
+      setActiveCategory(item.category || "未分類");
+    } else {
+      const option = data.options.find(entry => entry.id === id);
+      const group = data.groups.find(entry => entry.id === option?.optionGroupId);
+      if (!option || !group) { setMessage("対象メニューが見つかりません。最新の一覧を確認してください。"); return; }
+      setActiveBrandId(group.brandId);
+      openChoiceSettings(group);
+      editOption(option);
+    }
+    // This link selects an existing target once; refreshes preserve ongoing edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, data.items, data.options, data.groups]);
 
   async function loadPublishPreview(brandId: string) {
     if (!brandId) {
@@ -3285,6 +3312,7 @@ export default function MenuAdminPage() {
                         <input type="checkbox" checked={optionDraft.isActive} onChange={(event) => setOptionDraft({ ...optionDraft, isActive: event.target.checked })} />
                         <span>メニューに表示する</span>
                       </label>
+                      <MenuProductLinksEditor kind="option" targetId={optionDraft.id} />
                       <div className="row-actions">
                         {optionDraft.id ? (
                           <button className="danger-button" type="button" onClick={() => void deleteEntry("option", optionDraft.id)}>
@@ -3729,6 +3757,7 @@ export default function MenuAdminPage() {
               </details>
             </div>
 
+            <MenuProductLinksEditor kind="item" targetId={itemDraft.id} />
             <section className="menu-edit-card">
               <div className="section-heading">
                 <div>

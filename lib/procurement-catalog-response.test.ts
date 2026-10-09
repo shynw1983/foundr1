@@ -4,7 +4,7 @@ import { scopeProcurementCatalogResponse } from "./procurement-catalog-response.
 
 const data = {
   products: [
-    { id: "published", name: "Shared name", unit: "袋", referencePrice: 100, importOriginalPrice: 20, mainSupplier: "upstream", mainPurchaseUrl: "private", futureSecret: "must not escape" },
+    { id: "published", name: "Shared name", unit: "袋", inventoryUnitConversions: [{ unit: "個", unitsPerPurchase: 20 }], referencePrice: 100, importOriginalPrice: 20, mainSupplier: "upstream", mainPurchaseUrl: "private", futureSecret: "must not escape" },
     { id: "hidden", name: "Shared name", referencePrice: 200 }
   ],
   productBrandUsages: [{ productId: "published", product: "Shared name" }, { productId: "hidden", product: "Shared name" }],
@@ -19,6 +19,7 @@ test("store catalog removes unpublished IDs and upstream information even for du
   const scoped = scopeProcurementCatalogResponse(data, access, false);
   assert.deepEqual(scoped.products?.map((product) => product.id), ["published"]);
   assert.equal(scoped.products?.[0].referencePrice, null);
+  assert.deepEqual(scoped.products?.[0].inventoryUnitConversions, data.products[0].inventoryUnitConversions);
   assert.equal("importOriginalPrice" in scoped.products![0], false);
   assert.equal("futureSecret" in scoped.products![0], false);
   assert.equal("mainPurchaseUrl" in scoped.products![0], false);

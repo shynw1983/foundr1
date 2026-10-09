@@ -17,6 +17,11 @@ import {
 import { normalizeDecimalInput } from "../../../lib/number-input";
 import { findProductByIdentity } from "../../../lib/product-identity";
 import { applyProcurementFeedbackConfirmation, createProcurementConfirmationSnapshot, procurementConfirmationSnapshotMatches, type ProcurementConfirmationSnapshot } from "../../../lib/procurement-confirmation-policy";
+import { normalizeReplenishmentOrderIntent, readReplenishmentOrderIntent, resolveReplenishmentPrefill, type ReplenishmentOrderIntent, type ReplenishmentOpenOrderItem } from "../../../lib/replenishment-order-intent";
+import { StockReceiptPanel } from "../../../components/StockReceiptPanel";
+import { loadCurrentEmployee } from "../components/currentEmployeeStore";
+import { OrderTemplatesPanel } from "./OrderTemplatesPanel";
+import { appendOrderTemplate, templateItemsFromDraft } from "../../../lib/order-template-draft";
 
 type Product = typeof initialProducts[number];
 type ProductWithCategory = Omit<Product, "referencePrice"> & {
@@ -34,6 +39,7 @@ type StoreItem = typeof stores[number] & {
   defaultProcurementStaffId?: string;
 };
 type PurchaseOrder = typeof orders[number] & {
+  storeId?: string;
   note?: string;
   requesterStaffId?: string;
   requesterName?: string;
@@ -59,8 +65,10 @@ type OrderItemDraft = {
   category: string;
   subcategory: string;
   productName: string;
-  quantity: number;
+  quantity: number | null;
   unit: string;
+  replenishment?: boolean;
+  fromTemplate?: boolean;
 };
 type QueueFilter = "未完了" | "今日対応" | "配送待ち" | "完了" | "すべて";
 type PurchaseOrderItem = {
@@ -124,6 +132,7 @@ type NewOrderDraftSession = {
   categoryFilter: string;
   subcategoryFilter: string;
   items: OrderItemDraft[];
+  replenishmentIntent?: ReplenishmentOrderIntent;
 };
 
 type PendingStoreConfirmationAction = {
@@ -408,6 +417,7 @@ function getFirstProductInSubcategory(products: ProductWithCategory[], category:
 }
 
 function syncOrderItemWithProducts(item: OrderItemDraft, availableProducts: ProductWithCategory[]) {
+  if (item.replenishment || item.fromTemplate) return item;
   if (availableProducts.length === 0) return item;
   if (availableProducts.some((product) => product.id === item.productId || (!item.productId && product.name === item.productName))) return item;
 
@@ -439,8 +449,12 @@ function readSavedNewOrderDraft(): NewOrderDraftSession | null {
             category: String(item?.category ?? ""),
             subcategory: String(item?.subcategory ?? "未分類"),
             productName: String(item?.productName ?? ""),
-            quantity: Math.min(999, Math.max(1, Number(item?.quantity) || 1)),
-            unit: String(item?.unit ?? "個")
+            quantity: item?.replenishment === true || item?.fromTemplate === true
+              ? (item?.quantity !== null && item?.quantity !== undefined && String(item?.quantity) !== "" && Number.isInteger(Number(item?.quantity)) && Number(item?.quantity) >= 1 && Number(item?.quantity) <= 999 ? Number(item?.quantity) : null)
+              : Math.min(999, Math.max(1, Number(item?.quantity) || 1)),
+            unit: String(item?.unit ?? "個"),
+            replenishment: item?.replenishment === true,
+            fromTemplate: item?.fromTemplate === true
           }))
           .filter((item) => item.productId || item.productName)
       : [];
@@ -462,7 +476,8 @@ function readSavedNewOrderDraft(): NewOrderDraftSession | null {
       buyerStaffId: String(parsed.buyerStaffId ?? ""),
       categoryFilter: String(parsed.categoryFilter ?? ""),
       subcategoryFilter: String(parsed.subcategoryFilter ?? ""),
-      items
+      items,
+      replenishmentIntent: normalizeReplenishmentOrderIntent(parsed.replenishmentIntent) ?? undefined
     };
   } catch {
     return null;
@@ -580,7 +595,8 @@ export default function OrdersPage() {
   const [query, setQuery] = useState("");
   const [editingOrder, setEditingOrder] = useState<EditingOrder | null>(null);
   const [draftStore, setDraftStore] = useState("");
-  const [draftDeadline, setDraftDeadline] = useState(getDefaultDeadlineValue());
+  // A static build can render on a different day/timezone than the browser.
+  const [draftDeadline, setDraftDeadline] = useState("");
   const [draftPriority, setDraftPriority] = useState("中");
   const [draftNote, setDraftNote] = useState("");
   const [draftRequesterStaffId, setDraftRequesterStaffId] = useState("");
@@ -589,6 +605,23 @@ export default function OrdersPage() {
   const [draftSubcategoryFilter, setDraftSubcategoryFilter] = useState("");
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([]);
+  const [stockReceiptOrder, setStockReceiptOrder] = useState<{ storeId: string; orderId: string } | null>(null);
+  const [canViewInventory, setCanViewInventory] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void loadCurrentEmployee().then((employee) => {
+      if (active) setCanViewInventory(Boolean(employee?.permissions?.includes("module.inventory") || employee?.permittedNavPaths?.includes("/os/inventory")));
+    });
+    return () => { active = false; };
+  }, []);
+  const [pendingReplenishmentIntent, setPendingReplenishmentIntent] = useState<ReplenishmentOrderIntent | null>(null);
+  const [replenishmentIntent, setReplenishmentIntent] = useState<ReplenishmentOrderIntent | null>(null);
+  const [replenishmentMessage, setReplenishmentMessage] = useState("");
+  const [replenishmentContext, setReplenishmentContext] = useState<{ canCreateOrder: boolean; openItems: ReplenishmentOpenOrderItem[] } | null>(null);
+  const [replenishmentContextLoading, setReplenishmentContextLoading] = useState(false);
+  const [replenishmentRefresh, setReplenishmentRefresh] = useState(0);
+  const [additionalReplenishmentConfirmed, setAdditionalReplenishmentConfirmed] = useState(false);
 
   async function loadDashboardData() {
     const response = await fetch("/api/dashboard", { cache: "no-store" });
@@ -657,8 +690,19 @@ export default function OrdersPage() {
   useEffect(() => {
     const savedDraft = readSavedNewOrderDraft();
     hasRestoredNewOrderDraft.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const parsedIntent = readReplenishmentOrderIntent(params);
+    setPendingReplenishmentIntent(parsedIntent.intent);
+    if (parsedIntent.error) setReplenishmentMessage(parsedIntent.error);
+    if (params.get("order")) {
+      setQuery(params.get("order") ?? "");
+      setQueueFilter("すべて");
+    }
 
-    if (!savedDraft) return;
+    if (!savedDraft) {
+      setDraftDeadline(getDefaultDeadlineValue());
+      return;
+    }
 
     setDraftStore(savedDraft.store);
     setDraftDeadline(savedDraft.deadline);
@@ -669,6 +713,7 @@ export default function OrdersPage() {
     setDraftCategoryFilter(savedDraft.categoryFilter);
     setDraftSubcategoryFilter(savedDraft.subcategoryFilter);
     setOrderItemDrafts(savedDraft.items);
+    setReplenishmentIntent(savedDraft.replenishmentIntent ?? null);
   }, []);
 
   const orderableStores = storesData
@@ -708,7 +753,7 @@ export default function OrdersPage() {
   const selectedDraftStoreDefaultBuyerId = orderableStores.find((store) => store.name === selectedDraftStore)?.defaultProcurementStaffId ?? "";
   const selectedDraftRequesterStaffId = getSelectedRequesterStaffId(draftRequesterStaffId, draftAssignableStaff, selectedDraftStore, currentUserId);
   const selectedDraftBuyerStaffId = getSelectedBuyerStaffId(draftBuyerStaffId, draftAssignableStaff, selectedDraftStore, currentUserId, selectedDraftStoreDefaultBuyerId);
-  const draftDeadlineDate = getDateKeyFromDateTime(draftDeadline);
+  const draftDeadlineDate = draftDeadline ? getDateKeyFromDateTime(draftDeadline) : "";
   const draftUnavailableSlots = getUnavailableSlotSet(procurementStaffAvailability, selectedDraftBuyerStaffId, draftDeadlineDate);
   const draftUnavailableNotice = formatUnavailableNotice(procurementStaffAvailability, selectedDraftBuyerStaffId, draftDeadline);
   const draftProducts = getProductsForStore(products, orderableStores, selectedDraftStore);
@@ -743,13 +788,86 @@ export default function OrdersPage() {
     ? formatUnavailableNotice(procurementStaffAvailability, selectedEditingBuyerStaffId, editingOrder.deadline)
     : "";
   const draftEstimatedAmount = calculateDraftEstimatedAmount(orderItemDrafts, products);
+  const replenishmentProductKey = replenishmentIntent ? [...new Set(orderItemDrafts.map((item) => item.productId).filter(Boolean))].sort().join(",") : "";
+  const replenishmentStoreMatches = !replenishmentIntent || orderableStores.find((store) => store.name === selectedDraftStore)?.id === replenishmentIntent.storeId;
   const editingEstimatedAmount = editingOrder
     ? calculateDraftEstimatedAmount(editingOrder.items, products)
     : 0;
 
+  function applyReplenishmentIntent(intent: ReplenishmentOrderIntent) {
+    const resolved = resolveReplenishmentPrefill(intent, orderableStores, products);
+    if ("error" in resolved) {
+      setReplenishmentMessage(resolved.error);
+      setPendingReplenishmentIntent(null);
+      return;
+    }
+    const hasContent = orderItemDrafts.length > 0 || draftNote.trim().length > 0;
+    if (hasContent && selectedDraftStore !== resolved.store.name) {
+      setReplenishmentMessage("別の店舗の下書きがあります。現在の下書きを送信するか、商品と備考を整理してから補充商品を追加してください。");
+      return;
+    }
+    setDraftStore(resolved.store.name);
+    setOrderItemDrafts((items) => {
+      const next = items.map((item) => intent.productIds.includes(item.productId) ? { ...item, replenishment: true } : item);
+      for (const [index, product] of resolved.products.entries()) {
+        if (!next.some((item) => item.productId === product.id)) next.push({
+          ...createOrderItemDraftFromProduct(product, Date.now() + index), quantity: null, replenishment: true
+        });
+      }
+      return next;
+    });
+    setReplenishmentIntent(intent);
+    setPendingReplenishmentIntent(null);
+    setReplenishmentMessage("");
+    setAdditionalReplenishmentConfirmed(false);
+  }
+
   useEffect(() => {
+    if (dataSource !== "neon" || !hasRestoredNewOrderDraft.current || !pendingReplenishmentIntent) return;
+    if (replenishmentIntent?.storeId === pendingReplenishmentIntent.storeId &&
+      pendingReplenishmentIntent.productIds.every((id) => orderItemDrafts.some((item) => item.productId === id && item.replenishment))) {
+      setPendingReplenishmentIntent(null);
+      return;
+    }
+    if (orderItemDrafts.length > 0 || draftNote.trim()) {
+      setReplenishmentMessage("下書きはそのまま残しています。補充商品を追加する前に、納品先店舗を確認してください。");
+      return;
+    }
+    applyReplenishmentIntent(pendingReplenishmentIntent);
+  }, [dataSource, pendingReplenishmentIntent]);
+
+  useEffect(() => {
+    if (!replenishmentIntent) return;
+    setAdditionalReplenishmentConfirmed(false);
+    setReplenishmentContext(null);
+    if (!replenishmentStoreMatches || !replenishmentProductKey) {
+      setReplenishmentContextLoading(false);
+      setReplenishmentMessage("補充対象の店舗または商品が変わりました。最新の内容を確認してください。");
+      return;
+    }
+    const controller = new AbortController();
+    const params = new URLSearchParams({ replenishStoreId: replenishmentIntent.storeId });
+    replenishmentProductKey.split(",").forEach((id) => params.append("replenishProductId", id));
+    setReplenishmentContextLoading(true);
+    void fetch(`/api/orders?${params}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const data = await response.json() as { canCreateOrder?: boolean; openItems?: ReplenishmentOpenOrderItem[]; error?: string };
+        if (!response.ok) throw new Error(data.error ?? "補充対象を確認できませんでした。もう一度確認してください。");
+        if (controller.signal.aborted) return;
+        setReplenishmentContext({ canCreateOrder: data.canCreateOrder === true, openItems: data.openItems ?? [] });
+        setReplenishmentMessage(data.canCreateOrder === true ? "" : "このアカウントでは補充依頼を作成できません。");
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setReplenishmentMessage(error instanceof Error ? error.message : "補充対象を確認できませんでした。もう一度確認してください。");
+      })
+      .finally(() => { if (!controller.signal.aborted) setReplenishmentContextLoading(false); });
+    return () => controller.abort();
+  }, [replenishmentIntent?.storeId, replenishmentProductKey, replenishmentStoreMatches, replenishmentRefresh]);
+
+  useEffect(() => {
+    if (pendingReplenishmentIntent || replenishmentIntent) return;
     setOrderItemDrafts((items) => items.map((item) => syncOrderItemWithProducts(item, draftProducts)));
-  }, [selectedDraftStore, products]);
+  }, [selectedDraftStore, products, pendingReplenishmentIntent, replenishmentIntent]);
 
   useEffect(() => {
     setDraftCategoryFilter((current) => draftProductCategories.includes(current) ? current : draftProductCategories[0] ?? "");
@@ -780,7 +898,8 @@ export default function OrdersPage() {
       buyerStaffId: selectedDraftBuyerStaffId,
       categoryFilter: selectedDraftCategory,
       subcategoryFilter: selectedDraftSubcategory,
-      items: orderItemDrafts.filter((item) => item.productId || item.productName)
+      items: orderItemDrafts.filter((item) => item.productId || item.productName),
+      replenishmentIntent: replenishmentIntent ?? undefined
     };
     const hasDraftContent = draft.items.length > 0 || draft.note.trim().length > 0;
 
@@ -799,7 +918,8 @@ export default function OrdersPage() {
     selectedDraftBuyerStaffId,
     selectedDraftCategory,
     selectedDraftSubcategory,
-    orderItemDrafts
+    orderItemDrafts,
+    replenishmentIntent
   ]);
 
   function getQueueFilterCount(filter: QueueFilter) {
@@ -865,9 +985,10 @@ export default function OrdersPage() {
       const existingItem = items.find((item) => item.productId === product.id);
 
       if (existingItem) {
+        if (existingItem.quantity === null) return items;
         return items.map((item) =>
           item.id === existingItem.id
-            ? { ...item, quantity: Math.min(999, item.quantity + 1) }
+            ? { ...item, quantity: Math.min(999, (item.quantity ?? 0) + 1) }
             : item
         );
       }
@@ -933,6 +1054,9 @@ export default function OrdersPage() {
   }
 
   function copyOrderToDraft(order: PurchaseOrder) {
+    setReplenishmentIntent(null);
+    setReplenishmentContext(null);
+    setReplenishmentMessage("");
     const availableProducts = getProductsForStore(products, orderableStores, order.store);
     const items = purchaseOrderItems
       .filter((item) => item.orderId === order.id)
@@ -955,6 +1079,18 @@ export default function OrdersPage() {
   async function submitNewOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSubmittingOrder) return;
+    if (orderItemDrafts.some((item) => item.quantity === null)) {
+      showNotice("補充する数量を入力してください。", "info");
+      return;
+    }
+    if (replenishmentIntent && (replenishmentContextLoading || !replenishmentStoreMatches || !replenishmentContext?.canCreateOrder)) {
+      showNotice("補充対象を確認してから送信してください。", "info");
+      return;
+    }
+    if (replenishmentIntent && replenishmentContext && replenishmentContext.openItems.length > 0 && !additionalReplenishmentConfirmed) {
+      showNotice("未受領の発注を確認して、追加の補充が必要か確認してください。", "info");
+      return;
+    }
 
     if (isUnavailableDeadline(procurementStaffAvailability, selectedDraftBuyerStaffId, draftDeadline)) {
       window.alert(`${draftUnavailableNotice}。別の時間帯を選択してください。`);
@@ -965,13 +1101,26 @@ export default function OrdersPage() {
     const form = event.currentTarget;
 
     try {
+      const formData = new FormData(form);
+      if (replenishmentIntent && replenishmentContext) formData.set("replenishContext", JSON.stringify({
+        storeId: replenishmentIntent.storeId,
+        productIds: replenishmentProductKey.split(","),
+        expectedOpenItemIds: replenishmentContext.openItems.map((item) => item.itemId).sort(),
+        additionalOrderConfirmed: additionalReplenishmentConfirmed
+      }));
       const response = await fetch("/api/orders", {
         method: "POST",
-        body: new FormData(form)
+        body: formData
       });
 
       if (!response.ok) {
-        window.alert("発注依頼を送信できませんでした。");
+        const data = await response.json().catch(() => ({})) as { error?: string };
+        showNotice(data.error ?? "発注依頼を送信できませんでした。", "info");
+        if (replenishmentIntent && response.status === 409) {
+          setAdditionalReplenishmentConfirmed(false);
+          setReplenishmentRefresh((value) => value + 1);
+          await loadDashboardData();
+        }
         return;
       }
 
@@ -984,8 +1133,18 @@ export default function OrdersPage() {
       setDraftCategoryFilter("");
       setDraftSubcategoryFilter("");
       setOrderItemDrafts([]);
+      setReplenishmentIntent(null);
+      setReplenishmentContext(null);
+      setPendingReplenishmentIntent(null);
+      setReplenishmentMessage("");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("replenishStoreId");
+      url.searchParams.delete("replenishProductId");
+      window.history.replaceState(window.history.state, "", url);
       window.localStorage.removeItem(newOrderDraftStorageKey);
       await loadDashboardData();
+    } catch {
+      showNotice("発注依頼を送信できませんでした。元の発注を確認してから、もう一度送信してください。", "info");
     } finally {
       setIsSubmittingOrder(false);
     }
@@ -1249,11 +1408,44 @@ export default function OrdersPage() {
         <section className="panel create-order-panel" id="create-order-panel">
           <PanelTitle title="新規発注依頼" subtitle="納品先店舗と依頼商品リストを指定" />
           <form className="inline-create-form" onSubmit={submitNewOrder}>
+            {pendingReplenishmentIntent || replenishmentIntent || replenishmentMessage ? (
+              <div className="replenishment-order-context" role="status">
+                <strong>補充依頼</strong>
+                <p>{replenishmentMessage || (replenishmentContextLoading ? "未受領の発注を確認しています。" : "数量は自動入力されません。発注単位を確認して、必要な数量を入力してください。")}</p>
+                {pendingReplenishmentIntent && dataSource === "neon" ? (
+                  <button type="button" className="text-button" onClick={() => applyReplenishmentIntent(pendingReplenishmentIntent)}>下書きに補充商品を追加</button>
+                ) : null}
+                {replenishmentIntent ? (
+                  <>
+                    {replenishmentContext?.openItems.length ? (
+                      <>
+                        <p>同じ商品の未受領の発注があります。元の発注を確認してください。</p>
+                        <ul>
+                          {replenishmentContext.openItems.map((item) => (
+                            <li key={item.itemId}>
+                              <a href={item.href} target="_blank" rel="noreferrer">{item.orderId}</a>
+                              {" · "}{products.find((product) => product.id === item.productId)?.name ?? "商品"}
+                              {" · "}発注数量 {item.requestedQuantity} {item.requestedUnit}
+                            </li>
+                          ))}
+                        </ul>
+                        <label className="compact-checkbox-label">
+                          <input type="checkbox" checked={additionalReplenishmentConfirmed} onChange={(event) => setAdditionalReplenishmentConfirmed(event.target.checked)} />
+                          <span>未受領の発注を確認し、追加の補充が必要です</span>
+                        </label>
+                      </>
+                    ) : null}
+                    <button type="button" className="text-button" disabled={replenishmentContextLoading} onClick={() => setReplenishmentRefresh((value) => value + 1)}>未受領の発注を再確認</button>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             <label>
               <span>納品先店舗</span>
               <select
                 name="store"
                 value={selectedDraftStore}
+                disabled={Boolean(replenishmentIntent)}
                 onChange={(event) => {
                   setDraftStore(event.target.value);
                   setDraftRequesterStaffId("");
@@ -1264,13 +1456,14 @@ export default function OrdersPage() {
                   <option value={store.name} key={store.name}>{store.label}</option>
                 ))}
               </select>
+              {replenishmentIntent ? <input type="hidden" name="store" value={selectedDraftStore} /> : null}
             </label>
             <label>
               <span>締切</span>
               <input name="deadline" type="datetime-local" value={draftDeadline} onChange={(event) => setDraftDeadline(event.target.value)} />
             </label>
             <div className="deadline-slot-picker">
-              <span>{formatDateKeyLabel(draftDeadlineDate)} の時間帯</span>
+              <span>{draftDeadlineDate ? `${formatDateKeyLabel(draftDeadlineDate)} の時間帯` : "時間帯"}</span>
               <div>
                 {procurementTimeSlots.map((slot) => {
                   const isUnavailable = draftUnavailableSlots.has(slot.slot);
@@ -1320,6 +1513,14 @@ export default function OrdersPage() {
               <span>メモ</span>
               <textarea name="note" value={draftNote} onChange={(event) => setDraftNote(event.target.value)} placeholder="欠品時の代替、配送希望など" />
             </label>
+            <OrderTemplatesPanel storeId={orderableStores.find(store => store.name === selectedDraftStore)?.id ?? ""} storeName={selectedDraftStore}
+              cartItems={templateItemsFromDraft(orderItemDrafts, draftProducts)} products={draftProducts} disabled={isSubmittingOrder || dataSource !== "neon"}
+              onApply={(template) => {
+                const result = appendOrderTemplate(orderItemDrafts, template, draftProducts);
+                setOrderItemDrafts(result.items);
+                if (result.added) setAdditionalReplenishmentConfirmed(false);
+                return result;
+              }} />
             <div className="order-items-builder">
               <div className="builder-heading">
                 <strong>依頼商品リスト</strong>
@@ -1389,10 +1590,10 @@ export default function OrdersPage() {
               <div className="order-item-list">
                 {orderItemDrafts.map((item) => (
                   <div className="order-item-row" key={item.id}>
-                    <label className="selected-order-product">
+                    <label className={`selected-order-product${item.replenishment ? " replenishment-order-product" : ""}`}>
                       <span>商品</span>
                       <strong>{item.productName || "商品未選択"}</strong>
-                      <small>{item.category} / {item.subcategory}</small>
+                      <small>{item.category} / {item.subcategory}{item.replenishment ? " · 補充対象" : ""}</small>
                       <input type="hidden" name="productId" value={item.productId} />
                       <input type="hidden" name="productName" value={item.productName} />
                     </label>
@@ -1400,9 +1601,11 @@ export default function OrdersPage() {
                       <span>数量</span>
                       <select
                         name="requestedQuantity"
-                        value={item.quantity}
-                        onChange={(event) => updateOrderItemDraft(item.id, { quantity: Number(event.target.value) })}
+                        value={item.quantity ?? ""}
+                        required
+                        onChange={(event) => updateOrderItemDraft(item.id, { quantity: event.target.value === "" ? null : Number(event.target.value) })}
                       >
+                        {item.replenishment || item.fromTemplate ? <option value="">数量を選択</option> : null}
                         {quantityOptions.map((quantity) => (
                           <option value={quantity} key={quantity}>{quantity}</option>
                         ))}
@@ -1426,10 +1629,10 @@ export default function OrdersPage() {
                   <div className="empty-state">商品カードをクリックして追加してください</div>
                 ) : null}
               </div>
-              {procurementDetailsVisible ? <EstimatedAmountBox amount={draftEstimatedAmount} /> : null}
+              {procurementDetailsVisible && orderItemDrafts.every((item) => item.quantity !== null) ? <EstimatedAmountBox amount={draftEstimatedAmount} /> : null}
             </div>
             <div className="inline-create-actions">
-              <button type="submit" className="primary-button" disabled={isSubmittingOrder}>
+              <button type="submit" className="primary-button" disabled={isSubmittingOrder || Boolean(replenishmentIntent && (!replenishmentContext?.canCreateOrder || replenishmentContextLoading || !replenishmentStoreMatches || (replenishmentContext.openItems.length > 0 && !additionalReplenishmentConfirmed)))}>
                 <Plus size={18} />
                 {isSubmittingOrder ? "送信中..." : "依頼を送信"}
               </button>
@@ -1456,6 +1659,9 @@ export default function OrdersPage() {
             <div className="order-list">
               {filteredPurchaseOrders.map((order) => {
                 const orderItems = purchaseOrderItems.filter((item) => item.orderId === order.id);
+                const sameNameStores = storesData.filter((store) => store.name === order.store);
+                const receiptStoreId = order.storeId || (sameNameStores.length === 1 ? sameNameStores[0].id : "");
+                const hasArrivedItems = orderItems.some((item) => ["delivered", "received"].includes(item.deliveryStatus ?? ""));
                 const liveStatus = getLivePurchaseOrderStatus(order, orderItems);
                 const estimatedAmount = calculateOrderEstimatedAmount(order.id, purchaseOrderItems, products);
                 const storeConfirmationBatches = deliveryBatches.filter(
@@ -1503,6 +1709,7 @@ export default function OrdersPage() {
                       <strong>{order.priority}</strong>
                     </div>
                     <div className="row-actions">
+                      {canViewInventory && receiptStoreId && hasArrivedItems ? <button type="button" className="text-button" onClick={() => setStockReceiptOrder({ storeId: receiptStoreId, orderId: order.id })}>納品・入庫登録</button> : null}
                       <a
                         className="icon-button"
                         href={`/os/procurement?order=${encodeURIComponent(order.id)}`}
@@ -1785,7 +1992,7 @@ export default function OrdersPage() {
                     <label>
                       <span>数量</span>
                       <select
-                        value={item.quantity}
+                        value={item.quantity ?? ""}
                         onChange={(event) => updateEditingOrderItem(item.id, { quantity: Number(event.target.value) })}
                       >
                         {quantityOptions.map((quantity) => (
@@ -1828,6 +2035,14 @@ export default function OrdersPage() {
           </div>
         </ModalHistoryScope>
       ) : null}
+      {stockReceiptOrder ? <ModalHistoryScope historyKey="orders-stock-receipt" onClose={() => setStockReceiptOrder(null)}>
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="stock-receipt-order-title">
+          <section className="edit-modal">
+            <div className="modal-heading"><h3 id="stock-receipt-order-title">{stockReceiptOrder.orderId} · <span>納品・入庫登録</span></h3><button type="button" className="icon-button" aria-label="閉じる" onClick={() => setStockReceiptOrder(null)}>×</button></div>
+            <StockReceiptPanel storeId={stockReceiptOrder.storeId} orderId={stockReceiptOrder.orderId} onRecorded={() => void loadDashboardData()} />
+          </section>
+        </div>
+      </ModalHistoryScope> : null}
       <ActionNotice notice={notice} onClose={clearNotice} />
     </main>
   );
@@ -2064,7 +2279,7 @@ function EstimatedAmountBox({ amount }: { amount: number }) {
 function calculateDraftEstimatedAmount(items: OrderItemDraft[], productList: ProductWithCategory[]) {
   return items.reduce((total, item) => {
     const product = findProductForEstimate(item.productId, item.productName, productList);
-    return total + item.quantity * getReferencePrice(product);
+    return total + (item.quantity ?? 0) * getReferencePrice(product);
   }, 0);
 }
 

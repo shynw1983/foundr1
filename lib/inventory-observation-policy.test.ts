@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import * as policy from "./inventory-observation-policy.ts";
+import * as unitConversions from "./product-unit-conversions.ts";
+import * as quickPolicy from "./inventory-quick-policy.ts";
 
 test("shortage observations remain actionable when counts are unknown or older than the observation", () => {
   for (const currentQuantity of [null, 8]) {
@@ -37,6 +39,10 @@ function routeHarness(options: {
   visibleIdsByStore?: Record<string, string[]>;
   currentCountUnit?: string;
   currentSafetyStock?: number;
+  stockRevision?: number;
+  stockQuantity?: number | null;
+  lastCountedQuantity?: number | null;
+  lastReceivedAt?: string | null;
 } = {}) {
   const queries: Query[] = [];
   const transactions: Array<Promise<unknown>[]> = [];
@@ -45,20 +51,20 @@ function routeHarness(options: {
   const sql = Object.assign((parts: TemplateStringsArray, ...values: unknown[]) => {
     const text = parts.join("?");
     queries.push({ text, values });
-    if (text.includes("with counted as")) {
+    if (text.includes("with locked_product as") && text.includes("), counted as (")) {
       if (options.transactionFails) return Promise.reject(new Error("history insert failed"));
-      if (values[6] !== countState.unit) return Promise.resolve([]);
-      countState.quantity = Number(values[0]);
+      if (values[3] !== countState.unit) return Promise.resolve([]);
+      countState.quantity = Number(values[4]);
       countState.writes += 1;
       return Promise.resolve([{
         itemId: "item", quantity: countState.quantity, countUnit: countState.unit,
         exceptionCode: policy.inventoryCountException(countState.quantity, options.currentSafetyStock ?? 1)
       }]);
     }
-    if (text.includes('count_unit as "countUnit", safety_stock')) {
-      return Promise.resolve([{ id: "item", storeId: "store", productId: "product", countUnit: "袋", safetyStock: 1 }]);
+    if (text.includes('items.count_unit as "countUnit", items.safety_stock')) {
+      return Promise.resolve([{ id: "item", storeId: "store", productId: "product", countUnit: "袋", safetyStock: 1, purchaseUnit: "袋", packageQuantity: null, packageQuantityUnit: null, inventoryUnitConversions: [], stockRevision: options.stockRevision ?? 0, stockQuantity: options.stockQuantity === undefined ? 8 : options.stockQuantity, lastCountedQuantity: options.lastCountedQuantity === undefined ? 8 : options.lastCountedQuantity, lastReceivedAt: options.lastReceivedAt ?? null }]);
     }
-    if (text.includes("select id, unit from products") || text.includes("from inventory_locations")) {
+    if (text.includes("select id, unit,") || text.includes("from inventory_locations")) {
       return Promise.resolve([{ id: "product", unit: "袋" }]);
     }
     if (text.includes('coalesce(products.storage_type, \'\') as "storageType"')) {
@@ -84,6 +90,8 @@ function routeHarness(options: {
     "../../../lib/db": { sql },
     "../../../lib/role-permissions": { roleHasPermission: async () => true },
     "../../../lib/inventory-observation-policy": policy,
+    "../../../lib/product-unit-conversions": unitConversions,
+    "../../../lib/inventory-quick-policy": quickPolicy,
     "../../../lib/product-catalog-access": {
       getVisibleProductIdsForStore: async (_session: unknown, storeId: string) => {
         catalogCalls.push({ action: "read", storeId });
@@ -204,7 +212,7 @@ test("missing or concurrently changed count units reject stale counts without up
   assert.equal((await changedUnit.post({ action: "count", quantity: 6, countUnit: "袋" })).status, 409);
   assert.equal(changedUnit.countState.writes, 0);
   assert.equal(changedUnit.countState.quantity, 8);
-  const countQuery = changedUnit.queries.find((query) => query.text.includes("with counted as"));
+  const countQuery = changedUnit.queries.find((query) => query.text.includes("with locked_product as"));
   assert.ok(countQuery?.text.includes("and count_unit = ?"));
   assert.ok(countQuery?.text.includes("and store_id = ?::uuid"));
   assert.ok(countQuery?.text.includes("from counted"));
@@ -215,8 +223,30 @@ test("count shortage classification uses the current database threshold when con
   const response = await post({ action: "count", quantity: 6.25, countUnit: "袋" });
   assert.equal(response.status, 200);
   assert.equal((await response.json()).count.exceptionCode, "low");
-  const countQuery = queries.find((query) => query.text.includes("with counted as"));
+  const countQuery = queries.find((query) => query.text.includes("with locked_product as"));
   assert.ok(countQuery?.text.includes("when ?::numeric = 0 then 'out'"));
   assert.ok(countQuery?.text.includes("when ?::numeric <= inventory_items.safety_stock"));
   assert.ok(countQuery?.text.includes("<= inventory_items.safety_stock then 'low'"));
+});
+
+test("book stock altered by receipts requires a revision-aware count and stale revisions cannot write", async () => {
+  const changed = routeHarness({ stockRevision: 2, stockQuantity: 10, lastCountedQuantity: 8, lastReceivedAt: "2026-10-09T00:00:00Z" });
+  assert.equal((await changed.post({ action: "count", quantity: 10, countUnit: "袋" })).status, 409);
+  assert.equal((await changed.post({ action: "count", quantity: 10, countUnit: "袋", expectedStockRevision: 1 })).status, 409);
+  assert.equal(changed.countState.writes, 0);
+  assert.equal((await changed.post({ action: "count", quantity: 10, countUnit: "袋", expectedStockRevision: 2 })).status, 200);
+  assert.equal(changed.countState.writes, 1);
+  const countQuery = changed.queries.find(query => query.text.includes("), counted as ("));
+  assert.ok(countQuery?.text.includes("and stock_revision = ?::integer"));
+  assert.ok(countQuery?.text.includes("stock_quantity = ?::numeric"));
+});
+
+test("a shortage observation never invents a zero physical count or changes book stock", async () => {
+  const { post, queries } = routeHarness();
+  assert.equal((await post({ action: "exception", exceptionCode: "out" })).status, 200);
+  const update = queries.find(query => query.text.includes("update inventory_items"));
+  assert.ok(update);
+  assert.ok(!update.text.includes("current_quantity"));
+  assert.ok(!update.text.includes("stock_quantity"));
+  assert.ok(!update.text.includes("last_counted_at"));
 });

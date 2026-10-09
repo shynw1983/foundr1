@@ -1352,6 +1352,7 @@ create table if not exists products (
   origin_countries text[] not null default '{}',
   package_quantity numeric(12, 3),
   package_quantity_unit text,
+  inventory_unit_conversions jsonb not null default '[]'::jsonb,
   product_family_name text,
   variant_name text,
   is_default_variant boolean not null default false,
@@ -1388,6 +1389,12 @@ alter table products add column if not exists subcategory text;
 alter table products add column if not exists origin_countries text[] not null default '{}';
 alter table products add column if not exists package_quantity numeric(12, 3);
 alter table products add column if not exists package_quantity_unit text;
+alter table products add column if not exists inventory_unit_conversions jsonb not null default '[]'::jsonb;
+do $$ begin
+  if not exists(select 1 from pg_constraint where conrelid = 'products'::regclass and conname = 'products_inventory_unit_conversions_array') then
+    alter table products add constraint products_inventory_unit_conversions_array check (jsonb_typeof(inventory_unit_conversions) = 'array');
+  end if;
+end $$;
 alter table products add column if not exists product_family_name text;
 alter table products add column if not exists variant_name text;
 alter table products add column if not exists is_default_variant boolean not null default false;
@@ -1437,8 +1444,13 @@ create table if not exists inventory_items (
   product_id uuid not null references products(id) on delete cascade,
   location_id uuid not null references inventory_locations(id) on delete cascade,
   count_unit text not null default '袋',
-  safety_stock numeric(12, 2) not null default 1,
-  current_quantity numeric(12, 2),
+  safety_stock numeric(18, 6) not null default 1,
+  current_quantity numeric(18, 6),
+  count_conversion_snapshot jsonb,
+  stock_quantity numeric(18, 6),
+  stock_conversion_snapshot jsonb,
+  stock_revision integer not null default 0,
+  last_received_at timestamptz,
   exception_code text not null default '',
   exception_note text not null default '',
   last_counted_at timestamptz,
@@ -1454,13 +1466,29 @@ create table if not exists inventory_checks (
   inventory_item_id uuid not null references inventory_items(id) on delete cascade,
   store_id uuid not null references stores(id) on delete cascade,
   product_id uuid not null references products(id) on delete cascade,
-  quantity numeric(12, 2),
+  quantity numeric(18, 6),
+  unit_conversion_snapshot jsonb,
   record_type text not null default 'count',
   exception_code text not null default '',
   note text not null default '',
   recorded_by uuid references employees(id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+alter table inventory_items add column if not exists count_conversion_snapshot jsonb;
+alter table inventory_checks add column if not exists unit_conversion_snapshot jsonb;
+alter table inventory_items alter column current_quantity type numeric(18, 6), alter column safety_stock type numeric(18, 6);
+alter table inventory_checks alter column quantity type numeric(18, 6);
+do $$ declare initialize_stock boolean; begin
+  initialize_stock := not exists(select 1 from pg_attribute where attrelid = 'inventory_items'::regclass and attname = 'stock_quantity' and not attisdropped);
+  alter table inventory_items add column if not exists stock_quantity numeric(18, 6);
+  alter table inventory_items add column if not exists stock_conversion_snapshot jsonb;
+  alter table inventory_items add column if not exists stock_revision integer not null default 0;
+  alter table inventory_items add column if not exists last_received_at timestamptz;
+  if initialize_stock then
+    update inventory_items set stock_quantity = current_quantity, stock_conversion_snapshot = count_conversion_snapshot where current_quantity is not null;
+  end if;
+end $$;
 
 create index if not exists idx_inventory_locations_store
   on inventory_locations(store_id, status, sort_order, name);
@@ -4569,3 +4597,96 @@ alter table purchase_order_items add column if not exists price_feedback_confirm
 alter table purchase_order_items add column if not exists quantity_feedback_confirmation jsonb;
 -- Historical units were not recorded. Do not infer them from current inventory settings.
 alter table inventory_checks add column if not exists count_unit text not null default '';
+
+
+-- Local procurement SKU associations. Separate from Uber-owned menu source content.
+create table if not exists menu_product_links (
+  id uuid primary key default gen_random_uuid(),
+  menu_catalog_item_id uuid references menu_catalog_items(id) on delete cascade,
+  menu_option_id uuid references menu_options(id) on delete cascade,
+  product_id uuid not null references products(id) on delete restrict,
+  created_by uuid references employees(id) on delete set null,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint menu_product_links_exactly_one_target check (num_nonnulls(menu_catalog_item_id, menu_option_id) = 1),
+  unique(menu_catalog_item_id, product_id),
+  unique(menu_option_id, product_id)
+);
+create index if not exists idx_menu_product_links_product on menu_product_links(product_id);
+
+-- Replenishment requests retain their originating store/SKU context, without inventing stock quantities.
+alter table purchase_orders add column if not exists replenishment_source jsonb;
+
+create table if not exists inventory_stock_receipts (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null unique,
+  purchase_order_item_id uuid not null references purchase_order_items(id) on delete restrict,
+  purchase_order_id uuid not null references purchase_orders(id) on delete restrict,
+  store_id uuid not null references stores(id) on delete restrict,
+  product_id uuid not null references products(id) on delete restrict,
+  inventory_item_id uuid not null references inventory_items(id) on delete restrict,
+  purchase_quantity numeric(18, 6) not null check (purchase_quantity > 0),
+  purchase_unit text not null,
+  count_quantity numeric(18, 6) check (count_quantity > 0),
+  count_unit text not null,
+  mode text not null check (mode in ('add', 'included', 'unverified')),
+  before_stock_quantity numeric(18, 6),
+  after_stock_quantity numeric(18, 6),
+  conversion_snapshot jsonb,
+  source_snapshot jsonb not null,
+  request_payload jsonb not null,
+  recorded_by uuid references employees(id) on delete set null,
+  recorded_by_name text not null default '',
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_inventory_stock_receipts_source on inventory_stock_receipts(purchase_order_item_id, created_at);
+create index if not exists idx_inventory_stock_receipts_store on inventory_stock_receipts(store_id, created_at desc);
+create index if not exists idx_inventory_stock_receipts_item on inventory_stock_receipts(inventory_item_id, created_at desc);
+
+-- 20261009_inventory_quick_checks.sql
+
+-- Visual observations never populate physical counts, book stock or count dates.
+alter table inventory_items add column if not exists quick_status text;
+alter table inventory_items add column if not exists quick_checked_at timestamptz;
+alter table inventory_items add column if not exists quick_checked_by uuid references employees(id) on delete set null;
+alter table inventory_items add column if not exists quick_checked_by_name text not null default '';
+alter table inventory_items add column if not exists quick_estimate jsonb;
+alter table inventory_items add column if not exists quick_basis jsonb;
+alter table inventory_items add column if not exists quick_revision integer not null default 0;
+alter table inventory_items add column if not exists quick_superseded_at timestamptz;
+alter table inventory_items drop constraint if exists inventory_items_quick_status_check;
+alter table inventory_items add constraint inventory_items_quick_status_check check (quick_status is null or quick_status in ('enough', 'low', 'out'));
+alter table inventory_items drop constraint if exists inventory_items_quick_revision_check;
+alter table inventory_items add constraint inventory_items_quick_revision_check check (quick_revision >= 0);
+
+alter table inventory_checks add column if not exists quick_check_snapshot jsonb;
+
+
+-- 20261009_inventory_receipt_unknown_balance.sql
+
+-- An arrival can be recorded without asserting the total stock or inventing a conversion.
+alter table inventory_stock_receipts alter column count_quantity drop not null;
+alter table inventory_stock_receipts alter column conversion_snapshot drop not null;
+alter table inventory_stock_receipts drop constraint if exists inventory_stock_receipts_mode_check;
+alter table inventory_stock_receipts add constraint inventory_stock_receipts_mode_check check (mode in ('add', 'included', 'unverified'));
+alter table inventory_stock_receipts drop constraint if exists inventory_stock_receipts_balance_mode_check;
+alter table inventory_stock_receipts add constraint inventory_stock_receipts_balance_mode_check check (
+  (mode = 'unverified' and count_quantity is null and conversion_snapshot is null)
+  or (mode in ('add', 'included') and count_quantity is not null and count_quantity > 0 and conversion_snapshot is not null)
+);
+
+
+-- 20261009_procurement_order_templates.sql
+create table if not exists procurement_order_templates (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  name text not null check (length(btrim(name)) between 1 and 60),
+  items jsonb not null check (jsonb_typeof(items) = 'array' and jsonb_array_length(items) between 1 and 100),
+  created_by uuid references employees(id) on delete set null,
+  status text not null default 'active' check (status in ('active','archived')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(store_id,name)
+);
+create index if not exists idx_procurement_order_templates_store on procurement_order_templates(store_id,status,name);

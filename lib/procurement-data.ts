@@ -206,6 +206,7 @@ export async function getProcurementDashboardData(
           coalesce(origin_countries, '{}') as "originCountries",
           package_quantity::float as "packageQuantity",
           coalesce(package_quantity_unit, '') as "packageQuantityUnit",
+          products.inventory_unit_conversions as "inventoryUnitConversions",
           coalesce(product_family_name, '') as "productFamilyName",
           coalesce(variant_name, '') as "variantName",
           coalesce(is_default_variant, false) as "isDefaultVariant",
@@ -440,6 +441,7 @@ export async function getProcurementDashboardData(
       sql`
         select
           purchase_orders.order_no as id,
+          stores.id::text as "storeId",
           stores.name as store,
           coalesce(order_brands.brand_names, brands.name, '共通') as brand,
           requested_employees.id::text as "requesterStaffId",

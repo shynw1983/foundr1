@@ -5,6 +5,8 @@ import { sendPurchaseOrderLarkNotification } from "../../../lib/lark";
 import { publishOsNotificationEvent } from "../../../lib/notification-realtime";
 import { roleHasPermission } from "../../../lib/role-permissions";
 import { assertProductsOrderable } from "../../../lib/product-catalog-access";
+import { openReplenishmentOrderStatuses, readReplenishmentOrderContext, readReplenishmentOrderIntent, validateReplenishmentOrderSubmission } from "../../../lib/replenishment-order-intent";
+import { createReplenishmentOrderLocks, isReplenishmentOrderGuardConflict } from "../../../lib/replenishment-order-locks";
 
 function toTokyoDateParts(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -58,20 +60,7 @@ function normalizeRequestedQuantity(value: number) {
   return Math.min(999, Math.max(1, Math.round(value)));
 }
 
-async function generatePurchaseOrderNo() {
-  const today = toTokyoDateParts(new Date());
-  const prefix = `PO-${today.year}${today.month}${today.day}`;
-  const rows = await sql`
-    select coalesce(max((substring(order_no from ${`^${prefix}-([0-9]{4})$`}))::int), 0)::int as "lastSequence"
-    from purchase_orders
-    where order_no like ${`${prefix}-%`}
-  `;
-  const nextSequence = Number(rows[0]?.lastSequence ?? 0) + 1;
-
-  return `${prefix}-${String(nextSequence).padStart(4, "0")}`;
-}
-
-async function validateOrderInput(session: EmployeeSession, storeName: string, productNames: string[], productIds: string[]) {
+async function validateOrderInput(session: EmployeeSession, storeName: string, productNames: string[], productIds: string[], explicitStoreId?: string) {
   if (!storeName) {
     return { error: Response.json({ error: "納品先店舗を選択してください。" }, { status: 400 }) };
   }
@@ -83,7 +72,8 @@ async function validateOrderInput(session: EmployeeSession, storeName: string, p
   const stores = await sql`
     select id
     from stores
-    where name = ${storeName}
+    where (${Boolean(explicitStoreId)} and id::text = ${explicitStoreId ?? ""})
+      or (${!explicitStoreId} and name = ${storeName})
     limit 1
   `;
   const storeId = stores[0]?.id as string | undefined;
@@ -132,6 +122,38 @@ async function validateOrderInput(session: EmployeeSession, storeName: string, p
   const access = await assertProductsOrderable(session, storeId, [...validProductIds]);
   if (!access.ok) return { error: Response.json({ error: access.error }, { status: access.status }) };
   return { storeId, productIdsByName, validProductIds };
+}
+
+async function getCurrentOpenItems(storeId: string, productIds: string[]) {
+  const rows = await sql`
+    select items.id::text as "itemId", items.product_id::text as "productId",
+      orders.order_no as "orderId", items.status,
+      items.requested_quantity as "requestedQuantity", items.requested_unit as "requestedUnit"
+    from purchase_order_items items
+    join purchase_orders orders on orders.id = items.purchase_order_id
+    where orders.store_id::text = ${storeId}
+      and items.product_id::text = any(${productIds})
+      and items.status = any(${[...openReplenishmentOrderStatuses]})
+      and orders.order_no not like 'RCPT-%'
+    order by items.id
+  `;
+  return rows.map((row) => ({ ...row, requestedQuantity: Number(row.requestedQuantity), href: `/os/orders?order=${encodeURIComponent(String(row.orderId))}` }));
+}
+
+export async function GET(request: Request) {
+  const session = await requireOsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  if (!await roleHasPermission(session.role, "module.orders")) return Response.json({ error: "発注依頼を表示する権限がありません。" }, { status: 403 });
+  const parsed = readReplenishmentOrderIntent(new URL(request.url).searchParams);
+  if (!parsed.intent) return Response.json({ error: parsed.error ?? "店舗と商品を指定してください。" }, { status: 400 });
+  const { storeId, productIds } = parsed.intent;
+  const access = await assertProductsOrderable(session, storeId, productIds);
+  if (!access.ok) return Response.json({ error: access.error }, { status: access.status });
+  const openItems = await getCurrentOpenItems(storeId, productIds);
+  return Response.json({
+    storeId, productIds, openItems,
+    canCreateOrder: ["owner", "manager", "store_owner", "store_manager", "staff"].includes(session.role)
+  }, { headers: { "Cache-Control": "no-store, max-age=0" } });
 }
 
 async function validateStaffAssignee(session: EmployeeSession, staffId: string, storeId: string, fallbackId: string) {
@@ -253,75 +275,114 @@ export async function POST(request: Request) {
   const quantities = formData.getAll("requestedQuantity").map((value) => Number(value));
   const units = formData.getAll("requestedUnit").map((value) => String(value));
   const itemCount = productNames.length;
-  const orderNo = await generatePurchaseOrderNo();
-  const validation = await validateOrderInput(session, storeName, productNames, productIds);
+  const rawContext = formData.get("replenishContext");
+  const replenishContext = rawContext === null ? null : readReplenishmentOrderContext(String(rawContext));
+  if (rawContext !== null && !replenishContext) {
+    return Response.json({ error: "補充対象の店舗と商品を確認して、もう一度開いてください。" }, { status: 400 });
+  }
+  if (replenishContext && !await roleHasPermission(session.role, "module.orders")) {
+    return Response.json({ error: "補充依頼を作成する権限がありません。" }, { status: 403 });
+  }
+  const validation = await validateOrderInput(session, storeName, productNames, productIds, replenishContext?.storeId);
   if (validation.error) return validation.error;
+  const resolvedProductIds = productNames.map((name, index) => productIds[index] || validation.productIdsByName?.get(name) || "");
+  if (replenishContext) {
+    const error = validateReplenishmentOrderSubmission(replenishContext, {
+      storeId: validation.storeId, productIds: resolvedProductIds, quantities: formData.getAll("requestedQuantity")
+    });
+    if (error) return Response.json({ error }, { status: 400 });
+    if (units.length !== itemCount || units.some((unit) => !unit)) {
+      return Response.json({ error: "補充商品の発注単位が変わりました。最新の内容を確認してください。" }, { status: 409 });
+    }
+  }
   const requesterStaffId = await validateStaffAssignee(session, requesterStaffIdInput, validation.storeId, session.id);
   const buyerStaffId = await validateStaffAssignee(session, buyerStaffIdInput, validation.storeId, requesterStaffId);
-
-  const insertedOrders = await sql`
-    insert into purchase_orders (
-      order_no,
-      store_id,
-      deadline_label,
-      deadline_at,
-      requested_item_count,
-      priority,
-      status,
-      note,
-      requested_by,
-      assigned_to
-    )
-    values (
-      ${orderNo},
-      ${validation.storeId},
-      ${deadline},
-      ${deadlineAt},
-      ${itemCount},
-      ${priority},
-      ${"購入待ち"},
-      ${note},
-      ${requesterStaffId},
-      ${buyerStaffId}
-    )
-    returning id
-  `;
-
-  const purchaseOrderId = insertedOrders[0]?.id;
-
-  if (purchaseOrderId) {
-    for (const [index, productName] of productNames.entries()) {
-      const quantity = normalizeRequestedQuantity(quantities[index]);
-      const unit = units[index] || "個";
-      const productId = productIds[index] || validation.productIdsByName?.get(productName);
-
-      await sql`
-        insert into purchase_order_items (
-          purchase_order_id,
-          product_id,
-          requested_quantity,
-          requested_unit,
-          status
-        )
-        values (
-          ${purchaseOrderId},
-          ${productId},
-          ${quantity},
-          ${unit},
-        ${"requested"}
+  const lineData = productNames.map((_, index) => ({
+    productId: resolvedProductIds[index], quantity: normalizeRequestedQuantity(quantities[index]), unit: units[index] || "個"
+  }));
+  const today = toTokyoDateParts(new Date());
+  const prefix = `PO-${today.year}${today.month}${today.day}`;
+  // Separate statements are intentional: the snapshot after a waiting advisory lock
+  // sees the order committed by the first creator (including ordinary manual orders).
+  const results = await sql.transaction([
+    sql`select pg_advisory_xact_lock(hashtextextended(${`purchase-order-number:${prefix}`}, 0))`,
+    ...createReplenishmentOrderLocks(sql, [{ storeId: validation.storeId, productIds: resolvedProductIds }]),
+    sql`
+      with submitted as materialized (
+        select * from jsonb_to_recordset(${JSON.stringify(lineData)}::jsonb)
+          as line("productId" text, quantity numeric, unit text)
+      ), locked_products as materialized (
+        select products.* from products
+        where products.id::text = any(${[...new Set(resolvedProductIds)]})
+        order by products.id for share
+      ), current_open as (
+        select coalesce(array_agg(items.id::text order by items.id::text), '{}'::text[]) as ids
+        from purchase_order_items items join purchase_orders orders on orders.id = items.purchase_order_id
+        where orders.store_id::text = ${validation.storeId}
+          and items.product_id::text = any(${replenishContext?.productIds ?? []})
+          and items.status = any(${[...openReplenishmentOrderStatuses]})
+          and orders.order_no not like 'RCPT-%'
+      ), eligibility as (
+        select
+          (${!replenishContext} or current_open.ids = ${replenishContext?.expectedOpenItemIds ?? []}::text[]) as "openMatches",
+          (${!replenishContext} or not exists (
+            select 1 from submitted left join locked_products p on p.id::text = submitted."productId"
+            where p.id is null or submitted.unit <> coalesce(nullif(p.unit, ''), '個')
+          )) as "unitsMatch",
+          not exists (
+            select 1 from locked_products p
+            where not p.is_orderable
+              or not (p.brand_scope = 'common' or (p.brand_scope = 'specific' and exists (
+                select 1 from product_brand_usages u join store_brands sb on sb.brand_id = u.brand_id
+                where u.product_id = p.id and sb.store_id::text = ${validation.storeId}
+              )))
+              or ((p.brand_scope = 'specific' or exists (
+                select 1 from product_brand_usages u join store_brands sb on sb.brand_id = u.brand_id
+                where u.product_id = p.id and sb.store_id::text = ${validation.storeId}
+              )) and not exists (
+                select 1 from product_brand_usages u join store_brands sb on sb.brand_id = u.brand_id
+                where u.product_id = p.id and sb.store_id::text = ${validation.storeId} and u.is_orderable
+              ))
+              or (${!["owner", "manager"].includes(session.role)} and not (
+                p.catalog_visibility = 'brand_stores' or (p.catalog_visibility = 'selected_stores' and exists (
+                  select 1 from product_catalog_store_grants g where g.product_id = p.id and g.store_id::text = ${validation.storeId}
+                ))
+              ))
+          ) and (select count(*) from locked_products) = ${new Set(resolvedProductIds).size} as "catalogMatches"
+        from current_open
+      ), order_number as (
+        select ${prefix} || '-' || lpad((coalesce(max((substring(order_no from ${`^${prefix}-([0-9]{4})$`}))::int), 0) + 1)::text, 4, '0') as value
+        from purchase_orders where order_no like ${`${prefix}-%`}
+      ), inserted_order as (
+        insert into purchase_orders (order_no, store_id, deadline_label, deadline_at, requested_item_count,
+          priority, status, note, requested_by, assigned_to, replenishment_source)
+        select order_number.value, ${validation.storeId}::uuid, ${deadline}, ${deadlineAt}::timestamptz,
+          ${itemCount}, ${priority}, '購入待ち', ${note}, ${requesterStaffId}::uuid, ${buyerStaffId}::uuid,
+          ${replenishContext ? JSON.stringify(replenishContext) : null}::jsonb
+        from order_number, eligibility
+        where eligibility."openMatches" and eligibility."unitsMatch" and eligibility."catalogMatches"
+        returning id, order_no
+      ), inserted_items as (
+        insert into purchase_order_items (purchase_order_id, product_id, requested_quantity, requested_unit, status)
+        select inserted_order.id, submitted."productId"::uuid, submitted.quantity, submitted.unit, 'requested'
+        from inserted_order, submitted returning id
       )
-    `;
-    }
-
-    await notifyBuyerAboutOrder({
-      buyerStaffId,
-      orderNo,
-      storeName,
-      itemCount,
-      deadline
-    });
+      select (select order_no from inserted_order) as "orderNo", (select count(*) from inserted_items) as "insertedCount",
+        eligibility.* from eligibility
+    `
+  ]);
+  const result = results[results.length - 1][0];
+  const orderNo = result?.orderNo as string | undefined;
+  if (!orderNo) {
+    const error = result?.catalogMatches === false
+      ? "商品の公開範囲または発注可否が変わりました。最新の内容を確認してください。"
+      : result?.unitsMatch === false
+        ? "補充商品の発注単位が変わりました。最新の内容を確認してください。"
+        : "未受領の発注が変わりました。元の発注を確認して、追加の補充が必要か確認してください。";
+    return Response.json({ error }, { status: 409 });
   }
-
+  await notifyBuyerAboutOrder({ buyerStaffId, orderNo, storeName, itemCount, deadline })
+    .catch(() => console.error("purchase_order_notification_failed"));
   return Response.json({ ok: true, orderId: orderNo });
 }
 
@@ -381,7 +442,7 @@ export async function PUT(request: Request) {
     from purchase_order_items
     where purchase_order_id = ${purchaseOrderId}
       and (
-        status in ('purchased', 'in_delivery', 'delivered')
+        status in ('purchased', 'in_delivery', 'delivered', 'received')
         or exists (
           select 1
           from purchase_actuals
@@ -397,52 +458,49 @@ export async function PUT(request: Request) {
     );
   }
 
-  const updatedOrders = await sql`
-    update purchase_orders
-    set
-      store_id = ${validation.storeId},
-      deadline_label = ${deadline},
-      deadline_at = ${deadlineAt},
-      requested_item_count = ${productNames.length},
-      priority = ${priority},
-      note = ${note},
-      requested_by = ${requesterStaffId},
-      assigned_to = ${buyerStaffId},
-      updated_at = now()
-    where purchase_orders.id = ${purchaseOrderId}
-    returning purchase_orders.id
+  const previousItems = await sql`
+    select id::text as id, product_id::text as "productId"
+    from purchase_order_items where purchase_order_id = ${purchaseOrderId}
+    order by id
   `;
-
-  if (!updatedOrders[0]?.id) {
-    return Response.json({ error: "納品先店舗が見つかりません。" }, { status: 400 });
-  }
-
-  await sql`
-    delete from purchase_order_items
-    where purchase_order_id = ${purchaseOrderId}
-  `;
-
-  for (const [index, productName] of productNames.entries()) {
-    const quantity = normalizeRequestedQuantity(quantities[index]);
-    const unit = units[index] || "個";
-    const productId = productIds[index] || validation.productIdsByName?.get(productName);
-
-    await sql`
-      insert into purchase_order_items (
-        purchase_order_id,
-        product_id,
-        requested_quantity,
-        requested_unit,
-        status
-      )
-      values (
-        ${purchaseOrderId},
-        ${productId},
-        ${quantity},
-        ${unit},
-        ${"requested"}
-      )
-    `;
+  const resolvedProductIds = productNames.map((name, index) => productIds[index] || validation.productIdsByName?.get(name) || "");
+  const sourceStoreId = String(existingOrder[0].storeId);
+  try {
+    await sql.transaction([
+      ...createReplenishmentOrderLocks(sql, [
+        { storeId: sourceStoreId, productIds: previousItems.map((item) => item.productId) },
+        { storeId: validation.storeId, productIds: resolvedProductIds }
+      ], String(purchaseOrderId)),
+      sql`select id from purchase_orders where id = ${purchaseOrderId} for update`,
+      sql`select id from purchase_order_items where purchase_order_id = ${purchaseOrderId} order by id for update`,
+      // Re-read after all locks: do not erase an appended SKU or an item that started buying.
+      sql`
+        select 1 / count(*)::int from purchase_orders
+        where id = ${purchaseOrderId} and store_id::text = ${sourceStoreId}
+          and coalesce((select jsonb_agg(jsonb_build_array(id::text, product_id::text) order by id)
+            from purchase_order_items where purchase_order_id = ${purchaseOrderId}), '[]'::jsonb)
+            = ${JSON.stringify(previousItems.map((item) => [item.id, item.productId]))}::jsonb
+          and not exists (
+            select 1 from purchase_order_items items where items.purchase_order_id = ${purchaseOrderId}
+              and (items.status in ('purchased', 'in_delivery', 'delivered', 'received')
+                or exists (select 1 from purchase_actuals where purchase_order_item_id = items.id))
+          )
+      `,
+      sql`
+        update purchase_orders set store_id = ${validation.storeId}, deadline_label = ${deadline}, deadline_at = ${deadlineAt},
+          requested_item_count = ${productNames.length}, priority = ${priority}, note = ${note},
+          requested_by = ${requesterStaffId}, assigned_to = ${buyerStaffId}, updated_at = now()
+        where id = ${purchaseOrderId}
+      `,
+      sql`delete from purchase_order_items where purchase_order_id = ${purchaseOrderId}`,
+      ...productNames.map((_, index) => sql`
+        insert into purchase_order_items (purchase_order_id, product_id, requested_quantity, requested_unit, status)
+        values (${purchaseOrderId}, ${resolvedProductIds[index]}, ${normalizeRequestedQuantity(quantities[index])}, ${units[index] || "個"}, 'requested')
+      `)
+    ]);
+  } catch (error) {
+    if (!isReplenishmentOrderGuardConflict(error)) throw error;
+    return Response.json({ error: "発注処理が始まっている依頼は編集できません。必要な変更は備考または追加依頼で対応してください。" }, { status: 409 });
   }
 
   if (String(existingOrder[0]?.assignedTo ?? "") !== buyerStaffId) {
@@ -472,7 +530,7 @@ export async function DELETE(request: Request) {
   }
 
   const existingOrder = await sql`
-    select store_id::text as "storeId"
+    select id::text as id, store_id::text as "storeId"
     from purchase_orders
     where order_no = ${body.orderId}
     limit 1
@@ -486,10 +544,21 @@ export async function DELETE(request: Request) {
     return Response.json({ error: "この依頼を操作する権限がありません。" }, { status: 403 });
   }
 
-  await sql`
-    delete from purchase_orders
-    where order_no = ${body.orderId}
-  `;
+  try {
+    await sql.transaction([
+      ...createReplenishmentOrderLocks(sql, [], String(existingOrder[0].id)),
+      sql`select id from purchase_orders where id = ${existingOrder[0].id}::uuid for update`,
+      sql`select 1 / case when exists (
+        select 1 from inventory_stock_receipts receipts
+        join purchase_order_items items on items.id = receipts.purchase_order_item_id
+        where items.purchase_order_id = ${existingOrder[0].id}::uuid
+      ) then 0 else 1 end`,
+      sql`delete from purchase_orders where id = ${existingOrder[0].id}::uuid`
+    ]);
+  } catch (error) {
+    if (!isReplenishmentOrderGuardConflict(error) && !(error && typeof error === "object" && "code" in error && (error.code === "23503" || error.code === "23001"))) throw error;
+    return Response.json({ error: "入庫履歴がある発注依頼は削除できません。" }, { status: 409 });
+  }
 
   return Response.json({ ok: true });
 }

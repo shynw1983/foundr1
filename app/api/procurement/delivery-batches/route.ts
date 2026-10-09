@@ -2,6 +2,8 @@ import { canAccessStore, requireWritableOsSession } from "../../../../lib/api-au
 import { sql } from "../../../../lib/db";
 import { publishOsNotificationEvent } from "../../../../lib/notification-realtime";
 
+import { createDeliveryBatchTransitionQuery } from "../../../../lib/procurement-delivery-transition";
+
 const additionalPurchaseNotePrefix = "追加購入";
 
 export async function POST(request: Request) {
@@ -170,51 +172,16 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "この配送バッチを操作する権限がありません。" }, { status: 403 });
   }
 
-  if (body.status === "received") {
-    await sql`
-      update delivery_batches
-      set
-        status = 'received',
-        store_confirmed_at = now(),
-        store_confirmed_by = ${session.id}
-      where id = ${body.batchId}
-        and status = 'delivered'
-    `;
-
-    await sql`
-      update purchase_order_items
-      set status = 'received'
-      where id in (
-        select purchase_order_item_id
-        from delivery_batch_items
-        where delivery_batch_id = ${body.batchId}
-      )
-    `;
-
-    return Response.json({ ok: true });
+  const transitionedRows = await createDeliveryBatchTransitionQuery(sql, {
+    batchId: body.batchId, storeId: String(batchRows[0].storeId),
+    status: body.status!, employeeId: session.id
+  });
+  const transition = transitionedRows[0];
+  if (!transition) {
+    return Response.json({ error: "配送状態が変わりました。最新の納品内容を確認してください。" }, { status: 409 });
   }
 
-  const deliveredRows = await sql`
-    update delivery_batches
-    set
-      status = 'delivered',
-      delivered_at = now()
-    where id = ${body.batchId}
-      and status = 'in_delivery'
-    returning purchase_order_id as "purchaseOrderId"
-  `;
-
-  await sql`
-    update purchase_order_items
-    set status = 'delivered'
-    where id in (
-      select purchase_order_item_id
-      from delivery_batch_items
-      where delivery_batch_id = ${body.batchId}
-      )
-  `;
-
-  if (deliveredRows[0]?.purchaseOrderId) {
+  if (body.status === "delivered" && transition.changed && transition.status === "delivered") {
     const insertedNotifications = await sql`
       insert into os_notifications (
         recipient_employee_id,
@@ -242,7 +209,7 @@ export async function PATCH(request: Request) {
       left join employee_scopes
         on employee_scopes.employee_id = employees.id
         and employee_scopes.scope_type = 'store'
-      where purchase_orders.id = ${deliveredRows[0].purchaseOrderId}
+      where purchase_orders.id = ${transition.purchaseOrderId}
         and item_counts.item_count > 0
         and (
           employees.role in ('owner', 'manager')

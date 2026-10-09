@@ -1,6 +1,8 @@
 import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
+import { createDeliveryBatchTransitionQuery } from "../../../../lib/procurement-delivery-transition";
+
 type ReceivingPayload = {
   type?: "batch" | "items";
   batchId?: string;
@@ -126,24 +128,12 @@ export async function PATCH(request: Request) {
       return Response.json({ error: "確認する商品がありません。発注内容を確認してください。" }, { status: 409 });
     }
 
-    await sql`
-      update delivery_batches
-      set
-        status = 'received',
-        store_confirmed_at = now(),
-        store_confirmed_by = ${session.id}
-      where id = ${batchId}
-        and status = 'delivered'
-    `;
-    await sql`
-      update purchase_order_items
-      set status = 'received'
-      where id in (
-        select purchase_order_item_id
-        from delivery_batch_items
-        where delivery_batch_id = ${batchId}
-      )
-    `;
+    const transitions = await createDeliveryBatchTransitionQuery(sql, {
+      batchId, storeId: String(batchRows[0].storeId), status: "received", employeeId: session.id
+    });
+    if (!transitions[0]) {
+      return Response.json({ error: "配送状態が変わりました。最新の納品内容を確認してください。" }, { status: 409 });
+    }
 
     return Response.json({ ok: true });
   }

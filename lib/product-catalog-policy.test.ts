@@ -96,3 +96,10 @@ test("quantity conversions use explicit package relation and reject unknown or i
   assert.equal(convertPurchaseQuantityToStockUnit(-1, product, "袋"), null);
   assert.equal(convertPurchaseQuantityToStockUnit(2, { ...product, packageQuantity: 0 }, "袋"), null);
 });
+
+test("stock conversion reuses explicit piece and fraction relations", () => {
+  const product = { unit: "袋", inventoryUnitConversions: [{ unit: "個", unitsPerPurchase: 20 }, { unit: "1/3袋", unitsPerPurchase: 3, fractionalDenominator: 3 }] };
+  assert.equal(convertPurchaseQuantityToStockUnit(2, product, "個"), 40);
+  assert.equal(convertPurchaseQuantityToStockUnit(2, product, "1/3袋"), 6);
+  assert.equal(convertPurchaseQuantityToStockUnit(2, product, "箱"), null);
+});

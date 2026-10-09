@@ -6,6 +6,7 @@ import { roleHasPermission } from "../../../../lib/role-permissions";
 import { assertProductsOrderable } from "../../../../lib/product-catalog-access";
 import { isHeadquarterCatalogRole } from "../../../../lib/product-catalog-policy";
 import { normalizeRecordedProcurementQuantity, resolveProcurementFeedbackConfirmation, type ProcurementFeedbackKind } from "../../../../lib/procurement-confirmation-policy";
+import { createReplenishmentOrderLocks, isReplenishmentOrderGuardConflict } from "../../../../lib/replenishment-order-locks";
 
 const additionalPurchaseNotePrefix = "追加購入";
 
@@ -87,7 +88,12 @@ export async function POST(request: Request) {
       ? `${additionalPurchaseNotePrefix}: ${temporaryProductName}`
       : additionalPurchaseNotePrefix;
 
-  const insertedRows = await sql`
+  let insertedRows: Record<string, any>[];
+  try {
+    const results = await sql.transaction([
+      ...createReplenishmentOrderLocks(sql, [{ storeId: String(order.storeId), productIds: [product?.id] }], String(order.id)),
+      sql`select 1 / count(*)::int from purchase_orders where id = ${order.id} and store_id::text = ${String(order.storeId)}`,
+      sql`
     insert into purchase_order_items (
       purchase_order_id,
       product_id,
@@ -115,9 +121,9 @@ export async function POST(request: Request) {
       'requested'
     )
     returning id::text
-  `;
+      `,
 
-  await sql`
+      sql`
     update purchase_orders
     set
       requested_item_count = (
@@ -127,7 +133,13 @@ export async function POST(request: Request) {
       ),
       updated_at = now()
     where id = ${order.id}
-  `;
+      `
+    ]);
+    insertedRows = results[results.length - 2];
+  } catch (error) {
+    if (!isReplenishmentOrderGuardConflict(error)) throw error;
+    return Response.json({ error: "確認対象の状態が変わりました。最新の内容を確認してください。" }, { status: 409 });
+  }
 
   await publishStoreOperationalEvent(order.storeId, "procurement.updated").catch(() => undefined);
   return Response.json({ ok: true, itemId: insertedRows[0]?.id ?? "" });
@@ -210,25 +222,33 @@ export async function PATCH(request: Request) {
       coalesce(
         purchase_order_items.actual_price::float,
         purchase_actuals.actual_price::float
-      ) as "currentActualPrice"
+      ) as "currentActualPrice",
+      to_jsonb(purchase_order_items) as "mutationItemSnapshot",
+      coalesce(to_jsonb(purchase_actuals), 'null'::jsonb) as "mutationActualSnapshot",
+      coalesce((
+        select jsonb_agg(jsonb_build_object('link', to_jsonb(links), 'batch', to_jsonb(batches)) order by links.delivery_batch_id)
+        from delivery_batch_items links join delivery_batches batches on batches.id = links.delivery_batch_id
+        where links.purchase_order_item_id = purchase_order_items.id
+      ), '[]'::jsonb) as "mutationDeliverySnapshot"
     from purchase_order_items
     join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
     join stores on stores.id = purchase_orders.store_id
     left join products on products.id = purchase_order_items.product_id
     left join lateral (
-      select
-        purchase_actuals.id,
-        purchase_actuals.actual_quantity,
-        purchase_actuals.actual_price
+      select purchase_actuals.*
       from purchase_actuals
       where purchase_actuals.purchase_order_item_id = purchase_order_items.id
-      order by purchase_actuals.recorded_at desc
+      order by purchase_actuals.recorded_at desc, purchase_actuals.id desc
       limit 1
     ) purchase_actuals on true
     where purchase_order_items.id = ${body.itemId}
     limit 1
   `;
   const itemDetail = detailRows[0];
+  if (!itemDetail) return Response.json({ error: "発注明細が見つかりません。" }, { status: 404 });
+  if (itemDetail.storeId !== itemRows[0].storeId) {
+    return Response.json({ error: "確認対象の状態が変わりました。最新の内容を確認してください。" }, { status: 409 });
+  }
 
   const confirmation = resolveProcurementFeedbackConfirmation(body, {
     currentStatus: String(itemDetail?.currentStatus ?? ""),
@@ -377,6 +397,20 @@ export async function PATCH(request: Request) {
     (!nextProductId && nextProductName && String(itemDetail?.currentTemporaryProductName ?? "") !== nextProductName) ||
     (nextUnit && String(itemDetail?.requestedUnit ?? "") !== nextUnit)
   );
+  const receiptFactsWouldChange = productActuallyChanged
+    || body.purchased === false || body.unavailable === true || splitRemaining
+    || (requestedQuantity !== null && requestedQuantity !== currentRequestedQuantity)
+    || (actualQuantity !== null && actualQuantity !== Number(itemDetail.currentActualQuantity))
+    || (requestedDeliveryStatus !== "" && requestedDeliveryStatus !== "received" && requestedDeliveryStatus !== currentStatus)
+    || (body.purchased === true && String(itemDetail.mutationActualSnapshot?.actual_unit ?? "") !== String(itemDetail.requestedUnit ?? ""));
+  if (receiptFactsWouldChange) {
+    const postedReceipts = await sql`
+      select id from inventory_stock_receipts where purchase_order_item_id = ${body.itemId}::uuid limit 1
+    `;
+    if (postedReceipts[0]) {
+      return Response.json({ error: "入庫済みの発注明細は商品・数量・単位・配送状態を変更できません。追加分は別の発注で登録してください。" }, { status: 409 });
+    }
+  }
   if (productActuallyChanged) {
     if (nextProductId) {
       const access = await assertProductsOrderable(session, String(itemRows[0].storeId), [nextProductId]);
@@ -526,16 +560,44 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "購入した商品が見つかりません。" }, { status: 404 });
   }
 
+  const writeQueries = [
+    ...createReplenishmentOrderLocks(sql, [{
+      storeId: String(itemDetail.storeId),
+      productIds: [itemDetail.currentProductId, productActuallyChanged ? nextProduct?.id : null]
+    }], String(itemDetail.purchaseOrderId)),
+    sql`select id from purchase_order_items where id = ${body.itemId} for update`,
+    sql`
+      select 1 / count(*)::int from purchase_order_items items
+      join purchase_orders orders on orders.id = items.purchase_order_id
+      where items.id = ${body.itemId} and orders.id::text = ${String(itemDetail.purchaseOrderId)}
+        and orders.store_id::text = ${String(itemDetail.storeId)}
+        and items.product_id::text is not distinct from ${itemDetail.currentProductId ?? null}::text
+        and (${!receiptFactsWouldChange} or not exists (
+          select 1 from inventory_stock_receipts where purchase_order_item_id = items.id
+        ))
+        and to_jsonb(items) = ${JSON.stringify(itemDetail.mutationItemSnapshot ?? null)}::jsonb
+        and coalesce((
+          select to_jsonb(actuals) from purchase_actuals actuals
+          where actuals.purchase_order_item_id = items.id
+          order by actuals.recorded_at desc, actuals.id desc limit 1
+        ), 'null'::jsonb) = ${JSON.stringify(itemDetail.mutationActualSnapshot ?? null)}::jsonb
+        and coalesce((
+          select jsonb_agg(jsonb_build_object('link', to_jsonb(links), 'batch', to_jsonb(batches)) order by links.delivery_batch_id)
+          from delivery_batch_items links join delivery_batches batches on batches.id = links.delivery_batch_id
+          where links.purchase_order_item_id = items.id
+        ), '[]'::jsonb) = ${JSON.stringify(itemDetail.mutationDeliverySnapshot ?? [])}::jsonb
+    `
+  ];
   if (body.purchased === false || body.unavailable === true) {
-    await sql`
+    writeQueries.push(sql`
       delete from delivery_batch_items
       where purchase_order_item_id = ${body.itemId}
-    `;
+    `);
   }
 
   if (itemDetail) {
     if (body.unavailable === true && itemDetail.currentStatus !== "unavailable") {
-      await sql`
+      writeQueries.push(sql`
         insert into purchase_exceptions (
           purchase_order_id,
           purchase_order_item_id,
@@ -561,9 +623,9 @@ export async function PATCH(request: Request) {
           now(),
           now()
         )
-      `;
+      `);
     } else if (body.unavailable === true && itemDetail.currentStatus === "unavailable") {
-      await sql`
+      writeQueries.push(sql`
         update purchase_exceptions
         set
           message = ${`${itemDetail.productName} は本依頼で購入不可として処理しました。${note ? ` 理由: ${note}` : ""}`},
@@ -576,11 +638,11 @@ export async function PATCH(request: Request) {
           order by created_at desc
           limit 1
         )
-      `;
+      `);
     }
   }
 
-  await sql`
+  writeQueries.push(sql`
     update purchase_order_items
     set
       status = case
@@ -644,10 +706,10 @@ export async function PATCH(request: Request) {
         else store_feedback_confirmed_by
       end
     where id = ${body.itemId}
-  `;
+  `);
 
   if (splitRemaining && itemDetail && splitPurchasedQuantity !== null && splitRemainingQuantity > 0) {
-    await sql`
+    writeQueries.push(sql`
       insert into purchase_order_items (
         purchase_order_id,
         product_id,
@@ -678,9 +740,9 @@ export async function PATCH(request: Request) {
         ${hasRemainingSupplierInput ? remainingSupplierId : itemDetail.currentSupplierId ?? null}::uuid,
         'requested'
       )
-    `;
+    `);
 
-    await sql`
+    writeQueries.push(sql`
       update purchase_orders
       set
         requested_item_count = (
@@ -690,7 +752,89 @@ export async function PATCH(request: Request) {
         ),
         updated_at = now()
       where id = ${itemDetail.purchaseOrderId}
-    `;
+    `);
+  }
+
+  if (body.purchased === false || body.unavailable === true) {
+    writeQueries.push(sql`
+      delete from purchase_actuals
+      where purchase_order_item_id = ${body.itemId}
+    `);
+
+    writeQueries.push(sql`
+      delete from price_records
+      where source = 'purchase_actual'
+        and receipt_note = ${body.itemId}
+    `);
+  }
+
+  if (body.purchased && body.unavailable !== true) {
+    writeQueries.push(sql`
+      delete from purchase_actuals
+      where purchase_order_item_id = ${body.itemId}
+    `);
+
+    writeQueries.push(sql`
+      insert into purchase_actuals (
+        purchase_order_item_id,
+        supplier_id,
+        supplier_location_id,
+        actual_quantity,
+        actual_unit,
+        actual_price,
+        price_is_exception,
+        note
+      )
+      select
+        purchase_order_items.id,
+        coalesce(${supplierId}::uuid, purchase_order_items.selected_supplier_id),
+        ${supplierLocationId}::uuid,
+        coalesce(${actualQuantity}::numeric, purchase_order_items.actual_quantity, ${recordedActualQuantity}::numeric),
+        purchase_order_items.requested_unit,
+        ${Number.isFinite(purchaseRecordPrice) ? purchaseRecordPrice : null},
+        false,
+        ${hasNote ? note : itemDetail?.currentNote ?? ""}
+      from purchase_order_items
+      where purchase_order_items.id = ${body.itemId}
+    `);
+
+    if (Number.isFinite(purchaseRecordPrice)) {
+      writeQueries.push(sql`
+        delete from price_records
+        where source = 'purchase_actual'
+          and receipt_note = ${body.itemId}
+      `);
+
+      writeQueries.push(sql`
+        insert into price_records (
+          product_id,
+          supplier_id,
+          price,
+          unit,
+          source,
+          receipt_note,
+          recorded_by
+        )
+        select
+          purchase_order_items.product_id,
+          coalesce(${supplierId}::uuid, purchase_order_items.selected_supplier_id),
+          ${purchaseRecordPrice},
+          purchase_order_items.requested_unit,
+          'purchase_actual',
+          ${body.itemId},
+          ${session.id}
+        from purchase_order_items
+        where purchase_order_items.id = ${body.itemId}
+          and purchase_order_items.product_id is not null
+      `);
+    }
+  }
+
+  try {
+    await sql.transaction(writeQueries);
+  } catch (error) {
+    if (!isReplenishmentOrderGuardConflict(error)) throw error;
+    return Response.json({ error: "確認対象の状態が変わりました。最新の内容を確認してください。" }, { status: 409 });
   }
 
   if (
@@ -737,81 +881,6 @@ export async function PATCH(request: Request) {
     ));
   }
 
-  if (body.purchased === false || body.unavailable === true) {
-    await sql`
-      delete from purchase_actuals
-      where purchase_order_item_id = ${body.itemId}
-    `;
-
-    await sql`
-      delete from price_records
-      where source = 'purchase_actual'
-        and receipt_note = ${body.itemId}
-    `;
-  }
-
-  if (body.purchased && body.unavailable !== true) {
-    await sql`
-      delete from purchase_actuals
-      where purchase_order_item_id = ${body.itemId}
-    `;
-
-    await sql`
-      insert into purchase_actuals (
-        purchase_order_item_id,
-        supplier_id,
-        supplier_location_id,
-        actual_quantity,
-        actual_unit,
-        actual_price,
-        price_is_exception,
-        note
-      )
-      select
-        purchase_order_items.id,
-        coalesce(${supplierId}::uuid, purchase_order_items.selected_supplier_id),
-        ${supplierLocationId}::uuid,
-        coalesce(${actualQuantity}::numeric, purchase_order_items.actual_quantity, ${recordedActualQuantity}::numeric),
-        purchase_order_items.requested_unit,
-        ${Number.isFinite(purchaseRecordPrice) ? purchaseRecordPrice : null},
-        false,
-        ${hasNote ? note : itemDetail?.currentNote ?? ""}
-      from purchase_order_items
-      where purchase_order_items.id = ${body.itemId}
-    `;
-
-    if (Number.isFinite(purchaseRecordPrice)) {
-      await sql`
-        delete from price_records
-        where source = 'purchase_actual'
-          and receipt_note = ${body.itemId}
-      `;
-
-      await sql`
-        insert into price_records (
-          product_id,
-          supplier_id,
-          price,
-          unit,
-          source,
-          receipt_note,
-          recorded_by
-        )
-        select
-          purchase_order_items.product_id,
-          coalesce(${supplierId}::uuid, purchase_order_items.selected_supplier_id),
-          ${purchaseRecordPrice},
-          purchase_order_items.requested_unit,
-          'purchase_actual',
-          ${body.itemId},
-          ${session.id}
-        from purchase_order_items
-        where purchase_order_items.id = ${body.itemId}
-          and purchase_order_items.product_id is not null
-      `;
-    }
-  }
-
   await publishStoreOperationalEvent(itemDetail.storeId, "procurement.updated").catch(() => undefined);
   return Response.json({ ok: true });
 }
@@ -830,7 +899,8 @@ export async function DELETE(request: Request) {
   const itemRows = await sql`
     select
       purchase_order_items.purchase_order_id as "purchaseOrderId",
-      purchase_orders.store_id::text as "storeId"
+      purchase_orders.store_id::text as "storeId",
+      purchase_order_items.product_id::text as "productId"
     from purchase_order_items
     join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
     where purchase_order_items.id = ${itemId}
@@ -842,22 +912,25 @@ export async function DELETE(request: Request) {
     return Response.json({ error: "発注明細が見つかりません。" }, { status: 404 });
   }
 
-  await sql`
-    delete from purchase_order_items
-    where id = ${itemId}
-  `;
-
-  await sql`
-    update purchase_orders
-    set
-      requested_item_count = (
-        select count(*)::int
-        from purchase_order_items
-        where purchase_order_id = ${purchaseOrderId}
-      ),
-      updated_at = now()
-    where id = ${purchaseOrderId}
-  `;
+  try {
+    await sql.transaction([
+      ...createReplenishmentOrderLocks(sql, [{ storeId: String(itemRows[0].storeId), productIds: [itemRows[0].productId] }], String(purchaseOrderId)),
+      sql`select id from purchase_order_items where id = ${itemId}::uuid for update`,
+      sql`select 1 / case when exists (
+        select 1 from inventory_stock_receipts where purchase_order_item_id = ${itemId}::uuid
+      ) then 0 else 1 end`,
+      sql`delete from purchase_order_items where id = ${itemId}::uuid`,
+      sql`
+        update purchase_orders
+        set requested_item_count = (select count(*)::int from purchase_order_items where purchase_order_id = ${purchaseOrderId}),
+          updated_at = now()
+        where id = ${purchaseOrderId}
+      `
+    ]);
+  } catch (error) {
+    if (!isReplenishmentOrderGuardConflict(error) && !(error && typeof error === "object" && "code" in error && (error.code === "23503" || error.code === "23001"))) throw error;
+    return Response.json({ error: "入庫履歴がある発注明細は削除できません。" }, { status: 409 });
+  }
 
   await publishStoreOperationalEvent(itemRows[0].storeId, "procurement.updated").catch(() => undefined);
   return Response.json({ ok: true });

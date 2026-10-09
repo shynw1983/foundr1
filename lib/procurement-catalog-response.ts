@@ -6,7 +6,7 @@ export type CatalogAccessSnapshot = {
 
 const storeProductFields = [
   "id", "name", "productBrandName", "manufacturer", "category", "subcategory", "unit",
-  "originCountries", "packageQuantity", "packageQuantityUnit", "productFamilyName", "variantName",
+  "originCountries", "packageQuantity", "packageQuantityUnit", "inventoryUnitConversions", "productFamilyName", "variantName",
   "isDefaultVariant", "variantSortOrder", "specNote", "japaneseNote", "storageType", "usageType",
   "photoUrl", "brandScope", "brand", "isOrderable"
 ] as const;

@@ -5,6 +5,10 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import * as catalogPolicy from "./product-catalog-policy.ts";
 import * as numberInput from "./number-input.ts";
+import * as replenishmentIntent from "./replenishment-order-intent.ts";
+import * as replenishmentLocks from "./replenishment-order-locks.ts";
+import * as productUnitConversions from "./product-unit-conversions.ts";
+import { randomUUID } from "node:crypto";
 
 test("a hidden catalog price remains unknown without crashing product formatting", () => {
   const source = readFileSync(new URL("../app/os/products/page.tsx", import.meta.url), "utf8")
@@ -68,6 +72,8 @@ function ordersHarness(options: {
     "../../../lib/lark": { sendPurchaseOrderLarkNotification: async () => ({ ok: true, delivered: false }) },
     "../../../lib/notification-realtime": { publishOsNotificationEvent: async () => undefined },
     "../../../lib/role-permissions": { roleHasPermission: async () => false },
+    "../../../lib/replenishment-order-intent": replenishmentIntent,
+    "../../../lib/replenishment-order-locks": replenishmentLocks,
     "../../../lib/product-catalog-access": { assertProductsOrderable: async (_session: unknown, storeId: string, productIds: string[]) => {
       catalogChecks.push({ storeId, productIds: Array.from(productIds) });
       return options.denial ?? { ok: true };
@@ -122,6 +128,8 @@ test("SKU deletion preserves both current inventory and historical stock checks"
       "../../../lib/api-auth": { requireMasterOsSession: async () => ({ id: "owner", role: "owner" }) },
       "../../../lib/role-permissions": { roleHasPermission: async () => true },
       "../../../lib/product-catalog-policy": catalogPolicy,
+      "../../../lib/product-unit-conversions": productUnitConversions,
+      "node:crypto": { randomUUID },
       "../../../lib/db": { sql: (parts: TemplateStringsArray, ...values: unknown[]) => {
         const text = parts.join("?");
         queries.push({ text, values });
