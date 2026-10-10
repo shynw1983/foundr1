@@ -7,6 +7,7 @@ import { convertCountToPurchaseQuantity, resolveProductUnitConversion, unitConve
 import {
   deriveReplenishmentSnapshot,
   nullableReplenishmentNumber,
+  nullableReplenishmentStock,
   type ReplenishmentInventoryRow,
   type ReplenishmentMenuRow,
   type ReplenishmentOrderRow,
@@ -89,7 +90,7 @@ export async function readReplenishmentSnapshot(session: EmployeeSession, storeI
   }));
   const inventory: ReplenishmentInventoryRow[] = inventoryRows.map((row) => ({
     id: String(row.id), productId: String(row.productId), locationName: String(row.locationName), countUnit: String(row.countUnit ?? ""),
-    quantity: nullableReplenishmentNumber(row.quantity), safetyStock: nullableReplenishmentNumber(row.safetyStock),
+    quantity: nullableReplenishmentStock(row.quantity), safetyStock: nullableReplenishmentNumber(row.safetyStock),
     exceptionCode: String(row.exceptionCode ?? ""), note: String(row.note ?? ""), lastCountedAt: row.lastCountedAt ? String(row.lastCountedAt) : null,
     quickCheck: readInventoryQuickCheck(row, createInventoryQuickCheckBasis(row))
   }));

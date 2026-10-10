@@ -1,6 +1,7 @@
 import { createPickupCode, findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
+import { markInventoryOrderReady } from "../../../../../lib/inventory-order-usage";
 
 export const dynamic = "force-dynamic";
 
@@ -369,6 +370,15 @@ export async function POST(request: Request) {
     const sizeOptions = item.selectedOptions.filter((option) => option.groupKey === "size");
     const optionLabels = item.selectedOptions.filter((option) => option.groupKey === "option").map((option) => option.name);
     const toppingOptions = item.selectedOptions.filter((option) => option.groupKey === "topping" || !["size", "temperature", "sweetness", "ice", "option"].includes(option.groupKey));
+    const customizations = Array.from(new Set(item.selectedOptions.map((option) => option.groupId))).map((groupId) => {
+      const options = item.selectedOptions.filter((option) => option.groupId === groupId);
+      const group = options[0];
+      return {
+        groupId, groupKey: group.groupKey, groupName: group.groupName, selectionType: getEffectiveSelectionType(group),
+        optionIds: options.map((option) => option.id), optionKeys: options.map((option) => option.optionKey),
+        optionLabels: options.map((option) => option.name), optionPrices: options.map((option) => option.priceDelta)
+      };
+    });
     await sql`
       insert into store_customer_order_items (
         order_id,
@@ -383,6 +393,7 @@ export async function POST(request: Request) {
         option_label,
         topping_keys,
         topping_labels,
+        customizations,
         quantity,
         amount,
         gross_amount,
@@ -402,6 +413,7 @@ export async function POST(request: Request) {
         ${optionLabels.join(", ")},
         ${toppingOptions.map((option) => option.optionKey)},
         ${toppingOptions.map((option) => option.name)},
+        ${JSON.stringify(customizations)}::jsonb,
         ${item.quantity},
         ${item.amount},
         ${item.amount},
@@ -411,6 +423,7 @@ export async function POST(request: Request) {
     `;
   }
 
+  await markInventoryOrderReady(orderId);
   await publishCustomerOrderEvent("order.created", await findCustomerOrderById(orderId));
 
   return Response.json({

@@ -6,6 +6,7 @@ import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
 import { scheduleBridgeOrderPush } from "../../../../../lib/store-order-push-scheduler";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import { translateOrderNoteToChinese } from "../../../../../lib/order-note-translation";
+import { markInventoryOrderReady } from "../../../../../lib/inventory-order-usage";
 import {
   findMenuDisplayNameCandidate,
   type MenuDisplayNameCandidate
@@ -166,6 +167,7 @@ async function upsertOperationalOrder(input: {
     select
       id::text,
       status,
+      inventory_items_ready_at::text as "inventoryItemsReadyAt",
       coalesce(customer_summary ->> 'orderType', '') as "orderType",
       coalesce((customer_summary #>> '{bridge,completeness}')::int, 0) as completeness,
       coalesce((customer_summary #>> '{bridge,parserVersion}')::int, 0) as "parserVersion",
@@ -190,6 +192,7 @@ async function upsertOperationalOrder(input: {
   const repairRocketDashboard = input.platform === "rocket_now" && Boolean(existing)
     && isRocketDashboardImport(existing.bridgeItems);
   const shouldReplaceItems = !existing
+    || !existing.inventoryItemsReadyAt
     || parsed.completeness > Number(existing.completeness ?? 0)
     || (input.platform === "rocket_now" && Number(existing.parserVersion ?? 0) < 5)
     || repairRocketDashboard
@@ -272,6 +275,7 @@ async function upsertOperationalOrder(input: {
       brand_id = coalesce(store_customer_orders.brand_id, excluded.brand_id),
       store_id = excluded.store_id,
       status = ${nextStatus},
+      inventory_items_ready_at = case when ${shouldReplaceItems} then null else store_customer_orders.inventory_items_ready_at end,
       payment_status = 'paid',
       pickup_date = case when ${repairRocketDashboard} then excluded.pickup_date else store_customer_orders.pickup_date end,
       pickup_time = case when ${repairRocketDashboard} then excluded.pickup_time else store_customer_orders.pickup_time end,
@@ -370,6 +374,7 @@ async function upsertOperationalOrder(input: {
     }
   }
 
+  await markInventoryOrderReady(orderId, { reliableIdentity: false, issueCodes: ["unsupported_bridge_identity"] });
   await syncWebReservationToSalesOrder(orderId);
   if (repairRocketDashboard) {
     await sql`

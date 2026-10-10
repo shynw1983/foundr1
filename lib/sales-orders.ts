@@ -1,6 +1,10 @@
 import { sql } from "./db";
+import { safeSyncInventoryOrderUsage } from "./inventory-order-usage";
 
 export async function syncWebReservationToSalesOrder(orderId: string) {
+  // Inventory reads complete original rows, independently of this rebuildable
+  // sales projection. It is idempotent and cannot fail the core order sync.
+  await safeSyncInventoryOrderUsage(orderId);
   const orderRows = await sql`
     select
       id,

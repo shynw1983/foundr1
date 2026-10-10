@@ -15,6 +15,7 @@ import { localizeMaamaaProductionSummary, setProductionTaskStatus } from "../../
 import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
 import { normalizePosPrinterSettings, resolvePosKitchenTicketTemplate } from "../../../../../lib/pos-printer";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
+import { safeSyncInventoryOrderUsage } from "../../../../../lib/inventory-order-usage";
 
 export const dynamic = "force-dynamic";
 
@@ -393,13 +394,16 @@ export async function PATCH(request: Request) {
   if (status === "completed" && requestedOrderId) {
     const completedRows = await sql`
       update store_customer_orders
-      set status = 'completed', completed_at = coalesce(completed_at, now()), updated_at = now()
+      set status = 'completed', completed_at = coalesce(completed_at, now()), updated_at = now(),
+        inventory_first_prepared_at=coalesce(inventory_first_prepared_at,preparing_at,ready_at,completed_at,now()),
+        inventory_preparation_source_snapshot=coalesce(inventory_preparation_source_snapshot,inventory_source_snapshot)
       where id::text = ${requestedOrderId}
         and store_id::text = ${storeFilter}
         and status = 'ready'
       returning id::text
     `;
     if (!completedRows[0]) return Response.json({ error: "受け渡し可能な注文が見つかりません。" }, { status: 409 });
+    await safeSyncInventoryOrderUsage(requestedOrderId);
     await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(requestedOrderId));
     const { tasks, areas, displayLanguage } = await getKitchenTasks(
       storeFilter,

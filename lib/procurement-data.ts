@@ -511,6 +511,8 @@ export async function getProcurementDashboardData(
             purchase_order_items.actual_quantity::float,
             purchase_actuals.actual_quantity::float
           ) as "actualQuantity",
+          nullif(btrim(purchase_actuals.actual_unit), '') as "actualUnit",
+          coalesce(purchase_order_items.actual_packaging_snapshot,purchase_actuals.packaging_snapshot) as "actualPackaging",
           coalesce(
             purchase_order_items.actual_price::text,
             purchase_actuals.actual_price::text,
@@ -572,6 +574,8 @@ export async function getProcurementDashboardData(
           select
             purchase_actuals.id,
             purchase_actuals.actual_quantity,
+            purchase_actuals.actual_unit,
+            purchase_actuals.packaging_snapshot,
             purchase_actuals.actual_price,
             purchase_actuals.supplier_location_id,
             purchase_actuals.note,
@@ -658,6 +662,8 @@ export async function getProcurementDashboardData(
             products.name as product,
             coalesce(suppliers.name, '未設定') as supplier,
             price_records.price::float as price,
+            price_records.unit as price_unit,
+            price_records.packaging_snapshot as packaging,
             row_number() over (
               partition by price_records.product_id, price_records.supplier_id
               order by price_records.recorded_at desc
@@ -676,8 +682,10 @@ export async function getProcurementDashboardData(
           select
             product_supplier_options.product_id,
             product_supplier_options.supplier_id,
+            products.unit as price_unit,
             product_supplier_options.reference_price::float as price
           from product_supplier_options
+          join products on products.id=product_supplier_options.product_id
           where product_supplier_options.reference_price is not null
             and product_supplier_options.reference_price > 0
         )
@@ -699,12 +707,15 @@ export async function getProcurementDashboardData(
         from latest_prices
         left join previous_prices
           on previous_prices.product_id = latest_prices.product_id
+          and previous_prices.price_unit=latest_prices.price_unit
+          and (previous_prices.packaging-'templateId') is not distinct from (latest_prices.packaging-'templateId')
           and (
             previous_prices.supplier_id = latest_prices.supplier_id
             or (previous_prices.supplier_id is null and latest_prices.supplier_id is null)
           )
         left join fallback_prices
           on fallback_prices.product_id = latest_prices.product_id
+          and latest_prices.packaging is null and fallback_prices.price_unit=latest_prices.price_unit
           and (
             fallback_prices.supplier_id = latest_prices.supplier_id
             or (fallback_prices.supplier_id is null and latest_prices.supplier_id is null)

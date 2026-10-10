@@ -50,6 +50,7 @@ try {
   await db.exec(`
     create table stores(id uuid primary key, name text, status text default 'active');
     create table employees(id uuid primary key, name text);
+    create table suppliers(id uuid primary key default gen_random_uuid(),name text unique,channel_type text default '実店舗',updated_at timestamptz default now());
     create table products(id uuid primary key, name text, category text, unit text, storage_type text, brand_scope text default 'common', reference_price numeric, package_quantity numeric, package_quantity_unit text);
     create table brands(id uuid primary key, name text);
     create table store_brands(store_id uuid, brand_id uuid);
@@ -80,12 +81,18 @@ try {
   await db.exec(readFileSync(new URL('db/migrations/20261009_inventory_receipts.sql', root), 'utf8'));
   await db.exec(readFileSync(new URL('db/migrations/20261009_inventory_quick_checks.sql', root), 'utf8'));
   await db.exec(readFileSync(new URL('db/migrations/20261009_inventory_receipt_unknown_balance.sql', root), 'utf8'));
+  await db.exec(readFileSync(new URL('db/migrations/20261011_product_packaging.sql',root),'utf8'));
+  await db.exec(readFileSync(new URL('db/migrations/20261011_inventory_order_usage.sql',root),'utf8').match(/create table if not exists inventory_movements[\s\S]+?\n\);/)[0]);
+  await db.exec(readFileSync(new URL('db/migrations/20261011_inventory_usage_reconciliation.sql',root),'utf8'));
+  await db.exec(`create table inventory_order_usage_issues(id uuid primary key default gen_random_uuid(),order_id uuid,store_id uuid,created_at timestamptz default now(),resolved_at timestamptz);`);
   assert.equal((await db.query('select catalog_visibility from products')).rows[0].catalog_visibility, 'internal');
   assert.equal((await db.query('select count_unit from inventory_checks')).rows[0].count_unit, '');
   await assert.rejects(db.query("update products set catalog_visibility='invalid'"));
   console.log('PASS: migration repeat, defaults, constraint and unknown historical unit');
 
   const unitConversions = load('lib/product-unit-conversions.ts');
+  const countInput=load('lib/inventory-count-input-policy.ts',{'./product-unit-conversions':unitConversions});
+  const packaging=load('lib/product-packaging-policy.ts',{'./product-unit-conversions':unitConversions});
   const catalogPolicy = load('lib/product-catalog-policy.ts', { './product-unit-conversions.ts': unitConversions });
   const catalogAccess = load('lib/product-catalog-access.ts', { './product-catalog-policy': catalogPolicy });
   session.role = 'store_manager';
@@ -103,6 +110,7 @@ try {
   const inventory = load('app/api/inventory/route.ts', {
     '../../../lib/inventory-observation-policy': load('lib/inventory-observation-policy.ts'),
     '../../../lib/product-unit-conversions': unitConversions,
+    '../../../lib/inventory-count-input-policy':countInput,
     '../../../lib/inventory-quick-policy': load('lib/inventory-quick-policy.ts'),
     '../../../lib/product-catalog-access': catalogAccess
   });
@@ -116,6 +124,7 @@ try {
   console.log('PASS: atomic count/history, stale unit rejection, observation freshness');
 
   const procurement = load('app/api/procurement/items/route.ts', {
+    '../../../../lib/product-packaging-policy':packaging,
     '../../../../lib/replenishment-order-locks': load('lib/replenishment-order-locks.ts'),
     '../../../../lib/procurement-confirmation-policy': load('lib/procurement-confirmation-policy.ts'),
     '../../../../lib/product-catalog-access': catalogAccess,

@@ -300,6 +300,15 @@ export async function syncOrderStatusFromProductionTasks(orderId: string) {
     update store_customer_orders
     set
       status = case when status in ('cancelled', 'completed', 'refund_pending') then status else ${nextStatus} end,
+      inventory_first_prepared_at = case
+        when status in ('cancelled', 'refund_pending') then inventory_first_prepared_at
+        when ${nextStatus} in ('preparing','ready') then coalesce(inventory_first_prepared_at,preparing_at,ready_at,
+          case when order_source in ('store_pos','table_qr','nanacha_web','maamaa_web') then completed_at end,
+          (select min(tasks.started_at) from order_production_tasks tasks where tasks.order_id=store_customer_orders.id),now())
+        else inventory_first_prepared_at
+      end,
+      inventory_preparation_source_snapshot = case when ${nextStatus} in ('preparing','ready')
+        then coalesce(inventory_preparation_source_snapshot,inventory_source_snapshot) else inventory_preparation_source_snapshot end,
       preparing_at = case
         when status in ('cancelled', 'completed', 'refund_pending') then preparing_at
         when ${nextStatus} = 'new' then null
@@ -373,7 +382,12 @@ export async function ensureOrderProductionEstimate(orderId: string) {
 export async function setProductionTaskStatus(taskId: string, status: ProductionTaskStatus, employeeId?: string) {
   const nextStatus = ["new", "preparing", "ready"].includes(status) ? status : "new";
   const rows = await sql`
-    update order_production_tasks
+    with locked_order as materialized (
+      select orders.id from store_customer_orders orders join order_production_tasks tasks on tasks.order_id=orders.id
+      where tasks.id::text=${taskId} and orders.status not in ('cancelled','refund_pending','payment_failed','checkout_failed')
+      for update of orders
+    ), changed as (
+    update order_production_tasks tasks
     set
       status = ${nextStatus},
       started_at = case
@@ -391,8 +405,22 @@ export async function setProductionTaskStatus(taskId: string, status: Production
         else null::uuid
       end,
       updated_at = now()
-    where id::text = ${taskId}
-    returning order_id::text as "orderId"
+    from locked_order where tasks.id::text = ${taskId} and tasks.order_id=locked_order.id
+    returning tasks.order_id,tasks.started_at
+    ), remembered as (
+      update store_customer_orders orders set
+        inventory_first_prepared_at=case when ${nextStatus} in ('preparing','ready') then
+          case when order_source in ('store_pos','table_qr','nanacha_web','maamaa_web') then coalesce(inventory_first_prepared_at,preparing_at,ready_at,completed_at,changed.started_at,now())
+            else coalesce((inventory_preparation_source_snapshot#>>'{preparationEvidence,occurredAt}')::timestamptz,changed.started_at,now()) end
+          else inventory_first_prepared_at end,
+        inventory_preparation_source_snapshot=case when ${nextStatus} in ('preparing','ready') then
+          jsonb_set(coalesce(inventory_preparation_source_snapshot,inventory_source_snapshot),'{preparationEvidence}',jsonb_build_object(
+            'kind',coalesce(inventory_preparation_source_snapshot#>>'{preparationEvidence,kind}','internal_preparation'),
+            'occurredAt',case when order_source in ('store_pos','table_qr','nanacha_web','maamaa_web') then coalesce(inventory_first_prepared_at,preparing_at,ready_at,completed_at,changed.started_at,now())
+              else coalesce((inventory_preparation_source_snapshot#>>'{preparationEvidence,occurredAt}')::timestamptz,changed.started_at,now()) end),true)
+          else inventory_preparation_source_snapshot end
+      from changed where orders.id=changed.order_id returning orders.id
+    ) select order_id::text as "orderId" from changed
   `;
   const orderId = rows[0]?.orderId as string | undefined;
   if (orderId) {

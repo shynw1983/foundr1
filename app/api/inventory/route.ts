@@ -1,3 +1,4 @@
+import { normalizeInventoryCountInput } from "../../../lib/inventory-count-input-policy";
 import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { roleHasPermission } from "../../../lib/role-permissions";
@@ -144,6 +145,7 @@ export async function GET(request: Request) {
         inventory_checks.unit_conversion_snapshot as "unitConversionSnapshot",
         inventory_checks.record_type as "recordType",
         inventory_checks.quick_check_snapshot as "quickCheckSnapshot",
+        inventory_checks.reconciliation_snapshot as reconciliation,
         inventory_checks.quick_check_snapshot->>'status' as "quickStatus",
         inventory_checks.quick_check_snapshot->'estimate' as "quickEstimate",
         inventory_checks.exception_code as "exceptionCode",
@@ -212,6 +214,7 @@ export async function POST(request: Request) {
     countUnit?: string;
     safetyStock?: number | string;
     quantity?: number | string;
+    inputUnit?: string;
     expectedConversion?: ProductUnitConversionSnapshot | null;
     expectedStockRevision?: number;
     exceptionCode?: string;
@@ -438,6 +441,7 @@ export async function POST(request: Request) {
           when inventory_items.count_unit = excluded.count_unit then inventory_items.last_counted_by
           else null
         end,
+        usage_anchor_check_id = case when inventory_items.count_unit = excluded.count_unit then inventory_items.usage_anchor_check_id else null end,
         count_conversion_snapshot = case
           when inventory_items.count_unit = excluded.count_unit then inventory_items.count_conversion_snapshot
           else null
@@ -556,7 +560,7 @@ export async function POST(request: Request) {
   if (!item) return Response.json({ error: "在庫商品が見つかりません。" }, { status: 404 });
 
   if (action === "count") {
-    const quantity = parseInventoryCountQuantity(body.quantity);
+    let quantity = parseInventoryCountQuantity(body.quantity);
     if (quantity === null) {
       return Response.json({ error: "在庫量を0以上の数値で入力してください。分数は小数点以下6桁まで正確に表せる値を使い、1/3などは専用の棚卸単位で記録してください。" }, { status: 400 });
     }
@@ -565,6 +569,18 @@ export async function POST(request: Request) {
       return Response.json({ error: "画面を更新して、在庫の単位を再確認してください。" }, { status: 409 });
     }
     const currentConversion = resolveProductUnitConversion(inventoryProductConfiguration(item), expectedCountUnit);
+    const inputUnit = String(body.inputUnit ?? expectedCountUnit).trim();
+    try { quantity = normalizeInventoryCountInput(body.quantity,inputUnit,expectedCountUnit,inventoryProductConfiguration(item)).quantity; }
+    catch(error) { return Response.json({error:error instanceof Error?error.message:"数量を確認してください。"},{status:400}); }
+    if (inputUnit !== expectedCountUnit) {
+      const mixed = await sql`select exists(select 1 from inventory_stock_receipts receipts where inventory_item_id=${itemId}::uuid
+        and mode<>'unverified' and ((batch_packaging_snapshot is not null and (
+          batch_packaging_snapshot->>'purchaseUnit' is distinct from ${currentConversion?.purchaseUnit ?? null}::text or
+          batch_packaging_snapshot->>'countUnit'<>${expectedCountUnit} or
+          (batch_packaging_snapshot->>'stockQuantityPerPurchase')::numeric is distinct from ${currentConversion?.unitsPerPurchase ?? null}::numeric))
+          or (batch_packaging_snapshot is null and conversion_snapshot is not null and conversion_snapshot is distinct from ${currentConversion?JSON.stringify(currentConversion):null}::jsonb))) as mixed`;
+      if(mixed[0]?.mixed) return Response.json({error:"包装が異なる在庫は個数・重量で棚卸してください。袋数を同じ換算で合算できません。",code:"batch_unit_identity_required"},{status:409});
+    }
     const hasStockRevision = Object.prototype.hasOwnProperty.call(body, "expectedStockRevision");
     if (hasStockRevision && (!Number.isInteger(body.expectedStockRevision) || Number(body.expectedStockRevision) < 0)) {
       return Response.json({ error: "在庫の更新情報を再取得してください。", code: "stock_revision_changed" }, { status: 409 });
@@ -588,15 +604,87 @@ export async function POST(request: Request) {
         for share of products
       ), locked_count as materialized (
         select items.id, locked_product.purchase_unit, locked_product.package_quantity,
-          locked_product.package_quantity_unit, locked_product.inventory_unit_conversions
+          locked_product.package_quantity_unit, locked_product.inventory_unit_conversions,
+          items.current_quantity as previous_count_quantity, items.stock_quantity as previous_stock_quantity, items.count_unit as previous_count_unit,
+          items.usage_anchor_check_id as previous_anchor_id, items.last_counted_at as previous_counted_at
         from locked_product join inventory_items items on items.product_id = locked_product.id
         where items.id = ${itemId}::uuid and items.store_id = ${storeId}::uuid
           and items.status = 'active' and items.count_unit = ${expectedCountUnit}
         for update of items
+      ), count_clock as materialized (
+        select clock_timestamp() as counted_at from locked_count limit 1
+      ), reconciled as materialized (
+        select locked_count.*, gen_random_uuid() as check_id, count_clock.counted_at,
+          jsonb_build_object(
+            'anchorCheckId', anchor.id, 'anchorQuantity', anchor.quantity,
+             'expectedQuantity', case when anchor.id is null or locked_count.previous_stock_quantity is null or flows.broken or (flows.unknown_exposure > 0 and model.factor is null) then null
+              else round(locked_count.previous_stock_quantity-flows.estimated-flows.unknown_exposure*coalesce(model.factor,0),6) end,
+            'observedQuantity', ${quantity}::numeric, 'enteredQuantity', ${parseInventoryCountQuantity(body.quantity)}::numeric, 'enteredUnit', ${inputUnit}::text,
+            'difference', case when anchor.id is null or locked_count.previous_stock_quantity is null or flows.broken or (flows.unknown_exposure > 0 and model.factor is null) then null
+              else ${quantity}::numeric-round(locked_count.previous_stock_quantity-flows.estimated-flows.unknown_exposure*coalesce(model.factor,0),6) end,
+            'countUnit', ${expectedCountUnit}::text,
+            'receivedQuantity', case when anchor.id is null or flows.broken then null else flows.incoming end,
+            'orderDeductedQuantity', case when anchor.id is null or flows.broken then null else flows.order_usage end,
+            'estimatedUsageQuantity', case when flows.estimated > 0 then flows.estimated else null end,
+            'unknownExposure', flows.unknown_exposure, 'unknownRecipeVersionIds', flows.unknown_versions,
+            'confidence', case when anchor.id is null or locked_count.previous_stock_quantity is null or flows.broken or issues.unmapped > 0 then 'unknown'
+              when flows.estimated > 0 or flows.unknown_exposure > 0 then 'estimated' else 'confirmed' end,
+            'issueReasons', to_jsonb(array_remove(array[
+              case when anchor.id is null then 'anchor_missing' end,
+              case when locked_count.previous_stock_quantity is null then 'book_unknown' end,
+              case when flows.broken then 'movement_unknown' end,
+              case when flows.estimated > 0 then 'estimated_inputs' end,
+              case when flows.unknown_exposure > 0 then 'unmeasured_usage' end,
+              case when flows.unknown_exposure > 0 and model.factor is null then 'prediction_basis_missing' end,
+              case when issues.unmapped > 0 then 'unmapped_orders' end
+            ]::text[],null)),
+            'countedAt', count_clock.counted_at, 'periodStartedAt', anchor.created_at,
+            'movementCutoffId', flows.cutoff::text,
+            'otherDelta', flows.other_delta,
+            'incomingQuantity', flows.incoming,
+            'unmappedOrders', issues.unmapped
+          ) as reconciliation
+        from locked_count cross join count_clock
+        left join inventory_checks anchor on anchor.id = locked_count.previous_anchor_id
+          and anchor.inventory_item_id=locked_count.id and anchor.quantity=locked_count.previous_count_quantity and anchor.created_at=locked_count.previous_counted_at
+          and anchor.record_type = 'count' and anchor.count_unit = ${expectedCountUnit}
+        left join lateral (
+          select coalesce(sum(quantity) filter (where changes_stock and quantity > 0 and kind <> 'count'),0) as incoming,
+            coalesce(sum(-quantity) filter(where kind='order_use' and confidence='exact' and quantity < 0),0) as order_usage,
+            coalesce(sum(-quantity) filter(where confidence='estimate' and quantity < 0),0) as estimated,
+            coalesce(sum(exposure) filter(where kind='order_use' and confidence='unmeasured'),0) as unknown_exposure,
+            coalesce(jsonb_agg(distinct recipe_version_id::text order by recipe_version_id::text) filter(where kind='order_use' and confidence='unmeasured' and recipe_version_id is not null),'[]'::jsonb) as unknown_versions,
+            coalesce(sum(quantity) filter(where changes_stock and kind not in ('count','receipt','order_use') and quantity < 0),0) as other_delta,
+            coalesce(bool_or(count_unit <> ${expectedCountUnit} or metadata->>'quantityUnknown'='true' or metadata->>'balanceUnknown'='true' or (kind='production_input' and confidence='unmeasured')),false) as broken,
+            max(id) as cutoff
+          from inventory_movements
+          where inventory_item_id = locked_count.id and anchor.id is not null and kind <> 'count'
+            and occurred_at > anchor.created_at and occurred_at <= count_clock.counted_at
+        ) flows on true
+        left join lateral (
+          select case when sum((snapshot->>'unknownExposure')::numeric)>0 then
+            round(sum((snapshot->>'anchorQuantity')::numeric+(snapshot->>'incomingQuantity')::numeric+(snapshot->>'otherDelta')::numeric
+              -(snapshot->>'observedQuantity')::numeric-(snapshot->>'orderDeductedQuantity')::numeric) / sum((snapshot->>'unknownExposure')::numeric),6) else null end as factor
+          from (select reconciliation_snapshot as snapshot from inventory_checks
+            where inventory_item_id=locked_count.id and record_type='count' and reconciliation_snapshot is not null
+            order by created_at desc limit 8) prior
+          where snapshot->>'countUnit'=${expectedCountUnit}
+            and coalesce(snapshot->'issueReasons','["unknown"]'::jsonb) <@ '["unmeasured_usage","prediction_basis_missing"]'::jsonb
+            and snapshot->'unknownRecipeVersionIds'=flows.unknown_versions
+            and (snapshot->>'unknownExposure')::numeric>0
+            and (snapshot->>'anchorQuantity')::numeric+(snapshot->>'incomingQuantity')::numeric+(snapshot->>'otherDelta')::numeric
+              -(snapshot->>'observedQuantity')::numeric-(snapshot->>'orderDeductedQuantity')::numeric>=0
+        ) model on true
+        left join lateral (
+          select count(distinct order_id) as unmapped from inventory_order_usage_issues
+          where store_id = ${storeId}::uuid and resolved_at is null
+            and created_at > coalesce(anchor.created_at,count_clock.counted_at)
+        ) issues on true
       ), counted as (
         update inventory_items
         set
           current_quantity = ${quantity}::numeric,
+          usage_anchor_check_id = reconciled.check_id,
           count_conversion_snapshot = ${currentConversion ? JSON.stringify(currentConversion) : null}::jsonb,
           stock_quantity = ${quantity}::numeric,
           stock_conversion_snapshot = ${currentConversion ? JSON.stringify(currentConversion) : null}::jsonb,
@@ -609,32 +697,43 @@ export async function POST(request: Request) {
             else ''
           end,
           exception_note = case when inventory_items.exception_code in ('quality', 'damaged', 'too_much') then inventory_items.exception_note else '' end,
-          last_counted_at = now(),
+          last_counted_at = reconciled.counted_at,
           last_counted_by = ${session.id}::uuid,
           updated_at = now()
-        from locked_count
-        where inventory_items.id = locked_count.id
-          and locked_count.purchase_unit is not distinct from ${item.purchaseUnit}
-          and locked_count.package_quantity is not distinct from ${item.packageQuantity}::numeric
-          and locked_count.package_quantity_unit is not distinct from ${item.packageQuantityUnit}
-          and locked_count.inventory_unit_conversions is not distinct from ${JSON.stringify(item.inventoryUnitConversions ?? [])}::jsonb
+        from reconciled
+        where inventory_items.id = reconciled.id
+          and reconciled.purchase_unit is not distinct from ${item.purchaseUnit}
+          and reconciled.package_quantity is not distinct from ${item.packageQuantity}::numeric
+          and reconciled.package_quantity_unit is not distinct from ${item.packageQuantityUnit}
+          and reconciled.inventory_unit_conversions is not distinct from ${JSON.stringify(item.inventoryUnitConversions ?? [])}::jsonb
           and inventory_items.id = ${itemId}::uuid
           and store_id = ${storeId}::uuid
           and status = 'active'
           and count_unit = ${expectedCountUnit}
           and stock_revision = ${expectedStockRevision}::integer
           and (${hasStockRevision} or (last_received_at is null and stock_quantity is not distinct from current_quantity))
-        returning inventory_items.id, store_id, product_id, current_quantity, count_unit, exception_code, count_conversion_snapshot, stock_revision
+        returning inventory_items.id, store_id, product_id, current_quantity, count_unit, exception_code, count_conversion_snapshot, stock_revision,
+          reconciled.check_id, reconciled.counted_at, reconciled.previous_stock_quantity, reconciled.reconciliation
+      ), checked as (
+        insert into inventory_checks (
+          id,inventory_item_id,store_id,product_id,quantity,count_unit,record_type,
+          exception_code,note,recorded_by,unit_conversion_snapshot,reconciliation_snapshot,created_at
+        ) select check_id,id,store_id,product_id,current_quantity,count_unit,'count',exception_code,'',${session.id}::uuid,
+          count_conversion_snapshot,reconciliation,counted_at from counted
+        returning id,inventory_item_id,store_id,product_id,quantity,count_unit,exception_code,unit_conversion_snapshot,reconciliation_snapshot,created_at
+      ), movement as (
+        insert into inventory_movements(operation_key,store_id,product_id,inventory_item_id,kind,quantity,count_unit,confidence,
+          occurred_at,before_quantity,after_quantity,changes_stock,metadata)
+        select 'count:'||checked.id::text,checked.store_id,checked.product_id,checked.inventory_item_id,'count',
+          case when counted.previous_stock_quantity is null then null else checked.quantity-counted.previous_stock_quantity end,
+          checked.count_unit,'exact',checked.created_at,counted.previous_stock_quantity,checked.quantity,
+          counted.previous_stock_quantity is not null,jsonb_build_object('checkId',checked.id,'countQuantity',checked.quantity)
+        from checked join counted on counted.id=checked.inventory_item_id returning id
       )
-      insert into inventory_checks (
-        inventory_item_id, store_id, product_id, quantity, count_unit, record_type,
-        exception_code, note, recorded_by, unit_conversion_snapshot
-      )
-      select id, store_id, product_id, current_quantity, count_unit,
-        'count', exception_code, '', ${session.id}::uuid, count_conversion_snapshot
-      from counted
-      returning inventory_item_id::text as "itemId", quantity::float as quantity,
-        count_unit as "countUnit", exception_code as "exceptionCode", unit_conversion_snapshot as "countConversionSnapshot"
+      select checked.inventory_item_id::text as "itemId",checked.quantity::float as quantity,
+        checked.count_unit as "countUnit",checked.exception_code as "exceptionCode",checked.unit_conversion_snapshot as "countConversionSnapshot",
+        checked.reconciliation_snapshot as reconciliation,checked.id::text as "checkId"
+      from checked cross join movement
     `;
     if (!recordedCounts[0]) {
       return Response.json({ error: "在庫または購入・棚卸単位が更新されています。画面を更新して数量を再確認してください。", code: "stock_revision_changed" }, { status: 409 });

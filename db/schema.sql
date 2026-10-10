@@ -4690,3 +4690,207 @@ create table if not exists procurement_order_templates (
   unique(store_id,name)
 );
 create index if not exists idx_procurement_order_templates_store on procurement_order_templates(store_id,status,name);
+
+-- Inventory order/recipe/production rollout 20261011
+
+-- 20261011_inventory_recipes.sql
+
+create table if not exists inventory_recipes (
+ id uuid primary key default gen_random_uuid(), brand_id uuid not null references brands(id) on delete restrict,
+ name text not null, kind text not null check(kind in ('menu','production')),
+ target_type text check(target_type in ('item','option')), target_id uuid,
+ output_product_id uuid references products(id) on delete restrict,
+ current_version_id uuid, status text not null default 'active' check(status in ('active','inactive')),
+ create_request_payload jsonb,
+ created_by uuid references employees(id) on delete set null, updated_by uuid references employees(id) on delete set null,
+ created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+ constraint inventory_recipes_target check(
+  (kind='menu' and target_type is not null and target_id is not null and output_product_id is null)
+  or (kind='production' and target_type is null and target_id is null and output_product_id is not null))
+);
+alter table inventory_recipes add column if not exists create_request_payload jsonb;
+create unique index if not exists idx_inventory_recipes_active_menu on inventory_recipes(brand_id,target_type,target_id) where kind='menu' and status='active';
+create table if not exists inventory_recipe_versions (
+ id uuid primary key default gen_random_uuid(), recipe_id uuid not null references inventory_recipes(id) on delete restrict,
+ version integer not null check(version > 0), snapshot jsonb not null check(jsonb_typeof(snapshot)='object'),
+ created_by uuid references employees(id) on delete set null, created_at timestamptz not null default now(), unique(recipe_id,version)
+);
+do $$ begin
+ if not exists(select 1 from pg_constraint where conname='inventory_recipes_current_version_fk' and conrelid='inventory_recipes'::regclass) then
+  alter table inventory_recipes add constraint inventory_recipes_current_version_fk foreign key(current_version_id) references inventory_recipe_versions(id) on delete restrict;
+ end if;
+end $$;
+create table if not exists inventory_recipe_version_products (
+ recipe_version_id uuid not null references inventory_recipe_versions(id) on delete restrict,
+ product_id uuid not null references products(id) on delete restrict, primary key(recipe_version_id,product_id)
+);
+create or replace function inventory_recipe_version_immutable() returns trigger language plpgsql as $$ begin
+ if tg_op='DELETE' or new.snapshot is distinct from old.snapshot or new.recipe_id is distinct from old.recipe_id or new.version is distinct from old.version then
+  raise exception 'Published inventory recipe versions are immutable' using errcode='23000';
+ end if; return new;
+end $$;
+drop trigger if exists inventory_recipe_version_immutable on inventory_recipe_versions;
+create trigger inventory_recipe_version_immutable before update or delete on inventory_recipe_versions for each row execute function inventory_recipe_version_immutable();
+
+
+-- 20261011_product_packaging.sql
+
+create table if not exists product_packaging_templates (
+ id uuid primary key default gen_random_uuid(), product_id uuid not null references products(id) on delete restrict,
+ supplier_id uuid references suppliers(id) on delete restrict, name text not null,
+ packaging jsonb not null check(jsonb_typeof(packaging)='object'), status text not null default 'active' check(status in ('active','inactive')),
+ create_request_payload jsonb,
+ created_by uuid references employees(id) on delete set null, updated_by uuid references employees(id) on delete set null,
+ created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+);
+create index if not exists idx_product_packaging_templates_product on product_packaging_templates(product_id,status);
+alter table product_packaging_templates add column if not exists create_request_payload jsonb;
+create unique index if not exists idx_product_packaging_templates_name on product_packaging_templates(product_id,name);
+-- Unknown old batches remain unknown; do not backfill from today's master or shipping weight.
+alter table purchase_order_items add column if not exists actual_packaging_snapshot jsonb;
+alter table purchase_actuals add column if not exists packaging_snapshot jsonb;
+alter table price_records add column if not exists packaging_snapshot jsonb;
+alter table inventory_stock_receipts add column if not exists batch_packaging_snapshot jsonb;
+
+
+-- 20261011_inventory_order_usage.sql
+
+create table if not exists inventory_usage_settings (
+  store_id uuid primary key references stores(id) on delete cascade,
+  enabled boolean not null default false,
+  enabled_from timestamptz,
+  trigger_mode text not null default 'preparation' check (trigger_mode in ('preparation','confirmed_sale')),
+  revision integer not null default 0 check (revision >= 0),
+  updated_by uuid references employees(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  check (not enabled or enabled_from is not null)
+);
+create table if not exists inventory_product_usage_locations (
+  store_id uuid not null references stores(id) on delete cascade,
+  product_id uuid not null references products(id) on delete restrict,
+  inventory_item_id uuid not null references inventory_items(id) on delete restrict,
+  updated_by uuid references employees(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  primary key (store_id,product_id)
+);
+
+alter table store_customer_orders add column if not exists inventory_items_ready_at timestamptz;
+alter table store_customer_orders add column if not exists inventory_source_snapshot jsonb;
+alter table store_customer_orders add column if not exists inventory_first_prepared_at timestamptz;
+alter table store_customer_orders add column if not exists inventory_preparation_source_snapshot jsonb;
+-- Retain prior preparation evidence when an old task is later reset to New.
+-- Do not mark historical item sets ready or invent consumption of old orders.
+update store_customer_orders orders
+set inventory_first_prepared_at = coalesce(orders.preparing_at,orders.ready_at,orders.completed_at,
+  (select min(tasks.started_at) from order_production_tasks tasks where tasks.order_id=orders.id))
+where orders.inventory_first_prepared_at is null and (
+  orders.preparing_at is not null or orders.ready_at is not null or orders.completed_at is not null
+  or exists(select 1 from order_production_tasks tasks where tasks.order_id=orders.id and tasks.started_at is not null)
+);
+
+create table if not exists inventory_order_usage_events (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null unique references store_customer_orders(id) on delete restrict,
+  store_id uuid not null references stores(id) on delete restrict,
+  occurred_at timestamptz not null,
+  source_snapshot jsonb not null,
+  plan_snapshot jsonb not null,
+  created_at timestamptz not null default now()
+);
+create table if not exists inventory_movements (
+  id bigint generated always as identity primary key,
+  operation_key text not null unique,
+  store_id uuid not null references stores(id) on delete restrict,
+  product_id uuid not null references products(id) on delete restrict,
+  inventory_item_id uuid references inventory_items(id) on delete restrict,
+  kind text not null check(kind in ('receipt','count','order_use','production_input','production_output','adjustment','transfer_out','transfer_in')),
+  quantity numeric(18,6),
+  count_unit text not null default '',
+  confidence text not null check(confidence in ('exact','estimate','unmeasured')),
+  exposure numeric(18,6) not null default 0 check(exposure >= 0),
+  occurred_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  source_order_id uuid,
+  source_order_item_id uuid,
+  recipe_version_id uuid,
+  before_quantity numeric(18,6),
+  after_quantity numeric(18,6),
+  changes_stock boolean not null default false,
+  metadata jsonb not null default '{}'::jsonb,
+  check(not changes_stock or (confidence='exact' and quantity is not null and inventory_item_id is not null))
+);
+do $$ begin
+  if to_regclass('inventory_recipe_versions') is not null and not exists(
+    select 1 from pg_constraint where conrelid='inventory_movements'::regclass and conname='inventory_movements_recipe_version_fk'
+  ) then
+    alter table inventory_movements add constraint inventory_movements_recipe_version_fk
+      foreign key(recipe_version_id) references inventory_recipe_versions(id) on delete restrict;
+  end if;
+end $$;
+create index if not exists idx_inventory_movements_item_time on inventory_movements(inventory_item_id,occurred_at,id);
+create index if not exists idx_inventory_movements_store_order on inventory_movements(store_id,source_order_id);
+create index if not exists idx_inventory_order_usage_store_time on inventory_order_usage_events(store_id,occurred_at desc);
+
+create table if not exists inventory_order_usage_issues (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references store_customer_orders(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  code text not null,
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  resolved_at timestamptz,
+  unique(order_id,code)
+);
+create index if not exists idx_inventory_order_usage_issues_store on inventory_order_usage_issues(store_id,resolved_at,updated_at desc);
+
+
+-- 20261011_inventory_usage_reconciliation.sql
+
+alter table inventory_items add column if not exists usage_anchor_check_id uuid references inventory_checks(id) on delete set null deferrable initially deferred;
+alter table inventory_checks add column if not exists reconciliation_snapshot jsonb;
+create index if not exists idx_inventory_checks_usage_period on inventory_checks(inventory_item_id, created_at desc) where record_type = 'count';
+
+
+-- 20261011_inventory_production.sql
+
+create table if not exists inventory_transfers (
+ id uuid primary key default gen_random_uuid(),
+ source_store_id uuid not null references stores(id) on delete restrict,
+ target_store_id uuid not null references stores(id) on delete restrict,
+ product_id uuid not null references products(id) on delete restrict,
+ source_inventory_item_id uuid not null references inventory_items(id) on delete restrict,
+ target_inventory_item_id uuid not null references inventory_items(id) on delete restrict,
+ quantity numeric(18,6) not null check(quantity>0), received_quantity numeric(18,6) not null default 0,
+ unit text not null, status text not null default 'in_transit' check(status in ('in_transit','received')),
+ cost_price_jpy numeric(12,2), supply_price_jpy numeric(12,2), snapshot jsonb not null,
+ dispatched_by uuid references employees(id) on delete set null, dispatched_at timestamptz not null default now(), received_at timestamptz,
+ check(source_store_id<>target_store_id), check(source_inventory_item_id<>target_inventory_item_id),
+ check(received_quantity>=0 and received_quantity<=quantity),
+ check(cost_price_jpy is null or cost_price_jpy>=0), check(supply_price_jpy is null or supply_price_jpy>=0)
+);
+create table if not exists inventory_production_operations (
+ id uuid primary key default gen_random_uuid(), request_id uuid not null unique,
+ action text not null check(action in ('produce','transfer_dispatch','transfer_receive')),
+ store_id uuid not null references stores(id) on delete restrict,
+ recipe_version_id uuid references inventory_recipe_versions(id) on delete restrict,
+ transfer_id uuid references inventory_transfers(id) on delete restrict,
+ output_inventory_item_id uuid references inventory_items(id) on delete restrict,
+ output_quantity numeric(18,6), request_payload jsonb not null, snapshot jsonb not null,
+ recorded_by uuid references employees(id) on delete set null, recorded_by_name text not null default '',
+ created_at timestamptz not null default now(),
+ check((action='produce' and recipe_version_id is not null and transfer_id is null and output_inventory_item_id is not null and output_quantity is not null and output_quantity>0)
+   or (action in ('transfer_dispatch','transfer_receive') and recipe_version_id is null and transfer_id is not null))
+);
+create index if not exists idx_inventory_production_store on inventory_production_operations(store_id,created_at desc);
+create index if not exists idx_inventory_transfers_target on inventory_transfers(target_store_id,status,dispatched_at);
+create or replace function inventory_production_operation_immutable() returns trigger language plpgsql as $$ begin
+ raise exception 'Inventory production history is immutable' using errcode='23000'; end $$;
+drop trigger if exists inventory_production_operation_immutable on inventory_production_operations;
+create trigger inventory_production_operation_immutable before update or delete on inventory_production_operations for each row execute function inventory_production_operation_immutable();
+create or replace function inventory_transfer_source_immutable() returns trigger language plpgsql as $$ begin
+ if tg_op='DELETE' or (to_jsonb(new)-'received_quantity'-'status'-'received_at') is distinct from (to_jsonb(old)-'received_quantity'-'status'-'received_at') or new.received_quantity<old.received_quantity then
+  raise exception 'Dispatched inventory transfer facts are immutable' using errcode='23000';
+ end if; return new; end $$;
+drop trigger if exists inventory_transfer_source_immutable on inventory_transfers;
+create trigger inventory_transfer_source_immutable before update or delete on inventory_transfers for each row execute function inventory_transfer_source_immutable();

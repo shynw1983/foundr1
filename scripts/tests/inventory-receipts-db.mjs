@@ -82,6 +82,7 @@ async function createOldDatabase() {
   await db.exec(`
     create table stores(id uuid primary key,name text,status text not null default 'active');
     create table employees(id uuid primary key,name text);
+    create table suppliers(id uuid primary key,name text);
     create table store_brands(store_id uuid,brand_id uuid);
     create table products(id uuid primary key,name text,unit text,category text default '',storage_type text default '',
       package_quantity numeric(12,3),package_quantity_unit text,inventory_unit_conversions jsonb not null default '[]'::jsonb,
@@ -107,6 +108,9 @@ async function createOldDatabase() {
       actual_quantity numeric(12,2),status text,temporary_product_name text default '',temporary_product_unit text default '個');
     create table purchase_actuals(id uuid primary key default gen_random_uuid(),purchase_order_item_id uuid references purchase_order_items(id) on delete cascade,
       actual_quantity numeric(12,2),actual_unit text,recorded_at timestamptz not null default now());
+    create table price_records(id uuid primary key default gen_random_uuid(),product_id uuid references products(id),supplier_id uuid references suppliers(id),
+      price numeric(12,2),unit text,recorded_at timestamptz default now());
+    create table product_supplier_options(id uuid primary key default gen_random_uuid(),product_id uuid references products(id),supplier_id uuid references suppliers(id),reference_price numeric(12,2));
     create table delivery_batches(id uuid primary key,purchase_order_id uuid references purchase_orders(id) on delete cascade,batch_no integer,
       status text,created_at timestamptz default now(),delivered_at timestamptz,store_confirmed_at timestamptz,store_confirmed_by uuid);
     create table delivery_batch_items(delivery_batch_id uuid references delivery_batches(id) on delete cascade,purchase_order_item_id uuid references purchase_order_items(id) on delete cascade,
@@ -164,7 +168,7 @@ async function persistedState() {
   for (const [table, order] of [
     ['products', 'id'], ['purchase_orders', 'id'], ['purchase_order_items', 'id'], ['purchase_actuals', 'id'],
     ['delivery_batches', 'id'], ['delivery_batch_items', 'delivery_batch_id,purchase_order_item_id'],
-    ['inventory_locations', 'id'], ['inventory_items', 'id'], ['inventory_checks', 'id'], ['inventory_stock_receipts', 'id']
+    ['inventory_locations', 'id'], ['inventory_items', 'id'], ['inventory_checks', 'id'], ['inventory_stock_receipts', 'id'], ['inventory_movements','id']
   ]) state[table] = (await db.query(`select * from ${table} order by ${order}`)).rows;
   return state;
 }
@@ -227,11 +231,26 @@ try {
   await db.query('update inventory_items set stock_quantity=6,stock_revision=0 where id=$1', [ids.stock]);
   console.log('PASS: one-time book initialization retains physical facts, unknown historical snapshots and later book/revision changes');
 
+  const packagingMigration=readFileSync(new URL('db/migrations/20261011_product_packaging.sql',root),'utf8');
+  await db.exec(packagingMigration);
+  await db.exec(packagingMigration);
+  const movementMigration=readFileSync(new URL('db/migrations/20261011_inventory_order_usage.sql',root),'utf8');
+  await db.exec(movementMigration.match(/create table if not exists inventory_movements[\s\S]+?\n\);/)[0]);
+  await db.exec(readFileSync(new URL('db/migrations/20261009_inventory_quick_checks.sql',root),'utf8'));
+  await db.exec(readFileSync(new URL('db/migrations/20261011_inventory_usage_reconciliation.sql',root),'utf8'));
+  await db.exec(`create table inventory_order_usage_issues(id uuid primary key default gen_random_uuid(),order_id uuid,store_id uuid,code text,details jsonb default '{}',created_at timestamptz default now(),resolved_at timestamptz);`);
+  assert.equal((await db.query('select count(*)::int as n from purchase_order_items where actual_packaging_snapshot is not null')).rows[0].n,0);
+
   const units = load('lib/product-unit-conversions.ts');
-  const policy = load('lib/inventory-receipt-policy.ts', { './product-unit-conversions': units });
+  const packaging=load('lib/product-packaging-policy.ts',{'./product-unit-conversions':units});
+  const packagingData=load('lib/product-packaging-data.ts',{'./product-packaging-policy':packaging,'./product-catalog-access':{
+    assertProductViewable:async()=>({ok:true}),assertProductViewableAtStore:async()=>({ok:true})
+  }});
+  const policy = load('lib/inventory-receipt-policy.ts', { './product-unit-conversions': units,'./product-packaging-policy':packaging });
   const locks = load('lib/replenishment-order-locks.ts');
   const data = load('lib/inventory-receipt-data.ts', {
-    './product-unit-conversions': units, './inventory-receipt-policy': policy, './replenishment-order-locks': locks
+    './product-unit-conversions': units, './inventory-receipt-policy': policy, './replenishment-order-locks': locks,
+    './product-packaging-policy':packaging,'./product-packaging-data':packagingData
   });
   route = load('app/api/inventory/receipts/route.ts', {
     '../../../../lib/product-unit-conversions': units,
@@ -590,6 +609,121 @@ try {
   await db.query('update products set unit=$1 where id=$2', ['箱', ids.product]);
   await db.query('update purchase_actuals set actual_unit=$1 where id=$2', ['箱', ids.actual]);
   console.log('PASS: rough mode still enforces source quantity/unit certainty, historical unit consistency and cumulative purchase limits');
+
+  const batchProduct=uuid(950),batchStock=uuid(951),batchLine=uuid(952),batchActual=uuid(953);
+  await db.query('insert into products(id,name,unit,package_quantity,package_quantity_unit) values($1,$2,$3,$4,$5)',[batchProduct,'Stable ingredient','箱',12000,'g']);
+  await db.query(`insert into inventory_items(id,store_id,product_id,location_id,count_unit,safety_stock,current_quantity,stock_quantity,stock_revision,last_counted_at)
+    values($1,$2,$3,$4,'g',100,1000,1000,0,'2026-10-08T12:00:00Z')`,[batchStock,ids.store,batchProduct,ids.location]);
+  await db.query(`insert into purchase_order_items(id,purchase_order_id,product_id,requested_quantity,requested_unit,actual_quantity,status)
+    values($1,$2,$3,2,'袋',2,'delivered')`,[batchLine,ids.order,batchProduct]);
+  await db.query('insert into purchase_actuals(id,purchase_order_item_id,actual_quantity,actual_unit) values($1,$2,2,$3)',[batchActual,batchLine,'袋']);
+  const actualBatch={purchaseUnit:'袋',contentQuantity:800,contentUnit:'g',countUnit:'g',stockQuantityPerPurchase:800};
+  const physicalBeforeBatch=physicalFact(await stock(batchStock));
+  const firstBatchBody=await receiptBody({purchaseOrderItemId:batchLine,inventoryItemId:batchStock,purchaseQuantity:0.5,expectedConversion:null,batchPackaging:actualBatch});
+  let firstBatch=await post(firstBatchBody);
+  assert.equal(firstBatch.status,200,await firstBatch.clone().text());
+  assert.equal(Number((await stock(batchStock)).stock_quantity),1400);
+  assert.deepEqual(physicalFact(await stock(batchStock)),physicalBeforeBatch);
+  assert.equal((await stock(batchStock)).stock_conversion_snapshot,null);
+  assert.deepEqual((await db.query('select actual_packaging_snapshot from purchase_order_items where id=$1',[batchLine])).rows[0].actual_packaging_snapshot,actualBatch);
+  assert.equal((await db.query('select count(*)::int as n from inventory_movements movements join inventory_stock_receipts receipts on movements.operation_key=\'receipt:\'||receipts.id::text where receipts.request_id=$1',[firstBatchBody.requestId])).rows[0].n,1);
+  const beforeBatchReplay=await persistedState();
+  assert.equal((await post(firstBatchBody)).status,200);
+  assert.deepEqual(await persistedState(),beforeBatchReplay);
+  console.log('PASS: batch packaging adds actual 800g/bag to literal g stock despite today\'s different master unit, preserves physical count and old conversion, and replays once');
+
+  await db.query('update products set package_quantity=24000 where id=$1',[batchProduct]);
+  const secondBatchBody=await receiptBody({purchaseOrderItemId:batchLine,inventoryItemId:batchStock,purchaseQuantity:0.5,expectedConversion:null});
+  assert.equal((await post(secondBatchBody)).status,200);
+  assert.equal(Number((await stock(batchStock)).stock_quantity),1800);
+  await rejectsWithoutChanges(await receiptBody({purchaseOrderItemId:batchLine,inventoryItemId:batchStock,purchaseQuantity:0.25,expectedConversion:null,batchPackaging:{...actualBatch,contentQuantity:1000,stockQuantityPerPurchase:1000}}),409,'frozen batch cannot be reinterpreted from new master/template');
+  const savedBatchState=await persistedState();
+  await db.exec(packagingMigration);
+  assert.deepEqual(await persistedState(),savedBatchState);
+  console.log('PASS: remaining arrivals use frozen batch factor after master changes; conflicting batch and migration replay preserve old purchase/receipt/movement facts');
+
+  const thirdBatchBody=await receiptBody({purchaseOrderItemId:batchLine,inventoryItemId:batchStock,purchaseQuantity:0.5,expectedConversion:null});
+  beforeWrite=async()=>{await db.query('update purchase_order_items set actual_packaging_snapshot=$1::jsonb where id=$2',[JSON.stringify({...actualBatch,contentQuantity:900,stockQuantityPerPurchase:900}),batchLine]);};
+  const staleBatch=await post(thirdBatchBody);
+  assert.equal(staleBatch.status,409,await staleBatch.text());
+  assert.equal(Number((await stock(batchStock)).stock_quantity),1800);
+  await db.query('update purchase_order_items set actual_packaging_snapshot=$1::jsonb where id=$2',[JSON.stringify(actualBatch),batchLine]);
+  await db.query('update inventory_items set stock_quantity=-200 where id=$1',[batchStock]);
+  assert.equal((await post(await receiptBody({purchaseOrderItemId:batchLine,inventoryItemId:batchStock,purchaseQuantity:0.25,expectedConversion:null}))).status,200);
+  assert.equal(Number((await stock(batchStock)).stock_quantity),0);
+  assert.deepEqual(physicalFact(await stock(batchStock)),physicalBeforeBatch);
+  console.log('PASS: packaging CAS rejects stale source while preserving changed fact; batch receipt can reconcile signed theoretical deficit without changing physical count');
+
+  const templateRequest=uuid(970),templateSupplier=uuid(971);
+  await db.query('insert into suppliers(id,name) values($1,$2)',[templateSupplier,'HQ upstream supplier']);
+  const templatePayload={action:'save',requestId:templateRequest,productId:batchProduct,name:'800g bags',supplierId:templateSupplier,packaging:actualBatch};
+  assert.equal((await packagingData.saveProductPackagingTemplate(session,templatePayload)).replayed,false);
+  assert.equal((await packagingData.saveProductPackagingTemplate(session,templatePayload)).replayed,true);
+  assert.equal((await db.query('select count(*)::int as n from product_packaging_templates')).rows[0].n,1);
+  await assert.rejects(packagingData.saveProductPackagingTemplate(session,{...templatePayload,name:'changed payload'}),error=>error.status===409 && error.code==='request_conflict');
+  await assert.rejects(packagingData.saveProductPackagingTemplate(session,{...templatePayload,requestId:uuid(972)}),error=>error.status===409 && error.code==='template_exists');
+  console.log('PASS: packaging creation nonce replays once, rejects changed payload and distinguishes same-product duplicate names');
+  const originalTemplate=(await packagingData.readProductPackagingTemplates([batchProduct],true))[0];
+  assert.equal(originalTemplate.supplierId,templateSupplier);
+  assert.equal((await packagingData.readProductPackagingTemplates([batchProduct],false))[0].supplierId,null);
+  await packagingData.saveProductPackagingTemplate(session,{action:'save',id:originalTemplate.id,expectedUpdatedAt:originalTemplate.updatedAt,productId:batchProduct,name:originalTemplate.name,supplierId:templateSupplier,packaging:{...actualBatch,contentQuantity:900,stockQuantityPerPurchase:900}});
+  await assert.rejects(packagingData.saveProductPackagingTemplate(session,{action:'inactivate',id:originalTemplate.id,expectedUpdatedAt:originalTemplate.updatedAt,productId:batchProduct}),error=>error.status===409 && error.code==='template_changed');
+  assert.equal((await packagingData.saveProductPackagingTemplate(session,templatePayload)).replayed,true);
+  assert.equal((await packagingData.readProductPackagingTemplates([batchProduct],true))[0].contentQuantity,900);
+  assert.equal((await data.readInventoryReceiptSource(batchLine)).actualPackaging.contentQuantity,800);
+  console.log('PASS: template CAS and HQ supplier redaction; editing a template never rewrites old actual/receipt batch snapshots, even on retried original creation');
+
+  const priceSource=readFileSync(new URL('lib/procurement-data.ts',root),'utf8');
+  const priceQuery=priceSource.slice(priceSource.indexOf('with ranked_prices as (')).split('`')[0];
+  assert.ok(!priceQuery.includes('${'),'price signal query is independently executable without customer/session inputs');
+  await db.query('insert into product_supplier_options(product_id,supplier_id,reference_price) values($1,$2,1000)',[batchProduct,templateSupplier]);
+  const changedPack={...actualBatch,contentQuantity:900,stockQuantityPerPurchase:900};
+  await db.query('insert into price_records(product_id,supplier_id,price,unit,packaging_snapshot,recorded_at) values($1,$2,1000,$3,$4::jsonb,now()-interval \'2 days\')',[batchProduct,templateSupplier,'袋',JSON.stringify(actualBatch)]);
+  await db.query('insert into price_records(product_id,supplier_id,price,unit,packaging_snapshot,recorded_at) values($1,$2,900,$3,$4::jsonb,now()-interval \'1 day\')',[batchProduct,templateSupplier,'袋',JSON.stringify(changedPack)]);
+  assert.equal((await db.query(priceQuery)).rows.length,0,'changed package cannot create a raw per-bag price alert or use today\'s default reference price');
+  await db.query('insert into price_records(product_id,supplier_id,price,unit,packaging_snapshot) values($1,$2,1000,$3,$4::jsonb)',[batchProduct,templateSupplier,'袋',JSON.stringify({...changedPack,templateId:templateRequest})]);
+  const comparablePrices=(await db.query(priceQuery)).rows;
+  assert.equal(comparablePrices.length,1);assert.equal(comparablePrices[0].changeRate,11.1);
+  console.log('PASS: purchase price signals compare only matching literal units and frozen package contents; template identity does not alter package comparability');
+
+  const quickPolicy=load('lib/inventory-quick-policy.ts',{'./product-unit-conversions':units});
+  const countInput=load('lib/inventory-count-input-policy.ts',{'./product-unit-conversions':units});
+  const inventoryRoute=load('app/api/inventory/route.ts',{
+    '../../../lib/product-unit-conversions':units,'../../../lib/inventory-quick-policy':quickPolicy,
+    '../../../lib/inventory-count-input-policy':countInput,
+    '../../../lib/product-catalog-access':{assertProductViewableAtStore:async()=>({ok:true}),getVisibleProductIdsForStore:async()=>[batchProduct]}
+  });
+  async function countBatch(quantity) {
+    const current=await stock(batchStock);
+    const currentProduct=(await db.query('select * from products where id=$1',[batchProduct])).rows[0];
+    const expectedConversion=units.resolveProductUnitConversion({unit:currentProduct.unit,packageQuantity:Number(currentProduct.package_quantity),packageQuantityUnit:currentProduct.package_quantity_unit,inventoryUnitConversions:currentProduct.inventory_unit_conversions},'g');
+    const response=await inventoryRoute.POST(new Request('https://example.test/api/inventory',{method:'POST',body:JSON.stringify({action:'count',storeId:ids.store,itemId:batchStock,countUnit:'g',quantity,expectedStockRevision:current.stock_revision,expectedConversion})}));
+    assert.equal(response.status,200,await response.clone().text());
+    return (await db.query('select * from inventory_checks where id=(select usage_anchor_check_id from inventory_items where id=$1)',[batchStock])).rows[0];
+  }
+  await countBatch(1200);
+  assert.equal((await post(await receiptBody({purchaseOrderItemId:batchLine,inventoryItemId:batchStock,purchaseQuantity:0.25,expectedConversion:null}))).status,200);
+  await db.transaction(async tx=>{
+    await tx.query('update inventory_items set stock_quantity=stock_quantity-100,stock_revision=stock_revision+1 where id=$1',[batchStock]);
+    await tx.query(`insert into inventory_movements(operation_key,store_id,product_id,inventory_item_id,kind,quantity,count_unit,confidence,occurred_at,before_quantity,after_quantity,changes_stock)
+      values('isolated-known-usage',$1,$2,$3,'order_use',-100,'g','exact',clock_timestamp(),1400,1300,true)`,[ids.store,batchProduct,batchStock]);
+  });
+  const reconciledCount=await countBatch(1250),period=reconciledCount.reconciliation_snapshot;
+  assert.equal(Number(period.expectedQuantity),1300);assert.equal(Number(period.difference),-50);
+  assert.equal(Number(period.receivedQuantity),200);assert.equal(Number(period.orderDeductedQuantity),100);
+  assert.equal(period.confidence,'confirmed');assert.equal(Number((await stock(batchStock)).current_quantity),1250);
+  console.log('PASS: real count API anchors base units, then frozen receipt plus one known usage produces a preserved -50g reconciliation rather than rewriting prior count');
+
+  await rejectsWithoutChanges(await receiptBody({purchaseOrderItemId:batchLine,inventoryItemId:batchStock,mode:'unverified',purchaseQuantity:0.125,expectedConversion:null,batchPackaging:{...actualBatch,purchaseUnit:'箱'}}),409,'rough cannot freeze wrong batch purchase identity');
+  const unverifiedBatchBody=await receiptBody({purchaseOrderItemId:batchLine,inventoryItemId:batchStock,mode:'unverified',purchaseQuantity:0.125,expectedConversion:null});
+  assert.equal((await post(unverifiedBatchBody)).status,200);
+  const unknownPeriod=(await countBatch(1300)).reconciliation_snapshot;
+  assert.equal(unknownPeriod.expectedQuantity,null);assert.equal(unknownPeriod.difference,null);assert.equal(unknownPeriod.confidence,'unknown');
+  assert.ok(unknownPeriod.issueReasons.includes('movement_unknown'));
+  const countedAfterRough=await persistedState();
+  assert.equal((await post(unverifiedBatchBody)).status,200);
+  assert.deepEqual(await persistedState(),countedAfterRough);
+  console.log('PASS: unverified receipt invalidates precise interval via movement metadata; next count preserves unknown difference and old receipt retry cannot overwrite new count');
 } finally {
   await db.close();
 }

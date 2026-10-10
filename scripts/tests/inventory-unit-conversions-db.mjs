@@ -81,6 +81,10 @@ try {
   const stockMigration = readFileSync(new URL('db/migrations/20261009_inventory_receipts.sql', root), 'utf8');
   await db.exec(stockMigration); await db.exec(stockMigration);
   await db.exec(readFileSync(new URL('db/migrations/20261009_inventory_quick_checks.sql', root), 'utf8'));
+  await db.exec(readFileSync(new URL('db/migrations/20261011_inventory_order_usage.sql',root),'utf8').match(/create table if not exists inventory_movements[\s\S]+?\n\);/)[0]);
+  await db.exec(readFileSync(new URL('db/migrations/20261011_inventory_usage_reconciliation.sql',root),'utf8'));
+  await db.exec(`create table inventory_order_usage_issues(id uuid primary key default gen_random_uuid(),order_id uuid,store_id uuid,created_at timestamptz default now(),resolved_at timestamptz);
+    alter table inventory_stock_receipts add column batch_packaging_snapshot jsonb;`);
   const legacy = (await db.query('select current_quantity,safety_stock,count_conversion_snapshot from inventory_items')).rows[0];
   assert.equal(Number(legacy.current_quantity), 2.5);
   assert.equal(Number(legacy.safety_stock), 1.25);
@@ -96,11 +100,13 @@ try {
   console.log('PASS: idempotent migration preserves values and leaves historical conversion snapshots unknown');
 
   const units = load('lib/product-unit-conversions.ts');
+  const countInput=load('lib/inventory-count-input-policy.ts',{'./product-unit-conversions':units});
   const quickPolicy = load('lib/inventory-quick-policy.ts');
   const catalogPolicy = load('lib/product-catalog-policy.ts', { './product-unit-conversions.ts': units });
   const catalog = load('lib/product-catalog-access.ts', { './product-catalog-policy': catalogPolicy });
   const route = load('app/api/inventory/route.ts', {
     '../../../lib/product-unit-conversions': units,
+    '../../../lib/inventory-count-input-policy':countInput,
     '../../../lib/inventory-quick-policy': quickPolicy,
     '../../../lib/product-catalog-access': catalog
   });

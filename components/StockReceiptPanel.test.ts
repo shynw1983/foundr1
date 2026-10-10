@@ -6,7 +6,9 @@ import ts from "typescript";
 
 import * as units from "../lib/product-unit-conversions.ts";
 const policy: Record<string, any> = {};
-runInNewContext(ts.transpileModule(readFileSync(new URL("../lib/inventory-receipt-policy.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: policy, require: (name: string) => { if (name === "./product-unit-conversions") return units; throw new Error(`Unmocked ${name}`); } });
+const packaging: Record<string, any> = {};
+runInNewContext(ts.transpileModule(readFileSync(new URL("../lib/product-packaging-policy.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: packaging, require: (name: string) => { if (name === "./product-unit-conversions") return units; throw new Error(`Unmocked ${name}`); } });
+runInNewContext(ts.transpileModule(readFileSync(new URL("../lib/inventory-receipt-policy.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: policy, require: (name: string) => { if (name === "./product-unit-conversions") return units; if (name === "./product-packaging-policy") return packaging; throw new Error(`Unmocked ${name}`); } });
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const source = { purchaseOrderItemId: id(3), purchaseOrderId: id(4), orderNo: "PO-1", storeId: id(1), productId: id(2), productName: "A", status: "delivered", purchaseUnit: "袋", actualQuantity: 3, actualUnit: "袋", receivedPurchaseQuantity: 0, receivedPurchaseUnits: [], remainingPurchaseQuantity: 3, unverifiedRemainingPurchaseQuantity: 3, blockedReason: null, unverifiedBlockedReason: null, correctionHref: "", expectedSource: { purchaseOrderItemId: id(3), storeId: id(1) } };
@@ -30,7 +32,7 @@ function harness() {
   const modules: Record<string, any> = { react, "react/jsx-runtime": { jsx: (type: any, props: any) => ({ type, props }), jsxs: (type: any, props: any) => ({ type, props }) }, "lucide-react": {},
     "../app/os/components/OsTranslationProvider": { useOsTranslation: () => ({ t: (s: string) => s, language: "ja" }) },
     "../app/os/components/currentEmployeeStore": { loadCurrentEmployee: async () => null },
-    "../lib/inventory-receipt-policy": policy, "../lib/product-unit-conversions": units, "./StockReceiptPanel.module.css": { default: {} } };
+    "../lib/inventory-receipt-policy": policy, "../lib/product-packaging-policy": packaging, "../lib/product-unit-conversions": units, "./BatchPackagingTemplateSaver": { BatchPackagingTemplateSaver: "BatchPackagingTemplateSaver" }, "./StockReceiptPanel.module.css": { default: {} } };
   runInNewContext(ts.transpileModule(readFileSync(new URL("./StockReceiptPanel.tsx", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText,
     { exports, URLSearchParams, AbortController, crypto: { randomUUID: () => id(nonce++) }, window: { localStorage: { getItem: (k: string) => storage.get(k) ?? null, setItem: (k: string, v: string) => storage.set(k, v), removeItem: (k: string) => storage.delete(k) } },
       fetch: (url: string, options?: any) => new Promise<Response>(resolve => requests.push({ url, payload: options?.body ? JSON.parse(options.body) : null, resolve })),
@@ -82,6 +84,35 @@ test("failed sends retain the same nonce and stale conflicts preserve quantity u
   elements(tree, e => e.type === "form")[0].props.onSubmit({ preventDefault() {} }); assert.deepEqual(h.requests[2].payload, first);
   await h.respond(2, { error: "stale" }, 409); await h.respond(3, response()); tree = h.render();
   assert.equal(field(tree, "purchaseQuantity").props.value, "3"); assert.equal(button(tree, "新しい到着分を在庫に加算").props.disabled, true);
-  const review = elements(tree, e => e.type === "input" && e.props.type === "checkbox")[0]; review.props.onChange({ target: { checked: true } }); tree = h.render();
+  const review = field(tree, "receiptUpdatedFactsConfirmed"); review.props.onChange({ target: { checked: true } }); tree = h.render();
   button(tree, "新しい到着分を在庫に加算").props.onClick(); assert.notEqual(h.requests[4].payload.requestId, first.requestId);
+});
+
+test("batch packaging uses explicit contents, a stable destination unit, and confirmation rather than today's SKU ratio", async () => {
+  const h = harness(), batch = { purchaseUnit: "袋", contentQuantity: 3, contentUnit: "kg", countUnit: "kg", stockQuantityPerPurchase: 3 };
+  const targetKg = { ...target, countUnit: "kg", stockQuantity: 20, currentConversion: null, addBlockedReason: "conversion_unknown", includedBlockedReason: "conversion_unknown", batchAddBlockedReason: null, batchIncludedBlockedReason: null };
+  h.render(); await h.respond(0, { ...response([targetKg], [{ ...source, purchaseUnit: "箱", blockedReason: "purchase_unit_changed" }]), packagingTemplates: [{ ...batch, id: id(50), productId: source.productId, name: "3kg袋", status: "active" }] }); let tree = h.render();
+  field(tree, "batchPackagingEnabled").props.onChange({ target: { checked: true } }); tree = h.render(); field(tree, "batchPackagingTemplate").props.onChange({ target: { value: id(50) } }); tree = h.render();
+  button(tree, "今回の未入庫分をすべて受け取りました").props.onClick(); tree = h.render(); assert.equal(button(tree, "新しい到着分を在庫に加算").props.disabled, true);
+  field(tree, "batchPackagingConfirmed").props.onChange({ target: { checked: true } }); tree = h.render(); assert.equal(button(tree, "新しい到着分を在庫に加算").props.disabled, false); button(tree, "新しい到着分を在庫に加算").props.onClick();
+  assert.equal(h.requests[1].payload.expectedConversion, null); assert.equal(h.requests[1].payload.batchPackaging.stockQuantityPerPurchase, 3); assert.equal(h.requests[1].payload.batchPackaging.purchaseUnit, "袋"); assert.equal(h.requests[1].payload.purchaseQuantity, 3);
+  assert.equal(h.exports.receiptPreview({ ...source, actualPackaging: batch }, targetKg, 3, "add").after, 29);
+  assert.equal(h.exports.receiptModeBlockedReason(source, { ...targetKg, countUnit: "袋" }, "add", batch), "batch_unit_mismatch");
+});
+
+test("a frozen purchase batch is read-only, included requires an actual count, and retry preserves its snapshot", async () => {
+  const batch = { purchaseUnit: "袋", contentQuantity: 3, contentUnit: "kg", countUnit: "kg", stockQuantityPerPurchase: 3 };
+  const h = harness(), targetKg = { ...target, countUnit: "kg", currentConversion: null, currentQuantity: null, lastCountedAt: null, batchAddBlockedReason: null, batchIncludedBlockedReason: "count_unknown" };
+  h.render(); await h.respond(0, response([targetKg], [{ ...source, actualPackaging: batch }])); let tree = h.render(); assert.equal(field(tree, "batchPackagingEnabled"), undefined); assert.match(text(tree), /記録済みの購入包装仕様/);
+  button(tree, "今回の未入庫分をすべて受け取りました").props.onClick(); tree = h.render(); assert.equal(button(tree, "棚卸に含まれているため加算しない").props.disabled, true); button(tree, "新しい到着分を在庫に加算").props.onClick(); const sent = JSON.stringify(h.requests[1].payload);
+  await h.respond(1, { error: "temporary" }, 503); tree = h.render(); elements(tree, e => e.type === "form")[0].props.onSubmit({ preventDefault() {} }); assert.equal(JSON.stringify(h.requests[2].payload), sent); assert.equal(h.requests[2].payload.batchPackaging.contentQuantity, 3);
+});
+
+test("a stock unit change preserves the original batch basis and refuses to reinterpret its factor after conflict", async () => {
+  const h = harness(), targetKg = { ...target, countUnit: "kg", currentConversion: null, batchAddBlockedReason: null, batchIncludedBlockedReason: null };
+  h.render(); await h.respond(0, response([targetKg])); let tree = h.render(); field(tree, "batchPackagingEnabled").props.onChange({ target: { checked: true } }); tree = h.render();
+  field(tree, "batchContentQuantity").props.onChange({ target: { value: "3" } }); tree = h.render(); field(tree, "batchPackagingConfirmed").props.onChange({ target: { checked: true } }); tree = h.render(); button(tree, "今回の未入庫分をすべて受け取りました").props.onClick(); tree = h.render(); button(tree, "新しい到着分を在庫に加算").props.onClick();
+  await h.respond(1, { error: "unit changed" }, 409); await h.respond(2, response([{ ...targetKg, countUnit: "g", stockRevision: 2 }])); tree = h.render();
+  assert.equal(field(tree, "batchStockQuantityPerPurchase").props.value, "3"); assert.match(text(tree), /購入または保管先の単位が変わりました/); assert.match(text(elements(tree, e => e.type === "label" && elements(e, child => child.props?.name === "batchStockQuantityPerPurchase").length > 0)[0]), /kg/);
+  field(tree, "receiptUpdatedFactsConfirmed").props.onChange({ target: { checked: true } }); tree = h.render(); assert.equal(button(tree, "新しい到着分を在庫に加算").props.disabled, true); assert.equal(button(tree, "到着だけ記録・総在庫は未確認にする").props.disabled, true); assert.equal(h.requests.length, 3);
 });

@@ -7,18 +7,20 @@ import * as rocket from "./rocket-now-bridge.ts";
 
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/rocket-order-snapshots.json", import.meta.url), "utf8"));
 
-function harness(authorized = true, dashboardImport = false) {
+function harness(authorized = true, dashboardImport = false, options: { failItemWrite?: boolean; existingIncomplete?: boolean } = {}) {
   const writes: Array<{text: string; values: unknown[]}> = [];
   const downstream: string[] = [];
   const sql = async (parts: TemplateStringsArray, ...values: unknown[]) => {
     const text = parts.join("?");
     if (/\b(insert|update|delete)\b/.test(text)) writes.push({text, values});
+    if (text.includes("insert into store_customer_order_items") && options.failItemWrite) throw new Error("item write failed");
     if (text.includes("insert into local_bridge_events")) return [{id: "event"}];
     if (text.includes("from stores")) return [{id: "store"}];
     if (text.includes("from store_sales_sources")) return [{brandId: "brand", brandName: "まぁ麻"}];
-    if (text.includes("from store_customer_orders")) return dashboardImport ? [{
-      id: "order", status: "new", parserVersion: 5, completeness: 167,
-      bridgeItems: [{name: "注文完了率"}], note: "", noteZh: ""
+    if (text.includes("from store_customer_orders")) return dashboardImport || options.existingIncomplete ? [{
+      id: "order", status: "new", parserVersion: options.existingIncomplete ? 6 : 5, completeness: 999,
+      inventoryItemsReadyAt: null,
+      bridgeItems: options.existingIncomplete ? [{name: "マーラータン"}] : [{name: "注文完了率"}], note: "", noteZh: ""
     }] : [];
     if (text.includes("insert into store_customer_orders")) return [{id: "order"}];
     return [];
@@ -31,6 +33,10 @@ function harness(authorized = true, dashboardImport = false) {
     "order-realtime": {publishCustomerOrderEvent: async () => downstream.push("realtime")},
     "store-order-push-scheduler": {scheduleBridgeOrderPush: async () => downstream.push("phone-alert")},
     "sales-orders": {syncWebReservationToSalesOrder: async (id: string) => downstream.push(`sales:${id}`)},
+    "inventory-order-usage": {markInventoryOrderReady: async (id: string, options: unknown) => {
+      assert.deepEqual(JSON.parse(JSON.stringify(options)), {reliableIdentity: false, issueCodes: ["unsupported_bridge_identity"]});
+      downstream.push(`inventory-ready:${id}`);
+    }},
     "order-note-translation": {translateOrderNoteToChinese: async () => ""},
     "menu-display-name-matcher": {findMenuDisplayNameCandidate: () => null},
     "rocket-now-bridge": rocket,
@@ -70,7 +76,7 @@ test("accepted detail persists correct time, amount and four modifiers before ki
   const item = h.writes.find((write) => write.text.includes("insert into store_customer_order_items"))!;
   assert.ok(item.values.some((value) => Array.isArray(value) && value.length === 4 && value.every((label) => typeof label === "string")));
   assert.ok(item.values.includes(3605));
-  assert.deepEqual(h.downstream, ["sales:order", "kitchen:order", "phone-alert", "realtime"]);
+  assert.deepEqual(h.downstream, ["inventory-ready:order", "sales:order", "kitchen:order", "phone-alert", "realtime"]);
 });
 
 test("real details can replace a dashboard import despite its inflated completeness", async () => {
@@ -89,4 +95,19 @@ test("unauthorized snapshot creates neither an event nor an operational order", 
   assert.equal((await h.post(2)).status, 401);
   assert.deepEqual(h.writes, []);
   assert.deepEqual(h.downstream, []);
+});
+
+test("an incomplete Bridge writer never marks inventory source ready or invokes downstream synchronization", async () => {
+  const h = harness(true, false, {failItemWrite: true});
+  assert.equal((await h.post(2)).status, 500);
+  assert.deepEqual(h.downstream, []);
+  const order = h.writes.find((write) => write.text.includes("insert into store_customer_orders"))!;
+  assert.match(order.text, /inventory_items_ready_at = case when/);
+});
+
+test("a prior partial Bridge import repairs items even when the old summary has higher completeness", async () => {
+  const h = harness(true, false, {existingIncomplete: true});
+  assert.equal((await (await h.post(2)).json()).parseStatus, "imported");
+  assert.ok(h.writes.some((write) => write.text.includes("insert into store_customer_order_items")));
+  assert.equal(h.downstream[0], "inventory-ready:order");
 });

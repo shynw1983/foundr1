@@ -226,12 +226,16 @@ export async function PATCH(request: Request) {
     update store_customer_orders
     set
       status = ${status},
+      inventory_first_prepared_at = case when ${status} in ('preparing','ready','completed')
+        then coalesce(inventory_first_prepared_at,preparing_at,ready_at,completed_at,now()) else inventory_first_prepared_at end,
+      inventory_preparation_source_snapshot = case when ${status} in ('preparing','ready','completed')
+        then coalesce(inventory_preparation_source_snapshot,inventory_source_snapshot) else inventory_preparation_source_snapshot end,
       preparing_at = case when ${status} = 'preparing' and preparing_at is null then now() else preparing_at end,
       ready_at = case when ${status} = 'ready' and ready_at is null then now() else ready_at end,
       completed_at = case when ${status} = 'completed' and completed_at is null then now() else completed_at end,
       cancelled_at = case when ${status} = 'cancelled' and cancelled_at is null then now() else cancelled_at end,
       updated_at = now()
-    where id = ${orderId}
+    where id = ${orderId} and (${status}='cancelled' or status not in ('cancelled','refund_pending','payment_failed','checkout_failed'))
     returning id::text
   `;
   if (rows[0]?.id) {

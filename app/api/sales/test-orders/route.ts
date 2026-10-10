@@ -2,6 +2,7 @@ import { canAccessStore, requireOsSession } from "../../../../lib/api-auth";
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
 import { reconcileMemberAccountFromLoyaltyLedger, reverseLoyaltyForRefundedOrder } from "../../../../lib/loyalty";
+import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -264,6 +265,29 @@ export async function DELETE(request: Request) {
   const targetSalesOrderIds = targets.map((row) => String(row.id));
   const customerOrderIds = Array.from(new Set(targets.map((row) => String(row.sourceOrderId ?? "")).filter(isUuid)));
   const affectedMemberIds = Array.from(new Set(targets.map((row) => String(row.memberId ?? "")).filter(isUuid)));
+  const deletionClaimId=randomUUID();
+
+  // Protect the original inventory ledger before any loyalty/projection writes.
+  // The durable temporary issue also fences a source writer that marks Ready
+  // after this transaction releases the source row locks.
+  if (customerOrderIds.length) {
+    const claims = await sql.transaction([
+      sql`select id from store_customer_orders where id::text=any(${customerOrderIds}) order by id for update`,
+      sql`select order_id::text from inventory_order_usage_events where order_id::text=any(${customerOrderIds})`,
+      sql`insert into inventory_order_usage_issues(order_id,store_id,code,details)
+        select id,store_id,'source_deletion_pending',jsonb_build_object('actorId',${session.id}::text,'claimId',${deletionClaimId}::text) from store_customer_orders
+        where id::text=any(${customerOrderIds}) and not exists(select 1 from inventory_order_usage_events where order_id::text=any(${customerOrderIds}))
+        on conflict(order_id,code) do update set details=excluded.details,updated_at=now(),resolved_at=null
+          where inventory_order_usage_issues.resolved_at is not null returning order_id::text`
+    ]);
+    if (claims[1]?.length || claims[2]?.length !== customerOrderIds.length) {
+      await sql`delete from inventory_order_usage_issues where order_id::text=any(${customerOrderIds})
+        and code='source_deletion_pending' and details->>'claimId'=${deletionClaimId}`;
+      return Response.json({ error: "在庫流水が記録された注文は削除できません。注文と在庫履歴を保持してください。" }, { status: 409 });
+    }
+  }
+
+  try {
 
   for (const orderId of customerOrderIds) {
     await reverseLoyaltyForRefundedOrder(orderId, "テストデータ削除による会員特典取消");
@@ -336,4 +360,12 @@ export async function DELETE(request: Request) {
     deletedSalesOrderCount: deletedSalesRows.length,
     deletedCustomerOrderCount
   });
+  } catch {
+    return Response.json({error:"注文の削除を完了できませんでした。残っている注文を確認してください。"},{status:503});
+  } finally {
+    // Successful source deletion cascades this issue; a failed deletion leaves
+    // the original order available for an explicit inventory retry.
+    if (customerOrderIds.length) try { await sql`delete from inventory_order_usage_issues
+      where order_id::text=any(${customerOrderIds}) and code='source_deletion_pending' and details->>'claimId'=${deletionClaimId}`; } catch { /* retain the fence if the database is unavailable */ }
+  }
 }

@@ -9,6 +9,18 @@ if (!process.env.DATABASE_URL) {
 
 const sql = neon(process.env.DATABASE_URL);
 const tables = [
+  "inventory_recipes",
+  "inventory_recipe_versions",
+  "inventory_recipe_version_products",
+  "product_packaging_templates",
+  "inventory_usage_settings",
+  "inventory_product_usage_locations",
+  "inventory_order_usage_events",
+  "inventory_movements",
+  "inventory_order_usage_issues",
+  "inventory_transfers",
+  "inventory_production_operations",
+
   "stores",
   "brands",
   "store_brands",
@@ -145,6 +157,27 @@ const requiredColumns = {
     "is_active"
   ]
 };
+
+
+requiredColumns.inventory_recipes = ["create_request_payload","brand_id", "kind", "target_type", "target_id", "output_product_id", "current_version_id", "status"];
+requiredColumns.inventory_recipe_versions = ["recipe_id", "version", "snapshot"];
+requiredColumns.inventory_recipe_version_products = ["recipe_version_id", "product_id"];
+requiredColumns.product_packaging_templates = ["product_id", "supplier_id", "packaging", "create_request_payload", "status"];
+requiredColumns.inventory_usage_settings = ["enabled", "enabled_from", "trigger_mode", "revision"];
+requiredColumns.inventory_product_usage_locations = ["store_id", "product_id", "inventory_item_id"];
+requiredColumns.inventory_order_usage_events = ["order_id", "store_id", "source_snapshot", "plan_snapshot", "occurred_at"];
+requiredColumns.inventory_movements = ["operation_key", "store_id", "product_id", "inventory_item_id", "kind", "quantity", "count_unit", "confidence", "exposure", "occurred_at", "source_order_id", "source_order_item_id", "recipe_version_id", "changes_stock", "metadata"];
+requiredColumns.inventory_order_usage_issues = ["order_id", "store_id", "code", "details", "resolved_at"];
+requiredColumns.inventory_transfers = ["source_store_id", "target_store_id", "product_id", "quantity", "received_quantity", "unit", "status", "snapshot"];
+requiredColumns.inventory_production_operations = ["request_id", "action", "recipe_version_id", "transfer_id", "request_payload", "snapshot"];
+
+requiredColumns.store_customer_orders = [...(requiredColumns.store_customer_orders ?? []),"inventory_items_ready_at","inventory_source_snapshot","inventory_first_prepared_at","inventory_preparation_source_snapshot"];
+requiredColumns.inventory_items = [...(requiredColumns.inventory_items ?? []),"usage_anchor_check_id"];
+requiredColumns.inventory_checks = [...(requiredColumns.inventory_checks ?? []),"reconciliation_snapshot"];
+requiredColumns.purchase_order_items = [...(requiredColumns.purchase_order_items ?? []),"actual_packaging_snapshot"];
+requiredColumns.purchase_actuals = [...(requiredColumns.purchase_actuals ?? []),"packaging_snapshot"];
+requiredColumns.price_records = [...(requiredColumns.price_records ?? []),"packaging_snapshot"];
+requiredColumns.inventory_stock_receipts = [...(requiredColumns.inventory_stock_receipts ?? []),"batch_packaging_snapshot"];
 
 const rows = await sql`
   select table_name

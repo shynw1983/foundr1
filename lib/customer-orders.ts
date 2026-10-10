@@ -4,6 +4,7 @@ import { awardLoyaltyForPaidOrder, redeemPendingCouponForPaidOrder, reverseLoyal
 import { ensureProductionTasksForOrder } from "./order-production";
 import { syncWebReservationToSalesOrder } from "./sales-orders";
 import { getActiveStorePaymentAccount, getStorePaymentAccountById } from "./store-payment-accounts";
+import { markInventoryOrderReady } from "./inventory-order-usage";
 
 export type CustomerOrderRow = {
   id: string;
@@ -300,6 +301,7 @@ export async function createCustomerOrder(input: {
     `;
   }
 
+  await markInventoryOrderReady(orderId);
   await syncWebReservationToSalesOrder(orderId);
   return findCustomerOrderById(orderId);
 }
@@ -432,7 +434,7 @@ export async function findCustomerOrderById(orderId: string) {
       store_customer_orders.created_at as "createdAt",
       store_customer_orders.updated_at as "updatedAt",
       coalesce(store_customer_orders.paid_at::text, '') as "paidAt",
-      coalesce(store_customer_orders.preparing_at::text, '') as "preparingAt",
+      coalesce(store_customer_orders.inventory_first_prepared_at::text,store_customer_orders.preparing_at::text, '') as "preparingAt",
       coalesce(store_customer_orders.ready_at::text, '') as "readyAt",
       coalesce(store_customer_orders.completed_at::text, '') as "completedAt",
       coalesce(store_customer_orders.cancelled_at::text, '') as "cancelledAt"
@@ -572,6 +574,7 @@ export async function cancelPublicMaamaaCustomerOrder(input: { orderId?: string 
       and order_source = 'maamaa_web'
       and status in ('pending_payment', 'new')
       and preparing_at is null
+      and inventory_first_prepared_at is null
       and ready_at is null
       and completed_at is null
       and cancelled_at is null

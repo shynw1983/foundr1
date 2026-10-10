@@ -4,6 +4,7 @@ import { Link2, RefreshCw, Save, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MenuProductLinksResponse } from "../../../lib/menu-product-links";
 import { useOsTranslation } from "../components/OsTranslationProvider";
+import { InventoryRecipeEditor } from "../../../components/InventoryRecipeEditor";
 
 export function MenuProductLinksEditor({ kind, targetId }: { kind: "item" | "option"; targetId: string }) {
   const { t } = useOsTranslation();
@@ -15,6 +16,7 @@ export function MenuProductLinksEditor({ kind, targetId }: { kind: "item" | "opt
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [conflicted, setConflicted] = useState(false);
+  const [recipeOpen, setRecipeOpen] = useState(false);
   const targetKey = `${kind}:${targetId}`;
   const currentTarget = useRef(targetKey);
   currentTarget.current = targetKey;
@@ -60,6 +62,7 @@ export function MenuProductLinksEditor({ kind, targetId }: { kind: "item" | "opt
     setQuery("");
     setMessage("");
     setConflicted(false);
+    setRecipeOpen(false);
     void load(controller.signal);
     return () => { controller.abort(); ++loadSequence.current; };
   }, [load]);
@@ -112,6 +115,10 @@ export function MenuProductLinksEditor({ kind, targetId }: { kind: "item" | "opt
         </div>
         <div className="menu-product-links-footer"><small>{t("関連付け {count} 商品", { count: selectedIds.length })}</small><button className="primary-button compact-button" type="button" disabled={!changed || loading || saving || conflicted || !data.target.isActive} onClick={() => void save()}><Save size={15} />{t(saving ? "保存中" : "関連付けを保存")}</button></div>
       </> : null}
+      <details className="menu-product-links-recipe" open={recipeOpen} onToggle={event => setRecipeOpen(event.currentTarget.open)}>
+        <summary>{t("配合・注文の使用量を設定")}</summary>
+        {recipeOpen ? <InventoryRecipeEditor targetType={kind} targetId={targetId} /> : null}
+      </details>
     </section>
   );
 }

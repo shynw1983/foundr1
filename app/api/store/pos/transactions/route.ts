@@ -3,6 +3,7 @@ import { sql } from "../../../../../lib/db";
 import { reverseLoyaltyForRefundedOrder, reverseLoyaltyForRefundedOrderItem } from "../../../../../lib/loyalty";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
+import { markInventoryOrderReady } from "../../../../../lib/inventory-order-usage";
 
 export const dynamic = "force-dynamic";
 
@@ -217,6 +218,7 @@ export async function POST(request: Request) {
     if (target.paymentMethod !== "cash" && refundAmount > 0 && body.externalRefundConfirmed !== true) {
       return Response.json({ error: "外部決済端末で返金操作を完了してから、外部返金済みにチェックしてください。" }, { status: 400 });
     }
+    await sql`update store_customer_orders set inventory_items_ready_at = null where id::text = ${orderId}`;
     const itemUpdateRows = await sql`
       update store_customer_order_items
       set
@@ -260,6 +262,7 @@ export async function POST(request: Request) {
         updated_at = now()
       where id::text = ${orderId}
     `;
+    await markInventoryOrderReady(orderId);
     for (const item of refundableItems) {
       await reverseLoyaltyForRefundedOrderItem({
         orderId,

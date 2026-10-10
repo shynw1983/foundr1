@@ -163,7 +163,7 @@ test("superseding a rough observation restores exact-count and exception fallbac
   assert.equal(status(superseded), "low_stock");
   assert.equal(status(superseded, basis, { ...counted, quantity: 0, exceptionCode: "" }), "unavailable");
   assert.equal(status(superseded, basis, { ...counted, quantity: 10, exceptionCode: "" }), "available");
-  for (const patch of [{ quantity: -1 }, { quantity: Infinity }, { safetyStock: null }, { safetyStock: -1 }, { lastCountedAt: null }, { countUnit: " " }]) {
+  for (const patch of [{ quantity: Infinity }, { safetyStock: null }, { safetyStock: -1 }, { lastCountedAt: null }, { countUnit: " " }]) {
     assert.equal(policy.effectiveQuickInventoryStockStatus({ ...counted, exceptionCode: "quality", ...patch }), "available");
   }
 });
@@ -176,4 +176,9 @@ test("quick checks require a valid basis and operational roles exclude store ter
   ]) assert.equal(policy.validInventoryQuickCheckBasis(changed), false);
   for (const role of ["owner", "manager", "store_owner", "store_manager", "staff"]) assert.equal(policy.canQuickCheckInventoryRole(role), true);
   for (const role of ["store_terminal", "", "unknown"]) assert.equal(policy.canQuickCheckInventoryRole(role), false);
+});
+
+
+test("negative theoretical stock remains an actionable shortage, without becoming a physical count", () => {
+  assert.equal(policy.effectiveQuickInventoryStockStatus({quantity:-1,safetyStock:2,exceptionCode:"",lastCountedAt:"2026-10-08T12:00:00Z",countUnit:"個"}),"unavailable");
 });

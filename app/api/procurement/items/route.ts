@@ -7,6 +7,7 @@ import { assertProductsOrderable } from "../../../../lib/product-catalog-access"
 import { isHeadquarterCatalogRole } from "../../../../lib/product-catalog-policy";
 import { normalizeRecordedProcurementQuantity, resolveProcurementFeedbackConfirmation, type ProcurementFeedbackKind } from "../../../../lib/procurement-confirmation-policy";
 import { createReplenishmentOrderLocks, isReplenishmentOrderGuardConflict } from "../../../../lib/replenishment-order-locks";
+import { normalizeProductBatchPackaging, productBatchPackagingEquals, type ProductBatchPackaging } from "../../../../lib/product-packaging-policy";
 
 const additionalPurchaseNotePrefix = "追加購入";
 
@@ -158,6 +159,7 @@ export async function PATCH(request: Request) {
     purchased?: boolean;
     unavailable?: boolean;
     actualQuantity?: number;
+    actualPackaging?: unknown;
     actualQuantityRecordedExplicitly?: boolean;
     actualPrice?: string;
     supplierLocationName?: string;
@@ -397,12 +399,24 @@ export async function PATCH(request: Request) {
     (!nextProductId && nextProductName && String(itemDetail?.currentTemporaryProductName ?? "") !== nextProductName) ||
     (nextUnit && String(itemDetail?.requestedUnit ?? "") !== nextUnit)
   );
+  const hasActualPackaging = Object.prototype.hasOwnProperty.call(body, "actualPackaging");
+  const previousPackaging = (itemDetail.mutationItemSnapshot?.actual_packaging_snapshot ?? itemDetail.mutationActualSnapshot?.packaging_snapshot ?? null) as ProductBatchPackaging | null;
+  let actualPackaging: ProductBatchPackaging | null = productActuallyChanged ? null : previousPackaging;
+  if (hasActualPackaging) {
+    try { actualPackaging = body.actualPackaging === null ? null : normalizeProductBatchPackaging(body.actualPackaging); }
+    catch (error) { return Response.json({ error: error instanceof Error ? error.message : "今回の包装仕様を確認してください。" }, { status: 400 }); }
+    if (body.purchased !== true) return Response.json({ error: "実際の包装仕様は購入記録と一緒に保存してください。" }, { status: 400 });
+  }
+  const actualPackagingChanged = actualPackaging === null ? previousPackaging !== null : !productBatchPackagingEquals(actualPackaging, previousPackaging);
+  const actualPurchaseUnit = actualPackaging?.purchaseUnit ?? String(itemDetail.requestedUnit ?? "");
+  if(splitRemaining && actualPurchaseUnit!==String(itemDetail.requestedUnit??"")) return Response.json({error:"実際の購入単位が依頼単位と異なる場合、残数を自動で分割できません。依頼単位の残数を確認して別明細で登録してください。"},{status:409});
   const receiptFactsWouldChange = productActuallyChanged
+    || actualPackagingChanged
     || body.purchased === false || body.unavailable === true || splitRemaining
     || (requestedQuantity !== null && requestedQuantity !== currentRequestedQuantity)
     || (actualQuantity !== null && actualQuantity !== Number(itemDetail.currentActualQuantity))
     || (requestedDeliveryStatus !== "" && requestedDeliveryStatus !== "received" && requestedDeliveryStatus !== currentStatus)
-    || (body.purchased === true && String(itemDetail.mutationActualSnapshot?.actual_unit ?? "") !== String(itemDetail.requestedUnit ?? ""));
+    || (body.purchased === true && String(itemDetail.mutationActualSnapshot?.actual_unit ?? "") !== actualPurchaseUnit);
   if (receiptFactsWouldChange) {
     const postedReceipts = await sql`
       select id from inventory_stock_receipts where purchase_order_item_id = ${body.itemId}::uuid limit 1
@@ -663,6 +677,10 @@ export async function PATCH(request: Request) {
         when ${body.unavailable === true} then 0
         else coalesce(${actualQuantity}, actual_quantity)
       end,
+      actual_packaging_snapshot = case
+        when ${body.purchased === false || body.unavailable === true || productActuallyChanged || hasActualPackaging} then ${actualPackaging === null || body.purchased === false || body.unavailable === true ? null : JSON.stringify(actualPackaging)}::jsonb
+        else actual_packaging_snapshot
+      end,
       actual_price = case
         when ${body.unavailable === true} then null
         when ${hasActualPrice} then ${Number.isFinite(actualPrice) ? actualPrice : null}
@@ -783,17 +801,19 @@ export async function PATCH(request: Request) {
         actual_unit,
         actual_price,
         price_is_exception,
-        note
+        note,
+        packaging_snapshot
       )
       select
         purchase_order_items.id,
         coalesce(${supplierId}::uuid, purchase_order_items.selected_supplier_id),
         ${supplierLocationId}::uuid,
         coalesce(${actualQuantity}::numeric, purchase_order_items.actual_quantity, ${recordedActualQuantity}::numeric),
-        purchase_order_items.requested_unit,
+        coalesce(purchase_order_items.actual_packaging_snapshot->>'purchaseUnit', purchase_order_items.requested_unit),
         ${Number.isFinite(purchaseRecordPrice) ? purchaseRecordPrice : null},
         false,
-        ${hasNote ? note : itemDetail?.currentNote ?? ""}
+        ${hasNote ? note : itemDetail?.currentNote ?? ""},
+        purchase_order_items.actual_packaging_snapshot
       from purchase_order_items
       where purchase_order_items.id = ${body.itemId}
     `);
@@ -813,16 +833,18 @@ export async function PATCH(request: Request) {
           unit,
           source,
           receipt_note,
-          recorded_by
+          recorded_by,
+          packaging_snapshot
         )
         select
           purchase_order_items.product_id,
           coalesce(${supplierId}::uuid, purchase_order_items.selected_supplier_id),
           ${purchaseRecordPrice},
-          purchase_order_items.requested_unit,
+          coalesce(purchase_order_items.actual_packaging_snapshot->>'purchaseUnit', purchase_order_items.requested_unit),
           'purchase_actual',
           ${body.itemId},
-          ${session.id}
+          ${session.id},
+          purchase_order_items.actual_packaging_snapshot
         from purchase_order_items
         where purchase_order_items.id = ${body.itemId}
           and purchase_order_items.product_id is not null

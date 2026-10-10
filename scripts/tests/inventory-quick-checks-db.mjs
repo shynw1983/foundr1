@@ -57,11 +57,18 @@ try {
   const beforeMigration=(await db.query('select current_quantity,stock_quantity,last_counted_at,count_conversion_snapshot,stock_conversion_snapshot from inventory_items order by id')).rows;
   const migration=readFileSync(new URL('db/migrations/20261009_inventory_quick_checks.sql',root),'utf8');
   await db.exec(migration);await db.exec(migration);
+  const movementSchema=readFileSync(new URL('db/migrations/20261011_inventory_order_usage.sql',root),'utf8').match(/create table if not exists inventory_movements[\s\S]+?\n\);/)[0];
+  await db.exec(movementSchema);
+  await db.exec(readFileSync(new URL('db/migrations/20261011_inventory_usage_reconciliation.sql',root),'utf8'));
+  await db.exec(`create table inventory_order_usage_issues(id uuid primary key default gen_random_uuid(),order_id uuid,store_id uuid,created_at timestamptz default now(),resolved_at timestamptz);
+    create table inventory_stock_receipts(id uuid primary key,inventory_item_id uuid,mode text,conversion_snapshot jsonb,batch_packaging_snapshot jsonb);`);
   assert.deepEqual((await db.query('select current_quantity,stock_quantity,last_counted_at,count_conversion_snapshot,stock_conversion_snapshot from inventory_items order by id')).rows,beforeMigration);
   const policy=load('lib/inventory-quick-policy.ts');
   const units=load('lib/product-unit-conversions.ts');
+  const countInput=load('lib/inventory-count-input-policy.ts',{'./product-unit-conversions':units});
   const route=load('app/api/inventory/route.ts',{
     '../../../lib/inventory-quick-policy':policy,'../../../lib/product-unit-conversions':units,
+    '../../../lib/inventory-count-input-policy':countInput,
     '../../../lib/product-catalog-access':{getVisibleProductIdsForStore:async()=>[ids.product],assertProductViewableAtStore:async()=>({ok:true})}
   });
   const get=async()=>(await route.GET(new Request(`https://example.test/api/inventory?storeId=${ids.store}`))).json();

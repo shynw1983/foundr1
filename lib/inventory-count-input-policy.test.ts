@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {readFileSync} from "node:fs";
+import {runInNewContext} from "node:vm";
+import ts from "typescript";
+import * as units from "./product-unit-conversions.ts";
+const policy:Record<string,any>={};runInNewContext(ts.transpileModule(readFileSync(new URL("./inventory-count-input-policy.ts",import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:policy,require:()=>units});
+test("half a verified twenty-piece bag enters an exact piece count",()=>{const value=policy.normalizeInventoryCountInput("1/2","袋","個",{unit:"袋",packageQuantity:20,packageQuantityUnit:"個"});assert.equal(value.quantity,10);assert.equal(value.enteredQuantity,0.5);assert.equal(value.enteredUnit,"袋");});
+test("a fractional unit needs no rounding while its stored unit is literal",()=>{assert.equal(policy.normalizeInventoryCountInput(1,"1/3袋","1/3袋",{unit:"袋"}).quantity,1);assert.throws(()=>policy.normalizeInventoryCountInput(1,"1/3袋","個",{unit:"袋",packageQuantity:20,packageQuantityUnit:"個",inventoryUnitConversions:[{unit:"1/3袋",unitsPerPurchase:3,fractionalDenominator:3}]}));});
+test("a valid large conversion cannot silently lose a sixth decimal through Number",()=>{assert.throws(()=>policy.normalizeInventoryCountInput(9,"箱","g",{unit:"箱",inventoryUnitConversions:[{unit:"g",unitsPerPurchase:999999999.999999}]}));});

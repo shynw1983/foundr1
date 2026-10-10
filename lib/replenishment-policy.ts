@@ -106,6 +106,13 @@ export function nullableReplenishmentNumber(value: unknown): number | null {
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
+/** Signed theoretical stock can be negative; requested/purchased/count facts remain non-negative. */
+export function nullableReplenishmentStock(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 export function hasDirectMenuReplenishmentSignal(row: ReplenishmentMenuRow) {
   if (row.stockStatus === "low_stock") return true;
   if (row.stockStatus !== "unavailable") return false;
@@ -118,7 +125,7 @@ export function hasDirectMenuReplenishmentSignal(row: ReplenishmentMenuRow) {
 
 export function inventoryReplenishmentSignal(row: ReplenishmentInventoryRow): ReplenishmentStockStatus | null {
   const status = effectiveQuickInventoryStockStatus({
-    quantity: nullableReplenishmentNumber(row.quantity), safetyStock: nullableReplenishmentNumber(row.safetyStock),
+    quantity: nullableReplenishmentStock(row.quantity), safetyStock: nullableReplenishmentNumber(row.safetyStock),
     exceptionCode: row.exceptionCode, lastCountedAt: row.lastCountedAt, countUnit: row.countUnit, quickCheck: row.quickCheck
   });
   return status === "available" ? null : status;
@@ -196,7 +203,7 @@ export function deriveReplenishmentSnapshot(input: {
     const stockStatus = inventoryReplenishmentSignal(row);
     if (!stockStatus) continue;
     const countedAt = row.lastCountedAt ? Date.parse(row.lastCountedAt) : NaN;
-    const quantity = nullableReplenishmentNumber(row.quantity);
+    const quantity = nullableReplenishmentStock(row.quantity);
     const countConfidence = quantity === null || !row.countUnit.trim() || !Number.isFinite(countedAt)
       ? "unknown" : now - countedAt > 7 * 24 * 60 * 60 * 1000 || countedAt > now ? "stale" : "confirmed";
     addSource(row.productId, {

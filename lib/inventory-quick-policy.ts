@@ -135,10 +135,10 @@ export function effectiveQuickInventoryStockStatus(input: {
   }
   if (input.exceptionCode === "out") return "unavailable";
   if (input.exceptionCode === "low") return "low_stock";
-  if (input.quantity !== null && Number.isFinite(input.quantity) && input.quantity >= 0
+  if (input.quantity !== null && Number.isFinite(input.quantity)
     && input.safetyStock !== null && Number.isFinite(input.safetyStock) && input.safetyStock >= 0
     && input.lastCountedAt && input.countUnit.trim() && input.quantity <= input.safetyStock) {
-    return input.quantity === 0 ? "unavailable" : "low_stock";
+    return input.quantity <= 0 ? "unavailable" : "low_stock";
   }
   return "available";
 }

@@ -10,6 +10,7 @@ import { normalizePosPrinterSettings } from "../../../../lib/pos-printer";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
 import { markDiningOrdersPaid } from "../../../../lib/store-dining-sessions";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
+import { markInventoryOrderReady } from "../../../../lib/inventory-order-usage";
 
 export const dynamic = "force-dynamic";
 
@@ -767,6 +768,7 @@ async function refreshTableQrOrderAfterAdjustment(input: {
       where order_id::text = ${input.orderId}
         and status <> 'ready'
     `;
+    await markInventoryOrderReady(input.orderId);
     publishPosOrderEventAfterResponse("order.updated", input.orderId);
     return;
   }
@@ -781,6 +783,7 @@ async function refreshTableQrOrderAfterAdjustment(input: {
     where id::text = ${input.orderId}
   `;
   await sql`delete from order_production_tasks where order_id::text = ${input.orderId} and status <> 'ready'`;
+  await markInventoryOrderReady(input.orderId);
   await ensureProductionTasksForOrder(input.orderId);
   publishPosOrderEventAfterResponse("order.updated", input.orderId);
 }
@@ -875,6 +878,7 @@ export async function PATCH(request: Request) {
   if (order.paymentStatus === "paid") return Response.json({ error: "支払い済みのテーブル注文は修正できません。" }, { status: 409 });
 
   if (action === "cancel_order") {
+    await sql`update store_customer_orders set inventory_items_ready_at = null where id::text = ${orderId}`;
     await sql`delete from store_customer_order_items where order_id::text = ${orderId}`;
     await refreshTableQrOrderAfterAdjustment({ orderId, sessionId: session.id, reason: "cancel_order" });
     return Response.json({
@@ -898,6 +902,7 @@ export async function PATCH(request: Request) {
   const item = itemRows[0] as { id: string; quantity: number; amount: number } | undefined;
   if (!item) return Response.json({ error: "対象の商品が見つかりません。" }, { status: 404 });
 
+  await sql`update store_customer_orders set inventory_items_ready_at = null where id::text = ${orderId}`;
   if (action === "cancel_item" || nextQuantity <= 0) {
     await sql`delete from store_customer_order_items where id::text = ${itemId} and order_id::text = ${orderId}`;
     await refreshTableQrOrderAfterAdjustment({ orderId, sessionId: session.id, reason: "cancel_item" });
@@ -1514,12 +1519,7 @@ export async function POST(request: Request) {
 
   for (let index = 0; index < normalizedItems.length; index += 1) {
     const item = normalizedItems[index];
-    const selectedOptions = "selectedOptions" in item ? item.selectedOptions as Array<{
-      optionKey: string;
-      name: string;
-      groupKey: string;
-      groupName: string;
-    }> : [];
+    const selectedOptions = item.selectedOptions;
     const groupLabels = new Map<string, string[]>();
     for (const option of selectedOptions) {
       const labels = groupLabels.get(option.groupKey) ?? [];
@@ -1534,6 +1534,15 @@ export async function POST(request: Request) {
       .filter((option) => option.groupKey === "option")
       .map((option) => option.name);
     const toppingOptions = selectedOptions.filter((option) => option.groupKey === "topping" || !["size", "temperature", "sweetness", "ice", "option"].includes(option.groupKey));
+    const customizations = Array.from(new Set(selectedOptions.map((option) => option.groupId))).map((groupId) => {
+      const options = selectedOptions.filter((option) => option.groupId === groupId);
+      const group = options[0];
+      return {
+        groupId, groupKey: group.groupKey, groupName: group.groupName, selectionType: getEffectiveSelectionType(group),
+        optionIds: options.map((option) => option.id), optionKeys: options.map((option) => option.optionKey),
+        optionLabels: options.map((option) => option.name), optionPrices: options.map((option) => option.priceDelta)
+      };
+    });
     await sql`
       insert into store_customer_order_items (
         order_id,
@@ -1548,6 +1557,7 @@ export async function POST(request: Request) {
         option_label,
         topping_keys,
         topping_labels,
+        customizations,
         quantity,
         measured_quantity,
         measured_unit,
@@ -1573,6 +1583,7 @@ export async function POST(request: Request) {
         ${optionLabels.join(", ")},
         ${toppingOptions.map((option) => option.optionKey)},
         ${toppingOptions.map((option) => option.name)},
+        ${JSON.stringify(customizations)}::jsonb,
         ${item.quantity},
         ${item.measuredQuantity},
         ${item.measuredUnit},
@@ -1588,6 +1599,7 @@ export async function POST(request: Request) {
     `;
   }
 
+  await markInventoryOrderReady(orderId);
   await ensureProductionTasksForOrder(orderId);
   const loyaltyMember = await awardLoyaltyForPaidOrder(orderId);
   await syncWebReservationToSalesOrder(orderId);

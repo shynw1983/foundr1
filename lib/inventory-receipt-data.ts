@@ -2,6 +2,8 @@ import type { EmployeeSession } from "./auth";
 import { sql } from "./db";
 import { createReplenishmentOrderLocks } from "./replenishment-order-locks";
 import { resolveProductUnitConversion, type ProductUnitConversionSnapshot } from "./product-unit-conversions";
+import { normalizeProductBatchPackaging } from "./product-packaging-policy";
+import { readProductPackagingTemplates } from "./product-packaging-data";
 import {
   InventoryReceiptError, inventoryReceiptSourceBlockedReason, inventoryReceiptTargetBlockedReason, validateInventoryReceipt,
   type InventoryReceiptInventoryItem, type InventoryReceiptPayload, type InventoryReceiptRecord,
@@ -14,6 +16,7 @@ function number(value: unknown): number | null {
   return Number.isFinite(result) && result >= 0 ? result : null;
 }
 function textOrNull(value: unknown) { return value === null || value === undefined || value === "" ? null : String(value); }
+function signedNumber(value:unknown) { if(value===null || value===undefined || value==="") return null;const result=Number(value);return Number.isFinite(result) ? result:null; }
 function mapSource(row: Record<string, unknown>): InventoryReceiptSource {
   const expectedSource = row.expectedSource as InventoryReceiptSourceSnapshot;
   const source = {
@@ -25,13 +28,14 @@ function mapSource(row: Record<string, unknown>): InventoryReceiptSource {
       quantity: Number(group.quantity), purchaseUnit: String(group.purchaseUnit)
     })), remainingPurchaseQuantity: null as number | null,
     blockedReason: null as string | null, unverifiedBlockedReason: null as string | null, unverifiedRemainingPurchaseQuantity: null as number | null,
-    correctionHref: `/os/orders?order=${encodeURIComponent(String(row.orderNo))}`, expectedSource
+    correctionHref: `/os/orders?order=${encodeURIComponent(String(row.orderNo))}`, expectedSource,
+    actualPackaging: expectedSource.actualPackaging ? normalizeProductBatchPackaging(expectedSource.actualPackaging):null
   };
-  const matchingUnits = Boolean(source.actualUnit && source.actualUnit === source.purchaseUnit &&
+  const matchingUnits = Boolean(source.actualUnit && (source.actualPackaging || source.actualUnit === source.purchaseUnit) &&
     source.receivedPurchaseUnits.every(group => group.quantity <= 0 || group.purchaseUnit === source.actualUnit));
   source.remainingPurchaseQuantity = source.actualQuantity === null || !matchingUnits ? null
     : Math.max(0, Number((source.actualQuantity - source.receivedPurchaseQuantity).toFixed(6)));
-  source.blockedReason = inventoryReceiptSourceBlockedReason(source);
+  source.blockedReason = inventoryReceiptSourceBlockedReason(source,source.actualPackaging ? "unverified":"add");
   source.unverifiedBlockedReason = inventoryReceiptSourceBlockedReason(source, "unverified");
   const matchingRecordedUnits = Boolean(source.actualUnit && source.receivedPurchaseUnits.every(group => group.quantity <= 0 || group.purchaseUnit === source.actualUnit));
   source.unverifiedRemainingPurchaseQuantity = source.actualQuantity === null || !matchingRecordedUnits ? null
@@ -58,7 +62,8 @@ async function sourceRows(storeId?: string, orderNo?: string, itemId?: string) {
           then nullif(btrim(actuals.actual_unit), '') else null end,
         'latestActualId', actuals.id::text, 'latestActualQuantity', actuals.actual_quantity,
         'latestActualUnit', nullif(btrim(actuals.actual_unit), ''), 'latestActualRecordedAt', actuals.recorded_at::text,
-        'deliveryBatchId', batches.id::text, 'deliveryBatchStatus', batches.status
+        'deliveryBatchId', batches.id::text, 'deliveryBatchStatus', batches.status,
+        'actualPackaging',coalesce(items.actual_packaging_snapshot,actuals.packaging_snapshot)
       ) as "expectedSource"
     from purchase_order_items items join purchase_orders orders on orders.id = items.purchase_order_id
     join stores on stores.id = orders.store_id and stores.status = 'active'
@@ -100,12 +105,14 @@ function mapTarget(row: Record<string, unknown>): InventoryReceiptInventoryItem 
   const target: InventoryReceiptInventoryItem = {
     id: String(row.id), storeId: String(row.storeId), productId: String(row.productId), productName: String(row.productName),
     locationId: String(row.locationId), locationName: String(row.locationName), countUnit: String(row.countUnit),
-    currentQuantity: number(row.currentQuantity), stockQuantity: number(row.stockQuantity), stockRevision: Number(row.stockRevision),
+    currentQuantity: number(row.currentQuantity), stockQuantity: signedNumber(row.stockQuantity), stockRevision: Number(row.stockRevision),
     currentConversion: resolveProductUnitConversion({ unit: String(row.purchaseUnit), packageQuantity: row.packageQuantity as number | null,
       packageQuantityUnit: String(row.packageQuantityUnit ?? ""), inventoryUnitConversions: row.inventoryUnitConversions }, String(row.countUnit)),
     countConversionSnapshot: (row.countConversionSnapshot ?? null) as ProductUnitConversionSnapshot | null,
     stockConversionSnapshot: (row.stockConversionSnapshot ?? null) as ProductUnitConversionSnapshot | null,
-    lastCountedAt: textOrNull(row.lastCountedAt), lastReceivedAt: textOrNull(row.lastReceivedAt), addBlockedReason: null, includedBlockedReason: null, unverifiedBlockedReason: null
+    lastCountedAt: textOrNull(row.lastCountedAt), lastReceivedAt: textOrNull(row.lastReceivedAt), addBlockedReason: null, includedBlockedReason: null, unverifiedBlockedReason: null,
+    batchAddBlockedReason:signedNumber(row.stockQuantity)===null ? "stock_unknown":null,
+    batchIncludedBlockedReason:signedNumber(row.stockQuantity)===null ? "stock_unknown":number(row.currentQuantity)===null || !row.lastCountedAt ? "count_unknown":null
   };
   target.addBlockedReason = inventoryReceiptTargetBlockedReason(target, "add");
   target.includedBlockedReason = inventoryReceiptTargetBlockedReason(target, "included");
@@ -118,7 +125,8 @@ function mapReceipt(row: Record<string, unknown>): InventoryReceiptRecord {
     purchaseQuantity: Number(row.purchaseQuantity), purchaseUnit: String(row.purchaseUnit), countQuantity: number(row.countQuantity), countUnit: String(row.countUnit),
     mode: row.mode === "unverified" ? "unverified" : row.mode === "included" ? "included" : "add",
     conversionSnapshot: (row.conversionSnapshot ?? null) as ProductUnitConversionSnapshot | null,
-    beforeStockQuantity: number(row.beforeStockQuantity), afterStockQuantity: number(row.afterStockQuantity),
+    beforeStockQuantity: signedNumber(row.beforeStockQuantity), afterStockQuantity: signedNumber(row.afterStockQuantity),
+    batchPackaging:row.batchPackaging ? normalizeProductBatchPackaging(row.batchPackaging):null,
     recordedBy: String(row.recordedBy ?? ""), createdAt: String(row.createdAt)
   };
 }
@@ -128,7 +136,7 @@ async function receiptRows(storeId?: string, orderNo?: string, requestId?: strin
       receipts.inventory_item_id::text as "inventoryItemId", receipts.store_id::text as "storeId", orders.order_no as "orderNo",
       products.name as "productName", locations.name as "locationName", receipts.purchase_quantity::float as "purchaseQuantity",
       receipts.purchase_unit as "purchaseUnit", receipts.count_quantity::float as "countQuantity", receipts.count_unit as "countUnit", receipts.mode,
-      receipts.conversion_snapshot as "conversionSnapshot",
+      receipts.conversion_snapshot as "conversionSnapshot",receipts.batch_packaging_snapshot as "batchPackaging",
       receipts.before_stock_quantity::float as "beforeStockQuantity", receipts.after_stock_quantity::float as "afterStockQuantity",
       receipts.recorded_by_name as "recordedBy", receipts.created_at::text as "createdAt", receipts.request_payload as "requestPayload"
     from inventory_stock_receipts receipts join purchase_orders orders on orders.id = receipts.purchase_order_id
@@ -150,7 +158,8 @@ export async function readInventoryReceiptResponse(storeId: string, canReceive: 
   const [sourcesRaw, receiptsRaw] = await Promise.all([sourceRows(storeId, orderNo), receiptRows(storeId, orderNo)]);
   const sources = sourcesRaw.map(mapSource);
   const targetsRaw = await targetRows(storeId, [...new Set(sources.map(source => source.productId))]);
-  return { store: { id: storeId, name: String(stores[0].name) }, sources, inventoryItems: targetsRaw.map(mapTarget), recentReceipts: receiptsRaw.map(mapReceipt), canReceive };
+  return { store: { id: storeId, name: String(stores[0].name) }, sources, inventoryItems: targetsRaw.map(mapTarget), recentReceipts: receiptsRaw.map(mapReceipt), canReceive,
+    packagingTemplates:await readProductPackagingTemplates([...new Set(sources.map(source=>source.productId))],false) };
 }
 
 /** Stable source identity, deterministic shared procurement locks, then product/source/stock row locks. */
@@ -160,6 +169,7 @@ export async function recordInventoryReceipt(session: EmployeeSession, payload: 
   const target = mapTarget(targetRaw);
   if (source.orderNo.startsWith("RCPT-")) throw new InventoryReceiptError("レシート補録は入庫元に指定できません。", 409, "source_not_eligible");
   const quantities = validateInventoryReceipt(payload, source, target);
+  const batchPackaging=source.actualPackaging ?? payload.batchPackaging ?? null;
   const requestPayload = JSON.stringify(payload);
   const results = await sql.transaction([
     sql`select pg_advisory_xact_lock(hashtextextended(${`inventory-receipt-request:${payload.requestId}`}, 0))`,
@@ -186,13 +196,16 @@ export async function recordInventoryReceipt(session: EmployeeSession, payload: 
                 then nullif(btrim(actuals.actual_unit), '') else null end,
               'latestActualId', actuals.id::text, 'latestActualQuantity', actuals.actual_quantity,
               'latestActualUnit', nullif(btrim(actuals.actual_unit), ''), 'latestActualRecordedAt', actuals.recorded_at::text,
-              'deliveryBatchId', batches.id::text, 'deliveryBatchStatus', batches.status
+              'deliveryBatchId', batches.id::text, 'deliveryBatchStatus', batches.status,
+              'actualPackaging',coalesce(items.actual_packaging_snapshot,actuals.packaging_snapshot)
             ) = ${JSON.stringify(payload.expectedSource)}::jsonb
             and coalesce((select sum(receipts.purchase_quantity) from inventory_stock_receipts receipts where receipts.purchase_order_item_id = items.id), 0)
               + ${payload.purchaseQuantity}::numeric <= coalesce(items.actual_quantity, actuals.actual_quantity)
             and not exists(select 1 from inventory_stock_receipts receipts where receipts.purchase_order_item_id = items.id
               and receipts.purchase_unit is distinct from ${source.actualUnit})
-            and (${payload.mode === "unverified"} or (p.unit = ${source.actualUnit} and p.unit = ${targetRaw.purchaseUnit}
+            and (${batchPackaging===null} or not exists(select 1 from inventory_stock_receipts receipts where receipts.purchase_order_item_id=items.id
+              and receipts.batch_packaging_snapshot is distinct from ${batchPackaging===null ? null:JSON.stringify(batchPackaging)}::jsonb))
+            and (${payload.mode === "unverified" || batchPackaging!==null} or (p.unit = ${source.actualUnit} and p.unit = ${targetRaw.purchaseUnit}
               and p.package_quantity is not distinct from ${targetRaw.packageQuantity}::numeric
               and p.package_quantity_unit is not distinct from ${targetRaw.packageQuantityUnit}
               and p.inventory_unit_conversions = ${JSON.stringify(targetRaw.inventoryUnitConversions ?? [])}::jsonb))
@@ -208,13 +221,16 @@ export async function recordInventoryReceipt(session: EmployeeSession, payload: 
         ))
       ) valid
     `,
+    sql`update purchase_order_items set actual_packaging_snapshot=${batchPackaging===null ? null:JSON.stringify(batchPackaging)}::jsonb
+      where id::text=${source.purchaseOrderItemId} and ${batchPackaging!==null}
+        and not exists(select 1 from inventory_stock_receipts where request_id::text=${payload.requestId})`,
     sql`
       update inventory_items set
         stock_quantity = case when ${payload.mode === "unverified"} then null when ${payload.mode === "add"} then ${quantities.afterStockQuantity}::numeric else stock_quantity end,
-        stock_conversion_snapshot = case when ${payload.mode === "unverified"} then null when ${payload.mode === "add"} then ${JSON.stringify(target.currentConversion)}::jsonb else stock_conversion_snapshot end,
+        stock_conversion_snapshot = case when ${payload.mode === "unverified"} then null when ${payload.mode === "add" && batchPackaging===null} then ${JSON.stringify(target.currentConversion)}::jsonb else stock_conversion_snapshot end,
         stock_revision = stock_revision + 1, last_received_at = now(), updated_at = now(),
         exception_code = case when ${payload.mode === "add"} and exception_code in ('', 'low', 'out') then
-          case when ${quantities.afterStockQuantity}::numeric = 0 then 'out'
+          case when ${quantities.afterStockQuantity}::numeric <= 0 then 'out'
             when ${quantities.afterStockQuantity}::numeric <= safety_stock then 'low' else '' end else exception_code end,
         exception_note = case when ${payload.mode === "add"} and exception_code in ('', 'low', 'out') then '' else exception_note end
       where id::text = ${target.id} and not exists(select 1 from inventory_stock_receipts where request_id::text = ${payload.requestId})
@@ -222,16 +238,26 @@ export async function recordInventoryReceipt(session: EmployeeSession, payload: 
     sql`
       insert into inventory_stock_receipts(request_id,purchase_order_item_id,purchase_order_id,store_id,product_id,inventory_item_id,
         purchase_quantity,purchase_unit,count_quantity,count_unit,mode,before_stock_quantity,after_stock_quantity,
-        conversion_snapshot,source_snapshot,request_payload,recorded_by,recorded_by_name)
+        conversion_snapshot,source_snapshot,request_payload,recorded_by,recorded_by_name,batch_packaging_snapshot)
       select ${payload.requestId}::uuid,${source.purchaseOrderItemId}::uuid,${source.purchaseOrderId}::uuid,${source.storeId}::uuid,
         ${source.productId}::uuid,${target.id}::uuid,${payload.purchaseQuantity},${source.actualUnit},${quantities.countQuantity},${target.countUnit},${payload.mode},
         ${target.stockQuantity},${quantities.afterStockQuantity},${quantities.conversionSnapshot === null ? null : JSON.stringify(quantities.conversionSnapshot)}::jsonb,
-        ${JSON.stringify(source.expectedSource)}::jsonb,${requestPayload}::jsonb,${session.id}::uuid,${session.name ?? ""}
+        ${JSON.stringify(source.expectedSource)}::jsonb,${requestPayload}::jsonb,${session.id}::uuid,${session.name ?? ""},${batchPackaging===null ? null:JSON.stringify(batchPackaging)}::jsonb
       where not exists(select 1 from inventory_stock_receipts where request_id::text = ${payload.requestId})
       returning id::text
-    `
+    `,
+    sql`insert into inventory_movements(operation_key,store_id,product_id,inventory_item_id,kind,quantity,count_unit,confidence,
+      occurred_at,before_quantity,after_quantity,changes_stock,metadata)
+      select 'receipt:'||receipts.id::text,receipts.store_id,receipts.product_id,receipts.inventory_item_id,'receipt',
+        case when receipts.mode='included' then 0 else receipts.count_quantity end,receipts.count_unit,
+        case when receipts.mode='unverified' then 'unmeasured' else 'exact' end,receipts.created_at,
+        receipts.before_stock_quantity,receipts.after_stock_quantity,receipts.mode='add',
+        jsonb_build_object('receiptId',receipts.id::text,'requestId',receipts.request_id::text,'mode',receipts.mode,
+          'balanceUnknown',receipts.mode='unverified','quantityUnknown',receipts.mode='unverified','batchPackaging',receipts.batch_packaging_snapshot,'conversion',receipts.conversion_snapshot)
+      from inventory_stock_receipts receipts where receipts.request_id::text=${payload.requestId}
+      on conflict(operation_key) do nothing`
   ]);
   const recorded = await readInventoryReceiptByRequest(payload.requestId);
   if (!recorded) throw new InventoryReceiptError("入庫を保存できませんでした。", 500, "receipt_missing");
-  return { receipt: recorded.receipt, replayed: !results[results.length - 1]?.[0]?.id };
+  return { receipt: recorded.receipt, replayed: !results[results.length - 2]?.[0]?.id };
 }

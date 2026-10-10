@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import * as observations from "./inventory-observation-policy.ts";
 import * as units from "./product-unit-conversions.ts";
+const countInputs={ normalizeInventoryCountInput: () => ({quantity:0}) };
 
 const storeA = "00000000-0000-4000-8000-000000000001";
 const storeB = "00000000-0000-4000-8000-000000000002";
@@ -38,10 +39,12 @@ function pageHarness(search: string) {
     "../components/ActionNotice": { useActionNotice: () => ({ notice: null, showNotice() {}, clearNotice() {} }) },
     "../../../components/ReplenishmentPanel": { ReplenishmentPanel: "ReplenishmentPanel" },
     "../../../components/StockReceiptPanel": { StockReceiptPanel: "StockReceiptPanel" },
+    "../../../components/InventoryUsagePanel": { InventoryUsagePanel: () => null },
+    "../../../components/ManufacturingPanel": { ManufacturingPanel: () => null },
     "../../../components/QuickInventoryList": { QuickInventoryList: "QuickInventoryList" },
     "../components/MobileNavMenu": {}, "../components/OsNavList": {}, "../components/UserBadge": {},
     "../components/OsTranslationProvider": { useOsTranslation: () => ({ t: (value: string) => value, language: "ja" }) },
-    "../../../lib/inventory-observation-policy": observations, "../../../lib/product-unit-conversions": units
+    "../../../lib/inventory-count-input-policy": countInputs, "../../../lib/inventory-observation-policy": observations, "../../../lib/product-unit-conversions": units
   };
   runInNewContext(ts.transpileModule(readFileSync(new URL("../app/os/inventory/page.tsx", import.meta.url), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX }

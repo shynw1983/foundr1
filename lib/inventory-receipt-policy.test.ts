@@ -7,10 +7,15 @@ import * as unitPolicy from "./product-unit-conversions.ts";
 import type { InventoryReceiptInventoryItem, InventoryReceiptSource, InventoryReceiptPayload } from "./inventory-receipt-policy";
 
 const exports: Record<string, any> = {};
+const packagingPolicy: Record<string,any> = {};
+runInNewContext(ts.transpileModule(readFileSync(new URL("./product-packaging-policy.ts",import.meta.url),"utf8"),{
+  compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}
+}).outputText,{exports:packagingPolicy,require:(name:string)=>{if(name==="./product-unit-conversions")return unitPolicy;throw Error(name);}});
 runInNewContext(ts.transpileModule(readFileSync(new URL("./inventory-receipt-policy.ts", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText, { exports, require: (name: string) => {
   if (name === "./product-unit-conversions") return unitPolicy;
+  if (name === "./product-packaging-policy") return packagingPolicy;
   throw new Error(`Unknown policy dependency ${name}`);
 } });
 const policy = exports;
@@ -36,6 +41,27 @@ function payload(patch: Partial<InventoryReceiptPayload> = {}): InventoryReceipt
 function errorCode(callback: () => unknown, code: string) {
   assert.throws(callback, (error: any) => error.code === code);
 }
+test("a literal batch supplies only its incoming factor and never relabels existing base stock",()=>{
+  const batchPackaging={purchaseUnit:"袋",contentQuantity:800,contentUnit:"g",countUnit:"g",stockQuantityPerPurchase:800};
+  const batchTarget={...target,countUnit:"g",currentConversion:null,stockConversionSnapshot:null,countConversionSnapshot:null,stockQuantity:1000};
+  const result=policy.validateInventoryReceipt(payload({purchaseQuantity:0.5,expectedConversion:null,batchPackaging}),{...source,purchaseUnit:"箱"},batchTarget);
+  assert.equal(result.countQuantity,400);assert.equal(result.afterStockQuantity,1400);
+  errorCode(()=>policy.validateInventoryReceipt(payload({expectedConversion:null,batchPackaging}),source,{...batchTarget,countUnit:"袋"}),"batch_unit_mismatch");
+  errorCode(()=>policy.validateInventoryReceipt(payload({expectedConversion:null,batchPackaging:{...batchPackaging,contentQuantity:1000,stockQuantityPerPurchase:1000}}),
+    {...source,actualPackaging:batchPackaging},batchTarget),"batch_packaging_changed");
+});
+test("receipt addition preserves signed theoretical deficits rather than clipping them to zero",()=>{
+  assert.equal(policy.addInventoryReceiptQuantities(-10,1.5),-8.5);
+  const result=policy.validateInventoryReceipt(payload(),source,{...target,stockQuantity:-10});
+  assert.equal(result.afterStockQuantity,-8.5);assert.equal(target.currentQuantity,4);
+});
+test("unverified can skip conversion but cannot freeze a batch under the wrong purchase or destination unit",()=>{
+  const batchPackaging={purchaseUnit:"袋",contentQuantity:12,contentUnit:"個",countUnit:"個",stockQuantityPerPurchase:12};
+  for(const batch of [{...batchPackaging,purchaseUnit:"箱"},{...batchPackaging,countUnit:"g"}]) {
+    errorCode(()=>policy.validateInventoryReceipt(payload({mode:"unverified",expectedConversion:null,batchPackaging:batch}),source,{...target,stockQuantity:null,currentConversion:null}),"batch_unit_mismatch");
+  }
+  assert.equal(policy.validateInventoryReceipt(payload({mode:"unverified",expectedConversion:null,batchPackaging}),source,{...target,stockQuantity:null,currentConversion:null}).countQuantity,null);
+});
 
 test("partial receipt adds exact count units while included leaves book and physical facts unchanged", () => {
   const before = JSON.stringify(target);

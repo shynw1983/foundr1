@@ -4,6 +4,7 @@ import { reverseLoyaltyForRefundedOrderItem } from "./loyalty";
 import { ensureProductionTasksForOrder } from "./order-production";
 import { syncWebReservationToSalesOrder } from "./sales-orders";
 import { calculateShortageRefundAmount, canHandleShortageAsSeparateOption } from "./store-order-shortage-rules";
+import { markInventoryOrderReady } from "./inventory-order-usage";
 
 type StoredCustomization = {
   groupId?: string;
@@ -250,6 +251,7 @@ export async function handleStoreOrderShortage(input: {
     paymentRefundId = refund.refundId;
   }
 
+  await sql`update store_customer_orders set inventory_items_ready_at = null where id::text = ${input.orderId}`;
   if (targetType === "item" && input.actionType === "replace") {
     await sql`
       update store_customer_order_items
@@ -328,6 +330,7 @@ export async function handleStoreOrderShortage(input: {
       note: "欠品商品返金による会員特典キャンセル"
     });
   }
+  await markInventoryOrderReady(input.orderId, input.actionType === "replace" ? { issueCodes: ["unresolved_replacement"] } : {});
   await syncWebReservationToSalesOrder(input.orderId);
   if (!allItemsRefunded) await ensureProductionTasksForOrder(input.orderId);
   return { ok: true as const, refundAmount, allItemsRefunded };
