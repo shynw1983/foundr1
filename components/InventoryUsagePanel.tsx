@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useOsTranslation } from "../app/os/components/OsTranslationProvider";
-import type { InventoryOrderUsageRequest, InventoryOrderUsageResponse, InventoryUsageTriggerMode } from "../lib/inventory-order-usage-policy";
+import type { InventoryOrderUsageRequest, InventoryOrderUsageResponse } from "../lib/inventory-order-usage-policy";
 import type { InventoryUsageResponse } from "../lib/inventory-usage-policy";
 import { formatInventoryCountQuantity } from "../lib/product-unit-conversions";
 import { InventoryRecipeEditor } from "./InventoryRecipeEditor";
@@ -18,17 +18,19 @@ export const inventoryUsageReasonLabels: Record<string, string> = {
   source_identity_unresolved: "注文の商品識別を確認してください。", source_not_ready: "注文の商品明細を確認中です。", processing_failed: "使用量の記録に失敗しました。内容を確認して再確認してください。"
 };
 export type InventoryUsagePanelProps = { storeId: string; refreshKey?: unknown; onChanged?: () => void };
+type SettingsDraft = Pick<InventoryOrderUsageResponse["settings"], "storeId" | "enabled" | "revision">;
+const settingsDraft = (settings: InventoryOrderUsageResponse["settings"]): SettingsDraft => ({ storeId: settings.storeId, enabled: settings.enabled, revision: settings.revision });
 export function InventoryUsagePanel({ storeId, refreshKey, onChanged }: InventoryUsagePanelProps) {
   const { t, language } = useOsTranslation();
   const [open, setOpen] = useState(false), [recipeOpen, setRecipeOpen] = useState(false);
   const usage = useInventoryReadModel<InventoryUsageResponse>(`/api/inventory/usage?storeId=${encodeURIComponent(storeId)}`, storeId, open, refreshKey);
   const operations = useInventoryReadModel<InventoryOrderUsageResponse>(`/api/inventory/order-usage?storeId=${encodeURIComponent(storeId)}`, storeId, open, refreshKey);
-  const [setting, setSetting] = useState<{ storeId: string; enabled: boolean; triggerMode: InventoryUsageTriggerMode; revision: number } | null>(null);
+  const [setting, setSetting] = useState<SettingsDraft | null>(null);
   const [locations, setLocations] = useState<Record<string, string>>({});
   const [confirmed, setConfirmed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState(""), [stale, setStale] = useState(false);
   const currentStore = useRef(storeId); currentStore.current = storeId; const savingRef = useRef(false);
   useEffect(() => { setSetting(null); setLocations({}); setConfirmed(false); setError(""); setNotice(""); setStale(false); setBusy(false); setRecipeOpen(false); }, [storeId]);
-  useEffect(() => { if (operations.data && !setting) setSetting({ ...operations.data.settings }); }, [operations.data, setting]);
+  useEffect(() => { if (operations.data && !setting) setSetting(settingsDraft(operations.data.settings)); }, [operations.data, setting]);
   const data = operations.data?.settings.storeId === storeId ? operations.data : null;
   const usageData = usage.data?.selectedStoreId === storeId ? usage.data : null;
   const draft = setting?.storeId === storeId ? setting : null;
@@ -42,7 +44,7 @@ export function InventoryUsagePanel({ storeId, refreshKey, onChanged }: Inventor
       const body = await response.json(); if (currentStore.current !== savedStore) return;
       if (!response.ok) { if (response.status === 409) setStale(true); throw new Error(body.error || "注文の在庫連動を保存できませんでした。"); }
       setNotice(payload.action === "retry" ? "未処理の注文を再確認しました。" : "注文の在庫連動を保存しました。"); setLocations({}); setConfirmed(false);
-      const [, latest] = await Promise.all([usage.load(), operations.load()]); if (latest && currentStore.current === savedStore) setSetting({ ...latest.settings }); onChanged?.();
+      const [, latest] = await Promise.all([usage.load(), operations.load()]); if (latest && currentStore.current === savedStore) setSetting(settingsDraft(latest.settings)); onChanged?.();
     } catch (failure) { if (currentStore.current === savedStore) setError(failure instanceof Error ? failure.message : "注文の在庫連動を保存できませんでした。"); }
     finally { savingRef.current = false; setBusy(false); }
   }
@@ -52,7 +54,7 @@ export function InventoryUsagePanel({ storeId, refreshKey, onChanged }: Inventor
       <div className={styles.heading}><p className={styles.hint}>{t("棚卸を起点に、入庫と注文の標準使用量をつなぎます。次の棚卸との差は確認差異で、損耗として自動登録しません。")}</p><button type="button" className="text-button" disabled={busy || usage.loading || operations.loading} onClick={() => void Promise.all([usage.load(), operations.load()])}>{t("更新")}</button></div>
       <p className={styles.hint}>{t("帳簿上の数量には、仕込みの投入・店舗への出庫など、ほかの入出庫記録も含まれます。")}</p>
       {error || usage.error || operations.error ? <p className={styles.error} role="alert">{t(error || usage.error || operations.error)}</p> : null}{notice ? <p className={styles.notice} role="status">{t(notice)}</p> : null}
-      {stale ? <div className={styles.warning}><p>{t("設定が変更されました。入力は残しています。最新の設定を読み込み直してください。")}</p><button type="button" className="secondary-button" disabled={busy || operations.loading} onClick={() => { const requestedStore = storeId; void operations.load().then(latest => { if (!latest || currentStore.current !== requestedStore) return; setSetting({ ...latest.settings }); setLocations({}); setConfirmed(false); setStale(false); setError(""); }); }}>{t("入力を破棄して最新の設定を読み込む")}</button></div> : null}
+      {stale ? <div className={styles.warning}><p>{t("設定が変更されました。入力は残しています。最新の設定を読み込み直してください。")}</p><button type="button" className="secondary-button" disabled={busy || operations.loading} onClick={() => { const requestedStore = storeId; void operations.load().then(latest => { if (!latest || currentStore.current !== requestedStore) return; setSetting(settingsDraft(latest.settings)); setLocations({}); setConfirmed(false); setStale(false); setError(""); }); }}>{t("入力を破棄して最新の設定を読み込む")}</button></div> : null}
       {usageData?.items.map(item => <article className={styles.card} key={item.inventoryItemId}>
         <div className={styles.heading}><strong>{item.productName}</strong><span className={styles.muted}>{item.locationName} · {t(item.confidence === "confirmed" ? "数量記録から計算" : item.confidence === "estimated" ? "予測を含む" : "未確認の情報あり")}</span></div>
         <div className={styles.flow}><span>{t("起点の棚卸")} · {quantity(item.anchor?.quantity ?? null, item.countUnit)}</span><b>＋</b><span>{t("入庫")} · {quantity(item.receivedQuantity, item.countUnit)}</span><b>−</b><span>{t("注文の標準使用量")} · {quantity(item.orderDeductedQuantity, item.countUnit)}</span><b>→</b><span>{t("帳簿上の見込み数量")} · {quantity(item.bookExpectedQuantity, item.countUnit)}</span></div>
@@ -64,9 +66,9 @@ export function InventoryUsagePanel({ storeId, refreshKey, onChanged }: Inventor
       {usageData && !usageData.items.length ? <p>{t("在庫商品の登録後に、注文と在庫の確認ができます。")}</p> : null}
       <details className={styles.detail}><summary>{t("注文連動の設定・使用する保管場所")}</summary><div>
         {data && draft ? <><p className={styles.hint}>{t("有効にした後の注文だけを対象にします。過去の注文を現在庫からまとめて差し引きません。キャンセル後も、調理済みの使用量は戻しません。")}</p>
-          <div className={styles.fields}><label><span>{t("注文と在庫の連動")}</span><select name="usageEnabled" value={String(draft.enabled)} disabled={!data.canManage || busy || stale} onChange={event => { setSetting({ ...draft, enabled: event.target.value === "true" }); setConfirmed(false); }}><option value="false">{t("無効")}</option><option value="true">{t("有効")}</option></select></label><label><span>{t("標準使用量を記録するタイミング")}</span><select name="usageTriggerMode" value={draft.triggerMode} disabled={!data.canManage || busy || stale} onChange={event => { setSetting({ ...draft, triggerMode: event.target.value as InventoryUsageTriggerMode }); setConfirmed(false); }}><option value="preparation">{t("調理開始・完了時")}</option><option value="confirmed_sale">{t("売上確定時")}</option></select></label></div>
+          <div className={styles.fields}><label><span>{t("注文と在庫の連動")}</span><select name="usageEnabled" value={String(draft.enabled)} disabled={!data.canManage || busy || stale} onChange={event => { setSetting({ ...draft, enabled: event.target.value === "true" }); setConfirmed(false); }}><option value="false">{t("無効")}</option><option value="true">{t("有効")}</option></select></label><div className={styles.label}><span>{t("標準使用量を記録するタイミング")}</span><strong>{t("実際の調理開始時")}</strong><small className={styles.hint}>{t("支払いだけでは在庫を差し引きません。")}</small></div></div>
           <p className={styles.hint}>{t("有効化の起点")} · {date(data.settings.enabledFrom)}</p>
-          {data.canManage ? <><label className={styles.check}><input type="checkbox" name="usageConfirmed" checked={confirmed} disabled={busy || stale} onChange={event => setConfirmed(event.target.checked)} /><span>{t("現在の棚卸と配合・保管場所を確認しました")}</span></label><div className={styles.actions}><button type="button" className="primary-button" disabled={!confirmed || busy || stale} onClick={() => void save({ action: "settings", storeId, enabled: draft.enabled, triggerMode: draft.triggerMode, expectedRevision: draft.revision })}>{t("注文連動の設定を保存")}</button></div></> : null}
+          {data.canManage ? <><label className={styles.check}><input type="checkbox" name="usageConfirmed" checked={confirmed} disabled={busy || stale} onChange={event => setConfirmed(event.target.checked)} /><span>{t("現在の棚卸と配合・保管場所を確認しました")}</span></label><div className={styles.actions}><button type="button" className="primary-button" disabled={!confirmed || busy || stale} onClick={() => void save({ action: "settings", storeId, enabled: draft.enabled, triggerMode: "preparation", expectedRevision: draft.revision })}>{t("注文連動の設定を保存")}</button></div></> : null}
           {data.locations.map(location => <div className={styles.card} key={location.productId}><strong>{location.productName}</strong><label className={styles.label}><span>{t("使用する保管場所")}</span><select name={`usageLocation-${location.productId}`} disabled={!data.canManage || busy || stale} value={locations[location.productId] ?? location.explicitInventoryItemId ?? ""} onChange={event => setLocations(previous => ({ ...previous, [location.productId]: event.target.value }))}><option value="">{t(location.selection === "single" ? "1つの保管場所を自動使用" : "保管場所を選択してください")}</option>{location.items.map(item => <option value={item.id} key={item.id}>{item.locationName} · {item.countUnit}</option>)}</select></label>{location.selection === "ambiguous" ? <small className={styles.warning}>{t("保管場所が複数あります。使用する場所を明示してください。")}</small> : null}{data.canManage ? <div className={styles.actions}><button type="button" className="secondary-button" disabled={busy || stale || locations[location.productId] === undefined || (locations[location.productId] || null) === location.explicitInventoryItemId} onClick={() => void save({ action: "location", storeId, productId: location.productId, inventoryItemId: locations[location.productId] || null, expectedInventoryItemId: location.explicitInventoryItemId })}>{t("この商品の保管場所を保存")}</button></div> : null}</div>)}
         </> : null}
       </div></details>

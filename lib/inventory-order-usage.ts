@@ -189,10 +189,14 @@ export async function mapInventoryOrderSource(storeId:string,orderId:string,expe
   return {ok:true as const,result:await safeSyncInventoryOrderUsage(orderId)};
 }
 export async function readInventoryUsageSettings(storeId: string): Promise<InventoryUsageSettings> {
-  const rows = await sql`select enabled,enabled_from::text as "enabledFrom",trigger_mode as "triggerMode",revision
+  const rows = await sql`select enabled,enabled_from::text as "enabledFrom",revision
     from inventory_usage_settings where store_id::text=${storeId}`;
+  // f40 briefly exposed a persisted confirmed_sale enum. During this rollout
+  // read those rows as preparation without rewriting settings or stock facts.
+  // Remove the retained DB enum once f40 writers are retired and all persisted
+  // settings use preparation through an explicit settings save/migration.
   return { storeId,enabled:rows[0]?.enabled===true,enabledFrom:rows[0]?.enabledFrom ? String(rows[0].enabledFrom):null,
-    triggerMode:rows[0]?.triggerMode==="confirmed_sale"?"confirmed_sale":"preparation",revision:Number(rows[0]?.revision??0) };
+    triggerMode:"preparation",revision:Number(rows[0]?.revision??0) };
 }
 
 async function recordIssues(orderId: string, issues: InventoryOrderUsagePlan["issues"]) {
@@ -367,10 +371,9 @@ async function commitInventoryOrderUsage(order: OrderRow,settings: InventoryUsag
         join inventory_usage_settings settings on settings.store_id=orders.store_id
         where orders.id::text=${order.id} and orders.store_id::text=${order.storeId}
           and not exists(select 1 from inventory_order_usage_issues where order_id=orders.id and code='source_deletion_pending' and resolved_at is null)
-          and settings.enabled and settings.revision=${settings.revision} and settings.trigger_mode=${settings.triggerMode}
+          and settings.enabled and settings.revision=${settings.revision}
           and settings.enabled_from is not distinct from ${settings.enabledFrom}::timestamptz
-          and (orders.inventory_first_prepared_at is not null or orders.preparing_at is not null or orders.ready_at is not null or orders.completed_at is not null
-            or (settings.trigger_mode='confirmed_sale' and orders.order_source<>'table_qr' and orders.payment_status in ('paid','partial_refunded') and orders.status not in ('cancelled','refund_pending','pending_payment','checkout_failed','payment_failed')))
+          and (orders.inventory_first_prepared_at is not null or orders.preparing_at is not null or orders.ready_at is not null or orders.completed_at is not null)
           and (case when coalesce(orders.inventory_first_prepared_at,orders.preparing_at,orders.ready_at,orders.completed_at) is not null
             then orders.inventory_preparation_source_snapshot=${sourceJson}::jsonb
             else orders.inventory_items_ready_at is not null and orders.inventory_source_snapshot=${sourceJson}::jsonb
@@ -381,8 +384,7 @@ async function commitInventoryOrderUsage(order: OrderRow,settings: InventoryUsag
             'optionKey',items.option_key,'optionLabel',items.option_label,'sizeLabel',items.size_label,'toppingKeys',items.topping_keys,'toppingLabels',items.topping_labels,'customizations',items.customizations,
             'refundStatus',items.refund_status
           ) order by items.sort_order,items.id) from store_customer_order_items items where items.order_id=orders.id),'[]'::jsonb)=${JSON.stringify(order.rawItems)}::jsonb end)
-          and coalesce(orders.inventory_first_prepared_at,orders.preparing_at,orders.ready_at,orders.completed_at,
-            case when settings.trigger_mode='confirmed_sale' and orders.order_source<>'table_qr' then orders.paid_at else null end)=${occurredAt}::timestamptz
+          and coalesce(orders.inventory_first_prepared_at,orders.preparing_at,orders.ready_at,orders.completed_at)=${occurredAt}::timestamptz
           and not exists(select 1 from product_facts fact left join products product on product.id::text=fact.id
             where product.id is null or product.unit is distinct from fact.unit
               or product.package_quantity is distinct from fact."packageQuantity"
@@ -446,9 +448,7 @@ export async function retryInventoryOrderUsage(storeId: string,limit=50) {
     join inventory_usage_settings settings on settings.store_id=orders.store_id
     where orders.store_id::text=${storeId} and settings.enabled and orders.created_at>now()-interval '14 days'
       and not exists(select 1 from inventory_order_usage_events events where events.order_id=orders.id)
-      and coalesce(orders.inventory_first_prepared_at,orders.preparing_at,orders.ready_at,orders.completed_at,
-        case when settings.trigger_mode='confirmed_sale' and orders.order_source<>'table_qr' and orders.payment_status in ('paid','partial_refunded')
-          and orders.status not in ('cancelled','refund_pending','payment_failed','checkout_failed','pending_payment') then orders.paid_at else null end)>=settings.enabled_from
+      and coalesce(orders.inventory_first_prepared_at,orders.preparing_at,orders.ready_at,orders.completed_at)>=settings.enabled_from
     order by orders.created_at,orders.id limit ${Math.min(100,Math.max(1,limit))}`;
   const result={attempted:rows.length,applied:0,already:0,ineligible:0,blocked:0,failed:0};
   for (const row of rows) result[await safeSyncInventoryOrderUsage(String(row.id))]++;

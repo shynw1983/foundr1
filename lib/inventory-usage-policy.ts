@@ -22,7 +22,7 @@ export type InventoryCountReconciliation = {
 export type InventoryUsageResponse = {
   selectedStoreId: string; items: InventoryUsageItemSummary[];
   recentReconciliations: Array<{ id: string; productName: string; locationName: string; snapshot: InventoryCountReconciliation }>;
-  settings: { enabled: boolean; enabledFrom: string | null; triggerMode: "preparation" | "confirmed_sale" };
+  settings: { enabled: boolean; enabledFrom: string | null; triggerMode: "preparation" };
 };
 export type InventoryUsageMovement = {
   id: string; kind: string; quantity: number | null; countUnit: string;

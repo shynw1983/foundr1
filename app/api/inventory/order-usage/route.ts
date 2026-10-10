@@ -27,7 +27,8 @@ export async function POST(request:Request) {
   if(!await canAccessStore(session,body.storeId))return Response.json({error:"この店舗を操作する権限がありません。"},{status:403,headers});
   try {
     if(body.action==="settings") {
-      if(typeof body.enabled!=="boolean"||!["preparation","confirmed_sale"].includes(body.triggerMode)||!Number.isInteger(body.expectedRevision)||body.expectedRevision<0)return Response.json({error:"設定と更新情報を確認してください。"},{status:400,headers});
+      if(body.triggerMode!=="preparation")return Response.json({error:"注文の在庫連動は実際の調理開始・完了時のみ対応しています。"},{status:400,headers});
+      if(typeof body.enabled!=="boolean"||!Number.isInteger(body.expectedRevision)||body.expectedRevision<0)return Response.json({error:"設定と更新情報を確認してください。"},{status:400,headers});
       const rows=await sql`
         insert into inventory_usage_settings(store_id,enabled,enabled_from,trigger_mode,revision,updated_by)
         select ${body.storeId}::uuid,${body.enabled},case when ${body.enabled} then clock_timestamp() else null end,${body.triggerMode},1,${session.id}::uuid

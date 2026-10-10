@@ -1,6 +1,6 @@
 import { resolveProductUnitConversion, unitConversionSnapshotsEqual, type ProductUnitConfigurationInput, type ProductUnitConversionSnapshot } from "./product-unit-conversions";
 
-export type InventoryUsageTriggerMode = "preparation" | "confirmed_sale";
+export type InventoryUsageTriggerMode = "preparation";
 export type InventoryUsageSettings = {
   storeId: string; enabled: boolean; enabledFrom: string | null; triggerMode: InventoryUsageTriggerMode; revision: number;
 };
@@ -158,9 +158,7 @@ export function inventoryOrderUsageOccurredAt(order: {
   const preparedAt=order.firstPreparedAt||order.preparingAt||order.readyAt||order.completedAt;
   // A financial refund cannot erase food already prepared while an inventory
   // retry was pending. Prior physical preparation wins over mutable status.
-  const occurredAt=preparedAt || (settings.triggerMode==="confirmed_sale" && order.orderSource!=="table_qr"
-    && ["paid","partial_refunded"].includes(order.paymentStatus)
-    && !["cancelled","refund_pending","pending_payment","checkout_failed","payment_failed"].includes(order.status) ? order.paidAt : null);
+  const occurredAt=preparedAt;
   const time = occurredAt ? Date.parse(occurredAt) : NaN;
   const cutoff = Date.parse(settings.enabledFrom);
   return Number.isFinite(time) && Number.isFinite(cutoff) && time >= cutoff ? occurredAt : null;

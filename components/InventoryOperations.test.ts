@@ -93,12 +93,14 @@ test("forecast null and negative balances remain visible; no data request before
   await h.respond(1, { settings: { storeId: id(1), enabled: false, enabledFrom: null, triggerMode: "preparation", revision: 0 }, locations: [], issues: [], recentUsage: [], canManage: false }); h.render(); tree = h.render(); assert.match(text(tree), /−2 個/); assert.match(text(tree), /未確認/); assert.equal(field(tree, "usageEnabled").props.disabled, true);
   tree = h.render({ storeId: id(98) }); assert.equal(text(tree).includes("特殊原料"), false);
 });
-test("settings conflict preserves the selected trigger and only explicit reload accepts current revision", async () => {
+test("settings only submit actual preparation, ignore legacy sale mode, and preserve enabled draft through CAS conflict", async () => {
   const h = harness("InventoryUsagePanel", { storeId: id(1) }); open(h.render()); h.render(); await h.respond(0, { items: [], recentReconciliations: [] });
-  const response = { settings: { storeId: id(1), enabled: false, enabledFrom: null, triggerMode: "preparation", revision: 0 }, locations: [], issues: [], recentUsage: [], canManage: true };
-  await h.respond(1, response); h.render(); let tree = h.render(); change(tree, "usageTriggerMode", "confirmed_sale"); tree = h.render(); check(tree, "usageConfirmed"); tree = h.render(); button(tree, "注文連動の設定を保存").props.onClick(); assert.equal(h.requests[2].payload.expectedRevision, 0);
-  await h.respond(2, { error: "stale" }, 409); tree = h.render(); assert.equal(field(tree, "usageTriggerMode").props.value, "confirmed_sale"); assert.equal(button(tree, "注文連動の設定を保存").props.disabled, true);
-  button(tree, "入力を破棄して最新の設定を読み込む").props.onClick(); await h.respond(3, { ...response, settings: { ...response.settings, revision: 3, triggerMode: "preparation" } }); tree = h.render(); assert.equal(field(tree, "usageTriggerMode").props.value, "preparation"); check(tree, "usageConfirmed"); tree = h.render(); button(tree, "注文連動の設定を保存").props.onClick(); assert.equal(h.requests[4].payload.expectedRevision, 3);
+  const response = { settings: { storeId: id(1), enabled: false, enabledFrom: null, triggerMode: "confirmed_sale", revision: 0 }, locations: [], issues: [], recentUsage: [], canManage: true };
+  await h.respond(1, response); h.render(); let tree = h.render();
+  assert.equal(field(tree, "usageTriggerMode"), undefined); assert.equal(text(tree).includes("売上確定時"), false); assert.match(text(tree), /実際の調理開始時/); assert.match(text(tree), /支払いだけでは在庫を差し引きません/);
+  change(tree, "usageEnabled", "true"); tree = h.render(); check(tree, "usageConfirmed"); tree = h.render(); button(tree, "注文連動の設定を保存").props.onClick(); assert.equal(h.requests[2].payload.expectedRevision, 0); assert.equal(h.requests[2].payload.triggerMode, "preparation"); assert.equal(h.requests[2].payload.enabled, true);
+  await h.respond(2, { error: "stale" }, 409); tree = h.render(); assert.equal(field(tree, "usageEnabled").props.value, "true"); assert.equal(field(tree, "usageTriggerMode"), undefined); assert.equal(button(tree, "注文連動の設定を保存").props.disabled, true);
+  button(tree, "入力を破棄して最新の設定を読み込む").props.onClick(); await h.respond(3, { ...response, settings: { ...response.settings, revision: 3 } }); tree = h.render(); assert.equal(field(tree, "usageEnabled").props.value, "false"); check(tree, "usageConfirmed"); tree = h.render(); button(tree, "注文連動の設定を保存").props.onClick(); assert.equal(h.requests[4].payload.expectedRevision, 3); assert.equal(h.requests[4].payload.triggerMode, "preparation");
 });
 
 const batch = { purchaseUnit: "袋", contentQuantity: 3, contentUnit: "kg", countUnit: "kg", stockQuantityPerPurchase: 3 };

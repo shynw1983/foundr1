@@ -70,7 +70,7 @@ export async function getInventoryUsage(storeId: string, visibleProductIds: stri
     sql`select count(distinct order_id)::integer as count from inventory_order_usage_issues where store_id=${storeId}::uuid and resolved_at is null`
   ]);
   const settings = { enabled: Boolean(settingsRows[0]?.enabled),enabledFrom: settingsRows[0]?.enabledFrom ? String(settingsRows[0].enabledFrom) : null,
-    triggerMode: settingsRows[0]?.triggerMode === "confirmed_sale" ? "confirmed_sale" as const : "preparation" as const };
+    triggerMode: "preparation" as const };
   return { selectedStoreId: storeId,settings,
     items: items.map(item => {
       const intervals: CalibrationInterval[] = (Array.isArray(item.intervals) ? item.intervals : []).flatMap(raw => {

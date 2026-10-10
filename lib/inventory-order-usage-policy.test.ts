@@ -222,21 +222,23 @@ test("batch packaging permits literal stock units but blocks cross-unit assumpti
   assert.ok(staleConversion.issues.some((issue) => issue.code === "stock_unit_snapshot_unknown"));
 });
 
-test("preparation and confirmed sale honor activation cutoff while unpaid table orders use actual preparation", () => {
+test("only actual preparation honors activation cutoff and runtime legacy modes cannot trigger paid orders", () => {
   const settings: InventoryUsageSettings = {storeId: uuid(20), enabled: true, enabledFrom: occurredAt, triggerMode: "preparation", revision: 1};
   const order = {status: "new", paymentStatus: "paid", orderSource: "store_pos", firstPreparedAt: null, preparingAt: null, readyAt: null, completedAt: null, paidAt: occurredAt};
   assert.equal(policy.inventoryOrderUsageOccurredAt(order, settings), null);
-  assert.equal(policy.inventoryOrderUsageOccurredAt(order, {...settings, triggerMode: "confirmed_sale"}), occurredAt);
+  const legacySettings = {...settings, triggerMode: "confirmed_sale"} as unknown as InventoryUsageSettings;
+  assert.equal(policy.inventoryOrderUsageOccurredAt(order, legacySettings), null);
+  assert.equal(policy.inventoryOrderUsageOccurredAt({...order, status: "ready"}, legacySettings), null);
   assert.equal(policy.inventoryOrderUsageOccurredAt({...order, firstPreparedAt: occurredAt}, settings), occurredAt);
   assert.equal(policy.inventoryOrderUsageOccurredAt({...order, firstPreparedAt: "2026-10-11T11:59:59Z", readyAt: "2026-10-11T13:00:00Z"}, settings), null);
   assert.equal(policy.inventoryOrderUsageOccurredAt({...order, completedAt: occurredAt}, settings), occurredAt);
   assert.equal(policy.inventoryOrderUsageOccurredAt({...order, firstPreparedAt: occurredAt}, {...settings, enabled: false}), null);
   assert.equal(policy.inventoryOrderUsageOccurredAt({...order, firstPreparedAt: occurredAt}, {...settings, enabledFrom: null}), null);
-  for (const triggerMode of ["preparation", "confirmed_sale"] as const) {
-    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, orderSource: "table_qr", paymentStatus: "unpaid", firstPreparedAt: occurredAt}, {...settings, triggerMode}), occurredAt);
-    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, paymentStatus: "unpaid", firstPreparedAt: occurredAt}, {...settings, triggerMode}), occurredAt);
-    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, status: "cancelled"}, {...settings, triggerMode}), null);
-    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, status: "refund_pending"}, {...settings, triggerMode}), null);
+  for (const currentSettings of [settings, legacySettings]) {
+    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, orderSource: "table_qr", paymentStatus: "unpaid", firstPreparedAt: occurredAt}, currentSettings), occurredAt);
+    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, paymentStatus: "unpaid", firstPreparedAt: occurredAt}, currentSettings), occurredAt);
+    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, status: "cancelled"}, currentSettings), null);
+    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, status: "refund_pending"}, currentSettings), null);
   }
 });
 
@@ -244,11 +246,12 @@ test("cancellation and financial refund after actual preparation retain physical
   const settings: InventoryUsageSettings = {storeId: uuid(20), enabled: true, enabledFrom: occurredAt, triggerMode: "preparation", revision: 1};
   const order = {status: "cancelled", paymentStatus: "refunded", orderSource: "nanacha_web", firstPreparedAt: occurredAt,
     preparingAt: "2026-10-11T12:10:00Z", readyAt: "2026-10-11T12:20:00Z", completedAt: null, paidAt: "2026-10-11T11:55:00Z"};
-  for (const triggerMode of ["preparation", "confirmed_sale"] as const) {
-    assert.equal(policy.inventoryOrderUsageOccurredAt(order, {...settings, triggerMode}), occurredAt);
-    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, status: "refund_pending"}, {...settings, triggerMode}), occurredAt);
-    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, firstPreparedAt: "2026-10-11T11:59:59Z"}, {...settings, triggerMode}), null);
-    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, firstPreparedAt: null, preparingAt: null, readyAt: null}, {...settings, triggerMode}), null);
+  const legacySettings = {...settings, triggerMode: "confirmed_sale"} as unknown as InventoryUsageSettings;
+  for (const currentSettings of [settings, legacySettings]) {
+    assert.equal(policy.inventoryOrderUsageOccurredAt(order, currentSettings), occurredAt);
+    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, status: "refund_pending"}, currentSettings), occurredAt);
+    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, firstPreparedAt: "2026-10-11T11:59:59Z"}, currentSettings), null);
+    assert.equal(policy.inventoryOrderUsageOccurredAt({...order, firstPreparedAt: null, preparingAt: null, readyAt: null}, currentSettings), null);
   }
 });
 
