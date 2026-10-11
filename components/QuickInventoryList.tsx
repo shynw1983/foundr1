@@ -16,10 +16,11 @@ const labels: Record<InventoryQuickCheckStatus, string> = { enough: "足りる",
 const keyFor = (storeId: string) => `foundr1-os:quick-inventory-draft:v1:${storeId}`;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function QuickInventoryList({ storeId, items, saving, onSave }: {
-  storeId: string; items: QuickInventoryItem[]; saving: boolean; onSave: (checks: InventoryQuickCheckSubmission[]) => Promise<boolean>;
+export function QuickInventoryList({ storeId, items, saving, onSave, draftScopeKey }: {
+  storeId: string; items: QuickInventoryItem[]; saving: boolean; onSave: (checks: InventoryQuickCheckSubmission[]) => Promise<boolean>; draftScopeKey?: string;
 }) {
   const { t, language } = useOsTranslation();
+  const storageScope = draftScopeKey ?? storeId;
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [estimateInputs, setEstimateInputs] = useState<Record<string, string>>({});
   const [storageError, setStorageError] = useState("");
@@ -30,7 +31,7 @@ export function QuickInventoryList({ storeId, items, saving, onSave }: {
     setHydratedStore(null);
     setStorageError(""); setSaveError("");
     try {
-      const raw = JSON.parse(localStorage.getItem(keyFor(storeId)) || "{}");
+      const raw = JSON.parse(localStorage.getItem(keyFor(storageScope)) || "{}");
       const safe: Record<string, Draft> = {};
       if (raw && typeof raw === "object" && !Array.isArray(raw)) for (const [id, value] of Object.entries(raw)) {
         const draft = value as Draft;
@@ -39,17 +40,19 @@ export function QuickInventoryList({ storeId, items, saving, onSave }: {
       setDrafts(safe);
       setEstimateInputs(Object.fromEntries(Object.values(safe).filter(draft => draft.estimate?.kind === "quantity").map(draft => [draft.itemId, String((draft.estimate as Extract<InventoryQuickCheckEstimate, { kind: "quantity" }>).quantity)])));
     } catch { setDrafts({}); setEstimateInputs({}); }
-    setHydratedStore(storeId);
-  }, [storeId]);
+    setHydratedStore(storageScope);
+  }, [storeId, storageScope]);
   useEffect(() => {
-    if (hydratedStore !== storeId) return;
+    if (hydratedStore !== storageScope) return;
     try {
-      if (Object.keys(drafts).length) localStorage.setItem(keyFor(storeId), JSON.stringify(drafts));
-      else localStorage.removeItem(keyFor(storeId));
+      if (Object.keys(drafts).length) localStorage.setItem(keyFor(storageScope), JSON.stringify(drafts));
+      else localStorage.removeItem(keyFor(storageScope));
       setStorageError("");
     } catch { setStorageError("未保存の確認内容をこの端末に保存できません。画面を閉じずに保存してください。"); }
-  }, [drafts, storeId, hydratedStore]);
-  const draftList = Object.values(drafts);
+  }, [drafts, storeId, storageScope, hydratedStore]);
+  const scopedDrafts = hydratedStore === storageScope ? drafts : {};
+  const scopedEstimateInputs = hydratedStore === storageScope ? estimateInputs : {};
+  const draftList = Object.values(scopedDrafts);
   const currentItems = new Map(items.map(item => [item.id, item]));
   const staleDrafts = draftList.filter(draft => {
     const item = currentItems.get(draft.itemId);
@@ -57,23 +60,23 @@ export function QuickInventoryList({ storeId, items, saving, onSave }: {
     return item && JSON.stringify(item.quickCheckBasis) !== JSON.stringify(draft.expectedBasis);
   });
   const visibleDrafts = draftList.filter(draft => currentItems.has(draft.itemId));
-  const invalidEstimateInputs = visibleDrafts.some(draft => Boolean(estimateInputs[draft.itemId]?.trim() && parseInventoryCountQuantity(estimateInputs[draft.itemId]) === null));
-  const unseenCount = items.filter(item => !drafts[item.id] && (!item.quickCheck || item.quickCheck.state !== "fresh")).length;
+  const invalidEstimateInputs = visibleDrafts.some(draft => Boolean(scopedEstimateInputs[draft.itemId]?.trim() && parseInventoryCountQuantity(scopedEstimateInputs[draft.itemId]) === null));
+  const unseenCount = items.filter(item => !scopedDrafts[item.id] && (!item.quickCheck || item.quickCheck.state !== "fresh")).length;
   const canEdit = items.some(item => item.canQuickCheck && item.quickCheckBasis);
   const number = (value: number) => new Intl.NumberFormat(language === "ja" ? "ja-JP" : language === "zh-Hant" ? "zh-TW" : "zh-CN", { maximumFractionDigits: 6 }).format(value);
 
   function choose(item: QuickInventoryItem, status: InventoryQuickCheckStatus) {
-    if (!item.canQuickCheck || !item.quickCheckBasis || saving || savingRef.current) return;
+    if (hydratedStore !== storageScope || !item.canQuickCheck || !item.quickCheckBasis || saving || savingRef.current) return;
     setSaveError("");
-    const existingEstimate = drafts[item.id] ? drafts[item.id].estimate : item.quickCheck?.estimate?.purchaseUnit === item.quickCheckBasis.unitConfiguration.unit ? item.quickCheck.estimate : null;
-    if (!drafts[item.id]) setEstimateInputs(current => ({ ...current, [item.id]: existingEstimate?.kind === "quantity" ? String(existingEstimate.quantity) : "" }));
+    const existingEstimate = scopedDrafts[item.id] ? scopedDrafts[item.id].estimate : item.quickCheck?.estimate?.purchaseUnit === item.quickCheckBasis.unitConfiguration.unit ? item.quickCheck.estimate : null;
+    if (!scopedDrafts[item.id]) setEstimateInputs(current => ({ ...current, [item.id]: existingEstimate?.kind === "quantity" ? String(existingEstimate.quantity) : "" }));
     setDrafts(current => ({ ...current, [item.id]: { ...current[item.id], itemId: item.id, status,
       expectedBasis: current[item.id]?.expectedBasis ?? item.quickCheckBasis!,
       estimate: current[item.id] ? current[item.id].estimate : item.quickCheck?.estimate?.purchaseUnit === item.quickCheckBasis!.unitConfiguration.unit ? item.quickCheck.estimate : null
     } }));
   }
   function remainingEnough() {
-    if (saving || savingRef.current) return;
+    if (hydratedStore !== storageScope || saving || savingRef.current) return;
     setSaveError("");
     setDrafts(current => {
       const next = { ...current };
@@ -86,8 +89,8 @@ export function QuickInventoryList({ storeId, items, saving, onSave }: {
     });
   }
   function estimate(item: QuickInventoryItem, value: string | "small" | null) {
-    const draft = drafts[item.id];
-    if (!draft || saving || savingRef.current) return;
+    const draft = scopedDrafts[item.id];
+    if (hydratedStore !== storageScope || !draft || saving || savingRef.current) return;
     const unit = draft.expectedBasis.unitConfiguration.unit;
     const quantity = value === null || value === "small" ? null : parseInventoryCountQuantity(value);
     if (value !== null && value !== "small" && quantity === null) return;
@@ -95,6 +98,7 @@ export function QuickInventoryList({ storeId, items, saving, onSave }: {
     setDrafts(current => ({ ...current, [item.id]: { ...current[item.id], estimate: next } }));
   }
   function recheck() {
+    if (hydratedStore !== storageScope) return;
     const changedUnits = new Set(draftList.filter(draft => currentItems.get(draft.itemId)?.quickCheckBasis?.unitConfiguration.unit !== draft.expectedBasis.unitConfiguration.unit).map(draft => draft.itemId));
     setEstimateInputs(current => Object.fromEntries(Object.entries(current).filter(([id]) => !changedUnits.has(id))));
     setDrafts(current => Object.fromEntries(Object.entries(current).map(([id, draft]) => {
@@ -115,12 +119,12 @@ export function QuickInventoryList({ storeId, items, saving, onSave }: {
         let persistedRemaining: Record<string, Draft> | null = null;
         // A parent refresh may have unmounted this instance; clear committed drafts synchronously too.
         try {
-          const stored = JSON.parse(localStorage.getItem(keyFor(storeId)) || "{}");
+          const stored = JSON.parse(localStorage.getItem(keyFor(storageScope)) || "{}");
           if (stored && typeof stored === "object" && !Array.isArray(stored)) {
             const remaining = Object.fromEntries(Object.entries(stored).filter(([id, value]) => !saved.has(id) || JSON.stringify(value) !== submitted.get(id)));
             persistedRemaining = remaining as Record<string, Draft>;
-            if (Object.keys(remaining).length) localStorage.setItem(keyFor(storeId), JSON.stringify(remaining));
-            else localStorage.removeItem(keyFor(storeId));
+            if (Object.keys(remaining).length) localStorage.setItem(keyFor(storageScope), JSON.stringify(remaining));
+            else localStorage.removeItem(keyFor(storageScope));
           }
         } catch { /* The persisted draft stays reviewable if storage is unavailable. */ }
         setDrafts(current => ({ ...(persistedRemaining ?? {}), ...Object.fromEntries(Object.entries(current).filter(([id, value]) => !saved.has(id) || JSON.stringify(value) !== submitted.get(id))) }));
@@ -151,7 +155,7 @@ export function QuickInventoryList({ storeId, items, saving, onSave }: {
     {staleDrafts.length ? <div className={styles.warning} role="alert"><p>{t("保存前に在庫や単位が更新されました。状態をもう一度見てください。単位が変わった目安は外します。")}</p><button type="button" className="secondary-button" disabled={saving} onClick={recheck}>{t("最新の設定で状態を見直しました")}</button></div> : null}
     <div className={styles.list}>
       {items.map(item => {
-        const draft = drafts[item.id];
+        const draft = scopedDrafts[item.id];
         const check = item.quickCheck;
         const currentStatus = draft?.status ?? (check?.state !== "superseded" ? check?.status : null);
         const currentEstimate = draft ? draft.estimate : check?.estimate;
@@ -161,15 +165,15 @@ export function QuickInventoryList({ storeId, items, saving, onSave }: {
             <span className={`${styles.state} ${currentStatus === "low" || currentStatus === "out" ? styles.low : ""}`}>{draft ? t("未保存") : !check || check.state === "superseded" ? t("未確認") : check.state === "recheck" ? t("もう一度確認") : t("目視確認済み")}</span></div>
           {["quality", "damaged", "too_much"].includes(item.exceptionCode) ? <p className={styles.warning}>{t("品質・破損などの報告は別に残っています。数量で棚卸から確認してください。")}</p> : null}
           <div className={styles.statusButtons} role="group" aria-label={item.productName + " " + t("目視状態")}>
-            {(Object.keys(labels) as InventoryQuickCheckStatus[]).map(status => <button key={status} type="button" data-quick-status={status} aria-pressed={currentStatus === status} className={currentStatus === status ? styles.selected : ""} disabled={!item.canQuickCheck || !item.quickCheckBasis || saving} onClick={() => choose(item, status)}>{currentStatus === status ? <Check size={15} /> : null}{t(labels[status])}</button>)}
+            {(Object.keys(labels) as InventoryQuickCheckStatus[]).map(status => <button key={status} type="button" data-quick-status={status} aria-pressed={currentStatus === status} className={currentStatus === status ? styles.selected : ""} disabled={hydratedStore !== storageScope || !item.canQuickCheck || !item.quickCheckBasis || saving} onClick={() => choose(item, status)}>{currentStatus === status ? <Check size={15} /> : null}{t(labels[status])}</button>)}
           </div>
           {currentEstimate ? <small className={styles.estimateLabel}>{estimateLabel(currentEstimate)}</small> : null}
           {check && !draft && check.state !== "superseded" ? <small className={styles.checked}>{t("目視")} {time(check.checkedAt)} · {check.checkedBy}{check.state === "recheck" ? " · " + t("到着・時間経過などのため再確認") : ""}</small> : null}
           {item.canQuickCheck ? <details className={styles.estimate}><summary>{t("袋数などの目安を付ける（任意）")}</summary>
             <p>{t("状態を選んでから入力します。目安は実数棚卸や帳簿数量を書き換えません。")}</p>
-            <div className={styles.estimateControls}><label><span>{t("目安の購入単位数")}</span><input inputMode="decimal" aria-label={item.productName + " " + t("目安の購入単位数")} disabled={!draft || saving || !purchaseUnit} value={estimateInputs[item.id] ?? ""} placeholder="2.5" aria-invalid={Boolean(estimateInputs[item.id]?.trim() && parseInventoryCountQuantity(estimateInputs[item.id]) === null)} onChange={event => { const value = event.target.value; setEstimateInputs(current => ({ ...current, [item.id]: value })); if (!value.trim()) estimate(item, null); else if (parseInventoryCountQuantity(value) !== null) estimate(item, value); }} /><small>{purchaseUnit}</small></label>
-              <button type="button" className="text-button" disabled={!draft || saving || !purchaseUnit || Boolean(estimateInputs[item.id]?.trim() && parseInventoryCountQuantity(estimateInputs[item.id]) === null)} onClick={() => { const amount = (parseInventoryCountQuantity(estimateInputs[item.id]) ?? (draft?.estimate?.kind === "quantity" ? draft.estimate.quantity : 0)) + 1; setEstimateInputs(current => ({ ...current, [item.id]: String(amount) })); estimate(item, String(amount)); }}><Plus size={14} />{t("1単位を追加")}</button>
-              <button type="button" className="text-button" disabled={!draft || saving || !purchaseUnit || Boolean(estimateInputs[item.id]?.trim() && parseInventoryCountQuantity(estimateInputs[item.id]) === null)} onClick={() => { const amount = (parseInventoryCountQuantity(estimateInputs[item.id]) ?? (draft?.estimate?.kind === "quantity" ? draft.estimate.quantity : 0)) + 0.5; setEstimateInputs(current => ({ ...current, [item.id]: String(amount) })); estimate(item, String(amount)); }}>{t("約半分を追加")}</button>
+            <div className={styles.estimateControls}><label><span>{t("目安の購入単位数")}</span><input inputMode="decimal" aria-label={item.productName + " " + t("目安の購入単位数")} disabled={!draft || saving || !purchaseUnit} value={scopedEstimateInputs[item.id] ?? ""} placeholder="2.5" aria-invalid={Boolean(scopedEstimateInputs[item.id]?.trim() && parseInventoryCountQuantity(scopedEstimateInputs[item.id]) === null)} onChange={event => { const value = event.target.value; setEstimateInputs(current => ({ ...current, [item.id]: value })); if (!value.trim()) estimate(item, null); else if (parseInventoryCountQuantity(value) !== null) estimate(item, value); }} /><small>{purchaseUnit}</small></label>
+              <button type="button" className="text-button" disabled={!draft || saving || !purchaseUnit || Boolean(scopedEstimateInputs[item.id]?.trim() && parseInventoryCountQuantity(scopedEstimateInputs[item.id]) === null)} onClick={() => { const amount = (parseInventoryCountQuantity(scopedEstimateInputs[item.id]) ?? (draft?.estimate?.kind === "quantity" ? draft.estimate.quantity : 0)) + 1; setEstimateInputs(current => ({ ...current, [item.id]: String(amount) })); estimate(item, String(amount)); }}><Plus size={14} />{t("1単位を追加")}</button>
+              <button type="button" className="text-button" disabled={!draft || saving || !purchaseUnit || Boolean(scopedEstimateInputs[item.id]?.trim() && parseInventoryCountQuantity(scopedEstimateInputs[item.id]) === null)} onClick={() => { const amount = (parseInventoryCountQuantity(scopedEstimateInputs[item.id]) ?? (draft?.estimate?.kind === "quantity" ? draft.estimate.quantity : 0)) + 0.5; setEstimateInputs(current => ({ ...current, [item.id]: String(amount) })); estimate(item, String(amount)); }}>{t("約半分を追加")}</button>
               <button type="button" className="text-button" disabled={!draft || saving} onClick={() => { estimate(item, "small"); setEstimateInputs(current => ({ ...current, [item.id]: "" })); }}>{t("少量")}</button>
               <button type="button" className="text-button" disabled={!draft || saving} onClick={() => { estimate(item, null); setEstimateInputs(current => ({ ...current, [item.id]: "" })); }}><Minus size={14} />{t("目安を外す")}</button>
             </div></details> : null}

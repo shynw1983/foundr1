@@ -16,16 +16,16 @@ type ReceiptPayload = {
   requestId: string; purchaseOrderItemId: string; inventoryItemId: string; purchaseQuantity: number;
   mode: InventoryReceiptMode; expectedSource: InventoryReceiptSourceSnapshot;
   expectedStockRevision: number; expectedConversion: ProductUnitConversionSnapshot | null;
-  batchPackaging?: ProductBatchPackaging;
+  batchPackaging?: ProductBatchPackaging; expectedOperatorId?: string; confirmStoreReceiving?: true;
 };
 type ReceiptPreview = { before: number | null; after: number | null; quantity: number | null; countUnit: string; purchaseUnit: string };
 type PendingReceipt = { payload: ReceiptPayload; preview: ReceiptPreview };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const storageKey = (storeId: string) => `foundr1-os:pending-stock-receipt:${storeId}`;
 
-function readPendingReceipt(storeId: string): PendingReceipt | null {
+function readPendingReceipt(storeId: string, scope: string): PendingReceipt | null {
   try {
-    const raw = window.localStorage.getItem(storageKey(storeId));
+    const raw = window.localStorage.getItem(storageKey(scope));
     if (!raw) return null;
     const record = JSON.parse(raw) as PendingReceipt;
     if (!uuidPattern.test(record.payload?.requestId ?? "") || record.payload.expectedSource?.storeId !== storeId || !record.preview) return null;
@@ -47,11 +47,16 @@ const blockedMessages: Record<string, string> = {
   ,batch_unit_mismatch: "今回の包装は、保管先の内容単位に合わせてください。同じ袋・箱の単位で異なる内容量を混ぜて数えません。"
 };
 
-export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, heading = "納品・入庫登録" }: {
-  storeId: string; orderId?: string; sourceItemId?: string; onRecorded?: () => void; heading?: string;
+export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, heading = "納品・入庫登録", surface = "os", expectedOperatorId, draftScopeKey, canOperate = true, onAuthorizationRequired }: {
+  storeId: string; orderId?: string; sourceItemId?: string; onRecorded?: () => void; heading?: string; surface?: "os" | "store"; expectedOperatorId?: string; draftScopeKey?: string; canOperate?: boolean; onAuthorizationRequired?: () => void;
 }) {
   const { t, language } = useOsTranslation();
+  const storageScope = draftScopeKey ?? storeId;
+  const endpoint = surface === "store" ? "/api/store/inventory/receipts" : "/api/inventory/receipts";
+  const executionAllowed = surface !== "store" || Boolean(expectedOperatorId && canOperate);
+  const activeScope = useRef(storageScope); activeScope.current = storageScope;
   const [data, setData] = useState<InventoryReceiptResponse | null>(null);
+  const [renderedScope, setRenderedScope] = useState(storageScope);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [sourceId, setSourceId] = useState(sourceItemId ?? "");
@@ -77,16 +82,17 @@ export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, 
   onRecordedRef.current = onRecorded;
   useEffect(() => {
     let active = true;
+    if (surface === "store") { setCanViewProducts(false); return; }
     void loadCurrentEmployee().then((employee) => {
       if (active) setCanViewProducts(Boolean(employee?.permissions?.includes("module.products") || employee?.permittedNavPaths?.includes("/os/products")));
     });
     return () => { active = false; };
-  }, []);
+  }, [surface]);
 
   function clearPending() {
     pendingRef.current = null;
     setPending(null);
-    try { window.localStorage.removeItem(storageKey(storeId)); } catch { /* A saved nonce can still be checked against the receipt history. */ }
+    try { window.localStorage.removeItem(storageKey(storageScope)); } catch { /* A saved nonce can still be checked against the receipt history. */ }
   }
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!storeId) return;
@@ -95,16 +101,17 @@ export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, 
     try {
       const params = new URLSearchParams({ storeId });
       if (orderId) params.set("orderId", orderId);
-      const response = await fetch(`/api/inventory/receipts?${params}`, { cache: "no-store", signal });
+      const savedScope = storageScope;
+      const response = await fetch(`${endpoint}?${params}`, { cache: "no-store", signal });
       const body = await response.json();
-      if (signal?.aborted || sequence !== requestSequence.current || activeStore.current !== storeId) return;
+      if (signal?.aborted || sequence !== requestSequence.current || activeStore.current !== storeId || activeScope.current !== savedScope) return;
       if (!response.ok) throw new Error(body.error ?? "入庫候補を読み込めませんでした。更新して再確認してください。");
       setData(body as InventoryReceiptResponse);
       const unresolved = pendingRef.current;
       if (unresolved && body.recentReceipts?.some((receipt: { requestId: string }) => receipt.requestId === unresolved.payload.requestId)) {
         pendingRef.current = null;
         setPending(null);
-        try { window.localStorage.removeItem(storageKey(storeId)); } catch { /* Keep the verified result usable if storage is unavailable. */ }
+        try { window.localStorage.removeItem(storageKey(storageScope)); } catch { /* Keep the verified result usable if storage is unavailable. */ }
         setQuantityText("");
         setNotice("この入庫は登録済みです。重複して加算しません。");
         setError("");
@@ -117,12 +124,12 @@ export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, 
     } finally {
       if (!signal?.aborted && sequence === requestSequence.current && activeStore.current === storeId) setLoading(false);
     }
-  }, [storeId, orderId]);
+  }, [storeId, orderId, endpoint, storageScope]);
 
   useEffect(() => {
     const controller = new AbortController();
-    setData(null); setError(""); setNotice(""); setNeedsReview(false); setReviewed(false); setSubmitting(false); setDetailed(false); setBatchEnabled(false); setBatchConfirmed(false); setBatchDraft(null);
-    const saved = readPendingReceipt(storeId);
+    setRenderedScope(storageScope); setData(null); setError(""); setNotice(""); setNeedsReview(false); setReviewed(false); setSubmitting(false); setDetailed(false); setBatchEnabled(false); setBatchConfirmed(false); setBatchDraft(null);
+    const saved = readPendingReceipt(storeId, storageScope);
     pendingRef.current = saved;
     setPending(saved);
     setSourceId(saved?.payload.purchaseOrderItemId ?? sourceItemId ?? "");
@@ -131,9 +138,9 @@ export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, 
     setMode(saved?.payload.mode ?? "");
     void load(controller.signal);
     return () => { controller.abort(); ++requestSequence.current; };
-  }, [storeId, orderId, sourceItemId, load]);
+  }, [storeId, orderId, sourceItemId, storageScope, load]);
 
-  const visibleData = data?.store.id === storeId ? data : null;
+  const visibleData = renderedScope === storageScope && data?.store.id === storeId ? data : null;
   const sources = visibleData?.sources.filter((source) => !orderId || source.orderNo === orderId || source.purchaseOrderItemId === pending?.payload.purchaseOrderItemId) ?? [];
   const source = sources.find((candidate) => candidate.purchaseOrderItemId === sourceId) ?? (!sourceId && sources.length === 1 ? sources[0] : undefined);
   const targets = visibleData?.inventoryItems.filter((item) => item.storeId === storeId && item.productId === source?.productId) ?? [];
@@ -147,17 +154,17 @@ export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, 
   const remainingQuantity = source?.unverifiedRemainingPurchaseQuantity ?? source?.remainingPurchaseQuantity;
   const quantity = parseInventoryCountQuantity(quantityText);
   const conversion = target?.currentConversion;
-  const locked = submitting || Boolean(pending);
+  const locked = submitting || Boolean(pending) || !executionAllowed;
   const inputInvalid = quantity === null || quantity <= 0 || (remainingQuantity !== null && remainingQuantity !== undefined && quantity > remainingQuantity);
   const reviewReady = !needsReview || reviewed;
   function canRecord(nextMode: InventoryReceiptMode) {
-    return Boolean(visibleData?.canReceive && !loading && !locked && reviewReady && source && target && !inputInvalid &&
+    return Boolean(visibleData?.canReceive && executionAllowed && !loading && !locked && reviewReady && source && target && !inputInvalid &&
       batchReady && !receiptModeBlockedReason(source, target, nextMode, batchPackaging) && receiptPreview(source, target, quantity, nextMode, batchPackaging));
   }
   const preview = pending?.preview ?? (source && target && mode ? receiptPreview(source, target, quantity, mode, batchPackaging) : null);
-  const canRetry = Boolean(visibleData?.canReceive && !loading && !submitting && pending);
+  const canRetry = Boolean(visibleData?.canReceive && executionAllowed && !loading && !submitting && pending && (surface !== "store" || pending.payload.expectedOperatorId === expectedOperatorId));
   const arrivalBlocked = source ? inventoryReceiptSourceBlockedReason(source, "unverified") : null;
-  const inventoryHref = `/os/inventory?storeId=${encodeURIComponent(storeId)}`;
+  const inventoryHref = `${surface === "store" ? "/store/inventory" : "/os/inventory"}?storeId=${encodeURIComponent(storeId)}`;
   const number = (value: number | null | undefined) => value === null || value === undefined ? t("未確認") : `${value < 0 ? "−" : ""}${formatInventoryCountQuantity(Math.abs(value), language)}`;
   const withUnit = (value: number | null | undefined, unit: string) => `${number(value)}${unit.startsWith("1/") ? " × " : " "}${unit}`;
   function inputChanged() { setError(""); setNotice(""); setReviewed(false); }
@@ -171,26 +178,32 @@ export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, 
         requestId: crypto.randomUUID(), purchaseOrderItemId: source.purchaseOrderItemId, inventoryItemId: target.id,
         purchaseQuantity: quantity, mode: nextMode, expectedSource: source.expectedSource, expectedStockRevision: target.stockRevision,
         expectedConversion: nextMode === "unverified" || batchPackaging ? null : conversion!,
-        ...(batchPackaging ? { batchPackaging } : {})
+        ...(batchPackaging ? { batchPackaging } : {}),
+        ...(surface === "store" ? { expectedOperatorId, confirmStoreReceiving: true as const } : {})
       }, preview: nextPreview
     } : null);
     if (!selected) return;
     setMode(selected.payload.mode);
-    const submittedStore = storeId;
+    const submittedStore = storeId, submittedScope = storageScope;
     submittingRef.current = true; setSubmitting(true); setError(""); setNotice("");
     pendingRef.current = selected; setPending(selected);
-    try { window.localStorage.setItem(storageKey(storeId), JSON.stringify(selected)); } catch {
+    try { window.localStorage.setItem(storageKey(storageScope), JSON.stringify(selected)); } catch {
       setError("入庫を保存できませんでした。"); submittingRef.current = false; setSubmitting(false); return;
     }
     try {
-      const response = await fetch("/api/inventory/receipts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(selected.payload) });
+      const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(selected.payload) });
       const body = await response.json().catch(() => ({}));
-      if (activeStore.current !== submittedStore) return;
+      if (activeStore.current !== submittedStore || activeScope.current !== submittedScope) return;
       if (response.ok) {
         clearPending(); setQuantityText(""); setNeedsReview(false); setReviewed(false); resetBatch();
         setNotice(body.replayed ? "この入庫は登録済みです。重複して加算しません。" : "入庫を登録しました。");
         await load();
         onRecordedRef.current?.();
+        return;
+      }
+      if (surface === "store" && (response.status === 401 || response.status === 403 || body.code === "operator_changed")) {
+        setError(body.error ?? "操作担当者を再確認してください。同じ担当者で未送信の入庫を確認できます。");
+        onAuthorizationRequired?.();
         return;
       }
       if (response.status < 500) {
@@ -204,7 +217,7 @@ export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, 
         setError(body.error ?? "送信結果を確認できません。同じ内容で再送してください。");
       }
     } catch {
-      if (activeStore.current === submittedStore) setError("送信結果を確認できません。同じ内容で再送してください。");
+      if (activeStore.current === submittedStore && activeScope.current === submittedScope) setError("送信結果を確認できません。同じ内容で再送してください。");
     } finally { submittingRef.current = false; setSubmitting(false); }
   }
 
@@ -215,7 +228,7 @@ export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, 
     {error ? <p className={styles.error} role="alert">{t(error)}</p> : null}
     {notice ? <p className={styles.notice} role="status">{t(notice)}</p> : null}
     {loading && !visibleData ? <p role="status">{t("読み込み中")}</p> : null}
-    {visibleData && !visibleData.canReceive ? <p>{t("このアカウントでは入庫登録できません。担当者に確認してください。")}</p> : null}
+    {visibleData && (!visibleData.canReceive || !executionAllowed) ? <p>{t("このアカウントでは入庫登録できません。担当者に確認してください。")}</p> : null}
     {visibleData?.canReceive ? <>
       <form onSubmit={(event) => { event.preventDefault(); if (pending) void submit(); }}>
       {pending ? <p className={styles.warning}>{t("送信結果を確認中です。商品・数量・保管場所を変えず、同じ内容で再送してください。")}</p> : null}
@@ -234,7 +247,7 @@ export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, 
         </div> : null}
         {source ? <p className={styles.wide}>{t("記録購入量")} {withUnit(source.actualQuantity, source.actualUnit ?? "—")} · {t("登録済み入庫量")} {source.receivedPurchaseUnits.length ? source.receivedPurchaseUnits.map((record) => withUnit(record.quantity, record.purchaseUnit)).join(" · ") : withUnit(0, source.actualUnit ?? "—")}</p> : null}
         {arrivalBlocked ? <div className={styles.wide}><p className={styles.warning}>{t(blockedMessages[arrivalBlocked] ?? arrivalBlocked)}</p>
-          {source?.correctionHref && arrivalBlocked !== "fully_received" ? <a href={source.correctionHref}>{t("購入記録を確認")}</a> : null}</div> : null}
+          {surface !== "store" && source?.correctionHref && arrivalBlocked !== "fully_received" ? <a href={source.correctionHref}>{t("購入記録を確認")}</a> : null}</div> : null}
         <label className={styles.wide}><span>{t("入庫先の保管場所")}</span>
           <select name="inventoryItemId" value={target?.id ?? targetId} disabled={locked || !source || Boolean(arrivalBlocked)} onChange={(event) => { inputChanged(); resetBatch(); setTargetId(event.target.value); setMode(""); }}>
             <option value="">{t("保管場所を選択してください")}</option>
@@ -242,7 +255,7 @@ export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, 
           </select>
           {target && targets.length === 1 ? <small>{t("この商品の保管場所を選択しました。場所を確認してください。")}</small> : null}
         </label>
-        {source && !arrivalBlocked && !targets.length ? <p className={styles.wide}>{t("この店舗・商品に対応する保管場所がありません。先に在庫設定を登録してください。")} <a href={inventoryHref}>{t("在庫設定へ")}</a></p> : null}
+        {source && !arrivalBlocked && !targets.length ? <p className={styles.wide}>{t("この店舗・商品に対応する保管場所がありません。先に在庫設定を登録してください。")} {surface === "store" ? <span>{t("本部に保管場所の設定を依頼してください。")}</span> : <a href={inventoryHref}>{t("在庫設定へ")}</a>}</p> : null}
         {source && target ? <details className={styles.batchPackaging} open={Boolean(source.actualPackaging || batchEnabled)}>
           <summary>{t(source.actualPackaging ? "記録済みの購入包装仕様" : "今回の包装・内容量を指定")}</summary>
           {batchBasisChanged ? <p className={styles.warning}>{t("購入または保管先の単位が変わりました。入力した包装仕様を新しい単位へ読み替えず、選び直してください。")}</p> : null}
@@ -258,7 +271,7 @@ export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, 
               {!batchPackaging ? <small className={`${styles.warning} ${styles.wide}`}>{t("内容量・内容単位・入庫数量を明示してください。同じ内容単位の場合は数量を一致させます。")}</small> : null}
             </div> : null}
           </>}
-          {batchPackaging && batchReady ? <BatchPackagingTemplateSaver storeId={storeId} productId={source.productId} packaging={batchPackaging} disabled={locked} onSaved={() => void load()} /> : null}
+          {surface !== "store" && batchPackaging && batchReady ? <BatchPackagingTemplateSaver storeId={storeId} productId={source.productId} packaging={batchPackaging} disabled={locked} onSaved={() => void load()} /> : null}
         </details> : null}
         <div className={styles.allReceived}>
           <strong>{quantityText ? t("今回受け取った数量") : t("今回の到着を確認")}{quantityText ? ` · ${withUnit(quantity, source?.actualUnit ?? source?.purchaseUnit ?? "—")}` : ""}</strong>
@@ -269,7 +282,7 @@ export function StockReceiptPanel({ storeId, orderId, sourceItemId, onRecorded, 
           <label><span>{t("入庫する購入数量")}</span><input name="purchaseQuantity" inputMode="decimal" value={quantityText} disabled={locked || !target || Boolean(arrivalBlocked)} placeholder={t("数量を入力")} onChange={(event) => { inputChanged(); setQuantityText(event.target.value); setMode(""); }} /><small>{source?.actualUnit ?? source?.purchaseUnit ?? "—"}</small></label>
           <p>{t("分けて保管する場合は、この保管場所へ入れる数量を登録し、残りを別の場所へ登録してください。")}</p>
           {target ? <p>{t(target.stockRevision > 0 ? "最近の実際の棚卸" : "元の記録数量")} {withUnit(target.currentQuantity, target.countUnit)} · {t("帳簿在庫")} {withUnit(target.stockQuantity, target.countUnit)}</p> : null}
-          {!conversion && !batchPackaging && target ? <p>{t(blockedMessages.conversion_unknown)} {canViewProducts ? <a href="/os/products">{t("商品単位の設定を確認")}</a> : <span>{t("本部に単位の対応を確認してください。")}</span>}</p> : null}
+          {!conversion && !batchPackaging && target ? <p>{t(blockedMessages.conversion_unknown)} {surface !== "store" && canViewProducts ? <a href="/os/products">{t("商品単位の設定を確認")}</a> : <span>{t("本部に単位の対応を確認してください。")}</span>}</p> : null}
         </details>
         {quantityText && inputInvalid && !pending ? <p className={`${styles.error} ${styles.wide}`}>{t("入庫数量は正の数で、未入庫の残量以内にしてください。小数は6桁までです。")}</p> : null}
         {needsReview && !pending ? <label className={styles.review}><input name="receiptUpdatedFactsConfirmed" type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} /><span>{t("更新後の購入数量・保管場所・換算を確認しました")}</span></label> : null}

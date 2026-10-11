@@ -282,7 +282,7 @@ export default function InventoryPage() {
     setCountSaveError("");
     setIsSaving(item.id);
     try {
-      await postInventory({ action: "count", itemId: item.id, quantity, inputUnit, countUnit: item.countUnit, expectedConversion: item.currentConversion ?? null, expectedStockRevision: item.stockRevision }, `${item.productName}の在庫を記録しました。`);
+      await postInventory({ action: "count", itemId: item.id, quantity, inputUnit, countUnit: item.countUnit, expectedConversion: item.currentConversion ?? null, expectedInputConversion: item.unitChoices?.find(choice => choice.countUnit === inputUnit) ?? null, expectedStockRevision: item.stockRevision }, `${item.productName}の在庫を記録しました。`);
       if (activeInventoryStore.current === submittedStore) {
         setCountDrafts(current => { const next={...current};delete next[item.id];return next; });
         await loadInventory(submittedStore,true);

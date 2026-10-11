@@ -1,6 +1,6 @@
 "use client";
 
-import { BellRing, BookOpen, ChefHat, ChevronDown, Clock3, ClipboardList, Home, Lightbulb, Menu, MessageSquareWarning, Monitor, PackageCheck, Settings, ShoppingCart, Store, Tags, Users } from "lucide-react";
+import { BellRing, BookOpen, ChefHat, ChevronDown, Clock3, ClipboardList, Home, Lightbulb, Menu, MessageSquareWarning, Monitor, PackageCheck, PackageSearch, Settings, ShoppingCart, Store, Tags, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
 import { useCloseOnOutside } from "../../os/components/useCloseOnOutside";
@@ -25,7 +25,8 @@ const tabs = [
   { label: "販売状態", href: "/store/menu", icon: Tags },
   { label: "店舗設備", href: "/store/devices", icon: Lightbulb },
   { label: "POS", href: "/store/pos", icon: ShoppingCart },
-  { label: "納品確認", href: "/store/receiving", icon: PackageCheck },
+  { label: "在庫確認", href: "/store/inventory", icon: PackageSearch },
+  { label: "納品・入庫", href: "/store/receiving", icon: PackageCheck },
   { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
   { label: "SNS素材作成", href: "/store/sns", icon: Tags },
   { label: "手順書", href: "/store/procedures", icon: BookOpen },
@@ -57,7 +58,7 @@ function formatStoreClock(date: Date) {
   return { dateText, timeText };
 }
 
-export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" | "notifications" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "receiving" | "feedback" | "devices" | "sns" }) {
+export function StoreNavTabs({ active, storeId }: { storeId?: string; active: "home" | "seats" | "orders" | "notifications" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "receiving" | "inventory" | "feedback" | "devices" | "sns" }) {
   const activeHref = active === "home"
     ? "/store"
     : active === "kitchen"
@@ -70,6 +71,7 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
   const [now, setNow] = useState<Date | null>(null);
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
   const [employeeRole, setEmployeeRole] = useState<string | null>(null);
+  const [canUseInventory, setCanUseInventory] = useState(false);
   const [storeContext, setStoreContext] = useState<StoreContextResponse | null>(null);
   const [hasPendingOrderAlert, setHasPendingOrderAlert] = useState(false);
   const [displayMenuOpen, setDisplayMenuOpen] = useState(false);
@@ -81,11 +83,12 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
   const [snsAvailable, setSnsAvailable] = useState(false);
   useEffect(() => { let alive = true; fetch("/api/sns").then(r => r.ok ? r.json() : null).then(d => { if (alive) setSnsAvailable(Boolean(d?.stores?.length)); }).catch(() => {}); return () => { alive = false; }; }, [storeContext?.selectedStoreId]);
-  const authorizedTabs = tabs.filter(tab => tab.href !== "/store/sns" || snsAvailable);
-  const visibleTabs = employeeRole === null || employeeRole === "store_terminal"
-    ? authorizedTabs.filter((tab) => tab.href !== "/os")
-    : authorizedTabs;
-  const visibleDisplayTabs = displayTabs;
+  const authorizedTabs = tabs.filter(tab => (tab.href !== "/store/sns" || snsAvailable) && (!["/store/inventory", "/store/receiving"].includes(tab.href) || canUseInventory));
+  const restricted = employeeRole === null || ["staff", "store_owner", "store_manager"].includes(employeeRole);
+  const visibleTabs = restricted
+    ? [...authorizedTabs.filter(tab => ["/store/inventory", "/store/receiving"].includes(tab.href)), ...(employeeRole === "staff" ? [{ label: "個人アプリ", href: "/staff", icon: Users }] : employeeRole ? [authorizedTabs.find(tab => tab.href === "/os")!] : [])]
+    : employeeRole === "store_terminal" ? authorizedTabs.filter(tab => tab.href !== "/os") : authorizedTabs;
+  const visibleDisplayTabs = restricted ? [] : displayTabs;
   const isDisplayActive = visibleDisplayTabs.some((tab) => tab.href === activeHref);
   const storeOptions = storeContext?.access?.stores ?? [];
   const selectedStoreId = storeContext?.selectedStoreId ?? "";
@@ -93,7 +96,8 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
   const canSwitchStore = Boolean(
     storeOptions.length > 1 &&
     storeContext?.access &&
-    (storeContext.access.canUseAllStoreView || !["staff", "store_terminal"].includes(storeContext.access.role))
+    (storeContext.access.canUseAllStoreView || !["staff", "store_terminal"].includes(storeContext.access.role) ||
+      (canUseInventory && ["inventory", "receiving"].includes(active) && storeContext.access.role === "staff"))
   );
 
   const clearOrderAlert = () => {
@@ -126,7 +130,7 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
   useEffect(() => {
     let isMounted = true;
     async function loadStoreContext() {
-      const storedStoreId = getStoredStoreSelection();
+      const storedStoreId = storeId || getStoredStoreSelection();
       const params = storedStoreId ? `?storeId=${encodeURIComponent(storedStoreId)}` : "";
       const response = await fetch(`/api/store/context${params}`, { cache: "no-store" });
       if (!response.ok) return;
@@ -140,16 +144,17 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [storeId]);
 
   useEffect(() => {
     let isMounted = true;
     async function loadCurrentEmployee() {
       const response = await fetch("/api/auth/me", { cache: "no-store" });
       if (!response.ok) return;
-      const body = await response.json() as { employee?: { role?: string; isTimecardEmployee?: boolean } | null };
+      const body = await response.json() as { employee?: { role?: string; isTimecardEmployee?: boolean; permissions?: string[]; permittedNavPaths?: string[] } | null };
       if (isMounted) {
         setEmployeeRole(String(body.employee?.role ?? ""));
+        setCanUseInventory(Boolean(body.employee?.permissions?.includes("store.inventory") || body.employee?.permittedNavPaths?.includes("/store/inventory")));
       }
     }
     void loadCurrentEmployee();
@@ -192,7 +197,7 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
   function handleStoreSwitch(storeId: string) {
     if (!storeId || storeId === selectedStoreId) return;
     setStoredStoreSelection(storeId);
-    window.location.reload();
+    if (active === "inventory" || active === "receiving") { const url = new URL(window.location.href); url.searchParams.set("storeId", storeId); window.location.assign(url.toString()); } else window.location.reload();
   }
 
   return (
@@ -205,7 +210,7 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
         </div>
       ) : null}
       <div className={`store-user-tools is-user-${settings.header.userDisplay}`}>
-        <UserBadge showNotifications={settings.header.showNotifications} showLanguagePicker={settings.header.showLanguagePicker} />
+        <UserBadge showNotifications={settings.header.showNotifications} showLanguagePicker={settings.header.showLanguagePicker} showStorePicker={false} logoutHref="/store/logout" />
       </div>
       <nav className="store-nav-tabs" aria-label="店舗ワークベンチ">
         {visibleTabs.map((tab) => {
@@ -223,7 +228,7 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
             </a>
           );
         })}
-        <div className="store-display-nav-menu" data-open={displayMenuOpen ? "true" : "false"} ref={displayMenuRef}>
+        {visibleDisplayTabs.length > 0 ? <div className="store-display-nav-menu" data-open={displayMenuOpen ? "true" : "false"} ref={displayMenuRef}>
           <button
             className={isDisplayActive ? "is-active" : ""}
             type="button"
@@ -245,7 +250,7 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
               );
             })}
           </div> : null}
-        </div>
+        </div> : null}
         {canSwitchStore ? (
           <label className="store-nav-store-switch" title={selectedStoreName ? `現在: ${selectedStoreName}` : "店舗切替"}>
             <Store size={17} />
@@ -281,7 +286,7 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
               </a>
             );
           })}
-          <div className="store-display-nav-menu is-mobile" data-open={mobileDisplayMenuOpen ? "true" : "false"} ref={mobileDisplayMenuRef}>
+          {visibleDisplayTabs.length > 0 ? <div className="store-display-nav-menu is-mobile" data-open={mobileDisplayMenuOpen ? "true" : "false"} ref={mobileDisplayMenuRef}>
             <button
               className={isDisplayActive ? "is-active" : ""}
               type="button"
@@ -303,7 +308,7 @@ export function StoreNavTabs({ active }: { active: "home" | "seats" | "orders" |
                 );
               })}
             </div> : null}
-          </div>
+          </div> : null}
           {canSwitchStore ? (
             <label className="store-nav-store-switch is-mobile" title={selectedStoreName ? `現在: ${selectedStoreName}` : "店舗切替"}>
               <Store size={17} />

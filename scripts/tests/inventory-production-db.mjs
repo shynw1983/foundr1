@@ -11,7 +11,12 @@ const ids = Object.fromEntries(['store','destination','otherStore','brand','othe
 let session = { id:ids.employee,name:'Tester',role:'owner' }, allowed = true, permission = true, hook = null;
 const statements=[];
 const sql=Object.assign((parts,...values)=>({text:parts.reduce((text,part,i)=>text+part+(i<values.length?`$${i+1}`:''),''),values,then(resolve,reject){statements.push(this.text);return db.query(this.text,this.values).then(result=>result.rows).then(resolve,reject);}}),{transaction:async queries=>{if(hook){const next=hook;hook=null;await next();}return db.transaction(async tx=>{const results=[];for(const query of queries){statements.push(query.text);results.push((await tx.query(query.text,query.values)).rows);}return results;});}});
-function load(path,modules={}){const exports={};runInNewContext(ts.transpileModule(readFileSync(new URL(path,root),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,Response,Request,URL,console,require:name=>{
+function load(path,modules={}){
+  if(path==='app/api/inventory/route.ts') {
+    const sharedModules=Object.fromEntries(Object.entries(modules).map(([name,value])=>[name.replace('../../../lib/','./'),value]));
+    modules={...modules,'../../../lib/inventory-execution-data':load('lib/inventory-execution-data.ts',sharedModules)};
+  }
+const exports={};runInNewContext(ts.transpileModule(readFileSync(new URL(path,root),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,Response,Request,URL,console,require:name=>{
   if(name==='node:crypto')return require(name);
   if(name.endsWith('/db')||name==='./db')return{sql};
   if(name.endsWith('/api-auth'))return{requireOsSession:async()=>session,requireWritableOsSession:async()=>session&&session.role!=='store_terminal'?session:null,canAccessStore:async(_,storeId)=>allowed&&(session.role==='owner'||session.role==='manager'||storeId===ids.destination),getSessionStoreScope:async()=>({allStores:session.role==='owner'||session.role==='manager',storeIds:[ids.destination]})};

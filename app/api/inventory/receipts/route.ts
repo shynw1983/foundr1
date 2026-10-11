@@ -53,6 +53,7 @@ export async function POST(request: Request) {
   let payload: InventoryReceiptPayload | undefined;
   try {
     payload = normalizeInventoryReceiptPayload(await request.json().catch(() => null));
+    if (payload.confirmStoreReceiving) throw new InventoryReceiptError("店舗での入庫と確認は店舗画面から登録してください。", 400, "store_confirmation_surface");
     const alreadyRecorded = await replay(session, payload);
     if (alreadyRecorded) return alreadyRecorded;
     const source = await readInventoryReceiptSource(payload.purchaseOrderItemId);

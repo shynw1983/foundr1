@@ -44,6 +44,8 @@ export type InventoryReceiptPayload = {
   requestId: string; purchaseOrderItemId: string; inventoryItemId: string; purchaseQuantity: number; mode: InventoryReceiptMode;
   expectedSource: InventoryReceiptSourceSnapshot; expectedStockRevision: number; expectedConversion: ProductUnitConversionSnapshot | null;
   batchPackaging?: ProductBatchPackaging;
+  /** Store execution confirms only the fully received source, within the receipt transaction. */
+  confirmStoreReceiving?: true;
 };
 export class InventoryReceiptError extends Error {
   status: number; code: string;
@@ -88,6 +90,9 @@ export function normalizeInventoryReceiptPayload(value: unknown): InventoryRecei
   }
   const conversion = input.expectedConversion as ProductUnitConversionSnapshot | null | undefined;
   const batchPackaging = input.batchPackaging === undefined ? undefined : receiptPackaging(input.batchPackaging);
+  if (input.confirmStoreReceiving !== undefined && input.confirmStoreReceiving !== true) {
+    throw new InventoryReceiptError("店舗確認の登録方法を確認してください。", 400, "invalid_store_confirmation");
+  }
   if ((batchPackaging || normalizedSource.actualPackaging) && conversion!==null && !unitConversionSnapshotsEqual(conversion,conversion)) throw new InventoryReceiptError("棚卸単位の対応を再確認してください。",409,"conversion_unknown");
   if (input.mode === "unverified" ? conversion !== null : (!batchPackaging && !normalizedSource.actualPackaging && !unitConversionSnapshotsEqual(conversion, conversion))) {
     throw new InventoryReceiptError(input.mode === "unverified" ? "今回の到着だけを記録する場合、換算数量は設定しません。" : "商品と棚卸単位の対応を確認してください。", 409, "conversion_unknown");
@@ -98,7 +103,8 @@ export function normalizeInventoryReceiptPayload(value: unknown): InventoryRecei
     requestId: id(input.requestId), purchaseOrderItemId, inventoryItemId: id(input.inventoryItemId), purchaseQuantity: quantity,
     mode: input.mode, expectedSource: normalizedSource, expectedStockRevision: Number(input.expectedStockRevision),
     expectedConversion: conversion ? { purchaseUnit: conversion.purchaseUnit, countUnit: conversion.countUnit, unitsPerPurchase: conversion.unitsPerPurchase } : null,
-    ...(batchPackaging ? { batchPackaging } : {})
+    ...(batchPackaging ? { batchPackaging } : {}),
+    ...(input.confirmStoreReceiving === true ? { confirmStoreReceiving: true as const } : {})
   };
 }
 

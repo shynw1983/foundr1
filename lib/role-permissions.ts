@@ -88,6 +88,15 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     navPaths: ["/os/menus", "/os/brand-sites", "/os/loyalty"]
   },
   {
+    key: "store.inventory",
+    label: "店舗の在庫確認・入庫",
+    description: "所属店舗で在庫巡回、実数棚卸、異常報告、入庫を実行できます。商品・配合・設定の管理権限は含みません。",
+    category: "店舗運営",
+    defaultRoles: ["owner", "manager", "store_owner", "store_manager", "staff", "store_terminal"],
+    lockedRoles: ["owner"],
+    navPaths: ["/store/inventory", "/store/receiving"]
+  },
+  {
     key: "module.inventory",
     label: "在庫確認",
     description: "店舗ごとの粗い在庫確認、保管場所、安全在庫、異常記録を表示します。",
@@ -224,7 +233,7 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
 const permissionByKey = new Map(rolePermissionDefinitions.map((definition) => [definition.key, definition]));
 
 function isPermissionAvailableForRole(role: ConfigurableRole, permissionKey: string) {
-  if (role === "staff") return permissionKey === "module.staffPortal";
+  if (role === "staff") return permissionKey === "module.staffPortal" || permissionKey === "store.inventory";
   return true;
 }
 

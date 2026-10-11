@@ -38,7 +38,7 @@ function harness() {
       fetch: (url: string, options?: any) => new Promise<Response>(resolve => requests.push({ url, payload: options?.body ? JSON.parse(options.body) : null, resolve })),
       require: (name: string) => { if (!(name in modules)) throw new Error(`Unmocked ${name}`); return modules[name]; } });
   return { exports, requests, storage,
-    render(storeId = id(1)) { si = ri = ei = ci = 0; effects = []; const tree = exports.StockReceiptPanel({ storeId }); const run = effects; run.forEach(fn => fn()); return tree; },
+    render(input: string | Record<string, unknown> = id(1)) { si = ri = ei = ci = 0; effects = []; const props = typeof input === "string" ? { storeId: input } : input; const tree = exports.StockReceiptPanel(props); const run = effects; run.forEach(fn => fn()); return tree; },
     async respond(index: number, body: any, status = 200) { requests[index].resolve(Response.json(body, { status })); await new Promise(resolve => setTimeout(resolve, 0)); }
   };
 }
@@ -115,4 +115,25 @@ test("a stock unit change preserves the original batch basis and refuses to rein
   await h.respond(1, { error: "unit changed" }, 409); await h.respond(2, response([{ ...targetKg, countUnit: "g", stockRevision: 2 }])); tree = h.render();
   assert.equal(field(tree, "batchStockQuantityPerPurchase").props.value, "3"); assert.match(text(tree), /購入または保管先の単位が変わりました/); assert.match(text(elements(tree, e => e.type === "label" && elements(e, child => child.props?.name === "batchStockQuantityPerPurchase").length > 0)[0]), /kg/);
   field(tree, "receiptUpdatedFactsConfirmed").props.onChange({ target: { checked: true } }); tree = h.render(); assert.equal(button(tree, "新しい到着分を在庫に加算").props.disabled, true); assert.equal(button(tree, "到着だけ記録・総在庫は未確認にする").props.disabled, true); assert.equal(h.requests.length, 3);
+});
+
+
+test("Store receipt uses the verified operator and atomic confirmation, retaining the original nonce after authentication expiry", async () => {
+  const h = harness(); let authRequired = 0;
+  const props = { storeId: id(1), surface: "store", expectedOperatorId: id(70), draftScopeKey: `store:${id(1)}:${id(70)}`, canOperate: true, onAuthorizationRequired: () => { ++authRequired; } };
+  h.render(props); assert.match(h.requests[0].url, /^\/api\/store\/inventory\/receipts/); await h.respond(0, response()); let tree = h.render(props);
+  button(tree, "今回の未入庫分をすべて受け取りました").props.onClick(); tree = h.render(props); button(tree, "新しい到着分を在庫に加算").props.onClick();
+  const first = JSON.stringify(h.requests[1].payload); assert.equal(h.requests[1].payload.expectedOperatorId, id(70)); assert.equal(h.requests[1].payload.confirmStoreReceiving, true); assert.equal(h.requests[1].url, "/api/store/inventory/receipts");
+  await h.respond(1, { error: "expired", code: "operator_expired" }, 401); assert.equal(authRequired, 1); assert.equal(h.storage.size, 1);
+  tree = h.render({ ...props, canOperate: false }); elements(tree, e => e.type === "form")[0].props.onSubmit({ preventDefault() {} }); assert.equal(h.requests.length, 2);
+  tree = h.render(props); elements(tree, e => e.type === "form")[0].props.onSubmit({ preventDefault() {} }); assert.equal(JSON.stringify(h.requests[2].payload), first);
+  tree = h.render({ ...props, expectedOperatorId: id(71), draftScopeKey: `store:${id(1)}:${id(71)}` }); assert.equal(elements(tree, e => e.type === "form").length, 0); assert.equal(h.storage.size, 1);
+});
+
+test("Store receipt never exposes OS management links or template management, while keeping batch confirmation", async () => {
+  const h = harness(), props = { storeId: id(1), surface: "store", expectedOperatorId: id(70), draftScopeKey: `store:${id(1)}:${id(70)}` };
+  h.render(props); await h.respond(0, response([target], [{ ...source, correctionHref: "/os/orders?order=PO-1" }])); let tree = h.render(props);
+  field(tree, "batchPackagingEnabled").props.onChange({ target: { checked: true } }); tree = h.render(props);
+  field(tree, "batchContentQuantity").props.onChange({ target: { value: "20" } }); tree = h.render(props); field(tree, "batchPackagingConfirmed").props.onChange({ target: { checked: true } }); tree = h.render(props);
+  assert.equal(elements(tree, e => e.type === "BatchPackagingTemplateSaver").length, 0); assert.equal(elements(tree, e => e.type === "a" && String(e.props.href).startsWith("/os")).length, 0); assert.ok(field(tree, "batchPackagingTemplate"));
 });

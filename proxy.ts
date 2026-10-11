@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { canUseFullStoreWorkbench,isRestrictedStorePersonalRole,isRestrictedStoreExecutionPath } from "./lib/store-inventory-policy";
 
 const authCookieName = "foundr1_os_session";
 const defaultRoleNavPaths: Record<string, string[]> = {
@@ -85,6 +86,8 @@ const storeTerminalAllowedPaths = [
   "/store/display/kitchen",
   "/store/display/pickup",
   "/store/menu",
+  "/store/inventory",
+  "/store/receiving",
   "/store/timecard",
   "/store/pos",
   "/store/pos/customer-display",
@@ -194,8 +197,12 @@ async function runFoundr1Proxy(request: NextRequest) {
 
   const session = await readValidSession(request.cookies.get(authCookieName)?.value);
   if (session) {
-    const storeAppRoles = new Set(["owner", "manager", "store_terminal"]);
-    if (!storeAppRoles.has(session.role ?? "") && isStorePath && pathname !== "/store/logout") {
+    if(isStorePath&&isRestrictedStorePersonalRole(session.role??"")) {
+      if(!isRestrictedStoreExecutionPath(pathname)) {
+        const url=request.nextUrl.clone();url.pathname="/store/inventory";url.search="";
+        return NextResponse.redirect(url);
+      }
+    } else if (!canUseFullStoreWorkbench(session.role ?? "") && isStorePath && pathname !== "/store/logout") {
       const url = request.nextUrl.clone();
       url.pathname = session.role === "staff"
         ? pathname === "/store/timecard" ? "/staff/timecard" : "/staff"

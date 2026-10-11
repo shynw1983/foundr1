@@ -23,6 +23,7 @@ let session = { id: ids.employee, name: 'Tester', role: 'store_manager' };
 let storeAllowed = true;
 let scopedStoreId = ids.store;
 let inventoryAllowed = true;
+let terminalActor = null;
 let beforeWrite = null;
 const statements = [];
 
@@ -67,6 +68,19 @@ function load(path, modules = {}) {
         getSessionStoreScope: async () => ({ allStores: false, storeIds: storeAllowed ? [scopedStoreId] : [] })
       };
       if (name.endsWith('/role-permissions')) return { roleHasPermission: async () => inventoryAllowed };
+      if (name.endsWith('/store-inventory-access')) return {
+        requireStoreInventoryAccess: async (storeId, action) => {
+          const failure=(status,code)=>({ok:false,response:Response.json({error:code,code},{status})});
+          if(!session)return failure(401,'session_required');
+          if(!inventoryAllowed)return failure(403,'inventory_permission');
+          if(!storeAllowed||storeId!==scopedStoreId)return failure(403,'store_scope');
+          const actor=session.role==='store_terminal'?terminalActor:session;
+          if(action!=='read'&&!actor)return failure(401,'operator_required');
+          return {ok:true,baseSession:session,actor,storeId,operator:actor?{id:actor.id,name:actor.name,role:actor.role,expiresAt:null}:null};
+        },
+        assertExpectedStoreInventoryOperator:(access,expected)=>expected===access.actor?.id?null:Response.json({error:'operator_changed',code:'operator_changed'},{status:409}),
+        assertStoreInventorySameOrigin:request=>request.headers.get('origin')===new URL(request.url).origin?null:Response.json({error:'same_origin_required',code:'same_origin_required'},{status:403})
+      };
       if (name === 'node:crypto' || name === 'crypto') return require(name);
       if (name.endsWith('/order-realtime') || name.endsWith('/notification-realtime')) return {
         publishStoreOperationalEvent: async () => undefined, publishOsNotificationEvent: async () => undefined
@@ -105,7 +119,8 @@ async function createOldDatabase() {
       status text default 'submitted',created_at timestamptz default now(),updated_at timestamptz default now());
     create table purchase_order_items(id uuid primary key,purchase_order_id uuid references purchase_orders(id) on delete cascade,
       product_id uuid references products(id),requested_quantity numeric(12,2),requested_unit text,
-      actual_quantity numeric(12,2),status text,temporary_product_name text default '',temporary_product_unit text default '個');
+      actual_quantity numeric(12,2),status text,temporary_product_name text default '',temporary_product_unit text default '個',
+      store_feedback_confirmed_at timestamptz,store_feedback_confirmed_by uuid,procurement_note text,note text);
     create table purchase_actuals(id uuid primary key default gen_random_uuid(),purchase_order_item_id uuid references purchase_order_items(id) on delete cascade,
       actual_quantity numeric(12,2),actual_unit text,recorded_at timestamptz not null default now());
     create table price_records(id uuid primary key default gen_random_uuid(),product_id uuid references products(id),supplier_id uuid references suppliers(id),
@@ -688,11 +703,11 @@ try {
 
   const quickPolicy=load('lib/inventory-quick-policy.ts',{'./product-unit-conversions':units});
   const countInput=load('lib/inventory-count-input-policy.ts',{'./product-unit-conversions':units});
-  const inventoryRoute=load('app/api/inventory/route.ts',{
-    '../../../lib/product-unit-conversions':units,'../../../lib/inventory-quick-policy':quickPolicy,
-    '../../../lib/inventory-count-input-policy':countInput,
-    '../../../lib/product-catalog-access':{assertProductViewableAtStore:async()=>({ok:true}),getVisibleProductIdsForStore:async()=>[batchProduct]}
+  const inventoryExecution=load('lib/inventory-execution-data.ts',{
+    './product-unit-conversions':units,'./inventory-quick-policy':quickPolicy,'./inventory-count-input-policy':countInput,
+    './product-catalog-access':{assertProductViewableAtStore:async()=>({ok:true}),getVisibleProductIdsForStore:async()=>[batchProduct]}
   });
+  const inventoryRoute=load('app/api/inventory/route.ts',{'../../../lib/inventory-execution-data':inventoryExecution});
   async function countBatch(quantity) {
     const current=await stock(batchStock);
     const currentProduct=(await db.query('select * from products where id=$1',[batchProduct])).rows[0];
@@ -724,6 +739,215 @@ try {
   assert.equal((await post(unverifiedBatchBody)).status,200);
   assert.deepEqual(await persistedState(),countedAfterRough);
   console.log('PASS: unverified receipt invalidates precise interval via movement metadata; next count preserves unknown difference and old receipt retry cannot overwrite new count');
+
+  // Store executes the same stock transaction, with a verified employee and an explicitly different nonce body.
+  const storeRoute=load('app/api/store/inventory/receipts/route.ts',{
+    '../../../../../lib/inventory-receipt-policy':policy,'../../../../../lib/inventory-receipt-data':data
+  });
+  const deliveryTransition=load('lib/procurement-delivery-transition.ts');
+  const receivingRoute=load('app/api/store/procurement-receiving/route.ts',{
+    '../../../../lib/procurement-delivery-transition':deliveryTransition,'../../../../lib/replenishment-order-locks':locks
+  });
+  const storeGet=()=>storeRoute.GET(new Request(`https://example.test/api/store/inventory/receipts?storeId=${ids.store}`));
+  const storePost=body=>storeRoute.POST(new Request('https://example.test/api/store/inventory/receipts',{method:'POST',headers:{Origin:'https://example.test'},body:JSON.stringify(body)}));
+  const storeProduct=uuid(1500),storeStock=uuid(1501),storeLocation=uuid(1502),storeBatch=uuid(1503);
+  const storeLines=[uuid(1504),uuid(1505),uuid(1506),uuid(1507),uuid(1508),uuid(1510)];
+  const terminalId=uuid(1509),rollbackBatch=uuid(1511);
+  await db.query('insert into employees(id,name) values($1,$2)',[terminalId,'Shared tablet']);
+  await db.query(`insert into products(id,name,unit,package_quantity,package_quantity_unit,catalog_visibility,is_orderable)
+    values($1,'Historical hidden Store SKU','箱',12,'袋','internal',false)`,[storeProduct]);
+  await db.query(`insert into inventory_locations(id,store_id,name) values($1,$2,'Store shelf')`,[storeLocation,ids.store]);
+  await db.query(`insert into inventory_items(id,store_id,product_id,location_id,count_unit,safety_stock,current_quantity,
+    count_conversion_snapshot,stock_quantity,stock_conversion_snapshot,stock_revision,last_counted_at,last_counted_by)
+    values($1,$2,$3,$4,'袋',1,100,$5::jsonb,100,$5::jsonb,1,now(),$6)`,[storeStock,ids.store,storeProduct,storeLocation,JSON.stringify(conversion),ids.employee]);
+  for(const [index,line] of storeLines.entries()) {
+    await db.query(`insert into purchase_order_items(id,purchase_order_id,product_id,requested_quantity,requested_unit,actual_quantity,status)
+      values($1,$2,$3,9,'箱',$4,'delivered')`,[line,ids.order,storeProduct,index===4?null:2]);
+    if(index!==4)await db.query(`insert into purchase_actuals(purchase_order_item_id,actual_quantity,actual_unit) values($1,2,'箱')`,[line]);
+  }
+  await db.query(`insert into delivery_batches(id,purchase_order_id,batch_no,status,delivered_at) values($1,$2,20,'delivered',now()),($3,$2,21,'delivered',now())`,[storeBatch,ids.order,rollbackBatch]);
+  await db.query(`insert into delivery_batch_items values($1,$2),($1,$3),($4,$5)`,[storeBatch,storeLines[0],storeLines[1],rollbackBatch,storeLines[5]]);
+  session={id:ids.employee,name:'Verified staff',role:'staff'};
+  async function storeBody(line,overrides={}) {
+    const response=await storeGet();assert.equal(response.status,200,await response.clone().text());
+    const responseBody=await response.json();
+    const source=responseBody.sources.find(item=>item.purchaseOrderItemId===line);
+    const target=responseBody.inventoryItems.find(item=>item.id===storeStock);
+    assert.ok(source);assert.ok(target);
+    return {requestId:requestId(),purchaseOrderItemId:line,inventoryItemId:storeStock,purchaseQuantity:2,mode:'add',
+      expectedSource:source.expectedSource,expectedStockRevision:target.stockRevision,expectedConversion:conversion,
+      confirmStoreReceiving:true,expectedOperatorId:ids.employee,...overrides};
+  }
+  const initialStore=await (await storeGet()).json();
+  assert.equal(initialStore.canReceive,true);
+  assert.ok(initialStore.sources.some(source=>source.productName==='Historical hidden Store SKU'));
+  assert.ok(initialStore.sources.every(source=>source.correctionHref===''));
+  assert.ok(!JSON.stringify(initialStore).includes('Unrelated private SKU'));
+  assert.ok(!Object.keys(initialStore.sources[0]).some(key=>/cost|price|supplier/i.test(key)));
+  const storeFirst=await storeBody(storeLines[0],{purchaseQuantity:0.5});
+  const physicalStore=physicalFact(await stock(storeStock));
+  let storeResponse=await storePost(storeFirst);assert.equal(storeResponse.status,200,await storeResponse.clone().text());
+  assert.deepEqual((await storeResponse.json()).storeConfirmation,{itemStatus:'delivered',batchStatus:'delivered'});
+  assert.equal(Number((await stock(storeStock)).stock_quantity),106);
+  assert.deepEqual(physicalFact(await stock(storeStock)),physicalStore);
+  const afterPartial=await persistedState();
+  assert.equal((await storePost(storeFirst)).status,200);assert.deepEqual(await persistedState(),afterPartial);
+  assert.equal((await post({...storeFirst,requestId:requestId()})).status,400);
+  const {confirmStoreReceiving:ignoredConfirmation,...osReplayBody}=storeFirst;
+  assert.equal((await post(osReplayBody)).status,409);
+  assert.equal((await storePost({...first,confirmStoreReceiving:true,expectedOperatorId:ids.employee})).status,409);
+  const conflict=await storePost({...storeFirst,purchaseQuantity:1});assert.equal(conflict.status,409);
+  assert.deepEqual(await persistedState(),afterPartial);
+  console.log('PASS: Store partial arrival writes real stock only, leaves item and batch delivered, hides OS/cost controls and separates combined confirmation from the old OS contract');
+
+  await db.query(`update inventory_items set stock_quantity=115,current_quantity=115,stock_revision=stock_revision+1,last_counted_at=now() where id=$1`,[storeStock]);
+  const afterStoreCount=await persistedState();
+  assert.equal((await storePost(storeFirst)).status,200);assert.deepEqual(await persistedState(),afterStoreCount);
+  const storeRemainder=await storeBody(storeLines[0],{purchaseQuantity:1.5});
+  storeResponse=await storePost(storeRemainder);assert.equal(storeResponse.status,200,await storeResponse.clone().text());
+  assert.deepEqual((await storeResponse.json()).storeConfirmation,{itemStatus:'received',batchStatus:'delivered'});
+  assert.equal(Number((await stock(storeStock)).stock_quantity),133);
+  const itemConfirmation=(await db.query('select store_feedback_confirmed_by,store_feedback_confirmed_at from purchase_order_items where id=$1',[storeLines[0]])).rows[0];
+  assert.equal(itemConfirmation.store_feedback_confirmed_by,ids.employee);assert.ok(itemConfirmation.store_feedback_confirmed_at);
+  assert.equal((await db.query('select status from purchase_orders where id=$1',[ids.order])).rows[0].status,'submitted');
+  storeResponse=await storePost(await storeBody(storeLines[1],{mode:'included'}));assert.equal(storeResponse.status,200,await storeResponse.clone().text());
+  assert.deepEqual((await storeResponse.json()).storeConfirmation,{itemStatus:'received',batchStatus:'received'});
+  assert.equal(Number((await stock(storeStock)).stock_quantity),133);
+  assert.equal((await db.query('select store_confirmed_by from delivery_batches where id=$1',[storeBatch])).rows[0].store_confirmed_by,ids.employee);
+  console.log('PASS: last-count anchors survive retries, only a fully received line confirms, included arrivals add no stock, and a batch confirms only when every linked line is received');
+
+  session={id:terminalId,name:'Shared tablet',role:'store_terminal'};terminalActor=null;
+  const terminalRead=await (await storeGet()).json();assert.equal(terminalRead.canReceive,false);
+  const beforeUnverified=await persistedState();
+  const terminalBody=await storeBody(storeLines[2],{mode:'unverified',expectedConversion:null});
+  assert.equal((await storePost(terminalBody)).status,401);assert.deepEqual(await persistedState(),beforeUnverified);
+  terminalActor={id:ids.employee,name:'Verified staff',role:'staff'};
+  assert.equal((await storePost({...terminalBody,expectedOperatorId:terminalId})).status,409);assert.deepEqual(await persistedState(),beforeUnverified);
+  storeResponse=await storePost(terminalBody);assert.equal(storeResponse.status,200,await storeResponse.clone().text());
+  assert.deepEqual((await storeResponse.json()).storeConfirmation,{itemStatus:'received',batchStatus:null});
+  assert.equal((await stock(storeStock)).stock_quantity,null);
+  assert.deepEqual(physicalFact(await stock(storeStock)),physicalFact(afterStoreCount.inventory_items.find(row=>row.id===storeStock)));
+  const terminalLedger=(await db.query('select recorded_by,recorded_by_name,request_payload from inventory_stock_receipts where request_id=$1',[terminalBody.requestId])).rows[0];
+  assert.equal(terminalLedger.recorded_by,ids.employee);assert.equal(terminalLedger.recorded_by_name,'Verified staff');
+  assert.equal(terminalLedger.request_payload.expectedOperatorId,undefined);assert.equal(terminalLedger.request_payload.password,undefined);
+  const savedMovement=(await db.query(`select movements.metadata from inventory_movements movements join inventory_stock_receipts receipts on movements.operation_key='receipt:'||receipts.id::text where receipts.request_id=$1`,[terminalBody.requestId])).rows[0];
+  assert.equal(savedMovement.metadata.terminalEmployeeId,terminalId);assert.equal(savedMovement.metadata.recordedByEmployeeId,ids.employee);
+  console.log('PASS: an unverified physical total stays unknown, actual arrival can confirm, and a verified employee is audited independently from the shared terminal without storing credentials');
+
+  session={id:ids.employee,name:'Verified staff',role:'staff'};terminalActor=null;
+  await db.query('update inventory_items set stock_quantity=60,stock_conversion_snapshot=$2::jsonb,stock_revision=stock_revision+1 where id=$1',[storeStock,JSON.stringify(conversion)]);
+  const rollbackBody=await storeBody(storeLines[5]);
+  await db.exec(`create function reject_store_confirmation() returns trigger language plpgsql as $$ begin if new.status='received' and old.id='${rollbackBatch}'::uuid then raise exception 'isolated confirmation failure'; end if; return new; end $$;
+    create trigger reject_store_confirmation before update on delivery_batches for each row execute function reject_store_confirmation();`);
+  const beforeStoreFailure=await persistedState();
+  assert.equal((await storePost(rollbackBody)).status,503);assert.deepEqual(await persistedState(),beforeStoreFailure);
+  await db.exec('drop trigger reject_store_confirmation on delivery_batches;drop function reject_store_confirmation()');
+  storeResponse=await storePost(rollbackBody);assert.equal(storeResponse.status,200,await storeResponse.clone().text());
+  assert.equal(Number((await stock(storeStock)).stock_quantity),84);
+  assert.equal((await db.query('select count(*)::int n from inventory_stock_receipts where request_id=$1',[rollbackBody.requestId])).rows[0].n,1);
+  console.log('PASS: failure at the final batch confirmation rolls back stock, receipt and movement atomically; the same nonce safely succeeds after recovery');
+
+  const concurrentBody=await storeBody(storeLines[3]);
+  const concurrentResponses=await Promise.all([storePost(concurrentBody),storePost(concurrentBody)]);
+  assert.deepEqual(concurrentResponses.map(response=>response.status),[200,200]);
+  assert.equal((await db.query('select count(*)::int n from inventory_stock_receipts where request_id=$1',[concurrentBody.requestId])).rows[0].n,1);
+  assert.equal(Number((await stock(storeStock)).stock_quantity),108);
+  const safeBefore=await persistedState();
+  assert.equal((await storeRoute.POST(new Request('https://example.test/api/store/inventory/receipts',{method:'POST',headers:{Origin:'https://other.test'},body:JSON.stringify(concurrentBody)}))).status,403);
+  assert.equal((await storeRoute.POST(new Request('https://example.test/api/store/inventory/receipts',{method:'POST',body:JSON.stringify(concurrentBody)}))).status,403);
+  assert.deepEqual(await persistedState(),safeBefore);
+  assert.equal((await storePost(await storeBody(storeLines[4]))).status,409);assert.deepEqual(await persistedState(),safeBefore);
+  for(const denied of ['scope','permission','operator','session']) {
+    if(denied==='scope')storeAllowed=false;if(denied==='permission')inventoryAllowed=false;
+    if(denied==='operator')session={id:terminalId,name:'Shared tablet',role:'store_terminal'};if(denied==='session')session=null;
+    const response=await storePost(concurrentBody);assert.ok([401,403].includes(response.status));assert.deepEqual(await persistedState(),safeBefore);
+    storeAllowed=true;inventoryAllowed=true;session={id:ids.employee,name:'Verified staff',role:'staff'};
+  }
+  console.log('PASS: overlapping identical Store submits make one receipt, unknown purchase amounts never use requested quantities, and scope, permission, operator and session failures persist nothing');
+
+  const receivingRead=await receivingRoute.GET(new Request(`https://example.test/api/store/procurement-receiving?storeId=${ids.store}`));
+  assert.equal(receivingRead.status,200,await receivingRead.clone().text());
+  const receivingBody=await receivingRead.json();
+  const receivingItems=receivingBody.confirmations.flatMap(group=>group.items);
+  const unknownReceiving=receivingItems.find(item=>item.id===storeLines[4]);
+  assert.equal(unknownReceiving.actualQuantity,null);assert.equal(unknownReceiving.actualUnit,null);assert.equal(Number(unknownReceiving.requestedQuantity),9);
+  assert.equal(unknownReceiving.stockRecordStatus,'needs_review');
+  assert.ok(receivingItems.every(item=>!Object.keys(item).some(key=>/cost|price/i.test(key))));
+  session={id:terminalId,name:'Shared tablet',role:'store_terminal'};terminalActor=null;
+  const logisticalBody={type:'items',itemIds:[storeLines[4]],storeId:ids.store,expectedOperatorId:ids.employee};
+  const patchLogistics=body=>receivingRoute.PATCH(new Request('https://example.test/api/store/procurement-receiving',{method:'PATCH',headers:{Origin:'https://example.test'},body:JSON.stringify(body)}));
+  assert.equal((await patchLogistics(logisticalBody)).status,401);
+  terminalActor={id:ids.employee,name:'Verified staff',role:'staff'};
+  const beforeLogistical=await stock(storeStock),receiptCount=(await db.query('select count(*)::int n from inventory_stock_receipts')).rows[0].n;
+  assert.equal((await patchLogistics(logisticalBody)).status,200);
+  assert.equal((await db.query('select status,store_feedback_confirmed_by from purchase_order_items where id=$1',[storeLines[4]])).rows[0].status,'received');
+  assert.equal((await db.query('select store_feedback_confirmed_by from purchase_order_items where id=$1',[storeLines[4]])).rows[0].store_feedback_confirmed_by,ids.employee);
+  assert.deepEqual(await stock(storeStock),beforeLogistical);assert.equal((await db.query('select count(*)::int n from inventory_stock_receipts')).rows[0].n,receiptCount);
+  const afterLogistical=await persistedState();
+  assert.equal((await patchLogistics({...logisticalBody,itemIds:[storeLines[4],uuid(9999)]})).status,404);assert.deepEqual(await persistedState(),afterLogistical);
+  assert.equal((await patchLogistics({...logisticalBody,itemIds:[storeLines[0]]})).status,409);assert.deepEqual(await persistedState(),afterLogistical);
+  session={id:ids.employee,name:'HQ owner',role:'owner'};terminalActor=null;
+  assert.equal((await receivingRoute.PATCH(new Request('https://example.test/api/store/procurement-receiving',{method:'PATCH',body:JSON.stringify({type:'items',itemIds:[storeLines[4]]})}))).status,200);
+  assert.deepEqual(await stock(storeStock),beforeLogistical);
+  console.log('PASS: receiving displays unknown actual quantity and unit separately from demand; authenticated logistical confirmation records no fake stock, rejects missing IDs and cannot bypass batch lifecycle');
+
+  const mixedBatch=uuid(1700),unknownMixedLine=uuid(1701),knownMixedLine=uuid(1702);
+  await db.query(`insert into delivery_batches(id,purchase_order_id,batch_no,status,delivered_at) values($1,$2,30,'delivered',now())`,[mixedBatch,ids.order]);
+  await db.query(`insert into purchase_order_items(id,purchase_order_id,product_id,requested_quantity,requested_unit,actual_quantity,status)
+    values($1,$3,$4,9,'箱',null,'delivered'),($2,$3,$4,9,'箱',2,'delivered')`,[unknownMixedLine,knownMixedLine,ids.order,storeProduct]);
+  await db.query(`insert into purchase_actuals(purchase_order_item_id,actual_quantity,actual_unit) values($1,2,'箱')`,[knownMixedLine]);
+  await db.query(`insert into delivery_batch_items values($1,$2),($1,$3)`,[mixedBatch,unknownMixedLine,knownMixedLine]);
+  session={id:ids.employee,name:'Verified staff',role:'staff'};
+  const mixedBody={type:'items',itemIds:[unknownMixedLine],storeId:ids.store,expectedOperatorId:ids.employee,confirmArrivalOnly:true};
+  const mixedBefore=await persistedState();
+  assert.equal((await patchLogistics({...mixedBody,confirmArrivalOnly:undefined})).status,409);assert.deepEqual(await persistedState(),mixedBefore);
+  assert.equal((await patchLogistics({...mixedBody,itemIds:[knownMixedLine]})).status,409);assert.deepEqual(await persistedState(),mixedBefore);
+  assert.equal((await patchLogistics({...mixedBody,itemIds:[unknownMixedLine,knownMixedLine]})).status,409);assert.deepEqual(await persistedState(),mixedBefore);
+  assert.equal((await receivingRoute.PATCH(new Request('https://example.test/api/store/procurement-receiving',{method:'PATCH',body:JSON.stringify(mixedBody)}))).status,403);
+  assert.deepEqual(await persistedState(),mixedBefore);
+  let mixedResponse=await patchLogistics(mixedBody);assert.equal(mixedResponse.status,200,await mixedResponse.clone().text());
+  assert.equal((await mixedResponse.json()).changed,true);
+  assert.equal((await db.query('select status,actual_quantity from purchase_order_items where id=$1',[unknownMixedLine])).rows[0].status,'received');
+  assert.equal((await db.query('select actual_quantity from purchase_order_items where id=$1',[unknownMixedLine])).rows[0].actual_quantity,null);
+  assert.equal((await db.query('select status from purchase_order_items where id=$1',[knownMixedLine])).rows[0].status,'delivered');
+  assert.equal((await db.query('select status from delivery_batches where id=$1',[mixedBatch])).rows[0].status,'delivered');
+  assert.deepEqual(await stock(storeStock),mixedBefore.inventory_items.find(item=>item.id===storeStock));
+  assert.deepEqual((await persistedState()).inventory_stock_receipts,mixedBefore.inventory_stock_receipts);
+  assert.deepEqual((await persistedState()).inventory_movements,mixedBefore.inventory_movements);
+  const mixedConfirmed=await persistedState();
+  mixedResponse=await patchLogistics(mixedBody);assert.equal(mixedResponse.status,200);
+  assert.equal((await mixedResponse.json()).changed,false);assert.deepEqual(await persistedState(),mixedConfirmed);
+  storeResponse=await storePost(await storeBody(knownMixedLine));assert.equal(storeResponse.status,200,await storeResponse.clone().text());
+  assert.deepEqual((await storeResponse.json()).storeConfirmation,{itemStatus:'received',batchStatus:'received'});
+  assert.equal(Number((await stock(storeStock)).stock_quantity),132);
+  console.log('PASS: mixed-batch arrival-only confirms exactly unknown rows, preserves known stock-pending rows and all inventory facts, replays without writes, then actual known receipt completes the batch');
+
+  await db.query(`update purchase_order_items set actual_quantity=2 where id=$1`,[unknownMixedLine]);
+  await db.query(`insert into purchase_actuals(purchase_order_item_id,actual_quantity,actual_unit) values($1,2,'箱')`,[unknownMixedLine]);
+  const newlyKnown=await persistedState();
+  assert.equal((await patchLogistics(mixedBody)).status,409);assert.deepEqual(await persistedState(),newlyKnown);
+  session={id:ids.employee,name:'HQ owner',role:'owner'};
+  assert.equal((await patchLogistics({...mixedBody,expectedOperatorId:undefined})).status,409);assert.deepEqual(await persistedState(),newlyKnown);
+  console.log('PASS: a now-known purchase cannot use stale arrival-only confirmation, and the new arrival flag requires verified employee assertions even for HQ clients');
+
+  const temporaryLine=uuid(1710),temporaryBatch=uuid(1711);
+  await db.query(`insert into purchase_order_items(id,purchase_order_id,product_id,temporary_product_name,temporary_product_unit,requested_quantity,actual_quantity,status)
+    values($1,$2,null,'Temporary arrival','箱',9,2,'delivered')`,[temporaryLine,ids.order]);
+  await db.query(`insert into purchase_actuals(purchase_order_item_id,actual_quantity,actual_unit) values($1,2,'箱')`,[temporaryLine]);
+  await db.query(`insert into delivery_batches(id,purchase_order_id,batch_no,status,delivered_at) values($1,$2,31,'delivered',now())`,[temporaryBatch,ids.order]);
+  await db.query(`insert into delivery_batch_items values($1,$2)`,[temporaryBatch,temporaryLine]);
+  const beforeTemporary=await persistedState();
+  assert.equal((await patchLogistics({...mixedBody,itemIds:[temporaryLine]})).status,200);
+  assert.equal((await db.query('select status from purchase_order_items where id=$1',[temporaryLine])).rows[0].status,'received');
+  assert.equal((await db.query('select status from delivery_batches where id=$1',[temporaryBatch])).rows[0].status,'received');
+  const afterTemporary=await persistedState();
+  assert.deepEqual(afterTemporary.inventory_items,beforeTemporary.inventory_items);
+  assert.deepEqual(afterTemporary.inventory_stock_receipts,beforeTemporary.inventory_stock_receipts);
+  assert.deepEqual(afterTemporary.inventory_movements,beforeTemporary.inventory_movements);
+  const temporaryRead=await receivingRoute.GET(new Request(`https://example.test/api/store/procurement-receiving?storeId=${ids.store}`));
+  const temporaryView=(await temporaryRead.json()).confirmations.flatMap(group=>group.items).find(item=>item.id===temporaryLine);
+  assert.equal(temporaryView.stockRecordStatus,'unsupported');assert.equal(temporaryView.actualUnit,'箱');assert.equal(Number(temporaryView.actualQuantity),2);
+  console.log('PASS: a temporary item with known arrival quantity can confirm logistics and its batch without creating a SKU, stock row, receipt or movement');
 } finally {
   await db.close();
 }

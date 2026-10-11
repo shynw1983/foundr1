@@ -23,6 +23,11 @@ const sql = Object.assign((parts,...values) => ({
   const results = []; for (const query of queries) results.push(await execute(query,transaction)); return results;
 }) });
 function load(path,modules={}) {
+  if(path==='app/api/inventory/route.ts') {
+    const sharedModules=Object.fromEntries(Object.entries(modules).map(([name,value])=>[name.replace('../../../lib/','./'),value]));
+    modules={...modules,'../../../lib/inventory-execution-data':load('lib/inventory-execution-data.ts',sharedModules)};
+  }
+
   const exports = {};
   const source = ts.transpileModule(readFileSync(new URL(path,root),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
   runInNewContext(source,{exports,Response,Request,URL,console,require:name => {

@@ -35,7 +35,7 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
   const appIconSrc = surface === "staff" ? "/icons/foundr1-staff-192.png" : "/icons/foundr1-store-192.png";
   const loginTitle = surface === "store" ? "店舗ワークベンチログイン" : "スタッフログイン";
   const loginDescription = surface === "store"
-    ? "店舗端末または管理者アカウントでログイン"
+    ? "店舗端末・スタッフアカウントでログイン"
     : `${productName} にログイン`;
 
   useEffect(() => {

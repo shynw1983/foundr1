@@ -1,9 +1,12 @@
 "use client";
 
-import { BellRing, BookOpen, Clock3, ClipboardList, Lightbulb, MessageSquareWarning, PackageCheck, ShoppingCart, Tags, Users } from "lucide-react";
+import { BellRing, BookOpen, Clock3, ClipboardList, Lightbulb, MessageSquareWarning, PackageCheck, PackageSearch, ShoppingCart, Tags, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { loadCurrentEmployee } from "../os/components/currentEmployeeStore";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
 const storeModules = [
+  { title: "在庫確認", description: "目視で足りるかを確認し、必要なときだけ数えます。保管場所から商品を探せます。", href: "/store/inventory", icon: PackageSearch, status: "利用可能" },
   {
     title: "店舗設備",
     description: "室内照明の明るさと状態を確認し、スイッチを操作します。",
@@ -47,8 +50,8 @@ const storeModules = [
     status: "利用可能"
   },
   {
-    title: "納品確認",
-    description: "購入済みの商品が店に届いたら、数量と状態を確認して店舗確認済みにします。",
+    title: "納品・入庫",
+    description: "実際に届いた数量と保管場所を確認し、入庫を記録します。",
     href: "/store/receiving",
     icon: PackageCheck,
     status: "利用可能"
@@ -77,6 +80,11 @@ const storeModules = [
 ];
 
 export default function StoreHomePage() {
+  const [role, setRole] = useState<string | null>(null);
+  const [canUseInventory, setCanUseInventory] = useState(false);
+  useEffect(() => { let alive = true; void loadCurrentEmployee().then(employee => { if (alive) { setRole(employee?.role ?? ""); setCanUseInventory(Boolean(employee?.permissions?.includes("store.inventory") || employee?.permittedNavPaths?.includes("/store/inventory"))); } }); return () => { alive = false; }; }, []);
+  const visibleModules = role === null || ["staff", "store_owner", "store_manager"].includes(role) ? storeModules.filter(module => ["/store/inventory", "/store/receiving"].includes(module.href)) : storeModules;
+  const permittedModules = visibleModules.filter(module => !["/store/inventory", "/store/receiving"].includes(module.href) || canUseInventory);
   return (
     <main className="store-workbench-shell">
       <header className="store-workbench-topbar">
@@ -91,7 +99,7 @@ export default function StoreHomePage() {
       </header>
 
       <section className="store-workbench-grid">
-        {storeModules.map((module) => {
+        {permittedModules.map((module) => {
           const Icon = module.icon;
           const content = (
             <>

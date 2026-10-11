@@ -163,7 +163,8 @@ export async function readInventoryReceiptResponse(storeId: string, canReceive: 
 }
 
 /** Stable source identity, deterministic shared procurement locks, then product/source/stock row locks. */
-export async function recordInventoryReceipt(session: EmployeeSession, payload: InventoryReceiptPayload, source: InventoryReceiptSource) {
+export async function recordInventoryReceipt(session: EmployeeSession, payload: InventoryReceiptPayload, source: InventoryReceiptSource,
+  execution?: { terminalEmployeeId?: string }) {
   const targetRaw = (await targetRows(source.storeId, undefined, payload.inventoryItemId))[0];
   if (!targetRaw) throw new InventoryReceiptError("入庫先の保管場所が見つかりません。", 404, "target_missing");
   const target = mapTarget(targetRaw);
@@ -175,6 +176,11 @@ export async function recordInventoryReceipt(session: EmployeeSession, payload: 
     sql`select pg_advisory_xact_lock(hashtextextended(${`inventory-receipt-request:${payload.requestId}`}, 0))`,
     ...createReplenishmentOrderLocks(sql, [{ storeId: source.storeId, productIds: [source.productId] }], source.purchaseOrderId),
     sql`select id from products where id::text = ${source.productId} for share`,
+    // Logistics transitions lock batch then items. Keep the same order before an atomic Store confirmation.
+    ...(payload.confirmStoreReceiving && source.expectedSource.deliveryBatchId ? [sql`
+      select batches.id from delivery_batches batches join purchase_orders orders on orders.id=batches.purchase_order_id
+      where batches.id::text=${source.expectedSource.deliveryBatchId} and orders.store_id::text=${source.storeId}
+      for update of batches`] : []),
     sql`select id from purchase_order_items where id::text = ${source.purchaseOrderItemId} for update`,
     sql`select id from inventory_items where id::text = ${target.id} for update`,
     sql`
@@ -244,7 +250,7 @@ export async function recordInventoryReceipt(session: EmployeeSession, payload: 
         ${target.stockQuantity},${quantities.afterStockQuantity},${quantities.conversionSnapshot === null ? null : JSON.stringify(quantities.conversionSnapshot)}::jsonb,
         ${JSON.stringify(source.expectedSource)}::jsonb,${requestPayload}::jsonb,${session.id}::uuid,${session.name ?? ""},${batchPackaging===null ? null:JSON.stringify(batchPackaging)}::jsonb
       where not exists(select 1 from inventory_stock_receipts where request_id::text = ${payload.requestId})
-      returning id::text
+      returning id::text as "insertedReceiptId"
     `,
     sql`insert into inventory_movements(operation_key,store_id,product_id,inventory_item_id,kind,quantity,count_unit,confidence,
       occurred_at,before_quantity,after_quantity,changes_stock,metadata)
@@ -253,11 +259,41 @@ export async function recordInventoryReceipt(session: EmployeeSession, payload: 
         case when receipts.mode='unverified' then 'unmeasured' else 'exact' end,receipts.created_at,
         receipts.before_stock_quantity,receipts.after_stock_quantity,receipts.mode='add',
         jsonb_build_object('receiptId',receipts.id::text,'requestId',receipts.request_id::text,'mode',receipts.mode,
-          'balanceUnknown',receipts.mode='unverified','quantityUnknown',receipts.mode='unverified','batchPackaging',receipts.batch_packaging_snapshot,'conversion',receipts.conversion_snapshot)
+          'balanceUnknown',receipts.mode='unverified','quantityUnknown',receipts.mode='unverified','batchPackaging',receipts.batch_packaging_snapshot,'conversion',receipts.conversion_snapshot,
+          'recordedByEmployeeId',receipts.recorded_by::text,'recordedByName',receipts.recorded_by_name,
+          'terminalEmployeeId',${execution?.terminalEmployeeId ?? null}::text,'confirmStoreReceiving',${Boolean(payload.confirmStoreReceiving)}::boolean)
       from inventory_stock_receipts receipts where receipts.request_id::text=${payload.requestId}
-      on conflict(operation_key) do nothing`
+      on conflict(operation_key) do nothing`,
+    ...(payload.confirmStoreReceiving ? [
+      sql`update purchase_order_items items
+        set status='received',store_feedback_confirmed_at=coalesce(items.store_feedback_confirmed_at,now()),
+          store_feedback_confirmed_by=coalesce(items.store_feedback_confirmed_by,${session.id}::uuid)
+        where items.id::text=${source.purchaseOrderItemId} and items.status in ('delivered','received')
+          and exists(select 1 from inventory_stock_receipts receipts where receipts.request_id::text=${payload.requestId}
+            and receipts.purchase_order_item_id=items.id and receipts.request_payload->>'confirmStoreReceiving'='true')
+          and coalesce((select sum(receipts.purchase_quantity) from inventory_stock_receipts receipts
+            where receipts.purchase_order_item_id=items.id),0)=${source.actualQuantity}::numeric
+          and not exists(select 1 from inventory_stock_receipts receipts where receipts.purchase_order_item_id=items.id
+            and receipts.purchase_unit is distinct from ${source.actualUnit})`,
+      ...(source.expectedSource.deliveryBatchId ? [sql`update delivery_batches batches
+        set status='received',store_confirmed_at=coalesce(batches.store_confirmed_at,now()),
+          store_confirmed_by=coalesce(batches.store_confirmed_by,${session.id}::uuid)
+        where batches.id::text=${source.expectedSource.deliveryBatchId} and batches.status in ('delivered','received')
+          and exists(select 1 from delivery_batch_items links where links.delivery_batch_id=batches.id)
+          and not exists(select 1 from delivery_batch_items links join purchase_order_items items on items.id=links.purchase_order_item_id
+            where links.delivery_batch_id=batches.id and (items.purchase_order_id<>batches.purchase_order_id or items.status<>'received'))`] : [])
+    ] : [])
   ]);
   const recorded = await readInventoryReceiptByRequest(payload.requestId);
   if (!recorded) throw new InventoryReceiptError("入庫を保存できませんでした。", 500, "receipt_missing");
-  return { receipt: recorded.receipt, replayed: !results[results.length - 2]?.[0]?.id };
+  const inserted = results.some(rows => rows[0]?.insertedReceiptId === recorded.receipt.id);
+  return { receipt: recorded.receipt, replayed: !inserted };
+}
+
+export async function readInventoryReceiptStoreConfirmation(purchaseOrderItemId: string) {
+  const rows=await sql`select items.status as "itemStatus",batches.status as "batchStatus"
+    from purchase_order_items items left join delivery_batch_items links on links.purchase_order_item_id=items.id
+    left join delivery_batches batches on batches.id=links.delivery_batch_id
+    where items.id::text=${purchaseOrderItemId} limit 1`;
+  return rows[0] ? { itemStatus:String(rows[0].itemStatus),batchStatus:textOrNull(rows[0].batchStatus) }:null;
 }

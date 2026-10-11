@@ -4,6 +4,7 @@ import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
 import { createEmployeeSession, sessionCookieMaxAge } from "../../../../lib/employee-sessions";
 import { getNavPathsForPermissions, getPermissionsForRole } from "../../../../lib/role-permissions";
+import { canUseStoreInventory,isRestrictedStorePersonalRole,storeInventoryPermission } from "../../../../lib/store-inventory-policy";
 
 type EmployeeRow = {
   id: string;
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
 
   const loginIdForSession = employee.login_id || employee.email || loginId;
 
-  if (surface === "store" && !["owner", "manager", "store_terminal"].includes(employee.role)) {
+  if (surface === "store" && !canUseStoreInventory(employee.role)) {
     await writeAuditLog({
       actorEmployeeId: employee.id,
       action: "auth.login_rejected_for_surface",
@@ -105,7 +106,7 @@ export async function POST(request: Request) {
       metadata: { surface, role: employee.role },
       request
     });
-    return Response.json({ error: "店舗ワークベンチは店舗端末アカウント、または owner / manager アカウントでログインしてください。スタッフ個人機能は Foundr1 STAFF を利用してください。" }, { status: 403 });
+    return Response.json({ error: "このアカウントは店舗ワークベンチを利用できません。" }, { status: 403 });
   }
 
   if (surface === "os" && employee.role === "staff") {
@@ -153,6 +154,7 @@ export async function POST(request: Request) {
   }
 
   const permissionSet = await getPermissionsForRole(employee.role);
+  if(surface==="store"&&isRestrictedStorePersonalRole(employee.role)&&!permissionSet.has(storeInventoryPermission))return Response.json({error:"店舗の在庫確認を利用する権限がありません。"},{status:403});
   const permissions = Array.from(permissionSet);
   const sessionId = await createEmployeeSession({
     employeeId: employee.id,
