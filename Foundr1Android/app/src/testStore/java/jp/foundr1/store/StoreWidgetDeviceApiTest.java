@@ -62,6 +62,9 @@ public class StoreWidgetDeviceApiTest {
         assertEquals("POST", last.getRequestMethod()); assertEquals(store, body.getString("storeId"));
         assertEquals(key, body.getString("device")); assertEquals(id, body.getString("requestId"));
         assertEquals(100, body.getInt("position")); assertTrue(body.getBoolean("confirmed"));
+        InventoryApiClient.commandDevice(store, key, "turnOff", null, id, session, false);
+        body = new JSONObject(last.payload.toString("UTF-8"));
+        assertFalse(body.getBoolean("confirmed")); assertEquals("turnOff", body.getString("action"));
         status = 403; response = new JSONObject().put("error", "denied");
         try { InventoryApiClient.loadDevices(store, key, session); fail(); } catch (InventoryApiClient.ApiException denied) { assertEquals(403, denied.status); }
         status = 200; response = new JSONObject().put("storeId", "other-store").put("devices", new JSONArray());

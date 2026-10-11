@@ -18,7 +18,7 @@ export type DeviceCommand = {
 export type StoreDevice = {
   key: string; name: string; type: string; kind: DeviceKind; actions: DeviceAction[];
   sample: DeviceSample | null; fetchedAt: string | null; readError: boolean; issue: string;
-  controlEnabled: boolean; blockedUntil: string | null; command: DeviceCommand | null;
+  controlEnabled: boolean; confirmationRequired: boolean; blockedUntil: string | null; command: DeviceCommand | null;
 };
 export type StoreDevicesView = { configured: boolean; storeId: string; devices: StoreDevice[] };
 export function deviceCommandSkipped(command: DeviceCommand) { return ["already_in_state", "light_below_on_range", "light_ambiguous"].includes(command.reason); }

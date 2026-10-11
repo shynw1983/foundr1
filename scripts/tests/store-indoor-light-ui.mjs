@@ -14,7 +14,7 @@ const fixtureDevices=[
  ['ハブ２','Hub 2','hub',[],{temperature:22.6,humidity:66,lightLevel:12}],
  ['温湿度計','Meter','meter',[],null],['顔認証パッド','Keypad Vision','keypad',[],{battery:58}],['リモートボタン','Remote','remote',[],null],
  ['間接照明','Plug Mini (JP)','plug',['turnOn','turnOff'],{power:'on'}]
-].map(([name,type,kind,actions,sample],i)=>({key:String(i+1).repeat(24),name,type,kind,actions,sample,readError:!sample,issue:kind==='meter'?'sensor_unavailable':kind==='remote'?'status_unsupported':'',controlEnabled:true,blockedUntil:null,command:null}));
+].map(([name,type,kind,actions,sample],i)=>({key:String(i+1).repeat(24),name,type,kind,actions,sample,readError:!sample,issue:kind==='meter'?'sensor_unavailable':kind==='remote'?'status_unsupported':'',controlEnabled:true,confirmationRequired:true,blockedUntil:null,command:null}));
 const entry=`import React from 'react';import {createRoot} from 'react-dom/client';import Page from './app/store/devices/page';import {OsTranslationProvider} from './app/os/components/OsTranslationProvider';
 const NativeDate=Date,nativeTimeout=window.setTimeout.bind(window),nativeClear=window.clearTimeout.bind(window);let sequence=1000000;const jobs=new Map();const clock={now:NativeDate.now(),async advance(ms){const end=this.now+ms;let turns=0;while(true){const next=[...jobs.values()].filter(j=>j.at<=end).sort((a,b)=>a.at-b.at)[0];if(!next)break;if(++turns>3000)throw Error('timer loop');this.now=next.at;jobs.delete(next.id);if(next.interval)jobs.set(next.id,{...next,at:this.now+next.interval});await next.fn(...next.args);await new Promise(r=>nativeTimeout(r,0));}this.now=end;await new Promise(r=>nativeTimeout(r,0));}};window.__clock=clock;
 window.Date=class extends NativeDate {constructor(...args){if(args.length)super(...args);else super(clock.now);}static now(){return clock.now;}};
@@ -22,13 +22,16 @@ window.setTimeout=(fn,ms=0,...args)=>{const id=++sequence;jobs.set(id,{id,fn,arg
 const language=new URLSearchParams(location.search).get('language')||'ja';localStorage.setItem('foundr1-os-language',language);localStorage.setItem('foundr1-os-language-preference','manual');
 const storeId='10000000-0000-4000-8000-000000000001',dictionaries=${JSON.stringify(dictionaries)};
 window.__devices={posts:[],patches:[],savedOrder:JSON.parse(sessionStorage.getItem('fixtureDeviceOrder')||'null'),reads:[],failure:false,postFailure:false,view:{configured:true,storeId,devices:${JSON.stringify(fixtureDevices)}}};
+const savedConfirmations=JSON.parse(sessionStorage.getItem('fixtureDeviceConfirmations')||'{}');for(const d of window.__devices.view.devices)d.confirmationRequired=savedConfirmations[d.key]!==false;
 window.fetch=async(input,init={})=>{await Promise.resolve();if(init.signal?.aborted)throw new DOMException('Aborted','AbortError');const url=new URL(String(input),'https://fixture.invalid'),state=window.__devices;
 if(url.pathname.startsWith('/locales/os/'))return Response.json(dictionaries[url.pathname.includes('zh-Hant')?'zh-Hant':'zh-Hans']);
 if(url.pathname==='/api/store/context')return Response.json({selectedStoreId:storeId,access:{role:'store_terminal',canUseAllStoreView:false,stores:[{id:storeId,name:'清水店'}]}});
 if(url.pathname==='/api/auth/me')return Response.json({employee:{id:'test-terminal',name:'清水店',role:'store_terminal'}});
 if(url.pathname==='/api/settings')return Response.json({});
+if(url.pathname==='/api/store/cameras')return Response.json({cameras:[]});
+if(url.pathname==='/api/store/devices/scenes')return Response.json({storeId,scenes:[],devices:state.view.devices,latestRun:null,revision:'fixture'});
 if(url.pathname==='/api/store/devices'){
-if(init.method==='PATCH'){const body=JSON.parse(init.body);state.patches.push(body);if(state.sortFailure)return Response.json({error:'save failed'},{status:503});state.savedOrder=body.order;sessionStorage.setItem('fixtureDeviceOrder',JSON.stringify(body.order));return Response.json({order:body.order});}
+if(init.method==='PATCH'){const body=JSON.parse(init.body);state.patches.push(body);if(typeof body.confirmationRequired==='boolean'){if(state.confirmationFailure)return Response.json({error:'save failed'},{status:503});state.view.devices.find(d=>d.key===body.device).confirmationRequired=body.confirmationRequired;savedConfirmations[body.device]=body.confirmationRequired;sessionStorage.setItem('fixtureDeviceConfirmations',JSON.stringify(savedConfirmations));return Response.json({device:body.device,confirmationRequired:body.confirmationRequired});}if(state.sortFailure)return Response.json({error:'save failed'},{status:503});state.savedOrder=body.order;sessionStorage.setItem('fixtureDeviceOrder',JSON.stringify(body.order));return Response.json({order:body.order});}
 if(init.method==='POST'){const body=JSON.parse(init.body);state.posts.push(body);const device=state.view.devices.find(d=>d.key===body.device);const command={id:body.requestId,action:body.action,parameter:body.action==='setPosition'?String(body.position):'default',result:state.postFailure?'unknown':state.deviceCode?'rejected':'accepted',requestedAt:new Date().toISOString(),finishedAt:new Date().toISOString(),before:structuredClone(device.sample),reason:state.alreadyInState?'already_in_state':state.deviceCode?'api_'+state.deviceCode:''};if(state.alreadyInState)command.before={...device.sample,lockState:'locked'};device.command=command;device.blockedUntil=new Date(Date.now()+10000).toISOString();if(state.postFailure)throw new TypeError('Network error');return Response.json({command,blockedUntil:device.blockedUntil});}
 state.reads.push({device:url.searchParams.get('device'),at:Date.now()});if(state.failure)return Response.json({error:'unavailable'},{status:503});const devices=state.view.devices.filter(d=>!url.searchParams.get('device')||d.key===url.searchParams.get('device')).map(d=>({...d,fetchedAt:d.sample?new Date().toISOString():null}));if(state.savedOrder){const ranks=new Map(state.savedOrder.map((key,i)=>[key,i]));devices.sort((a,b)=>(ranks.get(a.key)??99)-(ranks.get(b.key)??99));}return Response.json({...state.view,devices});}
 return Response.json({items:[],notifications:[],unreadCount:0});};
@@ -39,11 +42,11 @@ const fixture=resolve(output,'fixture.html');await writeFile(fixture,`<!doctype 
 if(process.argv.includes('--prepare')){console.log(fixture);process.exit(0);}
 const browser=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
 try{
- const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.setRequestInterception(true);page.on('request',r=>/^https?:/.test(r.url())?r.abort():r.continue());
+ const page=await browser.newPage(),errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error(e.stack);});await page.setRequestInterception(true);page.on('request',r=>/^https?:/.test(r.url())?r.abort():r.continue());
  const card=kind=>`[data-device-kind="${kind}"]`,control=kind=>card(kind)+' .store-device-actions .primary-button';
  const open=async(language='ja')=>{await page.goto('file://'+fixture+'?language='+language,{waitUntil:'load'});await page.waitForFunction(()=>document.querySelectorAll('.store-device-card').length===9);if(language!=='ja')await page.waitForFunction(()=>document.querySelector('.store-devices-toolbar p').textContent.includes('需要'));};
  const advance=async ms=>page.evaluate(ms=>window.__clock.advance(ms),ms);
- const confirm=async()=>{await page.waitForSelector('dialog[open]');const count=await page.evaluate(()=>window.__devices.posts.length);await page.click('.store-device-dialog-actions .primary-button');await page.waitForFunction(n=>{const posts=window.__devices.posts;const card=document.querySelector('[data-device-key=\"'+posts.at(-1)?.device+'\"]');return posts.length>n&&!document.querySelector('dialog').open&&[...card.querySelectorAll('.store-device-help')].some(e=>e.textContent.includes('次の操作まで'));},{},count);};
+ const confirm=async()=>{await page.waitForSelector('dialog[open]');const count=await page.evaluate(()=>window.__devices.posts.length);await page.click('.store-device-dialog-actions .primary-button');await page.waitForFunction(n=>{const posts=window.__devices.posts;const card=document.querySelector('[data-device-key=\"'+posts.at(-1)?.device+'\"]');return posts.length>n&&!document.querySelector('dialog[aria-labelledby="device-confirm-title"]').open&&[...card.querySelectorAll('.store-device-help')].some(e=>e.textContent.includes('次の操作まで'));},{},count);};
  const lockButton=action=>card('lock')+` [data-device-action="${action}"]`;
  const refreshLock=async(lockState,readError=false)=>{
   await page.evaluate(({lockState,readError})=>{const d=window.__devices.view.devices[3];d.sample.lockState=lockState;d.readError=readError;},{lockState,readError});
@@ -57,6 +60,7 @@ try{
   assert.ok(buttons.every(b=>!b.disabled&&b.icon),'both explicit actions remain available with distinct icons');
   if(primary)assert.notEqual(buttons[0].background,buttons[1].background,'known-state actions have visibly different backgrounds');
  };
+ console.log('Checking responsive layouts');
  for(const width of [1440,768,360]){
   await page.setViewport({width,height:960});await open();await assertLockActions('unlock');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`overflow ${width}`);await page.screenshot({path:resolve(output,`devices-ja-${width}.png`),fullPage:true});
@@ -70,9 +74,9 @@ try{
  assert.match(await page.$eval(card('bot')+' .store-device-state',e=>e.textContent),/取得できません/);assert.equal(await page.$(card('remote')+' button'),null);
  const initialReads=await page.evaluate(()=>window.__devices.reads.length);await advance(300000);await page.evaluate(()=>{dispatchEvent(new Event('focus'));document.dispatchEvent(new Event('visibilitychange'));});assert.equal(await page.evaluate(()=>window.__devices.reads.length),initialReads,'five idle minutes and focus produce no status reads');
  await page.click(control('indoorLight'));await page.waitForSelector('dialog[open]');assert.equal(await page.evaluate(()=>window.__devices.reads.length),initialReads+1,'fresh read before confirmation');
- await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('dialog').open);assert.equal(await page.evaluate(()=>window.__devices.posts.length),0);
+ await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('dialog[aria-labelledby="device-confirm-title"]').open);assert.equal(await page.evaluate(()=>window.__devices.posts.length),0);
  await page.click(control('indoorLight'));await page.waitForSelector('dialog[open]');await page.screenshot({path:resolve(output,'devices-confirm-360.png'),fullPage:true});
- await page.evaluate(()=>{const b=document.querySelector('.store-device-dialog-actions .primary-button');b.click();b.click();});await page.waitForFunction(()=>window.__devices.posts.length===1&&!document.querySelector('dialog').open);
+ await page.evaluate(()=>{const b=document.querySelector('.store-device-dialog-actions .primary-button');b.click();b.click();});await page.waitForFunction(()=>window.__devices.posts.length===1&&!document.querySelector('dialog[aria-labelledby="device-confirm-title"]').open);
  assert.equal(await page.$eval(control('indoorLight'),e=>e.disabled),true);const beforeObserve=await page.evaluate(()=>window.__devices.reads.length);await advance(9000);assert.equal(await page.$eval(control('indoorLight'),e=>e.disabled),true);await advance(1000);assert.equal(await page.$eval(control('indoorLight'),e=>e.disabled),false,'next operation available at ten seconds');
  await advance(30000);assert.equal(await page.evaluate(()=>window.__devices.reads.length),beforeObserve+3,'at most three bounded post-command reads');await advance(300000);assert.equal(await page.evaluate(()=>window.__devices.reads.length),beforeObserve+3,'observations stop');assert.equal(await page.evaluate(()=>window.__devices.posts.length),1);
  await page.click(control('indoorLight'));await confirm();await page.evaluate(()=>window.__devices.view.devices[0].sample.lightLevel=2);const earlyReads=await page.evaluate(()=>window.__devices.reads.length);await advance(5000);assert.match(await page.$eval(card('indoorLight')+' .store-device-notice',e=>e.textContent),/確認しました/);await advance(30000);assert.equal(await page.evaluate(()=>window.__devices.reads.length),earlyReads+1,'observed change cancels remaining checks');
@@ -88,6 +92,42 @@ try{
  await open();assert.match(await page.$eval(card('plug')+' .store-device-state',e=>e.textContent),/^オン$/);assert.equal(await page.$eval(control('plug'),e=>e.dataset.deviceAction),'turnOff');
  await page.click(card('plug')+' [data-device-action="turnOff"]');await confirm();assert.equal(await page.evaluate(()=>window.__devices.posts.at(-1).action),'turnOff');await page.evaluate(()=>window.__devices.view.devices[8].sample.power='off');await advance(10000);assert.match(await page.$eval(card('plug')+' .store-device-state',e=>e.textContent),/^オフ$/);assert.equal(await page.$eval(control('plug'),e=>e.dataset.deviceAction),'turnOn');
  for(const language of ['zh-Hans','zh-Hant']){await open(language);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(await page.$eval('.store-devices-panel',e=>/[ぁ-んァ-ヶ]/.test(e.textContent)),false,'all device copy translated');await page.screenshot({path:resolve(output,`devices-${language}-360.png`),fullPage:true});}
+ console.log('Checking per-device confirmation preferences');
+ const toggle=kind=>card(kind)+' [role=switch]';
+ const toggleConfirmation=async(kind)=>{await page.click(toggle(kind));await page.waitForFunction(selector=>!document.querySelector(selector).disabled,{},toggle(kind));};
+ await open();assert.equal(await page.$$(toggle('hub')).then(x=>x.length),0,'read-only devices have no operation preference');
+ await page.evaluate(()=>window.__devices.confirmationFailure=true);await toggleConfirmation('plug');
+ assert.equal(await page.$eval(toggle('plug'),e=>e.checked),true,'failed save keeps confirmation enabled');
+ await page.waitForSelector(card('plug')+' [role=alert]');assert.equal(await page.evaluate(()=>window.__devices.posts.length),0);
+ await page.evaluate(()=>{window.__devices.confirmationFailure=false;window.__devices.patches=[];});
+ await page.evaluate(selector=>{const input=document.querySelector(selector);input.click();input.click();},toggle('plug'));
+ await page.waitForFunction(selector=>!document.querySelector(selector).disabled&&!document.querySelector(selector).checked,{},toggle('plug'));
+ assert.equal(await page.evaluate(()=>window.__devices.patches.length),1,'rapid preference toggles save once');
+ assert.equal(await page.$eval(toggle('lock'),e=>e.checked),true,'preferences are per device');
+ await page.reload({waitUntil:'load'});await page.waitForSelector(toggle('plug'));
+ assert.equal(await page.$eval(toggle('plug'),e=>e.checked),false,'preference survives reload');
+ await page.evaluate(selector=>{const button=document.querySelector(selector);button.click();button.click();},control('plug'));
+ await page.waitForFunction(()=>window.__devices.posts.length===1);
+ assert.equal(await page.$('dialog[open]'),null,'opted-out action has no confirmation dialog');
+ assert.deepEqual(await page.evaluate(()=>({action:window.__devices.posts[0].action,confirmed:window.__devices.posts[0].confirmed})),{action:'turnOff',confirmed:false});
+ await advance(60000);assert.equal(await page.evaluate(()=>window.__devices.posts.length),1,'observations never send another command');
+ await toggleConfirmation('plug');await page.click(control('plug'));await page.waitForSelector('dialog[open]');await page.keyboard.press('Escape');
+ assert.equal(await page.evaluate(()=>window.__devices.posts.length),1,'re-enabling restores confirmation and cancel is inert');
+ await toggleConfirmation('plug');await page.evaluate(()=>window.__devices.view.devices.find(d=>d.kind==='plug').confirmationRequired=true);
+ await page.click(control('plug'));await page.waitForSelector('dialog[open]');await page.keyboard.press('Escape');
+ assert.equal(await page.evaluate(()=>window.__devices.posts.length),1,'fresh preflight overrides an old no-confirmation snapshot');
+ await toggleConfirmation('lock');await page.click(lockButton('unlock'));await page.waitForFunction(()=>window.__devices.posts.length===2);
+ assert.equal(await page.$('dialog[open]'),null,'lock opt-out also removes confirmation acknowledgement');
+ assert.equal(await page.evaluate(()=>window.__devices.posts.at(-1).confirmed),false);
+ await toggleConfirmation('indoorLight');await page.evaluate(()=>window.__devices.failure=true);await page.click(control('indoorLight'));
+ await page.waitForSelector(card('indoorLight')+' [role=alert]');assert.equal(await page.evaluate(()=>window.__devices.posts.length),2,'opt-out still requires successful fresh status');
+ for(const [language,width] of [['ja',1440],['zh-Hans',360],['zh-Hant',768]]){
+  await page.setViewport({width,height:960});await open(language);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  assert.equal(await page.$eval('.store-devices-panel',e=>/[ぁ-んァ-ヶ]/.test(e.textContent)&&document.documentElement.lang!=='ja'),false);
+  await page.screenshot({path:resolve(output,`confirmation-setting-${language}-${width}.png`),fullPage:true});
+ }
+ await page.evaluate(()=>sessionStorage.removeItem('fixtureDeviceConfirmations'));
  for(const [language,width] of [['ja',1440],['zh-Hans',360],['zh-Hant',768]]){
   await page.setViewport({width,height:960});await open(language);await page.click('.store-device-sort-start');await page.waitForSelector('.store-device-sort-list');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'sorting has no horizontal overflow');
@@ -108,5 +148,5 @@ try{
  assert.deepEqual(await page.$$eval('.store-device-card',nodes=>nodes.map(n=>n.dataset.deviceKey)),desiredOrder);assert.equal(await page.evaluate(()=>window.__devices.posts.length),0,'sorting sends no control commands');
  await page.reload({waitUntil:'load'});await page.waitForFunction(()=>document.querySelectorAll('.store-device-card').length===9);assert.deepEqual(await page.$$eval('.store-device-card',nodes=>nodes.map(n=>n.dataset.deviceKey)),desiredOrder,'saved order survives reload');
  await page.evaluate(()=>window.__devices.view.configured=false);await page.click('.store-device-refresh-all');await page.waitForSelector('.store-device-empty');assert.equal(await page.$('.store-device-card'),null);
- assert.deepEqual(errors,[]);const report={passed:true,viewports:[1440,768,360],languages:['ja','zh-Hans','zh-Hant'],checks:['StrictMode','nine device cards','five minutes without polling','no focus polling','fresh preflight','cancel','double-click single POST','10-second cooldown','three bounded observations','early observation stop','unlock confirmation','unsupported latch hidden','lock action emphasis follows refreshed state','unknown and pending lock state stays neutral','explicit same-state action remains available','exact shade position','offline preflight','lost response no retry','legacy skipped command feedback','nested device rejection persists','plug reported on/off and exact command','sorting move/cancel/save/failure/reload','sorting does not send device commands or status reads','translations','unconfigured store'],liveDeviceCommands:0};await writeFile(resolve(output,'ui-report.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
+ assert.deepEqual(errors,[]);const report={passed:true,viewports:[1440,768,360],languages:['ja','zh-Hans','zh-Hant'],checks:['per-device confirmation persistence and save failure','direct action and double-click protection','fresh preference overrides cached value','opt-out preflight and read-only observations','StrictMode','nine device cards','five minutes without polling','no focus polling','fresh preflight','cancel','double-click single POST','10-second cooldown','three bounded observations','early observation stop','unlock confirmation','unsupported latch hidden','lock action emphasis follows refreshed state','unknown and pending lock state stays neutral','explicit same-state action remains available','exact shade position','offline preflight','lost response no retry','legacy skipped command feedback','nested device rejection persists','plug reported on/off and exact command','sorting move/cancel/save/failure/reload','sorting does not send device commands or status reads','translations','unconfigured store'],liveDeviceCommands:0};await writeFile(resolve(output,'ui-report.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
 }finally{await browser.close();}

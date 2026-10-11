@@ -1,6 +1,6 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { getStoreOrderAccess } from "../../../../lib/store-order-access";
-import { getStoreDevices, requestStoreDeviceCommand, saveStoreDeviceOrder, StoreDeviceError } from "../../../../lib/store-devices";
+import { getStoreDevices, requestStoreDeviceCommand, saveStoreDeviceConfirmation, saveStoreDeviceOrder, StoreDeviceError } from "../../../../lib/store-devices";
 import type { DeviceAction } from "../../../../lib/store-device-state";
 
 export const dynamic = "force-dynamic";
@@ -34,12 +34,12 @@ export async function POST(request: Request) {
   if (origin && origin !== new URL(request.url).origin) return json({ error: "不正なリクエスト元です。" }, 403);
   let body: { storeId?: unknown; device?: unknown; requestId?: unknown; action?: unknown; position?: unknown; confirmed?: unknown };
   try { body = await request.json(); } catch { return json({ error: "操作内容を確認してください。" }, 400); }
-  if (!body || typeof body.device !== "string" || !/^[a-f0-9]{24}$/.test(body.device) || typeof body.requestId !== "string" || !uuid.test(body.requestId) || typeof body.action !== "string" || body.confirmed !== true) return json({ error: "操作内容を確認してください。" }, 400);
+  if (!body || typeof body.device !== "string" || !/^[a-f0-9]{24}$/.test(body.device) || typeof body.requestId !== "string" || !uuid.test(body.requestId) || typeof body.action !== "string" || typeof body.confirmed !== "boolean") return json({ error: "操作内容を確認してください。" }, 400);
   if (body.action === "setPosition" && (typeof body.position !== "number" || !Number.isInteger(body.position) || body.position < 0 || body.position > 100)) return json({ error: "位置は0から100で指定してください。" }, 400);
   try {
     const access = await authorize(body.storeId);
     if (access.error) return access.error;
-    return json(await requestStoreDeviceCommand(access.storeId!, access.session!.id, body.device, body.requestId, body.action as DeviceAction, body.action === "setPosition" ? String(body.position) : "default"));
+    return json(await requestStoreDeviceCommand(access.storeId!, access.session!.id, body.device, body.requestId, body.action as DeviceAction, body.action === "setPosition" ? String(body.position) : "default", undefined, body.confirmed));
   } catch (error) {
     return error instanceof StoreDeviceError ? json({ error: error.message }, error.status) : json({ error: "操作結果を確認できません。再操作せず、状態を更新してください。" }, 503);
   }
@@ -48,13 +48,15 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin) return json({ error: "不正なリクエスト元です。" }, 403);
-  const body = await request.json().catch(() => null) as { storeId?: unknown; order?: unknown } | null;
-  if (!body || !Array.isArray(body.order)) return json({ error: "機器の並び順を確認してください。" }, 400);
+  const body = await request.json().catch(() => null) as { storeId?: unknown; order?: unknown; device?: unknown; confirmationRequired?: unknown } | null;
+  const ordering = body && Array.isArray(body.order) && body.device === undefined && body.confirmationRequired === undefined;
+  const confirmation = body && body.order === undefined && typeof body.device === "string" && /^[a-f0-9]{24}$/.test(body.device) && typeof body.confirmationRequired === "boolean";
+  if (!body || (!ordering && !confirmation)) return json({ error: "機器の設定を確認してください。" }, 400);
   try {
     const access = await authorize(body.storeId);
     if (access.error) return access.error;
-    return json(await saveStoreDeviceOrder(access.storeId!, access.session!.id, body.order));
+    return json(ordering ? await saveStoreDeviceOrder(access.storeId!, access.session!.id, body.order) : await saveStoreDeviceConfirmation(access.storeId!, access.session!.id, body.device as string, body.confirmationRequired as boolean));
   } catch (error) {
-    return error instanceof StoreDeviceError ? json({ error: error.message }, error.status) : json({ error: "並び順を保存できません。もう一度お試しください。" }, 503);
+    return error instanceof StoreDeviceError ? json({ error: error.message }, error.status) : json({ error: ordering ? "並び順を保存できません。もう一度お試しください。" : "確認設定を保存できません。もう一度お試しください。" }, 503);
   }
 }

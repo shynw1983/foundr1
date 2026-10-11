@@ -69,6 +69,21 @@ device keys. The server validates store scope, unique keys and current device
 membership; new devices are appended using the default type/name order.
 Opening or refreshing the page reads the saved order without writing it.
 
+Each controllable device has an `操作前確認` switch, enabled by default. Saving
+`{storeId, device, confirmationRequired}` with the same PATCH endpoint merges one
+opaque key into `settings.deviceConfirmations`; ordering, private bindings and
+other devices' preferences are preserved. This store-wide preference is returned
+by both list and single-device reads and shared by the device list and Android
+widget. Only a stored boolean `false` opts out; missing/invalid values require
+confirmation. Saving the preference does not send a device command.
+
+The list always preflights the current device and preference before acting. A
+fresh widget tap may execute once after that read when confirmation is disabled:
+press-mode Bots press once, power and lock controls choose the opposite reported
+state, and a fully open/closed shade moves to the opposite endpoint. Unknown
+states or intermediate shade positions present action choices. Activity restore,
+failed reads, manual refresh and post-command observations never auto-execute.
+
 The page displays **last fetched state and time**, not a promise of real-time
 state. The retrieval timestamp is not a physical sensor sample timestamp.
 SwitchBot cloud reports may lag devices. A successful command acknowledgement
@@ -90,7 +105,10 @@ The API uses existing Store roles `owner`, `manager`, `store_terminal` and
 requires the selected store to be in the session's active scoped store list.
 The browser supplies only an opaque store-specific device key, not credentials
 or physical IDs. Cross-origin commands, malformed targets, unsupported actions,
-missing confirmation and invalid positions are rejected. The server discovers
+missing confirmation fields and invalid positions are rejected. A command with
+`confirmed:false` is accepted only when this device's stored preference is false;
+the server rejects a client using an old preference after confirmation is enabled.
+The server discovers
 the target again, then reads fresh status before sending any command.
 
 Normal commands impose a **10-second cooldown after completion**, shared across
@@ -100,14 +118,18 @@ cooldown on completion. A durable journal exists before any physical command.
 Replaying a request UUID never sends twice, even after expiry. Ambiguous POST
 results and abandoned pending records remain unknown; no worker retries them.
 
-Every device command has an on-screen confirmation. Unlock additionally
-requires acknowledging that the door can be opened. Locking requires a closed
+Devices that require confirmation show an on-screen confirmation. On the device
+list, unlock additionally requires acknowledging that the door can be opened.
+Opting out removes these confirmation steps for that device in the list and
+widget. Scene confirmation and reservation/notification switches are unchanged.
+Locking still requires a closed
 door and valid lock calibration/state; shade positioning requires calibration
 and a valid position. Cloud status is checked before sending but can lag the physical device.
-An explicitly confirmed lock, shade or switch command is therefore sent even
+An explicit lock, shade or switch command is therefore sent even
 when the fetched value already matches. Request UUID idempotency and the
-10-second cooldown still prevent accidental duplicate sends. There is no automatic unlock, PIN creation
-or automatic toggle/retry.
+10-second cooldown still prevent accidental duplicate sends. Only a new user
+action may send a command; no background unlock, PIN creation or automatic retry
+is added.
 
 The historical tables `store_light_runtime` and `store_light_commands` are
 retained to preserve history and rolling-deployment compatibility. Apply

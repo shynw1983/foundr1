@@ -78,8 +78,11 @@ final class InventoryApiClient {
     }
 
     static JSONObject commandDevice(String storeId, String device, String action, Integer position, String requestId, String session) throws Exception {
+        return commandDevice(storeId, device, action, position, requestId, session, true);
+    }
+    static JSONObject commandDevice(String storeId, String device, String action, Integer position, String requestId, String session, boolean confirmed) throws Exception {
         JSONObject body = new JSONObject().put("storeId", storeId).put("device", device)
-            .put("action", action).put("requestId", requestId).put("confirmed", true);
+            .put("action", action).put("requestId", requestId).put("confirmed", confirmed);
         if (position != null) body.put("position", position);
         return request("POST", BASE_URL + "/api/store/devices", body.toString(), session);
     }

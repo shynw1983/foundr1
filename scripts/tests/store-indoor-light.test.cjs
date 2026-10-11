@@ -71,7 +71,7 @@ test('on-demand reads, additive migration, actual SQL claims, device safety and 
   const queries=[];const sql=async(strings,...values)=>{const q=strings.reduce((q,s,i)=>q+(i?'$'+i:'')+s,'');queries.push(q);return(await db.query(q,values)).rows;};
   let holdPost=null;
   const vendor=fakeVendor(async()=>{
-   assert.equal((await db.query("select count(*)::int as n from store_light_commands where result='pending'")).rows[0].n,1,'durable journal before send');if(holdPost)await holdPost;
+   assert.equal((await db.query("select count(*)::int as n from store_light_commands where result='pending' and requested_at>now()-interval '60 seconds'")).rows[0].n,1,'durable in-flight journal before send');if(holdPost)await holdPost;
   });
   const adapter=load('lib/switchbot.ts',{}, {fetch:vendor.fetch});const service=load('lib/store-devices.ts',{db:{sql},switchbot:adapter,'store-device-state':state,'store-light-state':light,'store-scene-state':scenePolicy});
   const legacy=load('lib/store-indoor-light.ts',{'store-devices':service,switchbot:adapter,'store-light-state':light});
@@ -139,6 +139,31 @@ test('on-demand reads, additive migration, actual SQL claims, device safety and 
   await expire();await send(plugId,'turnOn');assert.equal(vendor.posts.at(-1).body.command,'turnOn','explicit on is sent even when cloud already says on');
   vendor.plugPower='unknown';await expire();assert.equal((await send(plugId,'turnOff')).command.reason,'invalid_power_state');assert.equal(vendor.posts.length,postCount+2);
   vendor.plugPower='off';vendor.plugHub=foreignId;assert.equal((await service.getStoreDevices(storeId,key(plugId))).devices[0].issue,'device_mismatch');
+  vendor.plugHub=null;vendor.mode='pressMode';await expire();
+  assert.ok((await service.getStoreDevices(storeId)).devices.every(d=>d.confirmationRequired===true),'existing devices default to confirmation');
+  const direct=(id=plugId,requestId=crypto.randomUUID())=>service.requestStoreDeviceCommand(storeId,actorId,key(id),requestId,id===plugId?'turnOn':'press','default',undefined,false);
+  const startPosts=vendor.posts.length,startCommands=(await db.query('select count(*)::int n from store_light_commands')).rows[0].n;
+  await assert.rejects(()=>direct(),e=>e.status===409);
+  assert.equal((await db.query('select count(*)::int n from store_light_commands')).rows[0].n,startCommands,'denied direct action creates no command');
+  await Promise.all([plugId,botId].map(id=>service.saveStoreDeviceConfirmation(storeId,actorId,key(id),false)));
+  const saved=(await db.query("select settings from module_settings where scope_key=$1",['store:'+storeId])).rows[0].settings;
+  assert.deepEqual(saved,{...preferences,deviceConfirmations:{[key(plugId)]:false,[key(botId)]:false}},'concurrent settings preserve both devices and private configuration');
+  assert.equal((await service.getStoreDevices(storeId,key(plugId))).devices[0].confirmationRequired,false);
+  assert.equal((await service.getStoreDevices(storeId)).devices.find(d=>d.key===key(botId)).confirmationRequired,false);
+  assert.equal((await service.getStoreDevices(storeId,key(lockId))).devices[0].confirmationRequired,true);
+  assert.equal(vendor.posts.length,startPosts,'saving preferences never actuates');
+  for(const [target,value,status] of [[foreignId,false,404],[remoteId,false,400],[plugId,'false',400]])await assert.rejects(()=>service.saveStoreDeviceConfirmation(storeId,actorId,key(target),value),e=>e.status===status);
+  await assert.rejects(()=>service.saveStoreDeviceConfirmation(otherStoreId,actorId,key(plugId),false),e=>e.status===409);
+  const directId=crypto.randomUUID();assert.equal((await direct(plugId,directId)).command.result,'accepted');
+  await direct(plugId,directId);await assert.rejects(()=>direct(),e=>e.status===409);
+  assert.equal(vendor.posts.length,startPosts+1,'direct action retains UUID deduplication and cooldown');
+  await service.saveStoreDeviceConfirmation(storeId,actorId,key(plugId),true);await expire();
+  await assert.rejects(()=>direct(),e=>e.status===409,'server rejects stale disabled-confirmation snapshots');
+  assert.equal((await service.getStoreDevices(storeId,key(plugId))).devices[0].confirmationRequired,true);
+  await service.saveStoreDeviceConfirmation(storeId,actorId,key(plugId),false);vendor.failStatuses=true;
+  assert.equal((await direct()).command.result,'rejected');assert.equal(vendor.posts.length,startPosts+1,'direct execution retains status preflight');vendor.failStatuses=false;
+  await db.query("update module_settings set settings=jsonb_set(settings,'{deviceConfirmations}',$1::jsonb) where scope_key=$2",[JSON.stringify({[key(plugId)]:'false'}),'store:'+storeId]);
+  assert.equal((await service.getStoreDevices(storeId,key(plugId))).devices[0].confirmationRequired,true,'malformed stored values keep confirmation');
   t.diagnostic('Nine devices; read-only status; preserved history; 10-second completion cooldown; in-flight protection; shared legacy lock; guarded shade/lock controls; no command retries.');
  }finally{await db.close();}
 });
@@ -146,7 +171,7 @@ test('on-demand reads, additive migration, actual SQL claims, device safety and 
 test('route enforces session, role, active store, origin, confirmation and typed input',async()=>{
  let actor={id:actorId,role:'store_terminal'},visible=[{id:storeId}],calls=[];
  class StoreDeviceError extends Error { constructor(message,status){super(message);this.status=status;} }
- const service={StoreDeviceError,getStoreDevices:async(...args)=>{calls.push(['read',...args]);return{configured:true,devices:[]};},saveStoreDeviceOrder:async(...args)=>{calls.push(['order',...args]);return{order:args[2]};},requestStoreDeviceCommand:async(...args)=>{calls.push(['command',...args]);return{command:{result:'accepted'}};}};
+ const service={StoreDeviceError,getStoreDevices:async(...args)=>{calls.push(['read',...args]);return{configured:true,devices:[]};},saveStoreDeviceConfirmation:async(...args)=>{calls.push(['confirmation',...args]);return{device:args[2],confirmationRequired:args[3]};},saveStoreDeviceOrder:async(...args)=>{calls.push(['order',...args]);return{order:args[2]};},requestStoreDeviceCommand:async(...args)=>{calls.push(['command',...args]);return{command:{result:'accepted'}};}};
  const route=load('app/api/store/devices/route.ts',{'api-auth':{requireOsSession:async()=>actor},'store-order-access':{getStoreOrderAccess:async()=>({stores:visible})},'store-devices':service});
  const key='a'.repeat(24),post=(patch={},origin='http://test')=>route.POST(new Request('http://test/api/store/devices',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({storeId,device:key,requestId:crypto.randomUUID(),action:'press',confirmed:true,...patch})}));
  const get=()=>route.GET(new Request(`http://test/api/store/devices?storeId=${storeId}`));
@@ -155,17 +180,23 @@ test('route enforces session, role, active store, origin, confirmation and typed
  ['logged out',()=>{actor=null;},{},401],['staff',()=>{actor={id:actorId,role:'staff'};},{},403],
  ['cross store',()=>{actor={id:actorId,role:'store_terminal'};},{storeId:otherStoreId},403],
  ['inactive store',()=>{visible=[];},{},403],['missing store',()=>{visible=[{id:storeId}];},{storeId:''},400],
- ['arbitrary ID',()=>{},{device:botId},400],['no confirmation',()=>{},{confirmed:false},400],
+ ['arbitrary ID',()=>{},{device:botId},400],['missing confirmation',()=>{},{confirmed:undefined},400],['invalid confirmation',()=>{},{confirmed:'false'},400],
  ['invalid request ID',()=>{},{requestId:'repeat'},400],['invalid shade position',()=>{},{action:'setPosition',position:101},400],
  ['fractional shade position',()=>{},{action:'setPosition',position:1.5},400],['string position',()=>{},{action:'setPosition',position:'37'},400]
  ]){setup();assert.equal((await post(patch)).status,code,label);}
  assert.equal((await post({},'https://other.example')).status,403);assert.equal(calls.length,0,'denied requests never touch devices');
  actor=null;assert.equal((await get()).status,401);assert.equal(calls.length,0);
- actor={id:actorId,role:'owner'};assert.equal((await post({action:'setPosition',position:37})).status,200);assert.equal(calls.at(-1).at(-1),'37');
+ actor={id:actorId,role:'owner'};assert.equal((await post({action:'setPosition',position:37})).status,200);assert.equal(calls.at(-1)[6],'37');assert.equal(calls.at(-1)[8],true);
+ assert.equal((await post({confirmed:false})).status,200);assert.equal(calls.at(-1)[8],false,'service must receive the actual confirmation state');
  const patch=(body={storeId,order:[key]},origin='http://test')=>route.PATCH(new Request('http://test/api/store/devices',{method:'PATCH',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify(body)}));
  calls=[];assert.equal((await patch()).status,200);assert.deepEqual(plain(calls[0]),['order',storeId,actorId,[key]]);calls=[];
  actor=null;assert.equal((await patch()).status,401);actor={id:actorId,role:'staff'};assert.equal((await patch()).status,403);
  actor={id:actorId,role:'owner'};assert.equal((await patch({storeId:otherStoreId,order:[]})).status,403);assert.equal((await patch(undefined,'https://other.example')).status,403);assert.equal((await patch({storeId,order:'bad'})).status,400);assert.equal(calls.length,0);
+ const setting={storeId,device:key,confirmationRequired:false};
+ for(const body of [{...setting,confirmationRequired:'false'},{...setting,device:botId},{...setting,order:[]},{storeId,device:key}])assert.equal((await patch(body)).status,400);
+ actor=null;assert.equal((await patch(setting)).status,401);actor={id:actorId,role:'staff'};assert.equal((await patch(setting)).status,403);
+ actor={id:actorId,role:'owner'};assert.equal((await patch({...setting,storeId:otherStoreId})).status,403);assert.equal((await patch(setting,'https://other.example')).status,403);assert.equal(calls.length,0);
+ assert.equal((await patch(setting)).status,200);assert.deepEqual(plain(calls[0]),['confirmation',storeId,actorId,key,false]);
 
 });
 

@@ -17,18 +17,19 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import org.json.JSONObject;
 
-/** A widget tap only reads. A named confirmation is the sole command path. */
+/** A fresh widget tap may act once if the device's saved preference explicitly permits it. */
 public class StoreWidgetDeviceActivity extends Activity {
     static final String EXTRA_STORE = "device_store", EXTRA_KEY = "device_key", EXTRA_SLOT = "device_slot", EXTRA_SESSION = "device_session";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private LinearLayout content;
     private int widgetId, slot, readSequence;
     private String store, key, session, name;
-    private boolean zh, busy, submitted;
+    private boolean zh, busy, submitted, directTapPending, commandConfirmed;
     private JSONObject device;
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        directTapPending = saved == null;
         widgetId = getIntent().getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID);
         slot = getIntent().getIntExtra(EXTRA_SLOT, -1);
         store = getIntent().getStringExtra(EXTRA_STORE); key = getIntent().getStringExtra(EXTRA_KEY);
@@ -85,6 +86,7 @@ public class StoreWidgetDeviceActivity extends Activity {
         }, "foundr1-widget-device-read").start();
     }
     void showDevice(JSONObject current) {
+        boolean directTap = directTapPending; directTapPending = false;
         busy = false; submitted = false; device = current;
         if (current == null || !key.equals(current.optString("key"))) { failure(null); return; }
         name = current.optString("name", name); header(); text(StoreWidgetDevicePolicy.state(current, zh), 22, true);
@@ -95,7 +97,13 @@ public class StoreWidgetDeviceActivity extends Activity {
         if (cooldown > 0) text(zh ? "上一操作处理中，请稍后重新读取。" : "直前の操作を処理中です。少し待って再読込してください。", 14, false);
         else if (!available) text(zh ? "当前不能操作，请重新读取或在 Store 设备页确认。" : "現在は操作できません。再読込するかStoreの機器ページで確認してください。", 14, false);
         else {
-            text(zh ? "确认设备与操作后再执行。" : "機器と操作内容を確認して実行してください。", 14, false);
+            boolean needsConfirmation = StoreWidgetDevicePolicy.confirmationRequired(current);
+            String directAction = StoreWidgetDevicePolicy.directAction(current);
+            if (directTap && !needsConfirmation && !directAction.isEmpty()) {
+                execute(directAction, StoreWidgetDevicePolicy.directPosition(current)); return;
+            }
+            text(needsConfirmation ? (zh ? "确认设备与操作后再执行。" : "機器と操作内容を確認して実行してください。")
+                : (zh ? "已设为无需确认，选择操作后直接执行。" : "確認不要に設定されています。操作を選ぶと実行します。"), 14, false);
             if (StoreWidgetDevicePolicy.hasAction(current, "press")) {
                 text(zh ? "会按一次实体开关，实际灯光状态可能与显示不同。" : "物理スイッチを1回押します。実際の点灯状態と表示が異なる場合があります。", 14, false);
                 action("press", null, true);
@@ -111,7 +119,11 @@ public class StoreWidgetDeviceActivity extends Activity {
         button(zh ? "重新读取" : "再読込", false, this::load);
         button(zh ? "取消" : "キャンセル", false, this::finish);
     }
-    private void action(String action, Integer position, boolean primary) { button(StoreWidgetDevicePolicy.actionLabel(action, position, zh), primary, () -> execute(action, position)); }
+    private void action(String action, Integer position, boolean primary) {
+        String label = StoreWidgetDevicePolicy.actionLabel(action, position, zh);
+        if (zh && !StoreWidgetDevicePolicy.confirmationRequired(device)) label = label.replaceFirst("^确认", "");
+        button(label, primary, () -> execute(action, position));
+    }
     void execute(String action, Integer position) {
         if (busy || submitted) return;
         long elapsedNow = android.os.SystemClock.elapsedRealtime();
@@ -120,7 +132,7 @@ public class StoreWidgetDeviceActivity extends Activity {
             || StoreWidgetDevicePolicy.cooldownRemaining(device, elapsedNow) > 0) {
             failure(new InventoryApiClient.ApiException(409, "changed")); return;
         }
-        submitted = true; busy = true;
+        submitted = true; busy = true; commandConfirmed = StoreWidgetDevicePolicy.confirmationRequired(device);
         String requestId = java.util.UUID.randomUUID().toString();
         StoreWidgetDevicesData.invalidate(getApplicationContext(), session, store, key); renderWidgets();
         header(); text(zh ? "正在发送一次指令…" : "操作を送信中…", 16, false);
@@ -146,9 +158,9 @@ public class StoreWidgetDeviceActivity extends Activity {
             });
         }, "foundr1-widget-device-command").start();
     }
-    JSONObject sendCommand(String action, Integer position, String requestId) throws Exception { return InventoryApiClient.commandDevice(store, key, action, position, requestId, session); }
+    JSONObject sendCommand(String action, Integer position, String requestId) throws Exception { return InventoryApiClient.commandDevice(store, key, action, position, requestId, session, commandConfirmed); }
     private void failure(Exception error) {
-        busy = false; device = null; header(); text(StoreWidgetDevicePolicy.error(error, zh), 16, true);
+        directTapPending = false; busy = false; device = null; header(); text(StoreWidgetDevicePolicy.error(error, zh), 16, true);
         if (bound()) button(zh ? "重新读取" : "再読込", false, this::load);
         button(zh ? "打开设备页" : "機器ページを開く", false, () -> {
             startActivity(new Intent(this, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP)

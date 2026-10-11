@@ -45588,6 +45588,17 @@ a:focus-visible {
 .store-device-metrics small { font-size: 11px; color: var(--muted); }
 .store-device-metrics .is-low { color: var(--amber); }
 .store-device-help { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 12px 0 0; }
+.store-device-confirmation-setting { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.store-device-confirmation-setting label { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 32px; font-size: 13px; cursor: pointer; }
+.store-device-confirmation-setting label > span { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.store-device-confirmation-setting small, .store-device-confirmation-setting p { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.store-device-confirmation-setting p { margin: 4px 0 0; }
+.store-device-confirmation-setting input { appearance: none; flex: 0 0 38px; width: 38px; height: 22px; padding: 2px; margin: 0; border: 1px solid var(--line); border-radius: 20px; background: #dbe2de; cursor: pointer; }
+.store-device-confirmation-setting input::before { content: ""; display: block; width: 16px; height: 16px; border-radius: 50%; background: white; box-shadow: 0 1px 2px #173f3526; }
+.store-device-confirmation-setting input:checked { background: var(--green); border-color: var(--green); }
+.store-device-confirmation-setting input:checked::before { transform: translateX(16px); }
+.store-device-confirmation-setting input:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.store-device-confirmation-setting input:disabled { opacity: .5; cursor: wait; }
 .store-device-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .store-device-refresh { background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
 .store-device-notice { font-size: 12px; line-height: 1.7; background: var(--surface, #f4f6f4); padding: 10px 12px; border-radius: 7px; margin: 14px 0 0; overflow-wrap: anywhere; }

@@ -94,6 +94,63 @@ public class StoreWidgetDeviceTest {
             assertNotNull(java.util.UUID.fromString(activity.requestId));
         }
     }
+    @Test public void optedOutWidgetTapSendsOnceAndRereadsOrRestorationNeverReplay() throws Exception {
+        fixture.put("confirmationRequired", false);
+        try (ActivityController<RecordingActivity> controller = Robolectric.buildActivity(RecordingActivity.class, intent()).setup()) {
+            RecordingActivity activity = controller.get();
+            assertTrue(activity.sent.await(3, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals("turnOff", activity.action); assertEquals(1, activity.writes);
+            assertFalse((Boolean)org.robolectric.util.ReflectionHelpers.getField(activity, "commandConfirmed"));
+            shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(11));
+            assertEquals(1, activity.writes);
+            activity.load(); assertEquals(1, activity.writes);
+            assertNotNull(find(activity.getWindow().getDecorView(), "关闭"));
+        }
+        try (ActivityController<RecordingActivity> controller = Robolectric.buildActivity(RecordingActivity.class, intent()).setup(new Bundle())) {
+            assertEquals(0, controller.get().writes);
+            assertNotNull(find(controller.get().getWindow().getDecorView(), "关闭"));
+        }
+    }
+    @Test public void directTapNeedsFreshAvailableStateAndIsConsumedEvenWhenBlocked() throws Exception {
+        for (String blocked : new String[]{"readError", "cooldown", "disabled", "stale", "unknown"}) {
+            fixture = device(KEY).put("confirmationRequired", false);
+            if (blocked.equals("readError")) fixture.put("readError", true);
+            if (blocked.equals("cooldown")) fixture.put("blockedUntil", java.time.Instant.now().plusSeconds(30).toString());
+            if (blocked.equals("disabled")) fixture.put("controlEnabled", false);
+            if (blocked.equals("stale")) fixture.remove("_widgetRead");
+            if (blocked.equals("unknown")) fixture.getJSONObject("sample").put("power", "unknown");
+            try (ActivityController<RecordingActivity> controller = Robolectric.buildActivity(RecordingActivity.class, intent()).setup()) {
+                RecordingActivity activity = controller.get(); assertEquals(blocked, 0, activity.writes);
+                fixture = device(KEY).put("confirmationRequired", false); activity.load();
+                assertEquals("reread must not auto-execute: " + blocked, 0, activity.writes);
+            }
+        }
+        fixture = device(KEY).put("confirmationRequired", false);
+        try (ActivityController<RecordingActivity> controller = Robolectric.buildActivity(RecordingActivity.class, intent().putExtra(StoreWidgetDeviceActivity.EXTRA_SESSION, "old-session")).setup()) {
+            assertEquals(0, controller.get().writes);
+        }
+    }
+    @Test public void directActionUsesCapabilitiesAndKnownStateWithSafeDefaultPreference() throws Exception {
+        for (Object value : new Object[]{JSONObject.NULL, "false", 0, true}) {
+            assertTrue(StoreWidgetDevicePolicy.confirmationRequired(device(KEY).put("confirmationRequired", value)));
+        }
+        assertFalse(StoreWidgetDevicePolicy.confirmationRequired(device(KEY).put("confirmationRequired", false)));
+        assertEquals("turnOff", StoreWidgetDevicePolicy.directAction(device(KEY)));
+        JSONObject d = device(KEY); d.getJSONObject("sample").put("power", "off");
+        assertEquals("turnOn", StoreWidgetDevicePolicy.directAction(d));
+        d.put("kind", "bot").put("actions", new JSONArray().put("press"));
+        assertEquals("press", StoreWidgetDevicePolicy.directAction(d));
+        d.put("kind", "lock").put("actions", new JSONArray().put("lock").put("unlock"));
+        d.put("sample", new JSONObject().put("lockState", "locked")); assertEquals("unlock", StoreWidgetDevicePolicy.directAction(d));
+        d.getJSONObject("sample").put("lockState", "unlocked"); assertEquals("lock", StoreWidgetDevicePolicy.directAction(d));
+        d.getJSONObject("sample").put("lockState", "jammed"); assertEquals("", StoreWidgetDevicePolicy.directAction(d));
+        d.put("kind", "shade").put("actions", new JSONArray().put("setPosition"));
+        d.put("sample", new JSONObject().put("position", 0).put("calibrated", true)); assertEquals(Integer.valueOf(100), StoreWidgetDevicePolicy.directPosition(d));
+        d.getJSONObject("sample").put("position", 100); assertEquals(Integer.valueOf(0), StoreWidgetDevicePolicy.directPosition(d));
+        d.getJSONObject("sample").put("moving", true); assertEquals("", StoreWidgetDevicePolicy.directAction(d));
+        d.getJSONObject("sample").put("moving", false).put("position", 50); assertEquals("", StoreWidgetDevicePolicy.directAction(d));
+        d.getJSONObject("sample").put("position", 0).put("calibrated", false); assertEquals("", StoreWidgetDevicePolicy.directAction(d));
+    }
     @Test public void addedSlotsReadTheirOwnDeviceAndOnlyExplicitlyConfirm() throws Exception {
         String[] keys = {KEY, OTHER, "333333333333333333333333", "444444444444444444444444"};
         for (int slot : new int[]{2, 3}) {

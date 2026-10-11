@@ -30,6 +30,31 @@ final class StoreWidgetDevicePolicy {
         if (actions != null) for (int i = 0; i < actions.length(); i++) if (action.equals(actions.optString(i))) return true;
         return false;
     }
+    static boolean confirmationRequired(JSONObject device) {
+        // Only an explicit boolean false from a fresh server response opts out.
+        return device == null || !Boolean.FALSE.equals(device.opt("confirmationRequired"));
+    }
+    static String directAction(JSONObject device) {
+        if (device == null) return "";
+        if (hasAction(device, "press")) return "press";
+        JSONObject sample = device.optJSONObject("sample");
+        if (sample == null) return "";
+        String action = "";
+        if ("plug".equals(device.optString("kind")) || "bot".equals(device.optString("kind")) || "indoorLight".equals(device.optString("kind"))) {
+            if ("on".equals(sample.optString("power"))) action = "turnOff";
+            else if ("off".equals(sample.optString("power"))) action = "turnOn";
+        } else if ("lock".equals(device.optString("kind"))) {
+            if ("locked".equals(sample.optString("lockState"))) action = "unlock";
+            else if ("unlocked".equals(sample.optString("lockState"))) action = "lock";
+        } else if ("shade".equals(device.optString("kind")) && !sample.optBoolean("moving") && sample.optBoolean("calibrated")) {
+            int position = sample.optInt("position", -1);
+            if (position == 0 || position == 100) action = "setPosition";
+        }
+        return hasAction(device, action) ? action : "";
+    }
+    static Integer directPosition(JSONObject device) {
+        return "setPosition".equals(directAction(device)) ? (device.optJSONObject("sample").optInt("position") == 0 ? 100 : 0) : null;
+    }
     static boolean selectable(JSONObject device) {
         return device != null && validKey(device.optString("key")) && (hasAction(device, "press")
             || hasAction(device, "turnOn") || hasAction(device, "turnOff") || hasAction(device, "lock")

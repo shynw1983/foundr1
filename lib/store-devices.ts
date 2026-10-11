@@ -20,7 +20,24 @@ export async function storeDeviceConfig(storeId: string) {
   const rows = await sql`select settings from module_settings where scope_key=${`store:${storeId}`} and module_key='store_devices' limit 1`;
   const settings = rows[0]?.settings || {};
   const strings = (value: unknown, pattern: RegExp): string[] => Array.isArray(value) ? [...new Set(value.filter((v): v is string => typeof v === "string" && pattern.test(v)))].slice(0, 128) : [];
-  return { config: { ...config, directDeviceIds: strings(settings.directDeviceIds, /^[A-F0-9]{12}$/) }, order: strings(settings.deviceOrder, /^[a-f0-9]{24}$/) };
+  const confirmations: Record<string, boolean> = settings.deviceConfirmations && typeof settings.deviceConfirmations === "object" && !Array.isArray(settings.deviceConfirmations) ? settings.deviceConfirmations : {};
+  return { config: { ...config, directDeviceIds: strings(settings.directDeviceIds, /^[A-F0-9]{12}$/) }, order: strings(settings.deviceOrder, /^[a-f0-9]{24}$/), confirmations };
+}
+
+export async function saveStoreDeviceConfirmation(storeId: string, actorId: string, key: string, confirmationRequired: boolean) {
+  if (!/^[a-f0-9]{24}$/.test(key) || typeof confirmationRequired !== "boolean") throw new StoreDeviceError("確認設定を確認してください。", 400);
+  const configured = await storeDeviceConfig(storeId);
+  if (!configured) throw new StoreDeviceError("この店舗の機器は未設定です。", 409);
+  const device = (await listStoreSwitchBots(configured.config)).find(d => d.key === key);
+  if (!device) throw new StoreDeviceError("この店舗の機器が見つかりません。", 404);
+  if (!deviceActions(device, null).length) throw new StoreDeviceError("この機器では実行できない操作です。", 400);
+  // Merge one device at a time so concurrent saves preserve other devices, ordering and bindings.
+  await sql`insert into module_settings(scope_key,module_key,settings,updated_by,updated_at)
+    values(${`store:${storeId}`},'store_devices',${JSON.stringify({ deviceConfirmations: { [key]: confirmationRequired } })}::jsonb,${actorId}::uuid,now())
+    on conflict(scope_key,module_key) do update set settings=jsonb_set(module_settings.settings,'{deviceConfirmations}',
+      (case when jsonb_typeof(module_settings.settings->'deviceConfirmations')='object' then module_settings.settings->'deviceConfirmations' else '{}'::jsonb end) || (excluded.settings->'deviceConfirmations')),
+      updated_by=excluded.updated_by,updated_at=now()`;
+  return { device: key, confirmationRequired };
 }
 
 export async function saveStoreDeviceOrder(storeId: string, actorId: string, order: unknown) {
@@ -38,7 +55,7 @@ export async function saveStoreDeviceOrder(storeId: string, actorId: string, ord
 export async function getStoreDevices(storeId: string, key?: string): Promise<StoreDevicesView> {
   const configured = await storeDeviceConfig(storeId);
   if (!configured) return { configured: false, storeId, devices: [] };
-  const { config, order } = configured;
+  const { config, order, confirmations } = configured;
   let devices = await listStoreSwitchBots(config);
   if (key) {
     devices = devices.filter(d => d.key === key);
@@ -64,14 +81,15 @@ export async function getStoreDevices(storeId: string, key?: string): Promise<St
         catch (error) { issue = error instanceof SwitchBotError ? error.code : "unavailable"; }
       }
       const row = runtime.find(r => r.device_id === device.id);
-      return { key: device.key, name: device.name, type: device.type, kind: device.kind, actions: deviceActions(device, sample), sample, fetchedAt, readError: Boolean(issue), issue, controlEnabled: config.controlEnabled, blockedUntil: iso(row?.blocked_until as string | null), command: publicCommand(row?.command as CommandRow | null) };
+      return { key: device.key, name: device.name, type: device.type, kind: device.kind, actions: deviceActions(device, sample), sample, fetchedAt, readError: Boolean(issue), issue, controlEnabled: config.controlEnabled, confirmationRequired: confirmations[device.key] !== false, blockedUntil: iso(row?.blocked_until as string | null), command: publicCommand(row?.command as CommandRow | null) };
     })));
   }
   return { configured: true, storeId, devices: views };
 }
 
-export async function requestStoreDeviceCommand(storeId: string, actorId: string, key: string, requestId: string, action: DeviceAction, parameter: string, sceneRunId?: string) {
-  const config = (await storeDeviceConfig(storeId))?.config;
+export async function requestStoreDeviceCommand(storeId: string, actorId: string, key: string, requestId: string, action: DeviceAction, parameter: string, sceneRunId?: string, confirmed = true) {
+  // Legacy and scene callers already confirm their entire operation. The device route passes its actual confirmation state.
+  const configured = await storeDeviceConfig(storeId), config = configured?.config;
   if (!config || !config.controlEnabled) throw new StoreDeviceError("機器の操作はまだ有効になっていません。", 409);
   const device = (await listStoreSwitchBots(config)).find(d => d.key === key);
   if (!device) throw new StoreDeviceError("この店舗の機器が見つかりません。", 404);
@@ -84,6 +102,7 @@ export async function requestStoreDeviceCommand(storeId: string, actorId: string
     if (row.store_id !== storeId || row.device_id !== device.id || row.command !== action || row.parameter !== parameter) throw new StoreDeviceError("操作番号が一致しません。", 409);
     return { command: publicCommand(row)!, blockedUntil: new Date(Date.parse(row.finished_at || row.requested_at) + (row.finished_at ? deviceCooldownMs : deviceCommandLeaseMs)).toISOString() };
   }
+  if (!confirmed && configured?.confirmations[key] !== false) throw new StoreDeviceError("この機器は操作前の確認が必要です。状態を更新してください。", 409);
   const activeScene = await sql`select id::text from store_device_scene_runs where store_id=${storeId}::uuid and status='running' and expires_at>now() limit 1`;
   if (sceneRunId ? activeScene[0]?.id !== sceneRunId : activeScene.length > 0) throw new StoreDeviceError("シーンを実行中です。完了後に操作してください。", 409);
   await sql`insert into store_light_runtime(store_id,device_id) values(${storeId}::uuid,${device.id}) on conflict do nothing`;

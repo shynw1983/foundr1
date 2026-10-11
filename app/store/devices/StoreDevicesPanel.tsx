@@ -18,6 +18,7 @@ export function StoreDevicesPanel({ storeId, storeName }: { storeId: string; sto
   const [error, setError] = useState("");
   const [allBusy, setAllBusy] = useState(false);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [confirmationSaving, setConfirmationSaving] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [positions, setPositions] = useState<Record<string, number>>({});
   const [intent, setIntent] = useState<Intent | null>(null);
@@ -101,7 +102,9 @@ export function StoreDevicesPanel({ storeId, storeName }: { storeId: string; sto
       if (!fresh || fresh.readError) return;
       if (!fresh.controlEnabled || !fresh.actions.includes(action)) { setErrors(e => ({ ...e, [device.key]: "この機器では実行できない操作です。" })); return; }
       if (fresh.blockedUntil && Date.parse(fresh.blockedUntil) > Date.now()) return;
-      setAcknowledged(false); setIntent({ device: fresh, action, position });
+      const selected = { device: fresh, action, position };
+      if (fresh.confirmationRequired === false) await execute(selected, false);
+      else { setAcknowledged(false); setIntent(selected); }
     } finally { preparing.current = false; }
   }
   function observe(key: string, command: DeviceCommand) {
@@ -113,17 +116,17 @@ export function StoreDevicesPanel({ storeId, storeName }: { storeId: string; sto
       if (fresh && (fresh.command?.id !== command.id || deviceObservation(fresh) === "observed")) clearObservation(key);
     }, delay));
   }
-  async function execute() {
-    if (!intent || sending.current || busyKeys.current.has(intent.device.key) || sceneRunning) return;
-    const { device, action, position } = intent;
-    if ((action === "unlock" || action === "deadbolt") && !acknowledged) return;
+  async function execute(selected: Intent | null = intent, confirmed = true) {
+    if (!selected || sending.current || busyKeys.current.has(selected.device.key) || sceneRunning) return;
+    const { device, action, position } = selected;
+    if (confirmed ? (action === "unlock" || action === "deadbolt") && !acknowledged : device.confirmationRequired !== false) return;
     sending.current = true; busyKeys.current.add(device.key); setBusy(b => ({ ...b, [device.key]: true })); setIntent(null);
     clearObservation(device.key); versions.current.set(device.key, (versions.current.get(device.key) || 0) + 1);
     const requestId = crypto.randomUUID(), requestedAt = new Date().toISOString();
     let command: DeviceCommand = { id: requestId, action, parameter: action === "setPosition" ? String(position) : "default", result: "unknown", requestedAt, finishedAt: null, before: device.sample, reason: "response_lost" };
     let blockedUntil = new Date(Date.now() + deviceCommandLeaseMs).toISOString();
     try {
-      const response = await fetch("/api/store/devices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ storeId, device: device.key, action, position, requestId, confirmed: true }), signal: AbortSignal.timeout(35_000) });
+      const response = await fetch("/api/store/devices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ storeId, device: device.key, action, position, requestId, confirmed }), signal: AbortSignal.timeout(35_000) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "操作結果を確認できません。再操作せず、状態を更新してください。");
       command = body.command; blockedUntil = body.blockedUntil;
@@ -137,6 +140,27 @@ export function StoreDevicesPanel({ storeId, storeName }: { storeId: string; sto
         setView(v => v ? { ...v, devices: v.devices.map(d => d.key === device.key ? { ...d, ...(command.reason === "already_in_state" ? { sample: command.before, fetchedAt: command.finishedAt, readError: false, issue: "" } : {}), command, blockedUntil } : d) } : v);
         observe(device.key, command);
       }
+    }
+  }
+  async function saveConfirmation(device: StoreDevice, confirmationRequired: boolean) {
+    if (busyKeys.current.has(device.key) || allReading.current || sending.current || preparing.current || intent || sceneRunning) return;
+    busyKeys.current.add(device.key); setBusy(b => ({ ...b, [device.key]: true }));
+    setConfirmationSaving(s => ({ ...s, [device.key]: true }));
+    const gen = generation.current, controller = new AbortController(); controllers.current.add(controller);
+    versions.current.set(device.key, (versions.current.get(device.key) || 0) + 1);
+    try {
+      const response = await fetch("/api/store/devices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ storeId, device: device.key, confirmationRequired }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25_000)]) });
+      const body = await response.json();
+      if (!response.ok || body.device !== device.key || body.confirmationRequired !== confirmationRequired) throw new Error("save failed");
+      if (active.current && gen === generation.current) {
+        setView(v => v ? { ...v, devices: v.devices.map(d => d.key === device.key ? { ...d, confirmationRequired } : d) } : v);
+        setErrors(e => ({ ...e, [device.key]: "" }));
+      }
+    } catch {
+      if (active.current && gen === generation.current) setErrors(e => ({ ...e, [device.key]: "確認設定を保存できません。もう一度お試しください。" }));
+    } finally {
+      controllers.current.delete(controller); busyKeys.current.delete(device.key);
+      if (active.current && gen === generation.current) { setBusy(b => ({ ...b, [device.key]: false })); setConfirmationSaving(s => ({ ...s, [device.key]: false })); }
     }
   }
   function moveDevice(index: number, direction: number) {
@@ -220,7 +244,12 @@ export function StoreDevicesPanel({ storeId, storeName }: { storeId: string; sto
         })}
           {device.kind !== "remote" && device.kind !== "unsupported" && <button className="store-device-refresh" disabled={allBusy || busy[device.key]} onClick={() => void refreshOne(device.key)}><RefreshCw size={14}/>{t("状態を更新")}</button>}
         </div>
-        {busy[device.key] ? <p className="store-device-help" role="status">{t("状態確認・操作を処理しています。")}</p> : cooldown > 0 ? <p className="store-device-help" role="status">{t("次の操作まで")} {cooldown} {t("秒")}</p> : device.actions.length > 0 ? <p className="store-device-help">{t("操作前に最新の状態を確認します。")}</p> : null}
+        {device.actions.length > 0 && <div className="store-device-confirmation-setting">
+          <label><span>{t("操作前確認")}<small>{t(confirmationSaving[device.key] ? "保存中" : device.confirmationRequired !== false ? "確認する" : "確認不要")}</small></span>
+            <input type="checkbox" role="switch" aria-label={`${t(device.name)} ${t("操作前確認")}`} checked={device.confirmationRequired !== false} disabled={sceneRunning || allBusy || busy[device.key] || Boolean(intent)} onChange={e => void saveConfirmation(device, e.target.checked)}/>
+          </label><p>{t("機器一覧とウィジェットに共通の設定です。")}</p>
+        </div>}
+        {busy[device.key] ? <p className="store-device-help" role="status">{t(confirmationSaving[device.key] ? "保存中" : "状態確認・操作を処理しています。")}</p> : cooldown > 0 ? <p className="store-device-help" role="status">{t("次の操作まで")} {cooldown} {t("秒")}</p> : device.actions.length > 0 ? <p className="store-device-help">{t("操作前に最新の状態を確認します。")}</p> : null}
       </article>;
     })}</div>}
     <dialog ref={dialog} className="store-device-dialog" onCancel={() => setIntent(null)} onClose={() => setIntent(null)} aria-labelledby="device-confirm-title">
