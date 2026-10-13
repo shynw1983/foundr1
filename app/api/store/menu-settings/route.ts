@@ -4,6 +4,7 @@ import { assertNoWholeStoreSync, withInventoryOperationLock } from "../../../../
 import { getStoreModuleSettings } from "../../../../lib/module-settings";
 import { publishPublicMenuUpdatedEvent } from "../../../../lib/order-realtime";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
+import { loadStoreMenuSalesOptions } from "../../../../lib/store-menu-sales-options";
 
 export const dynamic = "force-dynamic";
 
@@ -153,52 +154,7 @@ export async function GET(request: Request) {
         and menu_catalog_items.store_id is null
       order by brands.name, coalesce(menu_categories.sort_order, 9999), menu_catalog_items.sort_order, menu_catalog_items.name
     `,
-    sql`
-      select
-        menu_options.id::text,
-        menu_option_groups.brand_id::text as "brandId",
-        brands.name as "brandName",
-        menu_option_groups.id::text as "groupId",
-        menu_option_groups.name as "groupName",
-        coalesce(menu_option_groups.display_names, '{}'::jsonb) as "groupDisplayNames",
-        menu_option_groups.group_key as "groupKey",
-        menu_options.name,
-        coalesce(menu_options.display_names, '{}'::jsonb) as "displayNames",
-        menu_options.price_delta::float as "priceDelta",
-        case
-          when menu_option_store_settings.is_available = false or menu_option_store_settings.stock_status = 'unavailable' then false
-          else true
-        end as "isAvailable",
-        case
-          when menu_option_store_settings.is_available = false then 'unavailable'
-          else coalesce(menu_option_store_settings.stock_status, 'available')
-        end as "stockStatus",
-        coalesce((
-          select jsonb_object_agg(platform_settings.platform, platform_settings.availability)
-          from menu_platform_availability_settings platform_settings
-          where platform_settings.store_id = ${selectedStoreId}
-            and platform_settings.target_kind = 'option'
-            and platform_settings.target_id = menu_options.id
-        ), '{}'::jsonb) as "platformAvailability",
-        coalesce(menu_option_store_settings.status_note, '') as "statusNote"
-      from menu_options
-      join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
-      join brands on brands.id = menu_option_groups.brand_id
-      join store_brands
-        on store_brands.brand_id = menu_option_groups.brand_id
-        and store_brands.store_id = ${selectedStoreId}
-      left join menu_option_store_settings
-        on menu_option_store_settings.menu_option_id = menu_options.id
-        and menu_option_store_settings.store_id = ${selectedStoreId}
-      where menu_options.is_active = true
-        and menu_option_groups.is_active = true
-        and (
-          menu_option_groups.group_key in ('option', 'topping')
-          or menu_option_groups.selection_type in ('multiple', 'quantity')
-        )
-        and menu_options.option_key <> 'none'
-      order by brands.name, menu_option_groups.sort_order, menu_options.sort_order, menu_options.name
-    `
+    loadStoreMenuSalesOptions(selectedStoreId)
   ]);
 
   return Response.json({

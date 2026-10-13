@@ -6,22 +6,14 @@ import {
   loadInventoryAvailabilityTargets
 } from "../../../../../../lib/inventory-availability";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../../lib/store-order-access";
+import { loadStoreMenuSalesOptions } from "../../../../../../lib/store-menu-sales-options";
 import {
-  resolveUberInventoryTargets,
   type UberInventoryItemRow,
-  type UberInventoryOptionRow
 } from "../../../../../../lib/uber-inventory-targets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-type InventoryOptionRow = UberInventoryOptionRow & {
-  statusNote: string;
-  brandName: string;
-  groupName: string;
-  groupDisplayNames: Record<string, unknown> | null;
-};
 
 type InventoryItemRow = UberInventoryItemRow & {
   statusNote: string;
@@ -61,22 +53,7 @@ async function authorizeStore(session: NonNullable<Awaited<ReturnType<typeof req
 }
 
 async function loadInventoryAuditTargets(storeId: string) {
-  const optionRows = await sql`
-    select
-      menu_options.id::text,
-      menu_option_groups.brand_id::text as "brandId",
-      menu_option_groups.group_key as "groupKey",
-      menu_options.name,
-      menu_options.display_names as "displayNames"
-    from menu_options
-    join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
-    join store_brands
-      on store_brands.brand_id = menu_option_groups.brand_id
-      and store_brands.store_id::text = ${storeId}
-    where menu_options.is_active = true
-      and menu_option_groups.is_active = true
-    order by menu_option_groups.sort_order, menu_options.sort_order
-  `;
+  const optionRows = await loadStoreMenuSalesOptions(storeId);
   const itemRows = await sql`
     select
       menu_catalog_items.id::text,
@@ -120,81 +97,37 @@ export async function GET(request: Request) {
   const commandId = text(params.get("commandId"), 80);
   if (!storeId) return Response.json({ error: "状態を確認できません。" }, { status: 400 });
   if (!commandId) {
-    const optionRows = await sql`
-      select
-        menu_options.id::text,
-        menu_option_groups.brand_id::text as "brandId",
-        brands.name as "brandName",
-        menu_option_groups.group_key as "groupKey",
-        menu_option_groups.name as "groupName",
-        menu_option_groups.display_names as "groupDisplayNames",
-        menu_options.option_key as "optionKey",
-        coalesce(menu_options.external_id, '') as "externalId",
-        menu_options.name,
-        menu_options.display_names as "displayNames",
-        coalesce(menu_option_store_settings.is_available, true) as "isAvailable",
-        coalesce(menu_option_store_settings.status_note, '') as "statusNote"
-      from menu_options
-      join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
-      join brands on brands.id = menu_option_groups.brand_id
-      join store_brands
-        on store_brands.brand_id = menu_option_groups.brand_id
-        and store_brands.store_id::text = ${storeId}
-      left join menu_option_store_settings
-        on menu_option_store_settings.menu_option_id = menu_options.id
-        and menu_option_store_settings.store_id::text = ${storeId}
-      where menu_options.is_active = true
-        and menu_option_groups.is_active = true
-      order by menu_option_groups.sort_order, menu_options.sort_order
-    `;
-    const optionGroups = new Map<string, Record<string, unknown>>();
-    for (const row of optionRows as InventoryOptionRow[]) {
-      if (!includeAvailable && row.isAvailable) continue;
-      const brandRows = (optionRows as InventoryOptionRow[])
-        .filter((candidate) => candidate.brandId === row.brandId);
-      const label = inventoryDisplayLabel(row.name, row.statusNote, row.displayNames);
-      const resolved = resolveUberInventoryTargets(label, brandRows);
-      if (!resolved.targets.length) continue;
-      const key = `${row.brandId}:option:${resolved.inventoryKey}`;
-      if (optionGroups.has(key)) continue;
-      const preferredTarget = resolved.targets.find((target) => (
-        /noodle/i.test(target.groupKey) && !/replacement/i.test(target.groupKey)
-      )) ?? resolved.targets[0];
-      const preferredRow = brandRows.find((candidate) => candidate.id === preferredTarget?.targetId);
-      const linkedRows = resolved.targets.flatMap((target) => {
-        const linkedRow = brandRows.find((candidate) => candidate.id === target.targetId);
-        return linkedRow ? [linkedRow] : [];
-      });
-      const displayLabel = includeAvailable
-        ? row.name
-        : /^厨房画面:/u.test(row.statusNote)
-        ? label
-        : preferredRow
-          ? inventoryDisplayLabel(preferredRow.name, preferredRow.statusNote, preferredRow.displayNames)
-          : label;
-      optionGroups.set(key, {
-        inventoryKey: resolved.inventoryKey,
-        ingredientLabel: displayLabel,
-        targetKind: "option",
+    const optionRows = await loadStoreMenuSalesOptions(storeId);
+    // A picker row is an exact menu identity, not a name-derived inventory
+    // relationship. Explicit links are expanded by the write path after the
+    // selected ID is authorized; short and same-name options stay selectable.
+    const optionGroups = optionRows
+      .filter((row) => includeAvailable || !row.isAvailable)
+      .map((row) => ({
+        inventoryKey: `option:${row.id}`,
+        targetId: row.id,
+        ingredientLabel: includeAvailable
+          ? row.name
+          : inventoryDisplayLabel(row.name, row.statusNote, row.displayNames),
+        targetKind: "option" as const,
         brandId: row.brandId,
         brandName: row.brandName,
         category: "",
-        groupName: preferredRow?.groupName ?? row.groupName,
-        groupDisplayNames: preferredRow?.groupDisplayNames ?? row.groupDisplayNames ?? {},
-        groupNames: Array.from(new Set(linkedRows.map((candidate) => candidate.groupName).filter(Boolean))),
-        impactCount: resolved.targets.length,
-        isAvailable: resolved.targets.every((target) => target.isAvailable),
-        displayNames: preferredRow?.displayNames ?? row.displayNames ?? {},
-        searchLabels: Array.from(new Set(resolved.targets.flatMap((target) => target.aliases))),
-        targets: resolved.targets.map((target) => ({
-          kind: target.kind,
-          targetId: target.targetId,
-          groupKey: target.groupKey,
-          label: target.label,
-          isAvailable: target.isAvailable
-        }))
-      });
-    }
+        groupName: row.groupName,
+        groupDisplayNames: row.groupDisplayNames,
+        groupNames: [row.groupName],
+        impactCount: 1,
+        isAvailable: row.isAvailable,
+        displayNames: row.displayNames,
+        searchLabels: inventoryAliases(row.name, row.displayNames),
+        targets: [{
+          kind: "option" as const,
+          targetId: row.id,
+          groupKey: row.groupKey,
+          label: row.name,
+          isAvailable: row.isAvailable
+        }]
+      }));
 
     const itemRows = await sql`
       select
@@ -222,7 +155,8 @@ export async function GET(request: Request) {
     const itemGroups = (itemRows as InventoryItemRow[])
       .filter((row) => includeAvailable || !row.isAvailable)
       .map((row) => ({
-        inventoryKey: `item:${row.externalId || row.id}`,
+        inventoryKey: `item:${row.id}`,
+        targetId: row.id,
         ingredientLabel: includeAvailable
           ? row.name
           : inventoryDisplayLabel(row.name, row.statusNote, row.displayNames),
@@ -243,7 +177,7 @@ export async function GET(request: Request) {
           groupKey: "",
           label: row.name,
           aliases: inventoryAliases(row.name, row.displayNames),
-          isAvailable: false
+          isAvailable: row.isAvailable
         }]
       }));
 
@@ -251,8 +185,8 @@ export async function GET(request: Request) {
       scope: includeAvailable ? "all" : "unavailable",
       storeId,
       items: includeAvailable
-        ? [...itemGroups, ...optionGroups.values()]
-        : [...optionGroups.values(), ...itemGroups]
+        ? [...itemGroups, ...optionGroups]
+        : [...optionGroups, ...itemGroups]
     }, { headers: { "Cache-Control": "no-store" } });
   }
   const rows = await sql`

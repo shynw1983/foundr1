@@ -35,6 +35,7 @@ function harness({applied=false,missingDemae=false,busy=false,phase='awaiting_co
     './inventory-operation-lock':{withInventoryOperationLock:async(_store:string,fn:()=>Promise<unknown>)=>fn(),assertNoWholeStoreSync:async()=>{}},
     './inventory-authority-policy':{validateUberAvailability},
     './inventory-comparison':{buildInventoryComparison},
+    './uber-option-placement-store':{loadUberOptionPlacements:async()=>[]},
     './local-bridge-realtime':{publishBridgeCommandAvailable:async()=>{wakes++;}}
   };
   const exports:Record<string,(...args:unknown[])=>Promise<unknown>>={};

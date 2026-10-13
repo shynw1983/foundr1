@@ -28,7 +28,15 @@ const options = Array.from({ length: 36 }, (_, i) => ({
   priceDelta: 100, isAvailable: true, stockStatus: 'available', platformAvailability: {}, statusNote: ''
 }));
 const access = { role: 'owner', stores, canUseAllStoreView: true };
-const menu = { access, selectedStoreId: stores[0].id, brands, categories, items, options };
+const menuFile = process.env.INVENTORY_TEST_MENU_FILE?.trim();
+if (menuFile && !process.argv.includes('--serve')) throw new Error('INVENTORY_TEST_MENU_FILE is supported only in server-only --serve mode');
+const menu = menuFile ? JSON.parse(await readFile(resolve(root, menuFile), 'utf8'))
+  : { access, selectedStoreId: stores[0].id, brands, categories, items, options };
+if (menuFile) {
+  assert.ok(menu && typeof menu === 'object' && !Array.isArray(menu), 'Menu fixture must be an API JSON object');
+  for (const field of ['brands', 'categories', 'items', 'options']) assert.ok(Array.isArray(menu[field]), `Menu fixture ${field} must be an array`);
+  assert.ok(Array.isArray(menu.access?.stores) && menu.selectedStoreId, 'Menu fixture must include scoped store access and selection');
+}
 const entry = `import React from 'react'; import {createRoot} from 'react-dom/client';
 import Page from './app/store/menu/page';
 import {OsTranslationProvider} from './app/os/components/OsTranslationProvider';
@@ -37,7 +45,8 @@ const params=new URLSearchParams(location.search);
 localStorage.setItem('foundr1-os-language',params.get('lang')||'ja');
 localStorage.setItem('foundr1-os-language-preference','manual');
 window.__menu=${JSON.stringify(menu)};
-window.__menu.settings={availability:{targets:{items:true,options:true},optionDisplayMode:params.get('optionMode')||'separate_category',allowStorePriceEdit:false,allowChannelToggle:false}};
+window.__menu.settings=${menuFile ? `window.__menu.settings||{availability:{targets:{items:true,options:true},optionDisplayMode:'separate_category',allowStorePriceEdit:false,allowChannelToggle:false}}` : `{availability:{targets:{items:true,options:true},optionDisplayMode:params.get('optionMode')||'separate_category',allowStorePriceEdit:false,allowChannelToggle:false}}`};
+if(${Boolean(menuFile)} && params.has('optionMode'))window.__menu.settings.availability={...window.__menu.settings.availability,optionDisplayMode:params.get('optionMode')};
 if(params.has('noOptions'))window.__menu.options=[];
 if(params.has('singleBrand'))window.__menu.brands=window.__menu.brands.slice(0,1);
 window.__writes=[]; window.__reads=0; window.__failKeys=[]; window.__inflight=0; window.__maxInflight=0; window.__runs=[];
@@ -75,8 +84,9 @@ window.fetch=async (input,init={})=>{
  if(path==='/api/store/menu-sync-runs')return Response.json({runs:window.__runs});
  if(path==='/api/store/context')return Response.json({access:window.__menu.access,selectedStoreId:window.__menu.selectedStoreId});
  if(path==='/api/auth/me')return Response.json({employee:{id:'test-user',name:'検証担当',role:'owner'}});
- if(path==='/api/os/store-context')return Response.json({canSelectStore:false,stores:${JSON.stringify(stores)},selectedStoreId:'test-store'});
+ if(path==='/api/os/store-context')return Response.json(${menuFile ? `{canSelectStore:false,stores:window.__menu.access.stores,selectedStoreId:window.__menu.selectedStoreId}` : `{canSelectStore:false,stores:${JSON.stringify(stores)},selectedStoreId:'test-store'}`});
  if(path==='/api/store/inventory-history')return Response.json({reports:[]});
+ if(path==='/api/replenishment')return Response.json({store:{id:window.__menu.selectedStoreId},risks:[],unmapped:[],restrictedSourceCount:0,canCreateOrder:false,canManageMenuLinks:false});
  if(path==='/api/notifications')return Response.json({notifications:[],unreadCount:0});
  if(path.includes('connection'))return Response.json({});
  return Response.json({});

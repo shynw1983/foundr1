@@ -642,31 +642,45 @@ export default function StoreKitchenPage() {
 
   async function restoreInventoryItem(item: UnavailableInventoryItem) {
     if (inventoryRestoringKey) return;
+    const target = item.targets.length === 1 ? item.targets[0] : null;
+    if (!target?.targetId || target.kind !== item.targetKind) {
+      setInventoryListError(t("画面を更新して商品を選び直してください。"));
+      return;
+    }
     setInventoryRestoringKey(item.inventoryKey);
     setInventoryListError("");
-    const response = await fetch("/api/store/display/kitchen/inventory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "apply",
-        storeId: selectedStoreId,
-        brandId: item.brandId,
-        ingredientLabel: item.ingredientLabel,
-        targetKind: item.targetKind,
-        isAvailable: true
-      })
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok && body.commandId) {
-      const inventoryKey = String(body.inventoryKey || item.inventoryKey);
-      setInventorySyncByKey((current) => ({
-        ...current,
-        [inventoryKey]: registerInventoryCommands(body, inventoryKey)
-      }));
-    } else {
-      setInventoryListError(String(body.error ?? (t("販売再開を送信できませんでした。"))));
+    try {
+      const response = await fetch("/api/store/display/kitchen/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "apply",
+          storeId: selectedStoreId,
+          brandId: item.brandId,
+          ingredientLabel: item.ingredientLabel,
+          targetKind: item.targetKind,
+          targetId: target.targetId,
+          isAvailable: true
+        })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (response.ok && body.commandId) {
+        // The selected row keeps its own UI identity even when the server uses a
+        // shared key for explicitly linked inventory targets.
+        const inventoryKey = item.inventoryKey;
+        setInventorySyncByKey((current) => ({
+          ...current,
+          [inventoryKey]: registerInventoryCommands(body, inventoryKey)
+        }));
+      } else {
+        setInventoryListError(String(body.error ?? (t("販売再開を送信できませんでした。"))));
+      }
+    } catch {
+      // A lost response does not prove the server rejected or applied a write.
+      setInventoryListError(t("販売状態を確認できません。画面を更新して結果を確認してください。"));
+    } finally {
+      setInventoryRestoringKey("");
     }
-    setInventoryRestoringKey("");
   }
 
   async function startInventoryAudit() {
