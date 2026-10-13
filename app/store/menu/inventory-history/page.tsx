@@ -47,12 +47,14 @@ type InventoryReport = {
 function copy(language: Language) {
   if (language === "zh-Hans") return {
     title: "库存同步履历",
-    description: "查看单品手动操作和以 Uber 为准的整店同步结果。销售状态不再定时同步。",
+    description: "查看单品操作和整店同步结果。默认以 Uber 为准，可为单次校正选择其他平台；销售状态不定时同步。",
     back: "返回销售状态",
     refresh: "刷新",
     empty: "该期间内没有库存同步记录。",
     loading: "正在读取履历…",
     operator: "操作人",
+    reference: "本次依据",
+    readAt: "读取",
     scheduled: "每日自动同步",
     siri: "Siri 语音",
     system: "系统",
@@ -88,12 +90,14 @@ function copy(language: Language) {
   };
   if (language === "zh-Hant") return {
     title: "庫存同步履歷",
-    description: "查看單品手動操作和以 Uber 為準的整店同步結果。銷售狀態不再定時同步。",
+    description: "查看單品操作和整店同步結果。預設以 Uber 為準，可為單次校正選擇其他平台；銷售狀態不定時同步。",
     back: "返回銷售狀態",
     refresh: "重新整理",
     empty: "該期間內沒有庫存同步記錄。",
     loading: "正在讀取履歷…",
     operator: "操作人",
+    reference: "本次依據",
+    readAt: "讀取",
     scheduled: "每日自動同步",
     siri: "Siri 語音",
     system: "系統",
@@ -129,12 +133,14 @@ function copy(language: Language) {
   };
   return {
     title: "在庫同期履歴",
-    description: "単品の手動操作と Uber 基準の全店同期結果を確認します。販売状態の定時同期は行いません。",
+    description: "単品操作と全店同期の結果を確認します。通常は Uber が基準です。今回のみ他社を基準にできます。販売状態の定時同期は行いません。",
     back: "販売状態へ戻る",
     refresh: "更新",
     empty: "この期間の在庫同期履歴はありません。",
     loading: "履歴を読み込み中…",
     operator: "操作担当",
+    reference: "今回の基準",
+    readAt: "読取",
     scheduled: "毎日自動同期",
     siri: "Siri音声",
     system: "システム",
@@ -346,6 +352,11 @@ export default function InventoryHistoryPage() {
             const previousDateLabel = index ? new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "zh-CN", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(pageReports[index - 1].createdAt)) : "";
             const stateLabel = report.status==='expired' ? (language==='ja'?'期限切れ（未適用）':language==='zh-Hant'?'已過期（未套用）':'已过期（未应用）') : report.status==='awaiting_confirmation' ? (language==='ja'?'確認待ち（未適用）':language==='zh-Hant'?'等待確認（未套用）':'等待确认（未应用）') : labels[report.status];
             const expanded = expandedReports.has(report.id);
+            const referencePlatform = report.details.authority === "uber_eats"
+              ? String(report.details.referencePlatform ?? "uber_eats") : "";
+            const referenceReadAt = String(report.details.referenceReadAt ?? report.details.previewAt ?? "");
+            const referenceReadTime = Number.isFinite(Date.parse(referenceReadAt))
+              ? new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "zh-CN", { timeZone: "Asia/Tokyo", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(referenceReadAt)) : "";
             return (
               <Fragment key={report.id}>
               {dateLabel !== previousDateLabel ? <h3 className="store-inventory-history-day">{dateLabel}</h3> : null}
@@ -360,8 +371,11 @@ export default function InventoryHistoryPage() {
                   ) : null}
                   <strong data-i18n-ignore>{report.runType === "full_sync" ? actionLabel(report, labels) : historyItemName(report, language)}</strong>
                   {report.runType === "full_sync" || (report.action !== "available" && report.action !== "unavailable") ? (
-                    <span data-i18n-ignore>{report.runType === "full_sync" ? "Store → Bridge" : actionLabel(report, labels)}</span>
+                    <span data-i18n-ignore>{report.runType === "full_sync"
+                      ? referencePlatform ? `${labels.reference}: ${platformName(referencePlatform, language)}` : "Store → Bridge"
+                      : actionLabel(report, labels)}</span>
                   ) : null}
+                  {report.runType === "full_sync" && referencePlatform && referenceReadTime ? <span data-i18n-ignore>{labels.readAt}: {referenceReadTime}</span> : null}
                 </div>
                 <div className="store-inventory-history-platforms">
                   {report.platforms.map((platform) => {

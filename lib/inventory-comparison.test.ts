@@ -30,3 +30,36 @@ test('only Uber-available verified release plans become new-product changes',()=
   assert.equal(result.counts.demae_can,isAvailable?1:0);assert.equal(result.ready,true);
  }
 });
+test('choosing Rocket makes Uber and OS destinations without changing the original Uber snapshot',()=>{
+ const result=buildInventoryComparison({...details,referencePlatform:'rocket_now'},[command]);
+ assert.equal(result.referencePlatform,'rocket_now');assert.equal(result.ready,true);
+ assert.equal(result.rows[0].isAvailable,false);assert.equal(result.rows[0].referenceAvailable,true);
+ assert.deepEqual(result.rows[0].changes,['uber_eats','foundr1']);
+ assert.equal(result.counts.rocket_now,0);assert.equal(result.counts.uber_eats,1);assert.equal(result.counts.foundr1,1);
+ assert.equal(buildInventoryComparison(details,[command]).referencePlatform,'uber_eats');
+});
+test('excluded source rows skip the whole logical target rather than falling back to Uber',()=>{
+ const second={...target,targetId:'2',label:'汤底'};
+ const result=buildInventoryComparison({...details,referencePlatform:'rocket_now',preview:[target,second],
+  comparisonExclusions:[{platform:'rocket_now',kind:'option',targetId:'1'}]},[{...command,payload:{comparisonAudit:true,targets:[second]},result:{items:[{...command.result.items[0],targetId:'2'}]}}]);
+ assert.equal(result.ready,true);assert.equal(result.referenceSkippedCount,1);
+ assert.equal(result.rows[0].referenceAvailable,null);assert.deepEqual(result.rows[0].changes,[]);
+ assert.deepEqual(result.rows[1].changes,['uber_eats','foundr1']);
+});
+test('a verified unpublished draft cannot supply an availability reference or restore anything',()=>{
+ const draft={...command,platform:'demae_can',result:{items:[{kind:'option',targetId:'1',found:true,isAvailable:null,status:'staged',stagingVerified:true,releasePlan:{kind:'option'}}]}};
+ const result=buildInventoryComparison({...details,referencePlatform:'demae_can',comparisonPlatforms:['demae_can']},[draft]);
+ assert.equal(result.ready,false);assert.equal(result.unknown,0);assert.equal(result.referenceSkippedCount,1);
+ assert.equal(result.referenceOptions.find(option=>option.platform==='demae_can')?.reason,'reference_empty');
+ assert.deepEqual(result.rows[0].changes,[]);
+});
+test('duplicate reads or expected identities do not pick whichever result appears first',()=>{
+ for(const commands of [[command,command],[{...command,payload:{comparisonAudit:true,targets:[target,target]}}]]) {
+  const result=buildInventoryComparison({...details,referencePlatform:'rocket_now'},commands);
+  assert.equal(result.ready,false);assert.equal(result.rows[0].referenceAvailable,null);assert.deepEqual(result.rows[0].changes,[]);
+ }
+});
+test('unknown unselected platforms also disable all reference choices',()=>{
+ const result=buildInventoryComparison({...details,referencePlatform:'rocket_now',comparisonPlatforms:['rocket_now','demae_can']},[command]);
+ assert.equal(result.ready,false);assert.equal(result.referenceOptions.every(option=>!option.enabled),true);
+});

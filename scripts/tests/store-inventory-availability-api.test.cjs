@@ -16,6 +16,16 @@ function harness({ authenticated = true, scoped = true, found = true } = {}) {
       getScopedStoreFilter: (_access, storeId) => scoped && storeId === 'store-a' ? storeId : '__forbidden__'
     },
     db: { sql: () => { throw Error('Unexpected database access'); } },
+    'inventory-manual-sync': {
+      setInventorySyncReference: async (...args) => {
+        calls.push({ action: 'set-reference', args });
+        return { referencePlatform: args[2], previewRevision: 'new-preview' };
+      },
+      confirmUberAvailabilitySync: async (...args) => {
+        calls.push({ action: 'confirm', args });
+        return { updatedCount: 1, missingCount: 0 };
+      }
+    },
     'inventory-availability': {
       loadInventoryAvailabilityTargets: async (...args) => {
         calls.push({ action: 'resolve', args });
@@ -39,6 +49,45 @@ function harness({ authenticated = true, scoped = true, found = true } = {}) {
     })
   }));
   return { post, calls };
+}
+
+test('run reference selection passes store scope and exact preview revision without an inventory write', async () => {
+  const { post, calls } = harness();
+  const response = await post({ action: 'set_full_sync_reference', runId: 'run-a', referencePlatform: 'rocket_now', previewRevision: 'original-preview' });
+  assert.equal(response.status, 200);
+  assert.deepEqual([...calls[0].args], ['store-a', 'run-a', 'rocket_now', 'original-preview']);
+  assert.equal(calls.length, 1);
+  const body = await response.json();
+  assert.equal(body.referencePlatform, 'rocket_now');
+  assert.equal(body.previewRevision, 'new-preview');
+});
+
+test('confirmation binds reference and preview; conflict acknowledgement requires boolean true', async () => {
+  const { post, calls } = harness();
+  await post({ action: 'confirm_full_sync', runId: 'run-a', referencePlatform: 'demae_can', previewRevision: 'preview-a', acknowledgeInventoryConflicts: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(calls[0].args)), ['store-a', 'run-a', { referencePlatform: 'demae_can', previewRevision: 'preview-a', acknowledgeInventoryConflicts: true }]);
+  await post({ action: 'confirm_full_sync', runId: 'run-a', referencePlatform: 'uber_eats', previewRevision: 'preview-b', acknowledgeInventoryConflicts: 'true' });
+  assert.equal(calls[1].args[2].acknowledgeInventoryConflicts, false);
+});
+
+test('old confirmation clients do not inject a non-Uber reference', async () => {
+  const { post, calls } = harness();
+  assert.equal((await post({ action: 'confirm_full_sync', runId: 'run-a' })).status, 200);
+  assert.equal(calls[0].args[2], undefined);
+});
+
+for (const [name, config, patch, expected] of [
+  ['signed out', { authenticated: false }, { referencePlatform: 'rocket_now', previewRevision: 'preview-a' }, 401],
+  ['other store', { scoped: false }, { referencePlatform: 'rocket_now', previewRevision: 'preview-a' }, 400],
+  ['unknown reference', {}, { referencePlatform: 'foundr1', previewRevision: 'preview-a' }, 409],
+  ['missing revision', {}, { referencePlatform: 'rocket_now' }, 409],
+  ['missing reference', {}, { previewRevision: 'preview-a' }, 409]
+]) {
+  test(`reference endpoint rejects ${name} before service access`, async () => {
+    const { post, calls } = harness(config);
+    assert.equal((await post({ action: 'set_full_sync_reference', runId: 'run-a', ...patch })).status, expected);
+    assert.equal(calls.length, 0);
+  });
 }
 
 for (const available of [false, true]) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateUberAvailability, type AuditTarget } from "./inventory-authority-policy.ts";
+import { inventoryReferencePlatform, validatePlatformAvailability, validateUberAvailability, type AuditTarget } from "./inventory-authority-policy.ts";
 const targets:AuditTarget[]=[{kind:'item',targetId:'a',brandId:'brand',label:'商品',aliases:[],knownExternalIds:['uber-a']},
   {kind:'option',targetId:'b',brandId:'brand',label:'配料',aliases:[],knownExternalIds:['uber-b']}];
 const rows=[{kind:'item',targetId:'a',found:true,isAvailable:true,status:'available'},
@@ -19,4 +19,12 @@ test('duplicates, foreign IDs, missing flags and inconsistent states are rejecte
 test('empty or wrong-count snapshots cannot become successful synchronization',()=>{
   assert.throws(()=>validateUberAvailability([],{targetCount:0,items:[]}));
   assert.throws(()=>validateUberAvailability(targets,{targetCount:1,items:rows}));
+});
+test('reference platform is an explicit per-run whitelist and never accepts OS, majority or an empty fallback',()=>{
+  for(const platform of ['uber_eats','rocket_now','demae_can'])assert.equal(inventoryReferencePlatform(platform),platform);
+  for(const value of ['foundr1','majority','',null,undefined,{},true])assert.throws(()=>inventoryReferencePlatform(value));
+});
+test('platform-neutral validation preserves false availability and rejects duplicate logical targets',()=>{
+  assert.deepEqual(validatePlatformAvailability(targets,{targetCount:2,items:rows},'Rocket Now').map(row=>row.isAvailable),[true,false]);
+  assert.throws(()=>validatePlatformAvailability([targets[0],targets[0]],{targetCount:2,items:[rows[0],rows[0]]},'出前館'));
 });

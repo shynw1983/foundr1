@@ -2,6 +2,7 @@ import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { inventoryPreviewExpired } from "../../../../lib/inventory-preview";
 import {buildInventoryComparison, type ComparisonCommand} from '../../../../lib/inventory-comparison';
+import { loadInventoryWriteRecoveryHints } from "../../../../lib/inventory-write-recovery-hints";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const runtime = "nodejs";
@@ -127,6 +128,7 @@ export async function GET(request: Request) {
     left join menu_options catalog_option on recent_runs.inventory_key = concat('option:', catalog_option.id::text)
     left join local_bridge_commands commands
       on coalesce(nullif(commands.payload->>'syncRunId', ''), commands.payload->>'fullSyncRunId') = recent_runs.id::text
+      and commands.store_id::text = ${storeId}
     order by recent_runs.created_at desc, commands.created_at
   `;
 
@@ -209,7 +211,7 @@ export async function GET(request: Request) {
         : platforms.some(platform => platform.superseded) ? "superseded" : "succeeded";
     return {
       ...run,
-      details: {...details,snapshot:undefined,comparison},
+      details: {...details,snapshot:undefined,comparison} as Record<string, unknown> & {comparison:typeof comparison},
       status,
       platforms,
       reads: run.commands.filter(c => c.commandType === 'audit_inventory').map(c => ({
@@ -221,5 +223,28 @@ export async function GET(request: Request) {
     };
   });
 
+  // This is an advisory attached to the current fresh comparison, not a second
+  // authority. Older write success cannot substitute for a current native read.
+  if (latestFullSync) {
+    const report = reports[0];
+    if (report?.status === "awaiting_confirmation" && report.details.comparison && !report.details.osApplied) {
+      const preview = (report.details.preview ?? []) as Array<{kind:string;targetId:string;label:string;isAvailable:boolean}>;
+      try {
+        const hints = await loadInventoryWriteRecoveryHints(storeId, preview);
+        report.details.previousWriteConflicts = hints.map(hint => ({
+          ...hint,
+          successfulPlatforms: hint.successfulPlatforms.filter(platform => {
+            const cell = report.details.comparison?.rows.find(row => row.kind === hint.kind && row.targetId === hint.targetId)?.cells[platform];
+            return cell?.state === (hint.isAvailable ? "available" : "sold_out");
+          })
+        })).filter(hint => hint.successfulPlatforms.length > 0);
+      } catch {
+        // A history hint outage must not hide the verified read/confirmation
+        // flow or be presented as proof that there was no failed prior write.
+        report.details.previousWriteConflictsUnavailable = true;
+        console.warn("Inventory recovery hint history is temporarily unavailable");
+      }
+    }
+  }
   return Response.json({ reports }, { headers: { "Cache-Control": "no-store" } });
 }

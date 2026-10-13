@@ -1,4 +1,4 @@
-import { startUberAvailabilitySync, confirmUberAvailabilitySync } from "../../../../../../lib/inventory-manual-sync";
+import { startUberAvailabilitySync, confirmUberAvailabilitySync, setInventorySyncReference } from "../../../../../../lib/inventory-manual-sync";
 import { requireOsSession } from "../../../../../../lib/api-auth";
 import { sql } from "../../../../../../lib/db";
 import {
@@ -232,13 +232,27 @@ export async function POST(request: Request) {
     ? text(body.overrideAvailability, 30) as "follow" | "available" | "unavailable"
     : "";
   const statusSource = body.source === "sales_status" ? "販売状態" : "厨房画面";
-  if (!storeId || !["preview", "apply", "audit", "full_sync", "confirm_full_sync"].includes(action)) {
+  if (!storeId || !["preview", "apply", "audit", "full_sync", "set_full_sync_reference", "confirm_full_sync"].includes(action)) {
     return Response.json({ error: "食材と操作内容を確認してください。" }, { status: 400 });
   }
 
-  if (action === "confirm_full_sync") {
+  if (action === "set_full_sync_reference" || action === "confirm_full_sync") {
+    const hasReference = body.referencePlatform !== undefined || body.previewRevision !== undefined;
+    const referencePlatform = text(body.referencePlatform, 30);
+    const previewRevision = text(body.previewRevision, 80);
+    if ((action === "set_full_sync_reference" || hasReference)
+      && (!allowedPlatforms.includes(referencePlatform as typeof allowedPlatforms[number]) || !previewRevision)) {
+      return Response.json({error:"今回の基準とプレビューを確認してください。全プラットフォームを再読み取りしてください。"},{status:409});
+    }
     try {
-      return Response.json({ok:true,...await confirmUberAvailabilitySync(storeId,text(body.runId,80))});
+      if (action === "set_full_sync_reference") {
+        return Response.json({ok:true,...await setInventorySyncReference(storeId,text(body.runId,80),referencePlatform,previewRevision)});
+      }
+      return Response.json({ok:true,...await confirmUberAvailabilitySync(storeId,text(body.runId,80),hasReference ? {
+        referencePlatform,
+        previewRevision,
+        acknowledgeInventoryConflicts: body.acknowledgeInventoryConflicts === true
+      } : undefined)});
     } catch(error) {
       return Response.json({error:error instanceof Error?error.message:'同期できませんでした。'},{status:409});
     }
