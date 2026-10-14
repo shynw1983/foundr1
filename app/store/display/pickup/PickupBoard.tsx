@@ -23,7 +23,7 @@ function PickupColumn({ orders, ready = false, menuOpen }: { orders: PickupOrder
     if (!grid) return;
     const observer = new ResizeObserver(() => {
       const columns = Math.max(1, Math.min(ready ? 2 : 4, Math.floor((grid.clientWidth + 16) / (ready ? 330 : 220))));
-      const rows = Math.max(1, Math.floor((grid.clientHeight + 16) / (ready ? 160 : 112)));
+      const rows = Math.max(1, Math.floor((grid.clientHeight + 16) / (ready ? 128 : 112)));
       setCapacity((current) => current.columns === columns && current.count === columns * rows ? current : { columns, count: columns * rows });
     });
     observer.observe(grid);

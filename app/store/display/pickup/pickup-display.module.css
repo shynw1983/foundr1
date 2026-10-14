@@ -29,12 +29,12 @@
 .column { min-width: 0; min-height: 0; padding: clamp(20px, 2.5vw, 44px); border-radius: 20px; display: flex; flex-direction: column; gap: clamp(20px, 2.4vh, 32px); }
 .ready { background: var(--brand-red); color: var(--board-white); }
 .preparing { background: var(--board-white); color: var(--brand-ink); }
-.columnHeader { flex-shrink: 0; }
-.headingRow { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.columnHeader { flex: 0 0 100px; display: flex; flex-direction: column; }
+.headingRow { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 .shell .columnHeader h2 { margin: 0; color: inherit; font-size: clamp(22px, 2.1vw, 38px); font-weight: 600; line-height: 1.35; letter-spacing: .025em; }
 .count { font: 400 clamp(22px, 2vw, 34px)/1 Arial, sans-serif; white-space: nowrap; opacity: .85; }
 .count small { margin-left: 6px; font-size: 12px; }
-.shell .columnHeader p { margin: 12px 0 0; font-size: clamp(14px, 1.2vw, 20px); line-height: 1.5; font-weight: 400; color: inherit; opacity: .72; }
+.shell .columnHeader p { margin: auto 0 0; font-size: clamp(14px, 1.2vw, 20px); line-height: 1.5; font-weight: 400; color: inherit; opacity: .72; }
 .codeGrid { min-height: 0; flex: 1; display: grid; gap: 16px; grid-template-rows: repeat(var(--rows), minmax(0, 1fr)); align-content: center; }
 .codeCell { min-width: 0; min-height: 0; display: flex; justify-content: center; align-items: center; border-radius: 12px; overflow: hidden; }
 .ready .codeCell { border: 1px solid #ffffff45; background: #ffffff08; }
@@ -47,7 +47,7 @@
 .empty { grid-column: 1 / -1; grid-row: 1 / -1; align-self: center; text-align: center; opacity: .75; }
 .emptySymbol { font: 300 64px/1 Arial, sans-serif; opacity: .45; }
 .shell .empty p { margin: 20px 0 0; font-size: clamp(16px, 1.5vw, 24px); color: inherit; font-weight: 400; line-height: 1.9; white-space: pre-line; }
-.columnFooter { flex-shrink: 0; min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--rule); padding-top: 16px; }
+.columnFooter { flex: 0 0 53px; min-height: 53px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--rule); padding-top: 16px; }
 .ready .columnFooter { border-color: #ffffff40; }
 .footerLabel { font: 500 11px/1.4 Arial, sans-serif; letter-spacing: .17em; opacity: .6; }
 .pages { display: flex; align-items: center; gap: 8px; font: 400 12px/1 Arial, sans-serif; }
@@ -69,13 +69,14 @@
   .shell .menuButton { top: 12px; right: 12px; width: 36px; height: 36px; }
   .board { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, .45fr) minmax(0, .55fr); gap: 12px; }
   .column { padding: 18px; gap: 12px; border-radius: 14px; }
+  .columnHeader { flex-basis: 84px; }
   .shell .columnHeader h2 { font-size: 20px; }
-  .shell .columnHeader p { font-size: 12px; margin-top: 6px; }
+  .shell .columnHeader p { font-size: 12px; margin-top: auto; }
   .count { font-size: 24px; }
   .shell .codeCell strong { font-size: clamp(8px, calc(64vw / var(--columns) / var(--code-length)), 60px); padding: 8px; }
   .shell .ready .codeCell strong, .shell .ready .single strong { font-size: clamp(8px, calc(70vw / var(--columns) / var(--code-length)), 72px); }
   .single .codeCell { min-height: 0; height: 100%; }
-  .columnFooter { padding-top: 10px; min-height: 20px; }
+  .columnFooter { flex-basis: 41px; padding-top: 10px; min-height: 41px; }
   .footerLabel { font-size: 9px; letter-spacing: .12em; }
   .pages button { min-width: 30px; min-height: 30px; }
 }
