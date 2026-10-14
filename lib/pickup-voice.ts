@@ -52,7 +52,7 @@ export function validatePickupVoiceManifest(value: unknown): PickupVoiceManifest
     throw new Error("Invalid pickup voice credit");
   }
   if (manifest.voice.startsWith("VOICEVOX:") && !manifest.credit?.trim()) throw new Error("VOICEVOX credit is required");
-  for (const token of Object.keys(pickupVoicePhrases)) {
+  for (const token of new Set([...Object.keys(pickupVoicePhrases), ...Object.keys(manifest.clips)])) {
     const clip = manifest.clips[token];
     if (!clip || !Number.isFinite(clip.offset) || clip.offset < 0
       || !Number.isFinite(clip.duration) || clip.duration <= 0 || clip.duration > 30) {
@@ -68,7 +68,7 @@ export function pickupVoiceSchedule(tokens: string[], manifest: PickupVoiceManif
     const clip = manifest.clips[token];
     if (!clip) throw new Error(`Missing pickup voice clip: ${token}`);
     const scheduled = { ...clip, when: next };
-    next += clip.duration + (token === "prefix" ? 0.28 : token === "suffix" ? 0.7 : 0.12);
+    next += clip.duration + (token === "chime" ? 0.3 : token === "prefix" ? 0.28 : token === "suffix" ? 0.7 : 0.12);
     return scheduled;
   });
 }

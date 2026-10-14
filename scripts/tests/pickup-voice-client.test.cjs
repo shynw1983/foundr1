@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
 
-function setup({ offline = false, missing = false, suspended = false, corrupt = false, delayedResume = false } = {}) {
+function setup({ offline = false, missing = false, suspended = false, corrupt = false, delayedResume = false, chime = false } = {}) {
   const requests = [], starts = [], sources = [], spoken = [], statuses = [], cache = new Map();
   const context = { currentTime: 0, state: suspended ? 'suspended' : 'running', destination: {},
     resume() {
@@ -47,6 +47,7 @@ function setup({ offline = false, missing = false, suspended = false, corrupt = 
   const phrases = load('pickup-voice.ts').pickupVoicePhrases;
   const manifest = { version: '0123456789abcdef', audio: '/audio/pickup/voice-0123456789abcdef.wav', language: 'ja-JP', voice: 'test',
     clips: Object.fromEntries(Object.keys(phrases).map((token, i) => [token, { offset: i, duration: 0.1 }])) };
+  if (chime) manifest.clips.chime = { offset: 50, duration: 1.3 };
   const Player = load('pickup-voice-client.ts').PickupVoicePlayer;
   const player = new Player((status) => statuses.push(status));
   return { player, context, requests, starts, sources, spoken, statuses, cache, manifest };
@@ -119,5 +120,24 @@ test('cancelled fallback does not retain a queued old-store call', async () => {
   s.player.stop(); s.player.announce('M-3'); await settle();
   assert.equal(s.spoken.length, 2);
   assert.match(s.spoken[1].text, /エム、さん/);
+  s.player.dispose();
+});
+
+
+test('approved chime precedes speech by 0.3 seconds, once per queued batch; new batch chimes again', async () => {
+  const s = setup({ chime: true }); await s.player.prepare();
+  s.player.announce('P-1'); s.player.announce('M-2'); await settle();
+  assert.equal(s.starts.length, 5);
+  assert.equal(s.starts[0][1], 50);
+  assert.ok(Math.abs(s.starts[1][0] - s.starts[0][0] - 1.6) < 1e-9);
+  s.sources.slice(0, 5).forEach((source) => source.onended());
+  s.context.currentTime = 4;
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  assert.equal(s.starts.length, 9);
+  assert.notEqual(s.starts[5][1], 50);
+  s.sources.slice(5, 9).forEach((source) => source.onended());
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  s.player.preview(); await settle();
+  assert.equal(s.starts[9][1], 50);
   s.player.dispose();
 });

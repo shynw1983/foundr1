@@ -108,11 +108,16 @@ export class PickupVoicePlayer {
       await this.prepare();
       // Browser resume completes asynchronously even when called from a real click.
       await this.activation;
+      let announced = false;
       while (generation === this.generation && this.queue.length) {
         const tokens = this.queue.shift()!;
         if (this.buffer && this.manifest && !tokens[0].startsWith("fallback:")) {
           // Once playback has started, never fallback mid-code and repeat its prefix.
-          try { await this.playRecorded(tokens, generation); }
+          try {
+            const withChime = !announced && tokens[0] === "prefix" && this.manifest.clips.chime;
+            await this.playRecorded(withChime ? ["chime", ...tokens] : tokens, generation);
+            if (tokens[0] === "prefix") announced = true;
+          }
           catch { if (generation === this.generation) this.onStatus("blocked"); }
         } else {
           await this.speakFallback(tokens, generation);

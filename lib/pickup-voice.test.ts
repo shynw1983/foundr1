@@ -40,3 +40,11 @@ test("free VOICEVOX packs require attribution before they can play", () => {
   m.credit = "VOICEVOX:四国めたん";
   assert.equal(validatePickupVoiceManifest(m).credit, m.credit);
 });
+
+
+test("optional chime requires a valid source range", () => {
+  const m = manifest(); m.clips.chime = { offset: 30, duration: 1.3 };
+  assert.equal(validatePickupVoiceManifest(m).clips.chime.duration, 1.3);
+  m.clips.chime.offset = -1;
+  assert.throws(() => validatePickupVoiceManifest(m));
+});
