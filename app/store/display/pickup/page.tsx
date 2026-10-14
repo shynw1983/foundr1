@@ -5,6 +5,7 @@ import { ReadStatusNotice } from "../../../../components/ReadStatusNotice";
 
 import { useEffect, useRef, useState } from "react";
 import { Menu } from "lucide-react";
+import { PickupVoicePlayer, type PickupVoiceStatus } from "../../../../lib/pickup-voice-client";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
 import { useVisibleRefresh } from "../../components/useVisibleRefresh";
@@ -29,11 +30,6 @@ function getStoredVoiceEnabled() {
   return window.localStorage.getItem(voiceSettingKey) === "1";
 }
 
-function getSpeechText(pickupCode: string) {
-  const readableCode = pickupCode.replace("-", "、");
-  return `番号 ${readableCode}、準備できました。`;
-}
-
 export default function StorePickupDisplayPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
@@ -44,7 +40,10 @@ export default function StorePickupDisplayPage() {
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [menuOpen, setMenuOpen] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(true);
+  const [voiceStatus, setVoiceStatus] = useState<PickupVoiceStatus>("loading");
+  const [voiceCredit, setVoiceCredit] = useState("");
+  const voicePlayerRef = useRef<PickupVoicePlayer | null>(null);
+  const speechSupported = voiceStatus !== "unsupported";
   const selectedStoreIdRef = useRef(selectedStoreId);
   const voiceEnabledRef = useRef(false);
   const knownReadyCodesRef = useRef<Set<string>>(new Set());
@@ -69,14 +68,9 @@ export default function StorePickupDisplayPage() {
       setPreparing(body.preparing ?? []);
       const nextReady = (body.ready ?? []) as PickupOrder[];
       const nextReadyCodes = new Set(nextReady.map((order) => order.pickupCode));
-      if (hasInitializedReadyCodesRef.current && voiceEnabledRef.current && typeof window !== "undefined" && "speechSynthesis" in window) {
+      if (hasInitializedReadyCodesRef.current && voiceEnabledRef.current) {
         const newCodes = Array.from(nextReadyCodes).filter((code) => !knownReadyCodesRef.current.has(code));
-        for (const code of newCodes) {
-          const utterance = new SpeechSynthesisUtterance(getSpeechText(code));
-          utterance.lang = "ja-JP";
-          utterance.rate = 0.92;
-          window.speechSynthesis.speak(utterance);
-        }
+        for (const code of newCodes) voicePlayerRef.current?.announce(code);
       }
       knownReadyCodesRef.current = nextReadyCodes;
       hasInitializedReadyCodesRef.current = true;
@@ -90,44 +84,35 @@ export default function StorePickupDisplayPage() {
   });
 
   function enableVoice() {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      setSpeechSupported(false);
-      return;
-    }
     window.localStorage.setItem(voiceSettingKey, "1");
     voiceEnabledRef.current = true;
     setVoiceEnabled(true);
-    const utterance = new SpeechSynthesisUtterance("音声案内を開始します。");
-    utterance.lang = "ja-JP";
-    utterance.rate = 0.92;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    voicePlayerRef.current?.stop();
+    voicePlayerRef.current?.activate();
+    voicePlayerRef.current?.enabled();
   }
 
   function disableVoice() {
     window.localStorage.removeItem(voiceSettingKey);
     voiceEnabledRef.current = false;
     setVoiceEnabled(false);
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    voicePlayerRef.current?.stop();
   }
 
   function testVoice() {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      setSpeechSupported(false);
-      return;
-    }
-    const utterance = new SpeechSynthesisUtterance("番号 P、1234、準備できました。");
-    utterance.lang = "ja-JP";
-    utterance.rate = 0.92;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    // Keep actual order calls in their queue; a test must not cut off a number.
+    voicePlayerRef.current?.activate();
+    voicePlayerRef.current?.preview();
   }
 
   useEffect(() => {
-    setSpeechSupported(typeof window !== "undefined" && "speechSynthesis" in window);
+    const player = new PickupVoicePlayer((status, credit) => { setVoiceStatus(status); setVoiceCredit(credit || ""); });
+    voicePlayerRef.current = player;
+    void player.prepare();
     const storedVoiceEnabled = getStoredVoiceEnabled();
     voiceEnabledRef.current = storedVoiceEnabled;
     setVoiceEnabled(storedVoiceEnabled);
+    return () => { player.dispose(); voicePlayerRef.current = null; };
   }, []);
 
   useEffect(() => {
@@ -226,6 +211,9 @@ export default function StorePickupDisplayPage() {
               <span>表示店舗</span>
               <select value={selectedStoreId} onChange={(event) => {
                 const storeId = event.target.value;
+                voicePlayerRef.current?.stop();
+                knownReadyCodesRef.current = new Set();
+                hasInitializedReadyCodesRef.current = false;
                 setPreparing([]); setReady([]);
                 setLastUpdatedAt("");
                 setSelectedStoreId(storeId);
@@ -254,7 +242,8 @@ export default function StorePickupDisplayPage() {
           </button>
           <small>{readState.failed ? "更新失敗・再取得中" : realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
           <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
-          {!speechSupported ? <small>このブラウザは音声案内に対応していません。</small> : null}
+          <small role="status">{voiceStatus === "recorded" ? "録音音声・準備完了" : voiceStatus === "loading" ? "音声を準備中" : voiceStatus === "fallback" ? "録音音声を読み込めません。端末の音声を使用します。" : voiceStatus === "blocked" ? "音声テストを押して再生を有効にしてください。" : "このブラウザは音声案内に対応していません。"}</small>
+          {voiceCredit ? <small>{voiceCredit}</small> : null}
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>
           <a className="danger-button" href="/store/logout">ログアウト</a>

@@ -1,0 +1,165 @@
+{
+  "version": "6ee475cd03ae36c6",
+  "audio": "/audio/pickup/voice-6ee475cd03ae36c6.wav",
+  "language": "ja-JP",
+  "voice": "Google AI Studio: Erinome (gemini-2.5-flash-preview-tts)",
+  "clips": {
+    "0": {
+      "offset": 0,
+      "duration": 0.36
+    },
+    "1": {
+      "offset": 0.36,
+      "duration": 0.41
+    },
+    "2": {
+      "offset": 0.77,
+      "duration": 0.38958333333333334
+    },
+    "3": {
+      "offset": 1.1595833333333334,
+      "duration": 0.4
+    },
+    "4": {
+      "offset": 1.5595833333333333,
+      "duration": 0.35
+    },
+    "5": {
+      "offset": 1.9095833333333334,
+      "duration": 0.36
+    },
+    "6": {
+      "offset": 2.2695833333333333,
+      "duration": 0.37
+    },
+    "7": {
+      "offset": 2.6395833333333334,
+      "duration": 0.39
+    },
+    "8": {
+      "offset": 3.0295833333333335,
+      "duration": 0.42
+    },
+    "9": {
+      "offset": 3.4495833333333334,
+      "duration": 0.3647916666666667
+    },
+    "prefix": {
+      "offset": 3.814375,
+      "duration": 0.97
+    },
+    "suffix": {
+      "offset": 4.784375,
+      "duration": 5.051541666666667
+    },
+    "enabled": {
+      "offset": 9.835916666666666,
+      "duration": 1.694875
+    },
+    "A": {
+      "offset": 11.530791666666667,
+      "duration": 0.37
+    },
+    "B": {
+      "offset": 11.900791666666667,
+      "duration": 0.37
+    },
+    "C": {
+      "offset": 12.270791666666666,
+      "duration": 0.47
+    },
+    "D": {
+      "offset": 12.740791666666667,
+      "duration": 0.35
+    },
+    "E": {
+      "offset": 13.090791666666666,
+      "duration": 0.37
+    },
+    "F": {
+      "offset": 13.460791666666667,
+      "duration": 0.42
+    },
+    "G": {
+      "offset": 13.880791666666667,
+      "duration": 0.4285
+    },
+    "H": {
+      "offset": 14.309291666666667,
+      "duration": 0.54
+    },
+    "I": {
+      "offset": 14.849291666666666,
+      "duration": 0.35
+    },
+    "J": {
+      "offset": 15.199291666666667,
+      "duration": 0.4
+    },
+    "K": {
+      "offset": 15.599291666666666,
+      "duration": 0.41
+    },
+    "L": {
+      "offset": 16.009291666666666,
+      "duration": 0.33
+    },
+    "M": {
+      "offset": 16.339291666666668,
+      "duration": 0.35
+    },
+    "N": {
+      "offset": 16.689291666666666,
+      "duration": 0.37
+    },
+    "O": {
+      "offset": 17.059291666666667,
+      "duration": 0.3739166666666667
+    },
+    "P": {
+      "offset": 17.433208333333333,
+      "duration": 0.4
+    },
+    "Q": {
+      "offset": 17.833208333333335,
+      "duration": 0.41479166666666667
+    },
+    "R": {
+      "offset": 18.248,
+      "duration": 0.46
+    },
+    "S": {
+      "offset": 18.708,
+      "duration": 0.41
+    },
+    "T": {
+      "offset": 19.118,
+      "duration": 0.3757916666666667
+    },
+    "U": {
+      "offset": 19.493791666666667,
+      "duration": 0.38
+    },
+    "V": {
+      "offset": 19.873791666666666,
+      "duration": 0.33
+    },
+    "W": {
+      "offset": 20.203791666666667,
+      "duration": 0.54
+    },
+    "X": {
+      "offset": 20.743791666666667,
+      "duration": 0.6
+    },
+    "Y": {
+      "offset": 21.343791666666668,
+      "duration": 0.36
+    },
+    "Z": {
+      "offset": 21.703791666666667,
+      "duration": 0.49
+    }
+  },
+  "masterSha256": "e3f1319fad833a33a4804c2912b99acdefb4547615b5d6230daef49dbd1caa2b"
+}

@@ -1,0 +1,9 @@
+{
+  "voice": "Erinome",
+  "model": "gemini-2.5-flash-preview-tts",
+  "generation": "single continuous full-code announcement",
+  "audioProfile": "A Japanese female department-store announcer around thirty years old. Clear, poised, approachable and subtly warm. Natural middle pitch, full vocal support, crisp articulation, minimal breath noise. Speak with calm confidence and courteous hospitality, restrained intonation, never overly sweet or cute.",
+  "scene": "A professional adult female announcer in a Japanese department store. Speak in clear native Japanese with a composed, courteous public-address delivery. Use a firm, clean, resonant voice with precise consonants, restrained intonation and a moderate pace. No breathy, whispering, intimate, ASMR, cute or anime delivery.",
+  "sampleContext": "This is a Japanese customer pickup announcement. Read each letter and digit separately exactly as written in kana, with clear natural pauses at commas. Read only the announcement text.",
+  "status": "Selected G persona; all 39 active clips cut from this single v3 recording"
+}
