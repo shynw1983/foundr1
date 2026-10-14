@@ -1,0 +1,81 @@
+.shell {
+  --brand-red: #c30d23;
+  --brand-ink: #191919;
+  --board-white: #fff;
+  --quiet: #74716f;
+  --paper: #f7f6f4;
+  --rule: #e6e2df;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  height: 100vh;
+  height: 100dvh;
+  padding: clamp(16px, 2vw, 36px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2vw, 32px);
+  background: var(--paper);
+  color: var(--brand-ink);
+  font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", Arial, sans-serif;
+}
+.shell, .shell * { box-sizing: border-box; }
+.masthead { display: flex; align-items: center; justify-content: space-between; min-height: 40px; padding-right: 56px; gap: 20px; }
+.title { display: flex; align-items: center; gap: 14px; font-size: clamp(20px, 1.8vw, 30px); font-weight: 600; white-space: nowrap; }
+.mark { width: 20px; height: 20px; border-radius: 50%; background: var(--brand-red); }
+.subtitle { font: 500 12px/1.4 Arial, sans-serif; letter-spacing: .16em; color: var(--quiet); padding-left: 10px; }
+.storeName { color: var(--quiet); font-size: 15px; }
+.shell .menuButton { top: clamp(16px, 2vw, 36px); right: clamp(16px, 2vw, 36px); border-color: var(--rule); color: var(--brand-ink); border-radius: 50%; }
+.board { min-height: 0; flex: 1; display: grid; grid-template-columns: minmax(0, .46fr) minmax(0, .54fr); gap: clamp(16px, 2vw, 32px); }
+.column { min-width: 0; min-height: 0; padding: clamp(20px, 2.5vw, 44px); border-radius: 20px; display: flex; flex-direction: column; gap: clamp(20px, 2.4vh, 32px); }
+.ready { background: var(--brand-red); color: var(--board-white); }
+.preparing { background: var(--board-white); color: var(--brand-ink); }
+.columnHeader { flex-shrink: 0; }
+.headingRow { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.shell .columnHeader h2 { margin: 0; color: inherit; font-size: clamp(22px, 2.1vw, 38px); font-weight: 600; line-height: 1.35; letter-spacing: .025em; }
+.count { font: 400 clamp(22px, 2vw, 34px)/1 Arial, sans-serif; white-space: nowrap; opacity: .85; }
+.count small { margin-left: 6px; font-size: 12px; }
+.shell .columnHeader p { margin: 12px 0 0; font-size: clamp(14px, 1.2vw, 20px); line-height: 1.5; font-weight: 400; color: inherit; opacity: .72; }
+.codeGrid { min-height: 0; flex: 1; display: grid; gap: 16px; grid-template-rows: repeat(var(--rows), minmax(0, 1fr)); align-content: center; }
+.codeCell { min-width: 0; min-height: 0; display: flex; justify-content: center; align-items: center; border-radius: 12px; overflow: hidden; }
+.ready .codeCell { border: 1px solid #ffffff45; background: #ffffff08; }
+.preparing .codeCell { background: var(--paper); }
+.shell .codeCell strong { display: block; padding: 12px; color: inherit; font-family: Arial, "Noto Sans", sans-serif; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.035em; line-height: 1.1; white-space: nowrap; font-size: clamp(8px, calc(52vw / var(--columns) / var(--code-length)), 88px); }
+.shell .ready .codeCell strong { font-size: clamp(8px, calc(33vw / var(--columns) / var(--code-length)), 112px); }
+.single { display: flex; align-items: center; justify-content: center; }
+.single .codeCell { width: 100%; min-height: min(240px, 80%); }
+.shell .ready .single strong { font-size: clamp(8px, calc(40vw / var(--code-length)), 144px); }
+.empty { grid-column: 1 / -1; grid-row: 1 / -1; align-self: center; text-align: center; opacity: .75; }
+.emptySymbol { font: 300 64px/1 Arial, sans-serif; opacity: .45; }
+.shell .empty p { margin: 20px 0 0; font-size: clamp(16px, 1.5vw, 24px); color: inherit; font-weight: 400; line-height: 1.9; white-space: pre-line; }
+.columnFooter { flex-shrink: 0; min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--rule); padding-top: 16px; }
+.ready .columnFooter { border-color: #ffffff40; }
+.footerLabel { font: 500 11px/1.4 Arial, sans-serif; letter-spacing: .17em; opacity: .6; }
+.pages { display: flex; align-items: center; gap: 8px; font: 400 12px/1 Arial, sans-serif; }
+.pages button { min-width: 36px; min-height: 36px; border: 1px solid var(--rule); border-radius: 6px; background: transparent; color: inherit; }
+.ready .pages button { border-color: #ffffff50; }
+.shell button:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+@media (max-width: 1000px) {
+  .subtitle { display: none; }
+  .column { padding: 22px; border-radius: 16px; gap: 20px; }
+  .shell .columnHeader h2 { font-size: 23px; }
+  .codeGrid { gap: 12px; }
+}
+@media (max-width: 680px) {
+  .shell { padding: 12px; gap: 14px; }
+  .masthead { min-height: 36px; }
+  .title { font-size: 18px; gap: 8px; }
+  .mark { width: 14px; height: 14px; }
+  .storeName { font-size: 12px; }
+  .shell .menuButton { top: 12px; right: 12px; width: 36px; height: 36px; }
+  .board { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, .45fr) minmax(0, .55fr); gap: 12px; }
+  .column { padding: 18px; gap: 12px; border-radius: 14px; }
+  .shell .columnHeader h2 { font-size: 20px; }
+  .shell .columnHeader p { font-size: 12px; margin-top: 6px; }
+  .count { font-size: 24px; }
+  .shell .codeCell strong { font-size: clamp(8px, calc(64vw / var(--columns) / var(--code-length)), 60px); padding: 8px; }
+  .shell .ready .codeCell strong, .shell .ready .single strong { font-size: clamp(8px, calc(70vw / var(--columns) / var(--code-length)), 72px); }
+  .single .codeCell { min-height: 0; height: 100%; }
+  .columnFooter { padding-top: 10px; min-height: 20px; }
+  .footerLabel { font-size: 9px; letter-spacing: .12em; }
+  .pages button { min-width: 30px; min-height: 30px; }
+}
