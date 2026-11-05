@@ -436,7 +436,7 @@ const orderTypeOptions = [
 
 const denominationCountOptions = [
   { value: "", label: "0" },
-  ...Array.from({ length: 50 }, (_, index) => {
+  ...Array.from({ length: 999 }, (_, index) => {
     const value = String(index + 1);
     return { value, label: value };
   })
