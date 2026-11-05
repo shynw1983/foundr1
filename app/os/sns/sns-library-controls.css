@@ -47,3 +47,7 @@
   .sns-library-custom-color { grid-template-columns: 70px minmax(0, 1fr) 42px; }
   .sns-editor .sns-library-favorite-toggle { width: 42px; }
 }
+
+body[data-store-theme] .sns-editor :is(.sns-library-group-badge, .sns-library-favorite-toggle) {
+  color: var(--store-primary-text, var(--sns-primary));
+}

@@ -155,8 +155,8 @@ export default function StoreNotificationsPage() {
               <div><dt>{t("この端末で最後に受信")}</dt><dd>{native.lastReceivedAt ? new Date(native.lastReceivedAt).toLocaleString("ja-JP") : t("未確認")}</dd></div>
             </dl>
             {(native.error || native.geoError || native.syncError || data.device?.lastError) ? <p className="store-push-message is-error">{t("通知または位置の同期に失敗しています。設定と通信状態を確認してください。")}</p> : null}
-            {presentationReady && !native.alarmEnabled && (!native.soundEnabled || native.notificationVolume === 0 || native.ringerNormal === false) ? <p className="store-push-message">{t("音が鳴らない設定です。通知音を選び、通知音量・マナーモード・通知カテゴリのサイレント設定を確認してください。")}</p> : null}
-            {presentationReady && native.doNotDisturb ? <p className="store-push-message">{t("おやすみモードがオンです。音やバナーが制限される場合があります。")}</p> : null}
+            {presentationReady && !native.alarmEnabled && (!native.soundEnabled || native.notificationVolume === 0 || native.ringerNormal === false) ? <p className="store-push-message is-warning">{t("音が鳴らない設定です。通知音を選び、通知音量・マナーモード・通知カテゴリのサイレント設定を確認してください。")}</p> : null}
+            {presentationReady && native.doNotDisturb ? <p className="store-push-message is-warning">{t("おやすみモードがオンです。音やバナーが制限される場合があります。")}</p> : null}
             {native.soundError ? <p className="store-push-message is-error">{t("通知音を保存できませんでした。もう一度選ぶか、通知カテゴリ設定で変更してください。")}</p> : null}
             {alarmReady ? <div className="store-push-alarm-settings">
               <h3>{t("確認まで繰り返すアラーム")}</h3>
@@ -222,7 +222,7 @@ export default function StoreNotificationsPage() {
               <label>{t("帰店と判定する距離（m）")}<input type="number" min={100} max={exitRadius - 1} required disabled={busy} value={enterRadius} onChange={(event) => { setRuleFeedback(null); setEnterRadius(Number(event.target.value)); }} /></label>
             </div>
             <label className="store-push-checkbox"><input type="checkbox" disabled={busy} checked={enabled} onChange={(event) => { setRuleFeedback(null); setEnabled(event.target.checked); }} />{t("このユーザーの離店通知を有効にする")}</label>
-            {ruleFeedback ? <p className={`store-push-message${ruleFeedback.error ? " is-error" : ""}`} role={ruleFeedback.error ? "alert" : "status"}>{t(ruleFeedback.message)}</p> : null}
+            {ruleFeedback ? <p className={`store-push-message${ruleFeedback.error ? " is-error" : " is-success"}`} role={ruleFeedback.error ? "alert" : "status"}>{t(ruleFeedback.message)}</p> : null}
             {!data.ready ? <p className="store-push-message">{t("通知機能は準備中です。まだ設定を保存できません。")}</p> : null}
             <button className="primary-button" disabled={busy || !data.ready}>{t(savingRule ? "保存中…" : "設定を保存")}</button>
           </form>
