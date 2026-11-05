@@ -48,7 +48,7 @@ const nextConfig: NextConfig = {
       "./app/globals.css",
       "./public/brands/*.png"
     ],
-    "/api/public/orders/receipt/pdf/[filename]": [
+    "/api/public/orders/receipt/pdf/\\[filename\\]": [
       "./node_modules/@sparticuz/chromium/bin/**/*",
       "./fonts/**/*",
       "./app/globals.css",
@@ -65,7 +65,7 @@ const nextConfig: NextConfig = {
       "./output/**/*",
       "./outputs/**/*"
     ],
-    "/api/public/orders/receipt/pdf/[filename]": [
+    "/api/public/orders/receipt/pdf/\\[filename\\]": [
       "./public/downloads/**/*",
       "./Foundr1Android/**/*",
       "./output/**/*",
