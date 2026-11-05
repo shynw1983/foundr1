@@ -1,3 +1,5 @@
+import { posPickupTicketCopy } from './pos-pickup-ticket-copy';
+
 export type PosPrinterConnection = {
   deviceType: "escpos_network" | "escpos_bluetooth" | "escpos_usb" | "star_printer";
   connectionType: "lan" | "bluetooth" | "bluetooth_le" | "usb";
@@ -105,6 +107,15 @@ export type PosKitchenTicketBlockStyle = {
   separatorBefore: boolean;
 };
 
+export const posBowlTicketKinds = ['kitchen', 'finishing', 'pickup'] as const;
+export type PosBowlTicketKind = typeof posBowlTicketKinds[number];
+export type PosBowlTicketSettings = {
+  enabled: boolean;
+  copies: number;
+  template: PosKitchenTicketTemplateSettings | null;
+  templateVariants: PosKitchenTicketTemplateVariant[];
+};
+
 export type PosKitchenTicketTemplateVariant = {
   brandId: string;
   brandName: string;
@@ -113,7 +124,10 @@ export type PosKitchenTicketTemplateVariant = {
 
 export type PosPrinterSettings = PosPrinterConnection & {
   enabled: boolean;
+  showPrintQueue: boolean;
   receiptEnabled: boolean;
+  receiptCopies: number;
+  bowlTickets: Record<PosBowlTicketKind, PosBowlTicketSettings>;
   kitchenEnabled: boolean;
   kitchenCopies: number;
   receiptPrinter: PosPrinterConnection;
@@ -145,6 +159,7 @@ export type PosPrintLineItem = {
 export type PosPrintPayload = {
   version: 1;
   jobType: "test" | "receipt" | "kitchen";
+  documentRole?: 'test' | 'receipt' | PosBowlTicketKind;
   printer: PosPrinterConnection;
   storeName: string;
   printedAt: string;
@@ -293,7 +308,14 @@ export const defaultPosPhysicalCustomerDisplaySettings: PosPhysicalCustomerDispl
 
 export const defaultPosPrinterSettings: PosPrinterSettings = {
   enabled: false,
+  showPrintQueue: true,
   receiptEnabled: true,
+  receiptCopies: 1,
+  bowlTickets: {
+    kitchen: { enabled: true, copies: 1, template: null, templateVariants: [] },
+    finishing: { enabled: true, copies: 1, template: null, templateVariants: [] },
+    pickup: { enabled: true, copies: 1, template: null, templateVariants: [] }
+  },
   kitchenEnabled: false,
   kitchenCopies: 1,
   ...defaultPosPrinterConnection,
@@ -450,7 +472,10 @@ export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings 
   };
   return {
     enabled: source.enabled === true,
+    showPrintQueue: source.showPrintQueue !== false,
     receiptEnabled: source.receiptEnabled !== false,
+    receiptCopies: normalizePosDocumentCopies(source.receiptCopies),
+    bowlTickets: normalizePosBowlTickets(source.bowlTickets),
     kitchenEnabled: source.kitchenEnabled === true,
     kitchenCopies: Number.isFinite(kitchenCopies) ? Math.max(1, Math.min(5, kitchenCopies)) : defaultPosPrinterSettings.kitchenCopies,
     ...receiptPrinter,
@@ -515,6 +540,89 @@ export function resolvePosKitchenTicketTemplate(settings: PosPrinterSettings, br
   const normalizedBrandId = String(brandId ?? "").trim();
   return settings.kitchenTicketTemplateVariants.find((item) => item.brandId === normalizedBrandId)?.template
     ?? settings.kitchenTicketTemplate;
+}
+
+/** Actual document counts are bounded independently; switching a document off never removes another kind. */
+export function normalizePosDocumentCopies(value: unknown): number {
+  const copies = Math.round(Number(value ?? 1));
+  return Number.isFinite(copies) ? Math.max(1, Math.min(5, copies)) : 1;
+}
+
+function legacyPosBowlTicketTemplate(base: PosKitchenTicketTemplateSettings, kind: PosBowlTicketKind, customerLanguage = 'ja'): PosKitchenTicketTemplateSettings {
+  const template = normalizePosKitchenTicketTemplateSettings(base);
+  const shared = { ...template, showTitle: true, showPickupCode: true, showItems: true, showOptions: true, showNote: true, largeText: true,
+    blockStyles: { ...template.blockStyles, pickup: { ...template.blockStyles.pickup, textSize: 'xlarge' as const, bold: true } } };
+  if (kind === 'kitchen') return { ...shared, title: '厨房伝票' };
+  if (kind === 'finishing') return { ...shared, title: '出品伝票', showAmounts: false,
+    customMessage: '厨房伝票と番号を照合し、味付け・追加・メモを確認してください。' };
+  const copy = posPickupTicketCopy[customerLanguage === 'zh-Hans' ? 'zh' : customerLanguage] || posPickupTicketCopy.ja;
+  return { ...shared, language: 'ja', title: copy.title, customMessage: copy.message, showAmounts: false, showNote: false, showOrderType: false };
+}
+
+function normalizePosBowlTemplate(value: unknown, kind: PosBowlTicketKind): PosKitchenTicketTemplateSettings {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Partial<PosKitchenTicketTemplateSettings> : {};
+  const defaults = legacyPosBowlTicketTemplate(defaultPosKitchenTicketTemplateSettings, kind);
+  // An explicitly configured template owns its appearance. Only the resolver applies safety locks.
+  return normalizePosKitchenTicketTemplateSettings({ ...defaults, ...source, title: String(source.title ?? '').trim() || defaults.title });
+}
+
+function normalizePosBowlTicketSettings(value: unknown, kind: PosBowlTicketKind): PosBowlTicketSettings {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Partial<PosBowlTicketSettings> : {};
+  return {
+    enabled: source.enabled !== false,
+    copies: normalizePosDocumentCopies(source.copies),
+    template: source.template && typeof source.template === 'object' && !Array.isArray(source.template) ? normalizePosBowlTemplate(source.template, kind) : null,
+    templateVariants: (Array.isArray(source.templateVariants) ? source.templateVariants : []).flatMap(value => {
+      const variant = value && typeof value === 'object' && !Array.isArray(value) ? value as Partial<PosKitchenTicketTemplateVariant> : {};
+      const brandId = String(variant.brandId ?? '').trim().slice(0, 80);
+      if (!brandId || !variant.template || typeof variant.template !== 'object' || Array.isArray(variant.template)) return [];
+      return [{ brandId, brandName: String(variant.brandName ?? '').trim().slice(0, 120), template: normalizePosBowlTemplate(variant.template, kind) }];
+    }).filter((variant, index, values) => values.findIndex(value => value.brandId === variant.brandId) === index).slice(0, 30)
+  };
+}
+
+export function normalizePosBowlTickets(value: unknown): Record<PosBowlTicketKind, PosBowlTicketSettings> {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Partial<Record<PosBowlTicketKind, unknown>> : {};
+  return {
+    kitchen: normalizePosBowlTicketSettings(source.kitchen, 'kitchen'),
+    finishing: normalizePosBowlTicketSettings(source.finishing, 'finishing'),
+    pickup: normalizePosBowlTicketSettings(source.pickup, 'pickup')
+  };
+}
+
+export function getPosBowlTicketSettings(settings: PosPrinterSettings, kind: PosBowlTicketKind): PosBowlTicketSettings {
+  return normalizePosBowlTicketSettings(settings.bowlTickets?.[kind], kind);
+}
+export function isPosBowlTicketEnabled(settings: PosPrinterSettings, kind: PosBowlTicketKind): boolean {
+  return settings.enabled === true && getPosBowlTicketSettings(settings, kind).enabled;
+}
+export function getPosBowlTicketCopies(settings: PosPrinterSettings, kind: PosBowlTicketKind): number {
+  return isPosBowlTicketEnabled(settings, kind) ? getPosBowlTicketSettings(settings, kind).copies : 0;
+}
+export function hasPosBowlPrintDocuments(settings: PosPrinterSettings): boolean {
+  return posBowlTicketKinds.some(kind => isPosBowlTicketEnabled(settings, kind));
+}
+export function isPosReceiptPrintingEnabled(settings: PosPrinterSettings): boolean {
+  return settings.enabled === true && settings.receiptEnabled !== false;
+}
+export function getPosReceiptCopies(settings: PosPrinterSettings): number {
+  return isPosReceiptPrintingEnabled(settings) ? normalizePosDocumentCopies(settings.receiptCopies) : 0;
+}
+
+/** These locks are shared by the settings preview, direct printing and the Android relay. */
+export function resolvePosBowlTicketTemplate(settings: PosPrinterSettings, kind: PosBowlTicketKind, brandId?: string | null, customerLanguage = 'ja'): PosKitchenTicketTemplateSettings {
+  const config = getPosBowlTicketSettings(settings, kind);
+  const selected = config.templateVariants.find(value => value.brandId === String(brandId ?? '').trim())?.template ?? config.template;
+  const template = selected ? normalizePosKitchenTicketTemplateSettings(selected)
+    : legacyPosBowlTicketTemplate(resolvePosKitchenTicketTemplate(settings, brandId), kind, customerLanguage);
+  if (kind === 'pickup' && selected) {
+    const copy = posPickupTicketCopy[customerLanguage === 'zh-Hans' ? 'zh' : customerLanguage] || posPickupTicketCopy.ja;
+    // Layout-only edits retain localized defaults; genuinely custom copy remains exactly configured.
+    if (template.title === posPickupTicketCopy.ja.title) template.title = copy.title;
+    if (template.customMessage === posPickupTicketCopy.ja.message) template.customMessage = copy.message;
+  }
+  return { ...template, showTitle: true, showPickupCode: true, showItems: true, showOptions: true,
+    showNote: kind !== 'pickup', ...(kind === 'pickup' ? { showAmounts: false } : {}) };
 }
 
 export function getReceiptPrinter(settings: PosPrinterSettings) {

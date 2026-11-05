@@ -4,10 +4,10 @@ import { getSessionStoreScope } from "./api-auth";
 import { sql } from "./db";
 import { createEmployeeSession, sessionCookieMaxAge } from "./employee-sessions";
 import { getNavPathsForPermissions, getPermissionsForRole } from "./role-permissions";
+import { canApproveTerminalLoginRole } from "./store-terminal-login-policy";
 
 const terminalLoginTokenBytes = 32;
 const terminalLoginExpiresIntervalSql = "5 minutes";
-const terminalLoginApproverRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 
 export type TerminalLoginStoreOption = {
   id: string;
@@ -30,7 +30,7 @@ export function hashTerminalLoginToken(token: string) {
 }
 
 export function canApproveTerminalLogin(session: EmployeeSession) {
-  return terminalLoginApproverRoles.has(session.role);
+  return canApproveTerminalLoginRole(session.role);
 }
 
 export async function createTerminalLoginRequest(request: Request) {
@@ -78,8 +78,11 @@ export async function getTerminalLoginRequest(token: string) {
 }
 
 export async function getTerminalLoginStoreOptions(session: EmployeeSession): Promise<TerminalLoginStoreOption[]> {
-  const scope = await getSessionStoreScope(session);
-  const rows = scope.allStores ? await sql`
+  // QR assignment uses account authority, not the current OS workbench filter.
+  const scope = session.role === "owner" || session.role === "manager"
+    ? { allStores: true, storeIds: [] as string[] }
+    : await getSessionStoreScope(session);
+  const rows = await sql`
     select
       stores.id::text as "storeId",
       stores.name as "storeName",
@@ -87,26 +90,12 @@ export async function getTerminalLoginStoreOptions(session: EmployeeSession): Pr
       employees.name as "terminalName",
       coalesce(employees.login_id, employees.email, '') as "terminalLoginId"
     from stores
-    join employee_scopes on employee_scopes.store_id = stores.id and employee_scopes.scope_type = 'store'
-    join employees on employees.id = employee_scopes.employee_id
-    where stores.status = 'active'
+    left join employee_scopes on employee_scopes.store_id = stores.id and employee_scopes.scope_type = 'store'
+    left join employees on employees.id = employee_scopes.employee_id
       and employees.status = 'active'
       and employees.role = 'store_terminal'
-    order by stores.name, employees.name
-  ` : await sql`
-    select
-      stores.id::text as "storeId",
-      stores.name as "storeName",
-      employees.id::text as "terminalEmployeeId",
-      employees.name as "terminalName",
-      coalesce(employees.login_id, employees.email, '') as "terminalLoginId"
-    from stores
-    join employee_scopes on employee_scopes.store_id = stores.id and employee_scopes.scope_type = 'store'
-    join employees on employees.id = employee_scopes.employee_id
     where stores.status = 'active'
-      and stores.id::text = any(${scope.storeIds})
-      and employees.status = 'active'
-      and employees.role = 'store_terminal'
+      and (${scope.allStores} or stores.id::text = any(${scope.storeIds}::text[]))
     order by stores.name, employees.name
   `;
 
@@ -118,11 +107,13 @@ export async function getTerminalLoginStoreOptions(session: EmployeeSession): Pr
       name: String(row.storeName ?? ""),
       terminalAccounts: []
     };
-    store.terminalAccounts.push({
-      id: String(row.terminalEmployeeId),
-      name: String(row.terminalName ?? ""),
-      loginId: String(row.terminalLoginId ?? "")
-    });
+    if (row.terminalEmployeeId) {
+      store.terminalAccounts.push({
+        id: String(row.terminalEmployeeId),
+        name: String(row.terminalName ?? ""),
+        loginId: String(row.terminalLoginId ?? "")
+      });
+    }
     byStore.set(storeId, store);
   }
   return Array.from(byStore.values());
@@ -145,7 +136,7 @@ export async function approveTerminalLoginRequest(input: {
   }
   const terminal = store.terminalAccounts.find((candidate) => candidate.id === input.terminalEmployeeId);
   if (!terminal) {
-    return { error: "選択した店舗の店舗Padアカウントを選択してください。", status: 400 };
+    return { error: "選択した店舗の端末アカウントを選択してください。", status: 400 };
   }
 
   const rows = await sql`

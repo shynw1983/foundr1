@@ -1,15 +1,18 @@
 "use client";
 
 import { BriefcaseBusiness, CalendarDays, CalendarPlus, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, Cloud, CloudFog, CloudLightning, CloudRain, CloudSun, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, RefreshCw, Search, Settings, Snowflake, Store, Sun, Trash2, Truck, UserCog, WalletCards } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { CSSProperties, FormEvent, MouseEvent } from "react";
-import { useOsTranslation } from "../components/OsTranslationProvider";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
+import { useOsTranslation } from "../components/OsTranslationProvider";
+import type { ScheduleDay } from "../../../lib/shift-confirmation";
+import { formatPeriods } from "./schedule/ScheduleConfirmation";
+import { StoreBusinessHoursSection } from "./schedule/StoreBusinessHoursSection";
 import { formatDuration, formatJstTime, getJstMonthLabel } from "../../../lib/timecard";
-import { normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from "../../../lib/store-business-hours";
+import { getStoreBusinessDayTimeRange, normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from "../../../lib/store-business-hours";
 
 type StoreOption = {
   id: string;
@@ -979,6 +982,7 @@ function getBusinessDayCloseMinutes(businessHours: StoreBusinessHours | undefine
   if (!businessHours) return null;
   const day = getBusinessDayForDate(businessHours, workDate);
   if (!day || day.closed) return null;
+  if (day.open24Hours) return 0;
   const open = timeToMinutes(day.open);
   const close = timeToMinutes(day.close);
   return close <= open ? close : null;
@@ -1043,13 +1047,11 @@ function getShiftDefaults(businessHours: StoreBusinessHours, workDate: string) {
       note: "休業日"
     };
   }
-  const openMinutes = timeToMinutes(day.open);
-  const closeMinutes = timeToMinutes(day.close);
-  const crossesMidnight = closeMinutes <= openMinutes;
-  const workMinutes = (crossesMidnight ? closeMinutes + 1440 : closeMinutes) - openMinutes;
+  const range = getStoreBusinessDayTimeRange(day);
+  const workMinutes = range.closeMinutes - range.openMinutes;
   return {
-    scheduledStart: day.open,
-    scheduledEnd: day.close,
+    scheduledStart: range.open,
+    scheduledEnd: range.close,
     breakMinutes: workMinutes >= 360 ? "60" : "0",
     note: ""
   };
@@ -1059,18 +1061,16 @@ function getShiftPatterns(businessHours: StoreBusinessHours, workDate: string) {
   const day = getBusinessDayForDate(businessHours, workDate);
   if (day.closed) return [];
 
-  const openMinutes = timeToMinutes(day.open);
-  const closeMinutes = timeToMinutes(day.close);
-  const adjustedClose = closeMinutes <= openMinutes ? closeMinutes + 1440 : closeMinutes;
+  const { open, close, openMinutes, closeMinutes: adjustedClose } = getStoreBusinessDayTimeRange(day);
   const duration = adjustedClose - openMinutes;
   const middle = openMinutes + Math.floor(duration / 2);
   const shortEnd = Math.min(adjustedClose, openMinutes + 360);
 
   return [
-    { label: "営業通し", start: day.open, end: day.close, breakMinutes: duration >= 360 ? "60" : "0" },
-    { label: "開店", start: day.open, end: minutesToTime(middle), breakMinutes: duration >= 480 ? "45" : "0" },
-    { label: "後半", start: minutesToTime(middle), end: day.close, breakMinutes: duration >= 480 ? "45" : "0" },
-    { label: "短時間", start: day.open, end: minutesToTime(shortEnd), breakMinutes: "0" }
+    { label: "営業通し", start: open, end: close, breakMinutes: duration >= 360 ? "60" : "0" },
+    { label: "開店", start: open, end: minutesToTime(middle), breakMinutes: duration >= 480 ? "45" : "0" },
+    { label: "後半", start: minutesToTime(middle), end: close, breakMinutes: duration >= 480 ? "45" : "0" },
+    { label: "短時間", start: open, end: minutesToTime(shortEnd), breakMinutes: "0" }
   ] satisfies ShiftPattern[];
 }
 
@@ -1332,9 +1332,7 @@ function getDayCoverage(businessHours: StoreBusinessHours, workDate: string, shi
     return { status: "closed", missingLabel: "" } satisfies DayCoverage;
   }
 
-  const businessStart = timeToMinutes(day.open);
-  const businessEndBase = timeToMinutes(day.close);
-  const businessEnd = businessEndBase <= businessStart ? businessEndBase + 1440 : businessEndBase;
+  const { openMinutes: businessStart, closeMinutes: businessEnd } = getStoreBusinessDayTimeRange(day);
   const intervals = shifts
     .filter((shift) => shift.workDate === workDate && shift.scheduledStart && shift.scheduledEnd)
     .map((shift) => {
@@ -1462,6 +1460,7 @@ export function TimecardPage({
     return t("{hours}時間{minutes}分", { hours: Math.floor(total / 60), minutes: String(total % 60).padStart(2, "0") });
   };
   const [data, setData] = useState<TimecardPayload | null>(null);
+  const [scheduleRefresh, setScheduleRefresh] = useState(0);
   const [month, setMonth] = useState(getStoredTimecardMonth);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -1505,6 +1504,8 @@ export function TimecardPage({
   const [isImportingAttendance, setIsImportingAttendance] = useState(false);
   const [isAttendanceImportOpen, setIsAttendanceImportOpen] = useState(false);
   const [isCalendarManagerOpen, setIsCalendarManagerOpen] = useState(false);
+  const [businessDate, setBusinessDate] = useState("");
+  const [businessDays, setBusinessDays] = useState<Record<string, ScheduleDay>>({});
   const [selectedCalendarDate, setSelectedCalendarDate] = useState("");
   const [calendarMessage, setCalendarMessage] = useState("");
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
@@ -1538,6 +1539,7 @@ export function TimecardPage({
       }
       const body = await response.json() as TimecardPayload;
       setData(body);
+      if (mainView === "schedule") setScheduleRefresh((revision) => revision + 1);
       setMonth(body.month);
       setSelectedStoreId(body.selectedStoreId);
       storeTimecardSelection(body.month, body.selectedStoreId);
@@ -1562,7 +1564,8 @@ export function TimecardPage({
   }
 
   useEffect(() => {
-    void loadTimecard(getStoredTimecardMonth(), getStoredTimecardStoreId());
+    const requestedStoreId = mainView === "schedule" ? new URLSearchParams(window.location.search).get("storeId") : null;
+    void loadTimecard(getStoredTimecardMonth(), requestedStoreId || getStoredTimecardStoreId());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1641,6 +1644,18 @@ export function TimecardPage({
     [data, selectedPayrollRow]
   );
   const selectedStore = data?.stores.find((store) => store.id === selectedStoreId) ?? null;
+  function openBusinessHours(date?: string) {
+    if (date) setBusinessDate(date);
+    const section = document.getElementById("store-business-hours");
+    section?.focus({ preventScroll: true });
+    section?.scrollIntoView({ block: "start" });
+  }
+
+  const rememberBusinessDays = useCallback((days: ScheduleDay[]) => {
+    setBusinessDays(Object.fromEntries(days.map(day => [`${selectedStoreId}:${day.workDate}`, day])));
+  }, [selectedStoreId]);
+  const canManageBusinessHours = Boolean(selectedStore && data?.selectedStoreId === selectedStoreId &&
+    ["owner", "manager", "store_owner", "store_manager"].includes(data.currentEmployeeRole ?? ""));
   const payrollPeriod = useMemo(
     () => getPayrollPeriod(month, selectedStore),
     [month, selectedStore]
@@ -1946,7 +1961,8 @@ export function TimecardPage({
     });
     if (response.ok) {
       await loadTimecard(month, selectedStoreId, { keepShiftDraft: true });
-      showShiftMessage("シフトを保存しました。");
+      const savedResult = await response.json().catch(() => ({}));
+      showShiftMessage(savedResult.scheduleSync?.warning ?? "シフトを保存しました。");
     } else {
       const body = await response.json().catch(() => ({}));
       showShiftMessage(String(body.error ?? "シフトを保存できませんでした。"), 4200);
@@ -1976,7 +1992,8 @@ export function TimecardPage({
     });
     if (response.ok) {
       await loadTimecard(month, selectedStoreId, { keepShiftDraft: true });
-      showShiftMessage("シフトを削除しました。");
+      const savedResult = await response.json().catch(() => ({}));
+      showShiftMessage(savedResult.scheduleSync?.warning ?? "シフトを削除しました。");
     } else {
       const body = await response.json().catch(() => ({}));
       showShiftMessage(String(body.error ?? "シフトを削除できませんでした。"), 4200);
@@ -2006,7 +2023,8 @@ export function TimecardPage({
     });
     if (response.ok) {
       await loadTimecard(month, selectedStoreId);
-      showShiftMessage(successMessage);
+      const savedResult = await response.json().catch(() => ({}));
+      showShiftMessage(savedResult.scheduleSync?.warning ?? successMessage);
     } else {
       const body = await response.json().catch(() => ({}));
       showShiftMessage(String(body.error ?? "選択したシフトを保存できませんでした。"), 4200);
@@ -2055,7 +2073,8 @@ export function TimecardPage({
     });
     if (response.ok) {
       await loadTimecard(month, selectedStoreId);
-      showShiftMessage("選択したシフトを削除しました。");
+      const savedResult = await response.json().catch(() => ({}));
+      showShiftMessage(savedResult.scheduleSync?.warning ?? "選択したシフトを削除しました。");
     } else {
       const body = await response.json().catch(() => ({}));
       showShiftMessage(String(body.error ?? "選択したシフトを削除できませんでした。"), 4200);
@@ -2750,6 +2769,7 @@ export function TimecardPage({
               <button className={scheduleView === "actual" ? "is-active" : ""} type="button" onClick={() => setScheduleView("actual")}>
                 実勤務時間
               </button>
+              {canManageBusinessHours ? <button className="secondary-button" type="button" aria-controls="store-business-hours" onClick={() => openBusinessHours()}>{t("店舗営業時間")}</button> : null}
             </section>
 
             {scheduleView === "planned" ? (
@@ -2999,7 +3019,7 @@ export function TimecardPage({
                   <div className="shift-editor shift-editor-popover" style={shiftEditorStyle} aria-label="シフト編集">
                     <div className="shift-editor-title">
                       <strong>{selectedShiftEmployee?.name ?? "従業員"}</strong>
-                      <span>{shiftDraft.workDate}{selectedDraftBusinessDay ? ` / 営業 ${selectedDraftBusinessDay.closed ? "休業日" : `${selectedDraftBusinessDay.open}-${selectedDraftBusinessDay.close}`}` : ""}</span>
+                      <span>{shiftDraft.workDate}{selectedDraftBusinessDay ? ` / 営業 ${selectedDraftBusinessDay.closed ? "休業日" : selectedDraftBusinessDay.open24Hours ? "24時間営業" : `${selectedDraftBusinessDay.open}-${selectedDraftBusinessDay.close}`}` : ""}</span>
                       <small className={`shift-editor-status${shiftMessage ? " is-visible" : ""}`} aria-live="polite">{shiftMessage || "\u00a0"}</small>
                     </div>
                     {selectedShiftSegments.length ? (
@@ -3060,7 +3080,7 @@ export function TimecardPage({
                   </div>
                 ) : null}
                 <div className="shift-grid-wrap">
-                  <table className="shift-grid">
+                  <table className={`shift-grid${canManageBusinessHours ? " has-business-hours" : ""}`}>
                     <thead>
                       <tr className="shift-date-head-row">
                         <th className="shift-employee-head" rowSpan={3}>従業員</th>
@@ -3068,6 +3088,14 @@ export function TimecardPage({
                           const coverage = coverageByDate.get(day.key);
                           const isUncovered = coverage?.status === "uncovered";
                           const isToday = day.key === todayKey;
+                          const business = businessDays[`${selectedStoreId}:${day.key}`];
+                          const needsReview = Boolean(business?.confirmedAt && (business.needsRefresh || !business.ready));
+                          const formalHours = business?.confirmedAt && !needsReview ? business.businessPeriods : null;
+                          const proposedHours = business?.hoursSource === "manual" ? business.manualPeriods : business?.suggestedPeriods;
+                          const hours = formalHours?.some(period => period.closed)
+                            ? t("臨時休業")
+                            : formatPeriods(formalHours ?? proposedHours);
+                          const status = t(needsReview ? "変更を確認" : business?.confirmedAt ? "確定済み" : "未確定");
                           return (
                             <th
                               className={`shift-date-head${day.isWeekend ? " is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}${isToday ? " is-today" : ""}`}
@@ -3076,6 +3104,18 @@ export function TimecardPage({
                             >
                               <span>{day.label}</span>
                               <small>{day.weekdayLabel}</small>
+                              {canManageBusinessHours ? (
+                                <button
+                                  className={`shift-business-day-button${needsReview ? " is-review-needed" : ""}`}
+                                  type="button"
+                                  aria-controls="store-business-hours"
+                                  aria-label={`${day.key} ${hours ? `${hours} ` : ""}${status}`}
+                                  onClick={() => openBusinessHours(day.key)}
+                                >
+                                  <span className="shift-business-day-hours" title={hours || undefined}>{hours}</span>
+                                  <span>{status}</span>
+                                </button>
+                              ) : null}
                               {isUncovered || isToday ? (
                                 <span className="shift-day-badges">
                                   {isUncovered ? <span className="shift-day-badge is-uncovered">未</span> : null}
@@ -3553,6 +3593,9 @@ export function TimecardPage({
                 </div>
               </section>
             )}
+            {canManageBusinessHours && data?.month === month ? (
+              <StoreBusinessHoursSection key={selectedStoreId} storeId={selectedStoreId} month={month} today={todayKey} refreshKey={String(scheduleRefresh)} selectedDate={businessDate.startsWith(month) ? businessDate : ""} onClearDate={() => setBusinessDate("")} onDays={rememberBusinessDays} />
+            ) : null}
           </>
         ) : canViewPayroll ? (
           <>

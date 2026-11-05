@@ -8,18 +8,93 @@ import {collectDemaeInternalCarriers,readDemaeInternalCarriers} from './demae-in
 import {migrateRocketOption,rocketMigrationIdentity} from './rocket-option-migration.mjs';
 import {nativeMenuOrder} from './native-menu-order.mjs';
 import {inspectMenuNameContract} from './menu-name-contract.mjs';
+import {authorityTargetProgress} from './uber-authority-runner.mjs';
 
 const ordered=rows=>[...rows].sort((a,b)=>a.sortOrder-b.sortOrder);
 const equalIds=(a,b)=>sameMenuValue(a.map(String),b.map(String));
 
+const completeDemaeRetirementValue=value=>value!==null&&typeof value==='object'
+  &&['hasMore','isContinueNextPage','truncated','isTruncated'].every(key=>!Object.hasOwn(value,key)||value[key]===false);
+const demaeRetirementCode=value=>typeof value==='string'&&/^[A-Za-z0-9_-]+$/.test(value);
+function validDemaeRetirementPeriod(row) {
+  if(row.applyStartDate===undefined&&row.applyEndDate===undefined)return true;
+  const parse=value=>{
+    if(typeof value!=='string'||!/^\d{4}([/-])\d{2}\1\d{2}$/.test(value))return null;
+    const [year,month,day]=value.split(/[/-]/).map(Number);
+    const days=[31,year%4===0&&(year%100!==0||year%400===0)?29:28,31,30,31,30,31,31,30,31,30,31];
+    return year>0&&month>=1&&month<=12&&day>=1&&day<=days[month-1]?value.replaceAll('/','-'):null;
+  };
+  const start=parse(row.applyStartDate),end=parse(row.applyEndDate);
+  return start!==null&&end!==null&&start<=end;
+}
+function demaeUnlinkedItemProof(catalog,item,id,chainId) {
+  const exactIdentity=(value,expected)=>(typeof value==='string'||typeof value==='number'&&Number.isSafeInteger(value)&&value>=0)&&String(value)===expected;
+  if(!demaeRetirementCode(id)||!completeDemaeRetirementValue(item)||Array.isArray(item)
+    ||!exactIdentity(item.itemCode,id)||!exactIdentity(item.chainId,chainId)
+    ||!Array.isArray(item.categoryItemLinkList)||!completeDemaeRetirementValue(item.categoryItemLinkList)
+    ||item.categoryItemLinkList.length!==0||!completeDemaeRetirementValue(catalog?.items)||Array.isArray(catalog.items))return false;
+  const validRows=(rows,key)=>{
+    if(!Array.isArray(rows)||!completeDemaeRetirementValue(rows))return false;
+    const seen=new Set();
+    return rows.every(row=>{
+      if(!completeDemaeRetirementValue(row)||Array.isArray(row)||!demaeRetirementCode(row[key])
+        ||Object.hasOwn(row,'chainId')&&!exactIdentity(row.chainId,chainId)
+        ||!validDemaeRetirementPeriod(row)||seen.has(row[key]))return false;
+      seen.add(row[key]);return true;
+    });
+  };
+  const categories=catalog.items.categoryList;
+  // Scoped native category/item summaries may omit chainId, but a present
+  // conflicting or malformed identity never establishes complete absence.
+  return validRows(categories,'categoryCode')&&categories.every(category=>
+    validRows(category.itemList,'itemCode')&&!category.itemList.some(row=>row.itemCode===id));
+}
+
 export class AuthorityNativeDriver {
   constructor(transport,payload) {
     this.platform=payload.platformKey;this.merchantId=String(payload.merchantId);this.payload=payload;
+    this.completedContentWrites=new Map();
+    this.completePreflightSnapshot=false;
+    this.demaeRelationshipSnapshotReusable=false;
     this.client=this.platform==='rocket_now'?new RocketMenuClient(transport,this.merchantId)
       :new DemaeMenuClient(transport,this.merchantId,payload.menuPatternCode,{draftPatternCode:payload.draftPatternCode,draftCarrierItemCode:payload.draftCarrierItemCode});
   }
   id(kind,value){return authorityPhysicalId(this.platform,kind,value,this.merchantId);}
+  invalidateDemaePhaseReuse() {
+    if(this.platform!=='demae_can')return;
+    // Keep the original relationship rows as the concurrent-edit baseline.
+    // Only their eligibility for later read-only no-op decisions is revoked.
+    this.demaeRelationshipSnapshotReusable=false;
+    this.categorySnapshot=undefined;
+  }
+  assertDemaeOwnedGroupMembers(ids) {
+    if(ids.some(id=>!this.payload.targets.some(row=>row.kind==='option'&&!row.quarantined&&this.ids(row).includes(id))))throw Error('uber_authority_unowned_group_member');
+  }
+  async ensureDemaeRelationshipWriteProof() {
+    if(this.platform==='demae_can'&&this.demaeRelationshipWriteProofPending) {
+      // Restore the former second complete boundary only if this phase will
+      // actually write. No-op checks must not authorize a relationship write.
+      this.invalidateDemaePhaseReuse();
+      this.demaeRelationshipWriteProofSnapshot=await this.snapshot();
+      this.demaeRelationshipWriteProofPending=false;
+    }
+    return this.demaeRelationshipWriteProofSnapshot;
+  }
   ids(target){return target.mappings.map(row=>this.id(target.kind,row.externalId));}
+  withRequestProgress(context,operation) {
+    return this.client.transport?.withProgress?this.client.transport.withProgress(context,operation):operation();
+  }
+  withTargetProgress(target,operation) {
+    return this.withRequestProgress(authorityTargetProgress(target,this.payload),operation);
+  }
+  nativeRequestContext(kind,id,name,parentName) {
+    const matches=this.payload.targets.filter(target=>target.kind===kind&&this.ids(target).includes(String(id)));
+    // Native names are presentation only. An unowned or shared native record
+    // never borrows a source identity from a similar name.
+    const target=matches.length===1?matches[0]:undefined;
+    return {sourceKey:target?.sourceKey,targetKind:kind,targetName:name??target?.name,
+      parentName:parentName??(target?authorityTargetProgress(target,this.payload).parentName:undefined)};
+  }
   hasCreationCollision(rows,target,{includeMarker=true}={}) {
     return rows.some(row=>row.kind===target.kind&&((includeMarker&&row.name===target.marker)
       ||(row.name===target.name&&!this.isIdentifiedOtherGroupOption(row,target))));
@@ -136,10 +211,12 @@ export class AuthorityNativeDriver {
     return {externalId:externalId(actual.option.optionCode),externalParentId:`stage:${actual.groupCode}`};
   }
   async resumeHidden(target,context) {
+    this.invalidateDemaePhaseReuse();
     if(this.platform!=='demae_can'||target.kind!=='option')return null;
     return this.stageOption(target,{...context,allowCreate:false});
   }
   async createHidden(target,context={}) {
+    this.invalidateDemaePhaseReuse();
     if(this.platform==='demae_can'&&target.kind==='option')return this.stageOption(target,{...context,allowCreate:true});
     if(this.platform==='demae_can'&&target.kind==='category') {
       const receipt=await this.client.createEmptyCategory(target.marker);
@@ -218,11 +295,17 @@ export class AuthorityNativeDriver {
     // actual record visible to structural validation instead of creating a copy.
     return placed.length?placed:physical;
   }
-  async snapshot({itemDetails=true}={}) {
+  async snapshot(options={}) {
+    return this.withRequestProgress({},()=>this.readSnapshot(options));
+  }
+  async readSnapshot({itemDetails=true}={}) {
     const c=this.client,remote=await c.catalog(),rows=[];
     if(this.platform==='rocket_now') {
       const items=[...new Map(remote.menus.flatMap(menu=>menu.dishes??[]).map(item=>[String(item.dishId),item])).values()];
-      const details=itemDetails?await Promise.all(items.map(item=>c.detail(item.dishId))):[];
+      const details=itemDetails?await Promise.all(items.map(item=>{
+        const parents=remote.menus.filter(menu=>(menu.dishes??[]).some(row=>String(row.dishId)===String(item.dishId)));
+        return this.withRequestProgress(this.nativeRequestContext('item',item.dishId,item.dishName,parents.length===1?parents[0].menuName:undefined),()=>c.detail(item.dishId));
+      })):[];
       for(const item of details)rows.push({kind:'item',id:String(item.dishId),name:item.dishName,price:Number(item.salePrice),description:item.description??'',hidden:item.displayStatus==='NOT_EXPOSE',
         parentIds:(item.mappingMenus??[]).map(row=>String(row.menuId)),groupIds:(item.options??[]).map(row=>String(row.optionId)),native:item});
       for(const group of remote.groups) {
@@ -241,13 +324,18 @@ export class AuthorityNativeDriver {
       const itemIds=[...new Set(remote.items.categoryList.flatMap(category=>category.itemList??[]).map(item=>String(item.itemCode)))];
       const draftIds=this.payload.targets.filter(target=>target.kind==='item'&&!target.quarantined).flatMap(target=>[...target.mappings,this.payload.authorityState?.[target.sourceKey]].filter(mapping=>mapping?.externalId).map(mapping=>this.id('item',mapping.externalId))).filter(id=>!itemIds.includes(id));
       const draftClient=new DemaeDraftClient(c.transport,this.merchantId,this.payload.menuPatternCode);
-      const items=await Promise.all([...itemIds.map(id=>c.item(id)),...[...new Set(draftIds)].map(async id=>{
-        const item=await c.item(id);
+      const readItem=id=>{
+        const parents=remote.items.categoryList.filter(category=>(category.itemList??[]).some(item=>String(item.itemCode)===id));
+        const native=parents.flatMap(category=>category.itemList??[]).find(item=>String(item.itemCode)===id);
+        return this.withRequestProgress(this.nativeRequestContext('item',id,native?.itemName,parents.length===1?parents[0].categoryName:undefined),()=>c.item(id));
+      };
+      const items=await Promise.all([...itemIds.map(readItem),...[...new Set(draftIds)].map(async id=>{
+        const item=await readItem(id);
         if(String(item.itemCode)!==id||String(item.chainId)!==this.merchantId)throw Error('demae_retired_item_identity_invalid');
         // Stable owned IDs may remain in the library after retirement. A
         // reappearing source must not release them: keep them staged/hidden.
         if(Array.isArray(item.categoryItemLinkList)&&item.categoryItemLinkList.length===0)return item;
-        return draftClient.assertHiddenItem(this.payload.draftPatternCode,id);
+        return this.withRequestProgress(this.nativeRequestContext('item',id,item.itemName),()=>draftClient.assertHiddenItem(this.payload.draftPatternCode,id));
       })]);
       for(const item of items) {
         const sizes=(item.sizeInfoList??[]).filter(size=>String(size.applyStartDate).replaceAll('/','-')<=c.today&&String(size.applyEndDate).replaceAll('/','-')>=c.today);
@@ -255,7 +343,10 @@ export class AuthorityNativeDriver {
       }
       const liveGroupIds=remote.groups.map(row=>String(row.optionGroupCode));
       const knownGroupIds=this.payload.targets.filter(target=>target.kind==='option_group'&&!target.quarantined).flatMap(target=>[...target.mappings,this.payload.authorityState?.[target.sourceKey]].filter(mapping=>mapping?.externalId).map(mapping=>this.id('option_group',mapping.externalId)));
-      const groups=await Promise.all([...new Set([...liveGroupIds,...knownGroupIds])].map(id=>c.group(id)));
+      const groups=await Promise.all([...new Set([...liveGroupIds,...knownGroupIds])].map(id=>{
+        const native=remote.groups.find(group=>String(group.optionGroupCode)===id);
+        return this.withRequestProgress(this.nativeRequestContext('option_group',id,native?.optionGroupName),()=>c.group(id));
+      }));
       const internalCarriers=await readDemaeInternalCarriers(c,this.payload,{
         identities:collectDemaeInternalCarriers(this.payload),groups,liveGroupIds,liveItemIds:itemIds});
       const allGroups=[...new Map([...groups,...[...internalCarriers.values()].map(row=>row.native)]
@@ -331,7 +422,12 @@ export class AuthorityNativeDriver {
     return issues;
   }
   async preflight(payload) {
+    this.invalidateDemaePhaseReuse();
+    this.demaeRelationshipWriteProofPending=false;
+    this.demaeRelationshipWriteProofSnapshot=undefined;
     this.payload=payload;
+    this.completedContentWrites.clear();
+    this.completePreflightSnapshot=false;
     const rows=await this.snapshot(),issues=[];
     if(this.platform==='rocket_now')for(const state of Object.values(payload.migrationState??{}).filter(state=>state.phase!=='complete')) {
       const target=payload.targets.find(target=>target.sourceKey===state.sourceKey&&target.targetId===state.targetId&&!target.quarantined&&!target.archived);
@@ -413,7 +509,22 @@ export class AuthorityNativeDriver {
       }
       issues.push(...this.structureIssues(target,rows,{preflight:true}));
     }
-    return {issues:[...new Map(issues.map(row=>[`${row.sourceKey}:${row.code}`,row])).values()]};
+    const uniqueIssues=[...new Map(issues.map(row=>[`${row.sourceKey}:${row.code}`,row])).values()];
+    this.completePreflightSnapshot=uniqueIssues.length===0;
+    return {issues:uniqueIssues};
+  }
+  contentDiffers(target,before) {
+    return before.name!==target.name
+      ||target.price!==null&&before.price!==target.price
+      ||target.kind==='item'&&before.description!==target.description
+      ||target.kind!=='option_group'&&!this.quantityMatches(target,before);
+  }
+  contentNeedsUpdate(target) {
+    if(!target.mappings.length)return true;
+    return this.ids(target).some(id=>{
+      const before=this.contentSnapshot?.find(row=>row.kind===target.kind&&row.id===id);
+      return !before||this.contentDiffers(target,before);
+    });
   }
   async updateContent(target) {
     // Newly journaled records did not exist in the preflight snapshot.
@@ -448,44 +559,57 @@ export class AuthorityNativeDriver {
       // read initial relationships for the later drift check.
       if(target.kind==='item'&&target.mappings.some(mapping=>mapping.created)
         &&!this.contentSnapshot.some(row=>row.kind==='item'&&row.id===id))this.contentSnapshot.push(structuredClone(before));
-      const nameChanged=before.name!==target.name,priceChanged=target.price!==null&&before.price!==target.price;
-      const descriptionChanged=target.kind==='item'&&before.description!==target.description;
-      const quantityChanged=target.kind!=='option_group'&&!this.quantityMatches(target,before);
-      if(!nameChanged&&!priceChanged&&!descriptionChanged&&!quantityChanged)continue;
+      if(!this.contentDiffers(target,before))continue;
       const patch={name:target.name,...(target.price!==null?{price:target.price}:{}),...(target.kind==='item'?{description:target.description}:{})};
+      const writeKey=`${target.kind}:${id}`,signature=JSON.stringify(patch);
+      if(this.completedContentWrites.get(writeKey)===signature)continue;
+      this.invalidateDemaePhaseReuse();
       if(target.kind==='item')await (this.platform==='rocket_now'?this.client.updateDish(id,patch):this.client.updateItem(id,patch));
       else if(target.kind==='option'&&before.staged)await new DemaeStagedOption(this.client).update({optionCode:id,groupCode:before.parentIds[0],marker:target.marker},patch);
       else if(target.kind==='option')await this.client.updateOption(id,patch);
       else if(target.kind==='option_group')await this.client.updateGroup(id,{name:target.name});
       else await this.client.updateCategory(id,{name:target.name});
+      // A physical option may have several logical source-group occurrences.
+      // Client promises resolve only after independent native readback. Reuse
+      // that successful write within this execution, without replacing the
+      // original drift baseline or the mandatory final native observations.
+      this.completedContentWrites.set(writeKey,signature);
     }
   }
   async updateRelationships(target) {
     if(this.platform==='demae_can'&&target.kind==='item') {
       for(const id of this.ids(target)) {
-        const before=this.contentSnapshot.find(row=>row.kind==='item'&&row.id===id);
-        const current=this.relationshipSnapshot.find(row=>row.kind==='item'&&row.id===id);
-        // Creating isolated option carriers intentionally adds groups to the
-        // existing hidden draft item. Admit only our identified additions;
-        // never accept removals, unknown groups or changes to a selling item.
-        const ownedDraftAdditions=before?.staged&&current?.staged
-          &&before.groupIds.every(groupId=>current.groupIds.includes(groupId))
-          &&current.groupIds.filter(groupId=>!before.groupIds.includes(groupId)).every(groupId=>
-            this.relationshipSnapshot.some(row=>row.staged&&row.kind==='option_group'&&row.id===groupId
-              &&(!row.internalCarrier||row.carrierItemId===id))
-            &&this.managedGroup(groupId,this.relationshipSnapshot));
-        if(!before||!current||!equalIds(before.parentIds,current.parentIds)
-          ||!equalIds(before.groupIds,current.groupIds)&&!ownedDraftAdditions)throw Error('uber_authority_relationship_drift');
-        const parent=this.payload.targets.find(row=>row.targetId===target.parentId&&!row.archived&&!row.quarantined);
-        const categoryChanged=!current.staged&&parent&&!equalIds(current.parentIds,this.ids(parent));
-        if(categoryChanged&&(current.parentIds.length!==1||this.ids(parent).length!==1))throw Error('demae_menu_category_move_ambiguous');
+        const inspect=rows=>{
+          const before=this.contentSnapshot.find(row=>row.kind==='item'&&row.id===id);
+          const current=rows.find(row=>row.kind==='item'&&row.id===id);
+          // Creating isolated option carriers intentionally adds groups to the
+          // existing hidden draft item. Admit only our identified additions;
+          // never accept removals, unknown groups or changes to a selling item.
+          const ownedDraftAdditions=before?.staged&&current?.staged
+            &&before.groupIds.every(groupId=>current.groupIds.includes(groupId))
+            &&current.groupIds.filter(groupId=>!before.groupIds.includes(groupId)).every(groupId=>
+              rows.some(row=>row.staged&&row.kind==='option_group'&&row.id===groupId
+                &&(!row.internalCarrier||row.carrierItemId===id))
+              &&this.managedGroup(groupId,rows));
+          if(!before||!current||!equalIds(before.parentIds,current.parentIds)
+            ||!equalIds(before.groupIds,current.groupIds)&&!ownedDraftAdditions)throw Error('uber_authority_relationship_drift');
+          const parent=this.payload.targets.find(row=>row.targetId===target.parentId&&!row.archived&&!row.quarantined);
+          const categoryChanged=!current.staged&&parent&&!equalIds(current.parentIds,this.ids(parent));
+          if(categoryChanged&&(current.parentIds.length!==1||this.ids(parent).length!==1))throw Error('demae_menu_category_move_ambiguous');
+          return {current,parent,categoryChanged};
+        };
+        let {current,parent,categoryChanged}=inspect(this.demaeRelationshipWriteProofSnapshot??this.relationshipSnapshot);
         if(equalIds(current.groupIds,this.groupIds(target))&&!categoryChanged)continue;
-        if(current.groupIds.some(id=>!this.managedGroup(id,this.relationshipSnapshot)))throw Error('uber_authority_unowned_item_group');
+        const writeRows=await this.ensureDemaeRelationshipWriteProof();
+        ({current,parent,categoryChanged}=inspect(writeRows??this.relationshipSnapshot));
+        if(equalIds(current.groupIds,this.groupIds(target))&&!categoryChanged)continue;
+        if(current.groupIds.some(id=>!this.managedGroup(id,writeRows??this.relationshipSnapshot)))throw Error('uber_authority_unowned_item_group');
         const links=[];
         for(const groupId of this.groupIds(target)) {
           const group=await this.client.group(groupId);
           links.push({chainId:Number(this.merchantId),optionGroupCode:groupId,optionGroupName:group.detail.optionGroupName,dispOrder:links.length+1});
         }
+        this.invalidateDemaePhaseReuse();
         await this.client.updateItem(id,{groupLinks:links,...(categoryChanged?{categoryLinks:[{categoryCode:this.ids(parent)[0]}],allowCategoryMove:true}:{})});
       }
       return;
@@ -493,9 +617,22 @@ export class AuthorityNativeDriver {
     if(this.platform==='demae_can'&&target.kind==='option_group') {
       const expected=this.activeChildIds(target,this.relationshipSnapshot);
       for(const id of this.ids(target)) {
+        const cached=this.demaeRelationshipSnapshotReusable
+          ?this.relationshipSnapshot.filter(row=>row.kind==='option_group'&&row.id===id):[];
+        // Snapshot childIds contains only today's periods. Preserve the old
+        // all-period membership check, including future/expired native rows.
+        if(cached.length===1&&Array.isArray(cached[0].native?.options)) {
+          const current=[...new Set(cached[0].native.options.map(row=>String(row.optionCode)))];
+          this.assertDemaeOwnedGroupMembers(current);
+          if(equalIds(current,expected))continue;
+        }
+        await this.ensureDemaeRelationshipWriteProof();
         const actual=await this.client.group(id),current=[...new Set(actual.options.map(row=>String(row.optionCode)))];
-        if(current.some(id=>!this.payload.targets.some(row=>row.kind==='option'&&!row.quarantined&&this.ids(row).includes(id))))throw Error('uber_authority_unowned_group_member');
-        if(!equalIds(current,expected))await this.client.updateGroup(id,{optionCodes:expected});
+        this.assertDemaeOwnedGroupMembers(current);
+        if(!equalIds(current,expected)) {
+          this.invalidateDemaePhaseReuse();
+          await this.client.updateGroup(id,{optionCodes:expected});
+        }
       }
       return;
     }
@@ -538,12 +675,23 @@ export class AuthorityNativeDriver {
       return;
     }
     if(target.kind==='category') {
-      const rows=this.categorySnapshot??await this.snapshot();
-      const expected=this.categoryItemIds(target,rows);
+      let rows=this.categorySnapshot??await this.snapshot();
+      if(this.platform==='demae_can')this.categorySnapshot=rows;
       for(const id of this.ids(target)) {
-        const actual=rows.find(row=>row.kind==='category'&&row.id===id);
+        let expected=this.categoryItemIds(target,rows);
+        let actual=rows.find(row=>row.kind==='category'&&row.id===id);
         if(!actual||!equalIds([...this.retainedCategoryItemIds(actual,rows)].sort(),[...expected].sort()))throw Error(`uber_authority_relationship_drift:${target.sourceKey}`);
         if(equalIds(this.retainedCategoryItemIds(actual,rows),expected))continue;
+        if(this.platform==='demae_can') {
+          // Reused rows can only authorize a no-op. A real category write
+          // retains a fresh complete private-carrier/hidden-item barrier.
+          this.invalidateDemaePhaseReuse();
+          rows=await this.snapshot();
+          expected=this.categoryItemIds(target,rows);
+          actual=rows.find(row=>row.kind==='category'&&row.id===id);
+          if(!actual||!equalIds([...this.retainedCategoryItemIds(actual,rows)].sort(),[...expected].sort()))throw Error(`uber_authority_relationship_drift:${target.sourceKey}`);
+          if(equalIds(this.retainedCategoryItemIds(actual,rows),expected))continue;
+        }
         // Hidden retired Rocket items can retain their category relationship.
         // Never remove those records or reopen them just to sort active items.
         const retained=actual.childIds.filter(id=>!expected.includes(String(id)));
@@ -559,8 +707,28 @@ export class AuthorityNativeDriver {
   }
   async retire(target) {
     for(const id of this.ids(target)) {
+      if(this.platform==='demae_can'&&target.kind==='item'&&target.archived===true) {
+        try {
+          const [catalog,item]=await Promise.all([this.client.catalog(),this.client.item(id)]);
+          if(demaeUnlinkedItemProof(catalog,item,id,this.merchantId))continue;
+          if(typeof this.client.retirementNoop==='function'&&await this.client.retirementNoop('item',id,{catalog,item})===true)continue;
+        } catch {
+          // A failed read is not absence. Preserve the original complete
+          // snapshot/private-carrier barrier and native writer checks below.
+        }
+      }
+      if(this.platform==='rocket_now'&&this.completePreflightSnapshot&&target.archived===true
+        &&this.payload.targets.includes(target)&&Array.isArray(this.contentSnapshot)) {
+        const before=this.contentSnapshot.filter(row=>row.kind===target.kind&&row.id===id);
+        // These records already need no mutation. A later external exposure or
+        // reappearance must still fail the independent final read; it is not
+        // permission to rewrite another actor's newer state during retirement.
+        if(['item','category','option_group'].includes(target.kind)&&(!before.length||before.length===1&&before[0].hidden===true)
+          ||target.kind==='option'&&!before.length)continue;
+      }
       if(this.platform==='demae_can'&&['option','option_group','category'].includes(target.kind)
         &&typeof this.client.retirementNoop==='function'&&await this.client.retirementNoop(target.kind,id)===true)continue;
+      this.invalidateDemaePhaseReuse();
       const row=(await this.snapshot()).find(row=>row.kind===target.kind&&row.id===id);
       if(target.kind==='option') {await this.client.retireOption(id);continue;}
       if(this.platform==='demae_can') {
@@ -596,6 +764,7 @@ export class AuthorityNativeDriver {
       const rows=await this.snapshot();
       if(!equalIds(rows.filter(row=>row.kind==='category').map(row=>String(row.id)),current))throw Error('uber_authority_category_order_identity_mismatch');
     }
+    this.invalidateDemaePhaseReuse();
     await this.client.reorderCategories(ordered);
   }
   async observe(target) {
@@ -608,17 +777,45 @@ export class AuthorityNativeDriver {
     });
   }
   async beginPhase(phase,reportProgress) {
-    if(phase==='categories')this.categorySnapshot=await this.snapshot();
+    // Rocket category membership/order is carried by its catalog. Retained
+    // retired dishes still need fresh hidden-state proof; Demae also needs its
+    // staged/hidden-item and private-carrier proofs from the complete snapshot.
+    if(phase==='categories') {
+      const retainedRetirements=this.payload.targets.some(target=>target.kind==='item'&&target.archived&&!target.quarantined&&target.mappings.length);
+      this.categorySnapshot=this.platform==='demae_can'&&this.demaeRelationshipSnapshotReusable
+        ?this.relationshipSnapshot:await this.snapshot(this.platform==='rocket_now'&&!retainedRetirements?{itemDetails:false}:{});
+    }
     if(phase==='relationships') {
+      this.invalidateDemaePhaseReuse();
+      this.demaeRelationshipWriteProofPending=false;
+      this.demaeRelationshipWriteProofSnapshot=undefined;
+      let unchangedDemaeRows;
       if(this.platform==='demae_can') {
         const rows=await this.snapshot();
+        const groups=this.payload.targets.filter(row=>row.kind==='option_group'&&!row.archived&&!row.quarantined);
+        // The fresh snapshot already read every exact native group. If all
+        // memberships match, there is no add-before-remove work: avoid reading
+        // those groups a second time just to establish the same fact. The
+        // same fresh complete rows can also serve the no-op relationship
+        // checks. They never replace the independent final verification.
+        const membershipUnchanged=groups.every(target=>{
+          const ids=this.ids(target);
+          return ids.length>0&&new Set(ids).size===ids.length&&ids.every(id=>{
+            const actual=rows.filter(row=>row.kind==='option_group'&&row.id===id);
+            const expected=this.activeChildIds(target,rows);
+            return actual.length===1&&equalIds([...actual[0].childIds].sort(),[...expected].sort());
+          });
+        });
+        if(membershipUnchanged)unchangedDemaeRows=rows;
         // Add existing, independently listed options at their destination
         // BEFORE dropping any old association. This keeps stockout records
         // attached throughout a move. Permanently staged options stay out.
-        for(const target of this.payload.targets.filter(row=>row.kind==='option_group'&&!row.archived&&!row.quarantined))for(const id of this.ids(target)) {
-          const actual=await this.client.group(id),current=[...new Set(actual.options.map(row=>String(row.optionCode)))];
-          const added=this.activeChildIds(target,rows).filter(id=>!current.includes(id));
-          if(added.length)await this.client.updateGroup(id,{optionCodes:[...current,...added]});
+        if(!membershipUnchanged)for(const target of groups)for(const id of this.ids(target)) {
+          await this.withTargetProgress(target,async()=>{
+            const actual=await this.client.group(id),current=[...new Set(actual.options.map(row=>String(row.optionCode)))];
+            const added=this.activeChildIds(target,rows).filter(id=>!current.includes(id));
+            if(added.length)await this.client.updateGroup(id,{optionCodes:[...current,...added]});
+          });
         }
       }
       for(const move of this.plannedMoves??[]) {
@@ -628,15 +825,27 @@ export class AuthorityNativeDriver {
         if(this.platform!=='rocket_now'||this.payload.optionMigrationPolicy!=='preserve_stock'||typeof reportProgress!=='function')throw Error('uber_authority_migration_not_authorized');
         const target=this.payload.targets.find(row=>row.sourceKey===move.sourceKey);
         const {key}=rocketMigrationIdentity(this.payload.sourceId,target.sourceKey,move.id,move.to);
-        await migrateRocketOption({client:this.client,sourceId:this.payload.sourceId,target,fromId:move.id,toParentId:move.to,state:this.payload.migrationState?.[key],save:async state=>{
-          await reportProgress({phase:'migrating',sourceKey:target.sourceKey,authorityMigration:state});
+        await this.withTargetProgress(target,()=>migrateRocketOption({client:this.client,sourceId:this.payload.sourceId,target,fromId:move.id,toParentId:move.to,state:this.payload.migrationState?.[key],save:async state=>{
+          await reportProgress({phase:'migrating',...authorityTargetProgress(target,this.payload),authorityMigration:state});
           this.payload.migrationState??={};this.payload.migrationState[key]=state;
           if(state.phase==='complete')target.mappings=[...target.mappings.filter(mapping=>mapping.externalId!==state.fromExternalId&&this.id('option',mapping.externalId)!==state.newId),
             {externalId:`sub_checkbox_${state.toParentId}_${state.newId}`,externalParentId:state.toParentId,migrated:true}];
-        }});
+        }}));
       }
-      this.relationshipSnapshot=await this.snapshot();
+      this.relationshipSnapshot=unchangedDemaeRows??await this.snapshot();
+      this.demaeRelationshipSnapshotReusable=this.platform==='demae_can';
+      this.demaeRelationshipWriteProofPending=Boolean(unchangedDemaeRows);
     }
-    if(phase==='verifying')this.observationSnapshot=await this.snapshot();
+    if(phase==='verifying') {
+      this.observationSnapshot=await this.snapshot();
+      // A no-op can reuse earlier rows, but later unowned membership in any
+      // native period must still fail the independent final native boundary.
+      // childIds alone omits future/expired periods and cannot prove this.
+      if(this.platform==='demae_can')for(const target of this.payload.targets.filter(row=>row.kind==='option_group'&&!row.archived&&!row.quarantined)) {
+        for(const id of this.ids(target))for(const row of this.observationSnapshot.filter(row=>row.kind==='option_group'&&row.id===id)) {
+          if(Array.isArray(row.native?.options))this.assertDemaeOwnedGroupMembers(row.native.options.map(option=>String(option.optionCode)));
+        }
+      }
+    }
   }
 }

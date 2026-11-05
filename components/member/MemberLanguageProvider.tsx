@@ -31,15 +31,17 @@ export function normalizeMemberLanguage(value?: string | null): MemberLanguage {
 
 function browserLanguage(): MemberLanguage {
   if (typeof navigator === "undefined") return "ja";
-  const languages = [navigator.language, ...(navigator.languages ?? [])]
-    .map((language) => language.toLowerCase())
-    .filter(Boolean);
-  if (languages.some((language) => language === "zh-hant" || language.startsWith("zh-hant-") || language === "zh-tw" || language.startsWith("zh-tw-") || language === "zh-hk" || language.startsWith("zh-hk-"))) return "zh-Hant";
-  if (languages.some((language) => language === "zh" || language.startsWith("zh-"))) return "zh";
-  if (languages.some((language) => language === "ko" || language.startsWith("ko-"))) return "ko";
-  if (languages.some((language) => language === "vi" || language.startsWith("vi-"))) return "vi";
-  if (languages.some((language) => language === "ne" || language.startsWith("ne-"))) return "ne";
-  if (languages.some((language) => language === "en" || language.startsWith("en-"))) return "en";
+  const languages = navigator.languages?.length ? navigator.languages : [navigator.language];
+  for (const value of languages) {
+    const language = value.trim().toLowerCase();
+    if (language === "ja" || language.startsWith("ja-")) return "ja";
+    if (language === "zh-hant" || language.startsWith("zh-hant-") || language === "zh-tw" || language.startsWith("zh-tw-") || language === "zh-hk" || language.startsWith("zh-hk-")) return "zh-Hant";
+    if (language === "zh" || language.startsWith("zh-")) return "zh";
+    if (language === "ko" || language.startsWith("ko-")) return "ko";
+    if (language === "vi" || language.startsWith("vi-")) return "vi";
+    if (language === "ne" || language.startsWith("ne-")) return "ne";
+    if (language === "en" || language.startsWith("en-")) return "en";
+  }
   return "ja";
 }
 

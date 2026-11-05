@@ -44,9 +44,8 @@ export function OsStoreContextPicker() {
   if (!canSelectStore) return null;
 
   async function changeStore(storeId: string) {
-    setSelectedStoreId(storeId);
+    if (isChanging || !storeId || storeId === selectedStoreId) return;
     setError("");
-    if (!storeId) return;
 
     setIsChanging(true);
     const response = await fetch("/api/os/store-context", {
@@ -74,6 +73,7 @@ export function OsStoreContextPicker() {
       <select
         aria-label="OS全体の対象店舗"
         aria-invalid={Boolean(error)}
+        aria-busy={isChanging}
         disabled={isChanging || stores.length === 0}
         value={selectedStoreId}
         onChange={(event) => void changeStore(event.target.value)}

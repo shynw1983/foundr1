@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { lockBodyScroll } from "../../../lib/body-scroll-lock";
 
 /** Focus and scroll containment for store overlays, including narrow-screen panels. */
 export function useStoreDialog(open: boolean, onClose: () => void, mediaQuery?: string) {
@@ -14,8 +15,7 @@ export function useStoreDialog(open: boolean, onClose: () => void, mediaQuery?: 
     const panel = ref.current;
     if (!panel) return;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const releaseScroll = lockBodyScroll();
     const controls = () => Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]'))
       .filter((element) => element.getClientRects().length > 0);
     controls()[0]?.focus({ preventScroll: true });
@@ -41,7 +41,7 @@ export function useStoreDialog(open: boolean, onClose: () => void, mediaQuery?: 
     document.addEventListener("keydown", onKeyDown);
     media?.addEventListener("change", onResize);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      releaseScroll();
       document.removeEventListener("keydown", onKeyDown);
       media?.removeEventListener("change", onResize);
       trigger?.focus({ preventScroll: true });

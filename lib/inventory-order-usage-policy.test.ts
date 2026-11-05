@@ -280,3 +280,50 @@ test("explicit recipes with no inputs are legal no-usage mappings and refunded s
   assert.equal(changedScope.lines.length, 0);
   assert.ok(changedScope.issues.some((issue) => issue.code === "recipe_product_scope_changed"));
 });
+
+
+test("POS product-backed choices consume true product recipes once alongside standalone sales", () => {
+  const drinkId = uuid(61), standaloneId = uuid(62);
+  const linkedRow = raw({ quantity: 1, measuredQuantity: 300, measuredUnit: 'g',
+    customizations: [{ optionIds: [], linkedItems: [
+      { menuCatalogItemId: drinkId, quantity: 1 }, { menuCatalogItemId: drinkId, quantity: 1 }
+    ] }] });
+  const standaloneRow = raw({ sourceItemId: standaloneId, menuCatalogItemId: drinkId, quantity: 1 });
+  const normalized = policy.normalizeInventoryOrderSource([linkedRow, standaloneRow], 'store_pos');
+  assert.equal(normalized.identityConfidence, 'exact');
+  assert.deepEqual(JSON.parse(JSON.stringify(normalized.items[0].linkedItems)), [{ id: drinkId, quantity: 2 }]);
+  assert.equal(normalized.items[0].options.length, 0, 'a product ID must never become an option recipe target');
+  const drinks: InventoryUsageRecipe = { ...recipe, targetId: drinkId, id: uuid(63), versionId: uuid(64) };
+  const result = plan({ source: normalized, recipes: [recipe, drinks] });
+  assert.equal(result.lines.length, 3);
+  assert.equal(result.lines.map(line => line.quantity).join(','), '-1,-2,-1');
+  assert.equal(result.lines.at(-1)?.afterQuantity, 16);
+  assert.equal(result.lines[1].exposure, 2, 'parent grams must not multiply fixed drinks');
+});
+
+test("a refunded parent excludes its linked products and a measured linked recipe is never guessed", () => {
+  const drinkId = uuid(71);
+  const customizations = [{ optionIds: [], linkedItems: [{ menuCatalogItemId: drinkId, quantity: 3 }] }];
+  const refunded = source({ quantity: 1, refundStatus: 'refunded', customizations });
+  const drink = { ...recipe, targetId: drinkId, id: uuid(72), versionId: uuid(73) };
+  assert.equal(plan({ source: refunded, recipes: [recipe, drink] }).lines.length, 0);
+  const measured = { ...drink, snapshot: { ...drink.snapshot, basis: 'measured' as const, measuredUnit: 'g' } };
+  const result = plan({ source: source({ quantity: 1, measuredQuantity: 300, measuredUnit: 'g', customizations }), recipes: [recipe, measured] });
+  assert.equal(result.lines.length, 1);
+  assert(result.issues.some(issue => issue.code === 'measured_basis_unknown' && issue.details.linkedProduct === true));
+});
+
+test("linked choices reject invalid quantities and untrusted channel identities before planning", () => {
+  const drinkId = uuid(81);
+  for (const linked of [{ menuCatalogItemId: 'same-name', quantity: 1 }, { menuCatalogItemId: drinkId, quantity: -1 },
+    { menuCatalogItemId: drinkId, quantity: 1.5 }, { menuCatalogItemId: drinkId, quantity: '2' }]) {
+    const normalized = source({ customizations: [{ optionIds: [], linkedItems: [linked] }] });
+    assert.equal(normalized.identityConfidence, 'unresolved');
+    assert.equal(plan({ source: normalized }).lines.length, 0);
+  }
+  for (const channel of ['maamaa_web', 'table_qr', 'uber_eats']) {
+    const normalized = policy.normalizeInventoryOrderSource([raw({ customizations: [{ optionIds: [], linkedItems: [{ menuCatalogItemId: drinkId, quantity: 1 }] }] })], channel);
+    assert.equal(normalized.identityConfidence, 'unresolved');
+    assert.equal(plan({ source: normalized }).lines.length, 0);
+  }
+});

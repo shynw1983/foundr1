@@ -11,6 +11,7 @@ export type RolePermissionDefinition = {
   category: string;
   defaultRoles: ConfigurableRole[];
   lockedRoles?: ConfigurableRole[];
+  availableRoles?: ConfigurableRole[];
   navPaths?: string[];
 };
 
@@ -27,20 +28,30 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
   {
     key: "module.orders",
     label: "発注・購入管理",
-    description: "発注依頼、購入管理、履歴、証憑、現場記録を表示します。",
+    description: "補充依頼の確認、発注依頼、購入管理、履歴、証憑、現場記録を表示します。",
     category: "モジュール",
     defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
     lockedRoles: ["owner"],
-    navPaths: ["/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback"]
+    navPaths: ["/os/replenishment", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback"]
   },
   {
     key: "module.analytics",
     label: "経営分析",
     description: "売上、人件費、原価、経費、月次損益を表示します。",
     category: "モジュール",
-    defaultRoles: ["owner", "manager"],
+    defaultRoles: ["owner", "manager", "store_owner"],
     lockedRoles: ["owner"],
-    navPaths: ["/os/analytics", "/os/analytics/sales", "/os/analytics/menu-ranking", "/os/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit", "/os/analytics/competitors"]
+    navPaths: ["/os/analytics", "/os/analytics/sales", "/os/analytics/menu-ranking", "/os/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"]
+  },
+  {
+    key: "module.competitors",
+    label: "競合メニュー監視",
+    description: "本部共有の競合調査と監視設定を表示します。",
+    category: "本部管理",
+    defaultRoles: ["owner", "manager"],
+    availableRoles: ["owner", "manager"],
+    lockedRoles: ["owner"],
+    navPaths: ["/os/analytics/competitors"]
   },
   {
     key: "module.timecard",
@@ -72,11 +83,40 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
   {
     key: "module.masterData",
     label: "本部共有データ",
-    description: "店舗・ブランド、発注先、商品比較などの本部共有データを表示します。",
+    description: "ブランド、発注先、商品比較などの本部共有データを表示します。",
     category: "モジュール",
     defaultRoles: ["owner", "manager"],
     lockedRoles: ["owner"],
-    navPaths: ["/os/stores", "/os/suppliers", "/os/product-comparisons"]
+    availableRoles: ["owner", "manager"],
+    navPaths: ["/os/suppliers", "/os/product-comparisons"]
+  },
+  {
+    key: "module.storeSettings",
+    label: "所属店舗の設定",
+    description: "管理範囲内の店舗設定を表示します。本部のブランド・発注先管理は含みません。",
+    category: "店舗運営",
+    defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
+    availableRoles: ["owner", "manager", "store_owner", "store_manager"],
+    lockedRoles: ["owner"],
+    navPaths: ["/os/stores"]
+  },
+  {
+    key: "stores.manageSettings",
+    label: "所属店舗の運営設定変更",
+    description: "所属店舗の営業時間、予約メモ、打刻地点、給与計算・シフト提出期限を変更できます。決済・会社・ブランド設定は含みません。",
+    category: "店舗運営",
+    defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
+    availableRoles: ["owner", "manager", "store_owner", "store_manager"],
+    lockedRoles: ["owner"]
+  },
+  {
+    key: "stores.manageMasterData",
+    label: "店舗・ブランドの本部設定変更",
+    description: "店舗・ブランドの作成・削除、会社情報、決済連携などの本部設定を変更できます。",
+    category: "本部管理",
+    defaultRoles: ["owner", "manager"],
+    availableRoles: ["owner", "manager"],
+    lockedRoles: ["owner"]
   },
   {
     key: "module.menu",
@@ -89,12 +129,21 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
   },
   {
     key: "store.inventory",
-    label: "店舗の在庫確認・入庫",
-    description: "所属店舗で在庫巡回、実数棚卸、異常報告、入庫を実行できます。商品・配合・設定の管理権限は含みません。",
+    label: "店舗の在庫確認・補充依頼・入庫",
+    description: "所属店舗で在庫巡回、実数棚卸、異常報告、補充依頼、入庫を実行できます。購入管理や商品・配合・設定の管理権限は含みません。",
     category: "店舗運営",
     defaultRoles: ["owner", "manager", "store_owner", "store_manager", "staff", "store_terminal"],
     lockedRoles: ["owner"],
-    navPaths: ["/store/inventory", "/store/receiving"]
+    navPaths: ["/store/inventory", "/store/replenishment", "/store/receiving"]
+  },
+  {
+    key: "store.theme.manage",
+    label: "Store テーマカラーの変更",
+    description: "権限のある店舗で Store の共有テーマカラーを変更できます。スタッフ・店舗端末には付与できません。",
+    category: "店舗運営",
+    defaultRoles: ["owner"],
+    lockedRoles: ["owner"],
+    navPaths: ["/store/settings/appearance"]
   },
   {
     key: "module.inventory",
@@ -119,7 +168,7 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     label: "POS",
     description: "POS 管理画面を表示します。",
     category: "モジュール",
-    defaultRoles: ["owner", "manager"],
+    defaultRoles: ["owner", "manager", "store_owner"],
     lockedRoles: ["owner"],
     navPaths: ["/os/pos", "/os/pos/reconciliation", "/os/pos/table-order"]
   },
@@ -137,7 +186,8 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     label: "スタッフ作成・編集",
     description: "許可された範囲のスタッフを作成、編集、削除できます。未許可の場合は閲覧のみです。",
     category: "操作",
-    defaultRoles: ["owner", "manager"],
+    defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
+    availableRoles: ["owner", "manager", "store_owner", "store_manager"],
     lockedRoles: ["owner"]
   },
   {
@@ -162,6 +212,14 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     description: "POS 税率、レシート、プリンタ、値引き、客面表示を編集できます。",
     category: "POS",
     defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
+    lockedRoles: ["owner"]
+  },
+  {
+    key: "pos.operate",
+    label: "店舗 POS 会計",
+    description: "所属店舗で POS の会計担当者として操作できます。OS の POS 管理画面への権限は含みません。",
+    category: "POS",
+    defaultRoles: ["owner", "manager", "store_owner", "store_manager", "staff", "store_terminal"],
     lockedRoles: ["owner"]
   },
   {
@@ -193,7 +251,7 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     label: "経費編集",
     description: "月次経費と経費レシートを登録、編集、削除、確認できます。",
     category: "経営分析",
-    defaultRoles: ["owner", "manager"],
+    defaultRoles: ["owner", "manager", "store_owner"],
     lockedRoles: ["owner"]
   },
   {
@@ -233,7 +291,10 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
 const permissionByKey = new Map(rolePermissionDefinitions.map((definition) => [definition.key, definition]));
 
 function isPermissionAvailableForRole(role: ConfigurableRole, permissionKey: string) {
-  if (role === "staff") return permissionKey === "module.staffPortal" || permissionKey === "store.inventory";
+  const definition = permissionByKey.get(permissionKey);
+  if (definition?.availableRoles && !definition.availableRoles.includes(role)) return false;
+  if (permissionKey === "store.theme.manage") return ["owner", "manager", "store_owner", "store_manager"].includes(role);
+  if (role === "staff") return permissionKey === "module.staffPortal" || permissionKey === "store.inventory" || permissionKey === "pos.operate";
   return true;
 }
 
@@ -281,12 +342,12 @@ export function clearRolePermissionCache(role?: string) {
   permissionCache.clear();
 }
 
-export async function getPermissionsForRole(role: string) {
+export async function getPermissionsForRole(role: string, options: { fresh?: boolean } = {}) {
   const normalizedRole = normalizeConfigurableRole(role);
   if (!normalizedRole) return new Set<string>();
 
   const cached = permissionCache.get(normalizedRole);
-  if (cached && cached.expiresAt > Date.now()) return new Set(cached.permissions);
+  if (!options.fresh && cached && cached.expiresAt > Date.now()) return new Set(cached.permissions);
 
   const rows = await sql`
     select permission_key as "permissionKey", is_enabled as "isEnabled"
@@ -298,7 +359,9 @@ export async function getPermissionsForRole(role: string) {
 
   for (const definition of rolePermissionDefinitions) {
     if (!isPermissionAvailableForRole(normalizedRole, definition.key)) continue;
-    const enabled = saved.has(definition.key) ? saved.get(definition.key) === true : definition.defaultRoles.includes(normalizedRole);
+    const fallbackKey = definition.key === "module.competitors" ? "module.analytics" : definition.key;
+    const enabled = saved.has(definition.key) ? saved.get(definition.key) === true
+      : saved.has(fallbackKey) ? saved.get(fallbackKey) === true : definition.defaultRoles.includes(normalizedRole);
     if (enabled || definition.lockedRoles?.includes(normalizedRole)) permissions.add(definition.key);
   }
 
@@ -322,9 +385,12 @@ export async function getAllRolePermissions() {
     permissions: rolePermissionDefinitions.map((definition) => {
       const savedKey = `${role}:${definition.key}`;
       const available = isPermissionAvailableForRole(role, definition.key);
-      const enabled = available && (saved.has(savedKey) ? saved.get(savedKey) === true : definition.defaultRoles.includes(role));
+      const fallbackKey = `${role}:${definition.key === "module.competitors" ? "module.analytics" : definition.key}`;
+      const enabled = available && (saved.has(savedKey) ? saved.get(savedKey) === true
+        : saved.has(fallbackKey) ? saved.get(fallbackKey) === true : definition.defaultRoles.includes(role));
       return {
         key: definition.key,
+        available,
         enabled: enabled || (available && Boolean(definition.lockedRoles?.includes(role))),
         locked: Boolean(definition.lockedRoles?.includes(role)) || !available
       };
@@ -332,8 +398,8 @@ export async function getAllRolePermissions() {
   }));
 }
 
-export async function roleHasPermission(role: string, permissionKey: string) {
-  return (await getPermissionsForRole(role)).has(permissionKey);
+export async function roleHasPermission(role: string, permissionKey: string, options: { fresh?: boolean } = {}) {
+  return (await getPermissionsForRole(role, options)).has(permissionKey);
 }
 
 export function getNavPathsForPermissions(permissionKeys: Iterable<string>) {
@@ -344,4 +410,12 @@ export function getNavPathsForPermissions(permissionKeys: Iterable<string>) {
   }
   if (Array.from(paths).some((path) => path.startsWith("/os/"))) paths.add("/os");
   return Array.from(paths);
+}
+
+export function isPermittedOsPagePath(pathname: string, permittedPaths: Set<string>) {
+  const matches = rolePermissionDefinitions.flatMap(definition => definition.navPaths ?? [])
+    .filter(path => path !== "/os" && (pathname === path || pathname.startsWith(`${path}/`)))
+    .sort((a, b) => b.length - a.length);
+  if (matches.length) return permittedPaths.has(matches[0]);
+  return false;
 }

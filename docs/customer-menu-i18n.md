@@ -8,6 +8,10 @@ Foundr1 OS is the shared data/API authority for customer-facing menu data. Brand
 
 The backoffice UI may stay Japanese for staff operation, but anything shown to customers must be rendered from stable menu/member/order IDs and translated display data from Foundr1 OS.
 
+An independent store dine-in menu is also OS-owned catalog data. Its local item/group/option IDs and `displayNames` supply POS customer display and the corresponding order/receipt snapshots; the brand public menu API continues to expose the brand catalog. Copying a source product may copy its existing translations. Changing a store-owned source label clears those copied translations until they are reviewed, allowing the normal Japanese/source fallback instead of showing the previous brand label in another language. Do not place these local menu names in website or POS UI dictionaries.
+
+New store-only products and unified addon groups start with their manager-entered Japanese name and empty `displayNames`; they follow the same fallback rules. Moving an existing ingredient retains its translations and source identity. Category and group names authored in the store catalog are menu data, while editor actions such as creating a category or importing a brand product remain local UI translations. A `storeDineInOnly` canonical product must not become visible through a store-filtered public menu request or a compatibility menu reader.
+
 ## Language Source
 
 - If no member/customer language is known, show Japanese.

@@ -102,3 +102,38 @@ export function confirmedUberRemovals(previous: UberSourceCatalog | null, curren
   const independent = Date.parse(current.capturedAt) - Date.parse(previous.capturedAt) >= 60_000;
   return {pending, confirmed: independent ? pending.filter(key => priorMissing.includes(key)) : []};
 }
+
+// Compare structural edges, not sale state. An option can still exist in
+// Uber's library while no longer being selectable in its original group.
+export function uberStructuralRemovals(previous: UberSourceCatalog | null, current: UberSourceCatalog) {
+  if (!previous) return [];
+  const edges = (catalog: UberSourceCatalog) => {
+    const out = new Map<string, string>();
+    const names = new Map([...catalog.entities, ...catalog.groups, ...catalog.categories].map(row=>[row.id,row.name]));
+    for (const row of [...catalog.entities, ...catalog.groups, ...catalog.categories, ...catalog.sections]) {
+      const kind = 'groupIds' in row ? 'entity' : 'optionIds' in row ? 'group' : 'itemIds' in row ? 'category' : 'section';
+      out.set(JSON.stringify([kind, row.id]), row.name);
+      const ids = 'groupIds' in row ? row.groupIds : 'optionIds' in row ? row.optionIds : 'itemIds' in row ? row.itemIds : row.categoryIds;
+      for (const id of ids) out.set(JSON.stringify([kind, row.id, id]), `${row.name} → ${names.get(id) ?? id}`);
+    }
+    return out;
+  };
+  const next = edges(current);
+  return [...edges(previous)].filter(([key]) => !next.has(key)).map(([key, name]) => ({key, name}));
+}
+
+export type UberRemovalReview = {
+  token: string; revision: number; hash: string; observedAt: string;
+  targets: {key: string; name: string}[];
+  approvedBy?: string; approvedAt?: string;
+};
+
+export function matchesUberRemovalReview(review: UberRemovalReview | undefined, revision: number, hash: string, targets: UberRemovalReview['targets']) {
+  return Boolean(review?.revision===revision && review.hash===hash
+    && JSON.stringify(review.targets.map(row=>row.key).sort())===JSON.stringify(targets.map(row=>row.key).sort()));
+}
+
+export function canApplyUberRemovalReview(review: UberRemovalReview | undefined, capturedAt: string) {
+  if (!review?.approvedBy || !review.approvedAt) return false;
+  return Date.parse(capturedAt)>=Math.max(Date.parse(review.observedAt)+60_000,Date.parse(review.approvedAt));
+}

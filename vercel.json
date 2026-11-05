@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/replenishment-demands",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/uber-menu-sync",
       "schedule": "0 3 * * *"
     },
@@ -23,6 +27,22 @@
     {
       "path": "/api/cron/store-order-push",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/inventory-sync-attention",
+      "schedule": "* * * * *"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/downloads/studio/latest.apk",
+      "destination": "/downloads/studio/foundr1-studio-1.13.0.apk",
+      "permanent": false
+    },
+    {
+      "source": "/downloads/foundr1-studio-latest.apk",
+      "destination": "/downloads/studio/foundr1-studio-1.13.0.apk",
+      "permanent": false
     }
   ]
 }

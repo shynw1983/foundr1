@@ -53,7 +53,7 @@ try{
  await page.evaluate(()=>{Object.defineProperty(navigator,'canShare',{configurable:true,value:()=>true});Object.defineProperty(navigator,'share',{configurable:true,value:async payload=>{window.__shared=payload.files.map(f=>({name:f.name,type:f.type,size:f.size}))}});Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.__caption=text}}});});
  await click('画像を共有');await page.waitForFunction(()=>window.__shared?.length===1);assert.equal(await page.evaluate(()=>window.__shared[0].type),'image/jpeg');
  await page.evaluate(()=>{Object.defineProperty(navigator,'share',{configurable:true,value:async()=>{throw new DOMException('cancel','AbortError')}})});await click('画像を共有');await page.waitForFunction(()=>!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='画像を保存')?.disabled);
- await page.type('textarea','今日のまぁ麻');await click('投稿文をコピー');await page.waitForFunction(()=>window.__caption==='今日のまぁ麻');
+ await page.type('textarea[aria-label="投稿文（画像には入りません）"]','今日のまぁ麻');await click('投稿文をコピー');await page.waitForFunction(()=>window.__caption==='今日のまぁ麻');
  await click('構図をリセット');await (await page.$('input[type=range]')).focus();for(let i=0;i<10;i++)await page.keyboard.press('ArrowRight');assert.ok(Number(await page.$eval('input[type=range]',e=>e.value))>1);
  const rect=await page.$eval('canvas',e=>{const r=e.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}});await page.mouse.move(rect.x,rect.y);await page.mouse.down();await page.mouse.move(rect.x+25,rect.y+20,{steps:4});await page.mouse.up();
  await click('プレビュー');assert.equal(await page.$eval('input[type=range]',e=>e.disabled),true);await click('編集に戻る');

@@ -2,6 +2,8 @@ import { sql } from "./db";
 import { resolveCustomerStoreDisplayName } from "./customer-display-names";
 import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "./store-staff-presence";
 import { getStoreReservationWindowsForCurrentBusinessDay, type ReservationWindow } from "./store-reservation-windows";
+import { getStoreCashBusinessDayState } from "./store-business-hours";
+import { applyMaamaaReceptionWindowPolicy } from "./maamaa-reception-policy";
 
 export type MaamaaPricedOption = {
   id: string;
@@ -181,6 +183,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
       where brand_id = ${brand.id}
         and item_kind = 'buildable_product'
         and is_active = true
+        and coalesce(variable_schema->>'storeDineInOnly', 'false') <> 'true'
       order by updated_at desc
       limit 1
     `,
@@ -243,6 +246,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
     where brand_id = ${brand.id}
       and item_kind = 'fixed_product'
       and is_active = true
+      and coalesce(variable_schema->>'storeDineInOnly', 'false') <> 'true'
       and variable_schema->>'source' = 'maamaa-malatang-menu'
       and variable_schema->>'preset' = 'true'
     order by sort_order, name
@@ -375,10 +379,13 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
     }
   );
   const reservationWindows = selectedStore?.osStoreId
-    ? await getStoreReservationWindowsForCurrentBusinessDay({
+    ? applyMaamaaReceptionWindowPolicy(await getStoreReservationWindowsForCurrentBusinessDay({
         storeId: selectedStore.osStoreId,
         businessHours: storeOperation.businessHours,
         ignoreStaffSchedule: storeOperation.acceptanceMode === "force_open"
+      }), {
+        businessDay: getStoreCashBusinessDayState(storeOperation.businessHours),
+        acceptanceMode: storeOperation.acceptanceMode
       })
     : [];
 

@@ -39,7 +39,8 @@ export function isUberPublicationRetired(node:UberPublicationNode) {
 function publicationSource(value: unknown): unknown {
   if(Array.isArray(value))return value.map(publicationSource);
   if(value && typeof value==='object')return Object.fromEntries(Object.entries(value)
-    .filter(([key])=>!/image|photo|picture|thumbnail/i.test(key))
+    .filter(([key])=>!/image|photo|picture|thumbnail/i.test(key)
+      && !['suspensionInfo','visibility','hidden'].includes(key))
     .map(([key,entry])=>[key,publicationSource(entry)]));
   return value;
 }

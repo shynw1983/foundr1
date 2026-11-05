@@ -1,0 +1,86 @@
+.banner {
+  position: sticky;
+  top: 8px;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  width: min(1120px, calc(100% - 24px));
+  margin: 10px auto;
+  padding: 9px 12px;
+  border: 1px solid var(--store-warning-border, #ddc899);
+  border-radius: 9px;
+  background: var(--store-warning-soft, #fffaf0);
+  color: var(--store-warning, #735218);
+  box-sizing: border-box;
+}
+.stopRisk { border-color: var(--store-danger-border, #dfb7b2); background: var(--store-danger-soft, #fff6f4); color: var(--store-danger, #9b352a); }
+.bannerOpen {
+  display: flex;
+  flex: 1 1 360px;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  border: 0;
+  padding: 3px 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bannerOpen > svg { flex: 0 0 auto; }
+.bannerOpen > svg:last-child { margin-left: auto; }
+.bannerOpen span { min-width: 0; }
+.bannerOpen strong { display: block; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.bannerOpen small { display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; }
+.bannerActions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.bannerActions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: var(--store-panel, #fff);
+  color: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.bannerActions button:disabled { border-color: transparent; opacity: .65; cursor: default; }
+.bannerNotice { flex-basis: 100%; font-size: 11px; }
+.banner button:focus-visible { outline: 2px solid var(--green, #173f35); outline-offset: 3px; }
+.dock { max-height: calc(100dvh - 24px); }
+.dock :global(.store-menu-sync-dock-body) { max-height: min(52dvh, 560px); }
+.detailToolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.detailToolbar p { flex: 1 1 220px; margin: 0; color: var(--muted, #66706c); font-size: 11px; line-height: 1.5; }
+.platforms { grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); }
+.platformState { flex-wrap: wrap; }
+.runHeading { align-items: flex-start; }
+.runHeading strong { white-space: normal; overflow-wrap: anywhere; }
+.needsAttention { border-color: var(--store-danger-border, #dfb7b2) !important; background: var(--store-danger-soft, #fff8f6) !important; }
+.targetLabels { color: var(--muted, #66706c); font-size: 10px; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .banner { top: 4px; width: calc(100% - 16px); margin: 8px auto; padding: 8px 10px; gap: 7px; }
+  .bannerOpen { flex-basis: 100%; }
+  .bannerActions { width: 100%; }
+  .bannerActions button { min-height: 34px; }
+  .dock :global(.store-menu-sync-dock-body) { max-height: 44dvh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .needsAttention svg { animation: none !important; }
+}
+.blockedReason { color: var(--muted, #66706c); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+/* Reserve the measured banner height only on sibling Store surfaces. Native
+   full-screen sheets and unrelated OS/customer displays keep their own sizes. */
+@media (min-width: 761px) {
+  .banner ~ :global(.store-orders-page) { height: calc(100dvh - var(--store-inventory-sync-attention-space, 0px)); }
+}
+.compactBanner { top: 0; margin: 4px auto; padding: 5px 10px; }
+.compactBanner .bannerOpen { flex-basis: auto; padding: 0; }
+.compactBanner .bannerOpen small, .compactBanner .bannerActions { display: none; }
+.compactBanner .bannerOpen strong { font-size: 12px; }
+.compactDock { display: none; }

@@ -265,7 +265,7 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
               : mode === "initialChange"
                 ? "初期パスワードから変更してください。"
                 : mode === "terminalQr"
-                  ? "管理者のスマートフォンで読み取り、店舗Padアカウントを選択します。"
+                  ? "管理者のスマートフォンで読み取り、登録済みの店舗端末アカウントを選択します。"
                   : loginDescription}
           </p>
         </div>

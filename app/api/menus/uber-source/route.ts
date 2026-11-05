@@ -3,6 +3,7 @@ import { sql } from '../../../../lib/db';
 import { scheduleUberSourceScans } from '../../../../lib/uber-menu-source-sync';
 import { nextMenuCheck, menuSyncIssue, menuSyncIssueContext } from '../../../../lib/menu-sync-status';
 import { reconcileUberPublications } from '../../../../lib/uber-menu-publication-reconcile';
+import { projectMenuSyncProgress } from '../../../../lib/menu-sync-progress';
 import { publishBridgeCommandAvailable } from '../../../../lib/local-bridge-realtime';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,25 +12,31 @@ export const maxDuration = 60;
 export async function GET(request: Request) {
   if (!await requireMasterOsSession()) return Response.json({error:'権限がありません。'},{status:403});
   const brandId = new URL(request.url).searchParams.get('brandId') ?? '';
-  const sources = await sql`select id::text,brand_id::text,store_id::text,uber_store_uuid,enabled,auto_publish,revision,last_checked_at,last_error from menu_uber_sources where brand_id::text=${brandId}`;
+  const sources = await sql`select id::text,brand_id::text,store_id::text,uber_store_uuid,enabled,auto_publish,revision,last_checked_at,last_error,
+    publish_config->'removalReview' as "removalReview" from menu_uber_sources where brand_id::text=${brandId}`;
   const runs = sources.length ? await sql`select r.id::text,r.revision,r.summary,r.created_at,coalesce(c.payload->>'trigger','unknown') as trigger from menu_uber_sync_runs r left join local_bridge_commands c on c.id=r.command_id where r.source_id=${sources[0].id} order by r.created_at desc limit 20` : [];
   const history = sources.length ? await sql`select id::text,platform,status,created_at,updated_at,last_error,attempts,available_at,payload->>'revision' as revision,result->'progress'->>'phase' as phase,result->'progress' as progress,payload->'manualRetryHistory' as retries,
     case when last_error<>'' then (select jsonb_object_agg(target->>'sourceKey',coalesce(target->>'sourceName',target->>'name'))
-      from jsonb_array_elements(coalesce(payload->'targets','[]'::jsonb)) target where target->>'sourceKey' is not null) else '{}'::jsonb end as "targetNames"
+      from jsonb_array_elements(coalesce(payload->'targets','[]'::jsonb)) target where target->>'sourceKey' is not null) else '{}'::jsonb end as "targetNames",
+    coalesce((select jsonb_object_agg(target->>'sourceKey',jsonb_build_object(
+      'targetName',target->>'name','targetKind',target->>'kind',
+      'parentName',(select case when count(*)=1 then min(parent->>'name') end
+        from jsonb_array_elements(coalesce(payload->'targets','[]'::jsonb)) parent
+        where parent->>'targetId'=target->>'parentId'
+          and ((target->>'kind'='option' and parent->>'kind'='option_group') or (target->>'kind'='item' and parent->>'kind'='category')))))
+      from jsonb_array_elements(coalesce(payload->'targets','[]'::jsonb)) target
+      where target->>'sourceKey' is not null and (
+        target->>'sourceKey'=coalesce(nullif(result->'progress'->>'sourceKey',''),result->'progress'->'authorityOperation'->>'sourceKey')
+        or target->>'sourceKey' in (select entry->>'sourceKey'
+          from jsonb_array_elements(case when jsonb_typeof(result->'progress'->'recent')='array' then result->'progress'->'recent' else '[]'::jsonb end)
+            with ordinality as recent(entry,ordinal) where ordinal<=10)
+      )), '{}'::jsonb) as "progressTargets"
     from local_bridge_commands where store_id=${sources[0].store_id} and payload->>'sourceId'=${sources[0].id}::text
       and ((platform='uber_eats' and command_type='capture_menu_snapshot' and payload->'authoritativeSource'='true'::jsonb)
         or (platform in ('rocket_now','demae_can') and command_type='publish_menu_changes' and payload->'authoritativePublication'='true'::jsonb))
     order by created_at desc,id desc limit 80` : [];
-  const jobHistory=history.map(({targetNames,...job})=>Object.assign(job,menuSyncIssueContext(String(job.last_error??''),(targetNames??{}) as Record<string,string>)));
+  const jobHistory=history.map(({targetNames,progressTargets,...job})=>Object.assign(job,{progress:projectMenuSyncProgress(job.progress,progressTargets)},menuSyncIssueContext(String(job.last_error??''),(targetNames??{}) as Record<string,string>)));
   const jobs=jobHistory.filter((row,index)=>jobHistory.findIndex(other=>other.platform===row.platform)===index);
-  // Resolve only the current target name, never return the full command payload.
-  for(const job of jobs.filter(row=>row.status==='processing')) {
-    const progress=(job.progress??{}) as Record<string,unknown>;
-    if(!progress.targetName) {
-      const names=await sql`select target->>'name' as name from local_bridge_commands c cross join lateral jsonb_array_elements(coalesce(c.payload->'targets','[]'::jsonb)) target where c.id::text=${job.id} and c.store_id=${sources[0].store_id} and target->>'sourceKey'=coalesce(c.result->'progress'->>'sourceKey',c.result->'progress'->'authorityOperation'->>'sourceKey') limit 1`;
-      job.progress={...progress,targetName:names[0]?.name??''};
-    }
-  }
   // Inventory/audit commands also carry sourceId. Their successful read or
   // stock change is not a full menu publication, nor an authoritative capture.
   const successes=sources.length?await sql`select distinct on(platform) platform,payload->>'revision' as revision,completed_at
@@ -43,11 +50,23 @@ export async function GET(request: Request) {
   return Response.json({source:sources[0]??null,runs,jobs,jobHistory,successes,devices,prices,nextCheck:nextMenuCheck()},{headers:{'Cache-Control':'no-store'}});
 }
 export async function POST(request: Request) {
-  if (!await requireMasterOsSession()) return Response.json({error:'権限がありません。'},{status:403});
+  const session=await requireMasterOsSession();
+  if (!session) return Response.json({error:'権限がありません。'},{status:403});
   const value:unknown=await request.json().catch(()=>({}));
   const body=value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};
   const sources = await sql`select id::text,store_id::text,revision from menu_uber_sources where brand_id::text=${String(body.brandId??'')} and enabled=true`;
   if (!sources.length) return Response.json({error:'Uber メニュー連携はまだ有効になっていません。'},{status:409});
+  if(body.action==='approve-removal') {
+    const source=sources[0];
+    const rows=await sql`update menu_uber_sources set publish_config=jsonb_set(publish_config,'{removalReview}',
+        (publish_config->'removalReview')||jsonb_build_object('approvedBy',${session.id}::text,'approvedAt',now())),updated_at=now()
+      where id::text=${source.id} and store_id=${source.store_id} and enabled and revision=${source.revision}
+        and publish_config->'removalReview'->>'revision'=revision::text
+        and publish_config->'removalReview'->>'token'=${String(body.reviewToken??'')}
+        and publish_config->'removalReview'->>'approvedAt' is null
+      returning id`;
+    return rows.length?Response.json({approved:true}):Response.json({error:'確認対象が変わりました。状態を更新してください。'},{status:409});
+  }
   if(body.action==='scan') return Response.json(await scheduleUberSourceScans(sources[0].store_id));
   if(body.action==='retry') {
     const source=sources[0],id=typeof body.jobId==='string'?body.jobId.trim():'';

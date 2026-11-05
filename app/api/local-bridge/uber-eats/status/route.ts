@@ -46,7 +46,9 @@ export async function POST(request: Request) {
       : "uber_eats",
     realtimeConnected: source.realtimeConnected === true,
     accessibilityConnected: source.accessibilityConnected === true,
-    notificationConnected: source.notificationConnected === true
+    notificationConnected: source.notificationConnected === true,
+    connectionRecoveryVersion: authorization.devicePlatform === 'desktop' && source.connectionRecoveryVersion === 1 ? 1 : 0,
+    menuSyncRecoveryVersion: authorization.devicePlatform === 'desktop' && source.menuSyncRecoveryVersion === 1 ? 1 : 0
   };
   if (authorization.deviceId) {
     await sql`

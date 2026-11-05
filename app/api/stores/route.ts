@@ -1,8 +1,9 @@
+import { getPermissionsForRole } from "../../../lib/role-permissions";
 import { requireMasterOsSession } from "../../../lib/api-auth";
 import { normalizeCustomerDisplayNameSettings } from "../../../lib/customer-display-names";
 import { sql } from "../../../lib/db";
 import { getSalesSourceDefinition, salesSourceDefinitions } from "../../../lib/sales-sources";
-import { serializeBusinessHours } from "../../../lib/store-business-hours";
+import { normalizeShiftRequestOffset, serializeBusinessHours } from "../../../lib/store-business-hours";
 
 async function normalizeStoreBrands(brandNames: string[]) {
   const concreteBrands = await sql`
@@ -318,6 +319,8 @@ async function replaceStorePaymentAccount(storeId: string, formData: FormData) {
 export async function POST(request: Request) {
   const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const permissions = await getPermissionsForRole(session.role, { fresh: true });
+  if (!permissions.has("module.masterData") || !permissions.has("stores.manageMasterData")) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const formData = await request.formData();
   const name = String(formData.get("name") ?? "").trim();
@@ -334,6 +337,11 @@ export async function POST(request: Request) {
   const privacyContactEmail = String(formData.get("privacyContactEmail") ?? "").trim();
   const privacyContactPhone = String(formData.get("privacyContactPhone") ?? "").trim();
   const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
+  const shiftRequestStartOffsetMinutes = normalizeShiftRequestOffset(formData.get("shiftRequestStartOffsetMinutes"));
+  const shiftRequestEndOffsetMinutes = normalizeShiftRequestOffset(formData.get("shiftRequestEndOffsetMinutes"));
+  if (shiftRequestStartOffsetMinutes === null || shiftRequestEndOffsetMinutes === null) {
+    return Response.json({ error: "希望シフトの調整は前後720分以内の整数で入力してください。" }, { status: 400 });
+  }
   const reservationNote = String(formData.get("reservationNote") ?? "").trim();
   const payrollCycleType = normalizePayrollCycleType(String(formData.get("payrollCycleType") ?? ""));
   const payrollClosingDay = normalizePayrollClosingDay(String(formData.get("payrollClosingDay") ?? ""), payrollCycleType);
@@ -378,6 +386,8 @@ export async function POST(request: Request) {
       owner_name,
       customer_display_names,
       business_hours,
+      shift_request_start_offset_minutes,
+      shift_request_end_offset_minutes,
       reservation_note,
       payroll_cycle_type,
       payroll_closing_day,
@@ -404,6 +414,8 @@ export async function POST(request: Request) {
       ${owner},
       ${JSON.stringify(customerDisplayNames)}::jsonb,
       ${businessHours}::jsonb,
+      ${shiftRequestStartOffsetMinutes},
+      ${shiftRequestEndOffsetMinutes},
       ${reservationNote},
       ${payrollCycleType},
       ${payrollClosingDay},
@@ -430,6 +442,8 @@ export async function POST(request: Request) {
       owner_name = excluded.owner_name,
       customer_display_names = excluded.customer_display_names,
       business_hours = excluded.business_hours,
+      shift_request_start_offset_minutes = case when ${formData.has("shiftRequestStartOffsetMinutes")} then excluded.shift_request_start_offset_minutes else stores.shift_request_start_offset_minutes end,
+      shift_request_end_offset_minutes = case when ${formData.has("shiftRequestEndOffsetMinutes")} then excluded.shift_request_end_offset_minutes else stores.shift_request_end_offset_minutes end,
       reservation_note = excluded.reservation_note,
       payroll_cycle_type = excluded.payroll_cycle_type,
       payroll_closing_day = excluded.payroll_closing_day,
@@ -475,6 +489,8 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const permissions = await getPermissionsForRole(session.role, { fresh: true });
+  if (!permissions.has("module.masterData") || !permissions.has("stores.manageMasterData")) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const formData = await request.formData();
   const currentName = String(formData.get("currentName") ?? "").trim();
@@ -492,6 +508,11 @@ export async function PUT(request: Request) {
   const privacyContactEmail = String(formData.get("privacyContactEmail") ?? "").trim();
   const privacyContactPhone = String(formData.get("privacyContactPhone") ?? "").trim();
   const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
+  const shiftRequestStartOffsetMinutes = normalizeShiftRequestOffset(formData.get("shiftRequestStartOffsetMinutes"));
+  const shiftRequestEndOffsetMinutes = normalizeShiftRequestOffset(formData.get("shiftRequestEndOffsetMinutes"));
+  if (shiftRequestStartOffsetMinutes === null || shiftRequestEndOffsetMinutes === null) {
+    return Response.json({ error: "希望シフトの調整は前後720分以内の整数で入力してください。" }, { status: 400 });
+  }
   const reservationNote = String(formData.get("reservationNote") ?? "").trim();
   const payrollCycleType = normalizePayrollCycleType(String(formData.get("payrollCycleType") ?? ""));
   const payrollClosingDay = normalizePayrollClosingDay(String(formData.get("payrollClosingDay") ?? ""), payrollCycleType);
@@ -551,6 +572,8 @@ export async function PUT(request: Request) {
       owner_name = ${owner},
       customer_display_names = ${JSON.stringify(customerDisplayNames)}::jsonb,
       business_hours = ${businessHours}::jsonb,
+      shift_request_start_offset_minutes = coalesce(${formData.has("shiftRequestStartOffsetMinutes") ? shiftRequestStartOffsetMinutes : null}::int, stores.shift_request_start_offset_minutes),
+      shift_request_end_offset_minutes = coalesce(${formData.has("shiftRequestEndOffsetMinutes") ? shiftRequestEndOffsetMinutes : null}::int, stores.shift_request_end_offset_minutes),
       reservation_note = ${reservationNote},
       payroll_cycle_type = ${payrollCycleType},
       payroll_closing_day = ${payrollClosingDay},
@@ -600,6 +623,8 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const permissions = await getPermissionsForRole(session.role, { fresh: true });
+  if (!permissions.has("module.masterData") || !permissions.has("stores.manageMasterData")) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as { name?: string };
 

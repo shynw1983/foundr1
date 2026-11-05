@@ -106,7 +106,7 @@ export async function verifyOrderPushTransport() {
   }, true);
 }
 
-export async function sendOrderPush(device: OrderPushDevice, payload: Record<string, string>) {
+export async function sendOrderPush(device: OrderPushDevice, payload: Record<string, string>, options: { ttlSeconds?: number } = {}) {
   const config = getOrderPushConfig();
   if (device.provider === "fcm") {
     if (!config.fcm || !device.registration.token) throw new OrderPushTransportError("FCM_NOT_CONFIGURED");
@@ -114,7 +114,7 @@ export async function sendOrderPush(device: OrderPushDevice, payload: Record<str
       token: device.registration.token,
       // The native receiver checks the local geofence before displaying. No automatic notification payload.
       data: { ...payload, sessionId: device.sessionId },
-      android: { priority: "high", ttl: "60s", restricted_package_name: "jp.foundr1.store" }
+      android: { priority: "high", ttl: `${Math.max(60, Math.min(600, Math.floor(options.ttlSeconds ?? 60)))}s`, restricted_package_name: "jp.foundr1.store" }
     });
     return;
   }

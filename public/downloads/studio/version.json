@@ -1,0 +1,21 @@
+{
+  "app": "studio",
+  "title": "Foundr1 Studio",
+  "description": "新增 AI 擦除杂物：涂选、补全背景、原图对比；支持模型与质量切换、费用预估和母版复用。 / AI消しゴム：範囲選択・背景補完・比較、モデルと品質の切替。",
+  "packageName": "jp.foundr1.studio",
+  "versionName": "1.13.0",
+  "versionCode": 19,
+  "releaseLabel": "2026.11.03.113",
+  "buildType": "release",
+  "fileName": "foundr1-studio-1.13.0.apk",
+  "downloadPath": "/downloads/studio/foundr1-studio-1.13.0.apk",
+  "latestDownloadPath": "/downloads/studio/latest.apk",
+  "legacyDownloadPath": "/downloads/foundr1-studio-latest.apk",
+  "sizeBytes": 70161983,
+  "sha256": "28e997da3668018c2ae816dd5064c9c0a6856aa1f6fe33786256d80844dd32d4",
+  "builtAt": "2026-11-02T17:53:13.219109+00:00",
+  "gitCommit": "standalone-1.13.0",
+  "sourceBaseline": "Verified1.12.0 production baseline + scoped masked AI object removal; uncommitted source",
+  "certificateSha256": "043563376a2e0d52d253896559d0c8616e17cd1c277a7e153399e7d06e8aec58",
+  "gitSubject": "新增 AI 擦除杂物"
+}

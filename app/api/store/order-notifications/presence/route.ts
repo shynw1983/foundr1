@@ -11,7 +11,8 @@ export async function POST(request: Request) {
   const rules = await getOrderPushRules(String(device.employeeId));
   const body = await request.json().catch(() => ({}));
   if (typeof body.token === "string" && body.token.length >= 20 && body.token.length <= 4096) {
-    await sql`update store_order_push_devices set registration = ${JSON.stringify({ token: body.token })}::jsonb, endpoint_hash = ${hashPushValue(body.token)}, updated_at = now() where id::text = ${String(device.id)}`;
+    const registration = { token: body.token, inventorySyncVersion: body.inventorySyncVersion === 1 ? 1 : 0 };
+    await sql`update store_order_push_devices set registration = ${JSON.stringify(registration)}::jsonb, endpoint_hash = ${hashPushValue(body.token)}, updated_at = now() where id::text = ${String(device.id)}`;
   }
   if (Array.isArray(body.presence)) {
     for (const presence of body.presence.slice(0, 50)) {

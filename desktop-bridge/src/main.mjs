@@ -1,7 +1,12 @@
 import { setTimeout as delay } from "node:timers/promises";
 import {prepareDemaeSingleRelease} from './demae-single-release.mjs';
 
+import {createCommandWake} from "./command-wake.mjs";
+import {createBridgePollSchedule} from "./poll-schedule.mjs";
 import { BridgeApiClient } from "./api-client.mjs";
+import {OrderabilitySchedule} from './uber-orderability.mjs';
+import {checkUberOrderability} from './uber-orderability-check.mjs';
+import {recoverPlatformConnection, RecoveryGuard} from './connection-recovery.mjs';
 import { createAdapter } from "./adapters/index.mjs";
 import { BrowserSession } from "./browser-session.mjs";
 import { loadConfig } from "./config.mjs";
@@ -25,6 +30,7 @@ const requestedKind = locateHasKind
 const requestedTarget = String(process.argv.slice(locateHasKind ? 5 : 4).join(" ") ?? "").trim();
 const config = await loadConfig({ requireCredentials: mode === "run" });
 const localStatus = mode === 'run' ? await createLocalStatus(config) : null;
+let commandWake;
 const enabledPlatforms = ["uber_eats", "rocket_now", "demae_can"]
   .filter((platform) => config.platforms[platform]?.enabled !== false)
   .filter((platform) => !requestedPlatform || requestedPlatform === platform);
@@ -33,6 +39,7 @@ if (requestedPlatform && !enabledPlatforms.length) {
 }
 const sessions = new Map();
 const adapters = new Map();
+const recoveryGuard = new RecoveryGuard();
 let demaeCanConsecutiveTimeouts = 0;
 let demaeCanCircuitOpenUntil = 0;
 
@@ -40,6 +47,14 @@ for (const platform of enabledPlatforms) {
   const session = new BrowserSession(config, platform);
   sessions.set(platform, session);
   adapters.set(platform, createAdapter(platform, session, config.platforms[platform]));
+}
+
+async function executeBridgeReadProbe(command) {
+  const adapter = adapters.get(command.platform);
+  if (command.platform !== "rocket_now" || !adapter) throw new Error("unsupported_bridge_probe");
+  const { snapshot } = await adapter.captureMenuSnapshot({});
+  if (!snapshot.complete || !snapshot.items.length) throw new Error("incomplete_bridge_probe");
+  return { itemCount: snapshot.items.length, optionCount: snapshot.options.length };
 }
 
 async function inspectAll() {
@@ -68,6 +83,7 @@ function platformStatusProblem(item) {
 }
 
 async function shutdown() {
+  commandWake?.stop();
   await Promise.all([...sessions.values()].map((session) => session.disconnect()));
 }
 
@@ -184,6 +200,14 @@ async function executeMenuCommand(command) {
   const adapter = adapters.get(platform);
   if (!adapter) throw new Error(`No enabled adapter for ${platform}`);
   const payload = command.payload && typeof command.payload === "object" ? command.payload : {};
+  if (["inspect_menu_sync", "repair_menu_sync"].includes(command.type)) {
+    const expectedMode=command.type==='inspect_menu_sync'?'inspect':null;
+    if(expectedMode?payload.recovery?.mode!==expectedMode:!['restore_hidden','verify_release'].includes(payload.recovery?.mode)) {
+      throw Error('menu_sync_recovery_command_mode_mismatch');
+    }
+    if(typeof adapter.recoverMenuSync!=='function')throw Error(`unsupported_menu_sync_recovery:${platform}`);
+    return adapter.recoverMenuSync(payload,progress=>reportProgress(command,progress));
+  }
   if (command.type === "capture_menu_snapshot") {
     await reportProgress(command, { phase: "capturing", attempt: 1, maxAttempts: 3 });
     return adapter.captureMenuSnapshot(payload);
@@ -223,8 +247,12 @@ process.once("SIGTERM", async () => {
 });
 
 if (mode === "login") {
-  const results = await inspectAll();
-  console.log(JSON.stringify(results, null, 2));
+  const urls = {uber_eats:'https://merchants.ubereats.com/',rocket_now:'https://store.rocketnow.co.jp/',demae_can:'https://partner.demae-can.com/merchant-admin/'};
+  for (const platform of enabledPlatforms) {
+    const adapter = adapters.get(platform);
+    const url = typeof adapter.itemsUrl === 'function' ? adapter.itemsUrl() : urls[platform];
+    await sessions.get(platform).openVisible(url);
+  }
   console.log("Dedicated Chrome windows are open. Sign in, then press Ctrl-C.");
   await new Promise(() => undefined);
 }
@@ -251,6 +279,9 @@ if (!config.executionEnabled) {
 }
 
 const api = new BridgeApiClient(config);
+const pollSchedule=createBridgePollSchedule(config.pollIntervalMs);
+commandWake=createCommandWake(api,config);commandWake.start();
+const orderabilitySchedule = new OrderabilitySchedule();
 let lastStatusAt = 0;
 for (;;) {
   let command = null;
@@ -261,18 +292,34 @@ for (;;) {
     if(action?.startsWith('open:')) {
       const platform=action.slice(5);
       const urls={uber_eats:'https://merchants.ubereats.com/',rocket_now:'https://store.rocketnow.co.jp/',demae_can:'https://partner.demae-can.com/merchant-admin/'};
-      if(sessions.has(platform)) {const page=await sessions.get(platform).goto(urls[platform]);await page.bringToFront();}
+      if(sessions.has(platform)) await sessions.get(platform).openVisible(urls[platform]);
+    }
+    if (sessions.has('uber_eats') && config.orderabilityMonitor.enabled === true) {
+      try {
+        await orderabilitySchedule.tick(
+          () => checkUberOrderability(config, sessions.get('uber_eats')),
+          result => api.reportOrderability(result)
+        );
+      } catch (error) {
+        console.error(new Date().toISOString(), 'orderability_report_failed', publicError(error.message));
+      }
     }
     command = await api.nextCommand();
     localStatus.state.lastServerAt=Date.now();localStatus.state.serviceError='';
     if (command) {
+      pollSchedule.busy();
       await localStatus.progress(command,{phase:'starting'});
-      const result = command.type === "audit_inventory"
+      const result = command.type === 'reset_platform_connection'
+        ? await recoverPlatformConnection(sessions.get(command.platform), adapters.get(command.platform))
+        : command.type === "bridge_read_probe"
+        ? await executeBridgeReadProbe(command)
+        : command.type === "audit_inventory"
         ? await executeAuditCommand(command)
-        : ["publish_menu_changes", "capture_menu_snapshot", "capture_competitor_menu_snapshot"].includes(command.type)
+        : ["publish_menu_changes", "capture_menu_snapshot", "capture_competitor_menu_snapshot", "inspect_menu_sync", "repair_menu_sync"].includes(command.type)
           ? await executeMenuCommand(command)
           : await executeInventoryCommand(command);
       await api.acknowledge(command.id, "succeeded", result);
+      recoveryGuard.clear(command.platform);
       await localStatus.finish(command);
       continue;
     }
@@ -285,25 +332,35 @@ for (;;) {
       await api.reportStatus({
         level: healthy ? "healthy" : "attention",
         problem: healthy ? "" : checks.filter((item) => !item.ok).map(platformStatusProblem).join("; "),
-        realtimeConnected: false,
+        realtimeConnected: commandWake.connected,
         accessibilityConnected: true,
-        notificationConnected: false
+        notificationConnected: false,
+        connectionRecoveryVersion: 1,
+        menuSyncRecoveryVersion: 1
       });
       lastStatusAt = Date.now();
     }
     localStatus.state.activity='空闲';await localStatus.save();
-    await delay(config.pollIntervalMs);
+    await commandWake.wait(commandWake.connected?pollSchedule.empty():config.pollIntervalMs);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(new Date().toISOString(), message);
     if (command?.id) {
+      const diagnostic = command.platform === 'uber_eats' && error?.diagnostic?.platform === 'uber_eats' ? error.diagnostic : null;
       await localStatus.finish(command,message);
-      await api.acknowledge(command.id, "failed", {}, message, {
+      await api.acknowledge(command.id, "failed", diagnostic ? {diagnostic} : {}, message, {
         authoritativePublication: command.payload?.authoritativePublication === true
       }).catch((ackError) => {
         console.error(new Date().toISOString(), "acknowledgement failed", ackError instanceof Error ? ackError.message : ackError);
       });
+      if (!['reset_platform_connection','capture_competitor_menu_snapshot'].includes(command.type) && recoveryGuard.record(command.platform, message)) {
+        // The failed operation remains failed; a recovery never replays it.
+        try {
+          localStatus.state.activity='连接自动修复中'; await localStatus.save();
+          await recoverPlatformConnection(sessions.get(command.platform), adapters.get(command.platform));
+        } catch (recoveryError) { console.error('automatic_connection_recovery_failed', String(recoveryError)); }
+      }
     } else {localStatus.state.serviceError=publicError(message);await localStatus.save();}
-    await delay(config.pollIntervalMs);
+    await commandWake.wait(pollSchedule.failed());
   }
 }

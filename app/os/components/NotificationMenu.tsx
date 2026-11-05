@@ -3,7 +3,9 @@
 import { Bell } from "lucide-react";
 import type { MouseEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createStoreFallbackPoller } from "../../../lib/store-polling-client";
+import { createStoreRefreshCoordinator } from "../../../lib/store-polling-client";
+import { bindStoreRealtimeChannels } from "../../../lib/store-realtime-refresh";
+import { createReadError } from "../../../components/useReadRequest";
 import { useCloseOnOutside } from "./useCloseOnOutside";
 
 type OsNotification = {
@@ -34,6 +36,7 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
   const [pushState, setPushState] = useState<PushState>("hidden");
   const [pushMessage, setPushMessage] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const refreshRef = useRef<ReturnType<typeof createStoreRefreshCoordinator> | null>(null);
   const notificationMenuRef = useRef<HTMLDetailsElement | null>(null);
 
   async function saveSubscription(subscription: PushSubscription) {
@@ -52,64 +55,67 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
     return true;
   }
 
-  const loadNotifications = useCallback(async () => {
-    const response = await fetch("/api/notifications", { cache: "no-store" });
-    if (!response.ok) return;
+  const loadNotificationsSnapshot = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch("/api/notifications", { cache: "no-store", signal });
+    if (!response.ok) throw createReadError(response);
     const body = await response.json() as {
       notifications?: OsNotification[];
       unreadCount?: number;
     };
+    if (signal.aborted) return;
     setNotifications(body.notifications ?? []);
     setUnreadCount(body.unreadCount ?? 0);
   }, []);
 
+  const loadNotifications = () => refreshRef.current?.refresh() ?? Promise.resolve();
+
   useEffect(() => {
     let active = true;
-    let pusher: any;
-    let channel: any;
-    const fallbackPoller = createStoreFallbackPoller(loadNotifications, {
-      baseIntervalMs: 10 * 60_000,
-      maxIntervalMs: 60 * 60_000,
-      outageBackoff: "standard",
-      respectBusinessHours: false
-    });
-    const startFallback = () => fallbackPoller.start();
-    const stopFallback = () => fallbackPoller.stop();
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") void loadNotifications();
+    let pusher: ReturnType<(typeof import("../../../lib/shared-pusher-client"))["acquireSharedPusher"]> | undefined;
+    let unbindRealtime: (() => void) | undefined;
+    const configController = new AbortController();
+    const deny = () => {
+      if (!active) return;
+      active = false; configController.abort();
+      setNotifications([]); setUnreadCount(0); setIsOpen(false);
+      unbindRealtime?.(); pusher?.disconnect();
+      coordinator.stop();
     };
-
-    void loadNotifications();
-    startFallback();
-    fetch("/api/notifications/realtime-config", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then(async (config) => {
+    const coordinator = createStoreRefreshCoordinator(loadNotificationsSnapshot, {
+      healthyIntervalMs: 5 * 60_000,
+      fallbackIntervalMs: 60_000,
+      maxFailureIntervalMs: 5 * 60_000,
+      onUnauthorized: deny
+    });
+    refreshRef.current = coordinator;
+    coordinator.start({ immediate: true });
+    void fetch("/api/notifications/realtime-config", { cache: "no-store", signal: configController.signal })
+      .then(response => response.ok ? response.json() : null)
+      .then(async config => {
         if (!active || !config?.key || !config?.cluster || !config?.channel) return;
         const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
         if (!active) return;
         pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
-        pusher.connection.bind("unavailable", startFallback);
-        pusher.connection.bind("failed", startFallback);
-        pusher.connection.bind("disconnected", startFallback);
-        channel = pusher.subscribe(config.channel);
-        channel.bind("pusher:subscription_succeeded", stopFallback);
-        channel.bind("pusher:subscription_error", startFallback);
-        channel.bind("notification.updated", loadNotifications);
-      })
-      .catch(startFallback);
-    window.addEventListener("focus", refreshWhenVisible);
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-
+        unbindRealtime = bindStoreRealtimeChannels(pusher, {
+          onUnauthorized: deny,
+          channels: [config.channel], events: ["notification.updated"],
+          onEvent: () => { void coordinator.refresh(); },
+          onHealthChange: healthy => {
+            if (!active) return;
+            coordinator.setRealtimeHealthy(healthy);
+            if (healthy) void coordinator.refresh({ force: true });
+          }
+        });
+      }).catch(() => undefined);
     return () => {
       active = false;
-      stopFallback();
-      window.removeEventListener("focus", refreshWhenVisible);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-      channel?.unbind("notification.updated", loadNotifications);
-      if (channel) pusher?.unsubscribe(channel.name);
+      configController.abort();
+      coordinator.stop();
+      if (refreshRef.current === coordinator) refreshRef.current = null;
+      unbindRealtime?.();
       pusher?.disconnect();
     };
-  }, [loadNotifications]);
+  }, [loadNotificationsSnapshot]);
 
   useEffect(() => {
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -214,7 +220,8 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
   }
 
   return (
-    <details className={["notification-menu", className].filter(Boolean).join(" ")} open={isOpen} ref={notificationMenuRef}>
+    <details className={["notification-menu", className].filter(Boolean).join(" ")} open={isOpen} ref={notificationMenuRef}
+      onToggle={(event) => { if (event.currentTarget.open) void loadNotifications().catch(() => undefined); }}>
       <summary aria-label="通知" onClick={(event) => {
         event.preventDefault();
         setIsOpen((current) => !current);

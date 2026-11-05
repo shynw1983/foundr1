@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PosMenuSettings } from "./PosMenuSettings";
+import { DineInMenuEditor } from "./DineInMenuEditor";
 import { MenuProductLinksEditor } from "./MenuProductLinksEditor";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { MobileNavMenu } from "../components/MobileNavMenu";
@@ -38,6 +40,7 @@ import { ModalHistoryScope } from "../components/useModalHistory";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 import { UberSourcePanel } from './UberSourcePanel';
+import styles from './menu-management.module.css';
 
 type OptionItem = {
   id: string;
@@ -749,6 +752,12 @@ export default function MenuAdminPage() {
     platformImportCandidates: []
   });
   const [activeBrandId, setActiveBrandId] = useState("");
+  const [menuScope, setMenuScope] = useState<"brand" | "dine-in">("brand");
+  const [dineInBusy, setDineInBusy] = useState(false);
+  const activeBrandIdRef = useRef("");
+  const brandContextRef = useRef<string | null>(null);
+  const brandGeneration = useRef(0);
+  const publishPreviewRequest = useRef(0);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [detailMode, setDetailMode] = useState<"item" | "category">("item");
   const [selectedItemId, setSelectedItemId] = useState("");
@@ -790,6 +799,18 @@ export default function MenuAdminPage() {
   const stockLinkNavigationApplied = useRef(false);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("menuStockTargetId")) return;
+    try {
+      if (window.localStorage.getItem("foundr1-menu-scope:v1") === "dine-in") setMenuScope("dine-in");
+    } catch { /* The menu remains available when browser preferences are unavailable. */ }
+  }, []);
+
+  function changeMenuScope(scope: "brand" | "dine-in") {
+    setMenuScope(scope);
+    try { window.localStorage.setItem("foundr1-menu-scope:v1", scope); } catch { /* Optional browser preference. */ }
+  }
+
+  useEffect(() => {
     if (loading || stockLinkNavigationApplied.current) return;
     const params = new URLSearchParams(window.location.search);
     const kind = params.get("menuStockKind");
@@ -799,14 +820,14 @@ export default function MenuAdminPage() {
     if (kind === "item") {
       const item = data.items.find(entry => entry.id === id && !entry.storeId);
       if (!item) { setMessage("対象メニューが見つかりません。最新の一覧を確認してください。"); return; }
-      setActiveBrandId(item.brandId);
+      selectBrand(item.brandId);
       selectItem(item);
       setActiveCategory(item.category || "未分類");
     } else {
       const option = data.options.find(entry => entry.id === id);
       const group = data.groups.find(entry => entry.id === option?.optionGroupId);
       if (!option || !group) { setMessage("対象メニューが見つかりません。最新の一覧を確認してください。"); return; }
-      setActiveBrandId(group.brandId);
+      selectBrand(group.brandId);
       openChoiceSettings(group);
       editOption(option);
     }
@@ -815,6 +836,8 @@ export default function MenuAdminPage() {
   }, [loading, data.items, data.options, data.groups]);
 
   async function loadPublishPreview(brandId: string) {
+    if (brandId !== activeBrandIdRef.current) return;
+    const requestId = ++publishPreviewRequest.current;
     if (!brandId) {
       setPublishPreview(null);
       return;
@@ -823,6 +846,7 @@ export default function MenuAdminPage() {
     try {
       const response = await fetch(`/api/menus/publish-preview?brandId=${encodeURIComponent(brandId)}`, { cache: "no-store" });
       const result = await response.json().catch(() => ({})) as MenuPublishPreview & { error?: string };
+      if (requestId !== publishPreviewRequest.current || brandId !== activeBrandIdRef.current) return;
       if (!response.ok) {
         setPublishPreviewStatus("error");
         return;
@@ -830,7 +854,7 @@ export default function MenuAdminPage() {
       setPublishPreview(result);
       setPublishPreviewStatus("");
     } catch {
-      setPublishPreviewStatus("error");
+      if (requestId === publishPreviewRequest.current && brandId === activeBrandIdRef.current) setPublishPreviewStatus("error");
     }
   }
 
@@ -1274,12 +1298,19 @@ export default function MenuAdminPage() {
     setLoading(true);
     return menuRead.run("menu", signal => readJson<MenuAdminData>("/api/menus", signal), nextData => {
       const contextStore = nextData.stores.find((store) => store.id === nextData.selectedStoreId);
-      const nextBrandId = activeBrandId || contextStore?.brandIds[0] || nextData.brands[0]?.id || "";
+      let rememberedBrandId = "";
+      try {
+        rememberedBrandId = window.localStorage.getItem(`foundr1-menu-brand:v1:${nextData.selectedStoreId || "all"}`) || "";
+      } catch { /* Browser preferences are optional. */ }
+      const availableBrandIds = new Set(nextData.brands.map((brand) => brand.id));
+      const currentBrandId = brandContextRef.current === nextData.selectedStoreId ? activeBrandIdRef.current : "";
+      const nextBrandId = [currentBrandId, rememberedBrandId, ...(contextStore?.brandIds || []), nextData.brands[0]?.id || ""]
+        .find((brandId) => availableBrandIds.has(brandId)) || "";
       const brandItems = nextData.items.filter((item) => item.brandId === nextBrandId && !item.storeId);
       const nextItem = brandItems.find((item) => item.id === nextSelectedItemId) ?? brandItems[0];
 
       setData(nextData);
-      setActiveBrandId(nextBrandId);
+      activateBrand(nextBrandId, nextData.selectedStoreId);
       const eligibleStores = nextData.stores.filter((store) => store.brandIds.includes(nextBrandId));
       setPublishStoreId((current) => eligibleStores.some((store) => store.id === current)
         ? current
@@ -1468,10 +1499,36 @@ export default function MenuAdminPage() {
       .filter((categoryName) => !applicable.size || applicable.has(categoryName));
   }, [categoryCounts, filteredItems, groupDraft.applicableCategories, groupDraft.menuCatalogItemId]);
 
+  function activateBrand(brandId: string, storeId: string) {
+    if (brandId !== activeBrandIdRef.current || storeId !== brandContextRef.current) {
+      brandGeneration.current += 1;
+      publishPreviewRequest.current += 1;
+      progressRead.cancel();
+      setPublishPreview(null);
+      setPublishPreviewStatus("");
+      setTranslationPreview(null);
+      setTranslationStatus("");
+      setTranslationBusy("");
+      setMessage("");
+      setPhotoStatus("");
+      setOptionPhotoStatus("");
+      setActionNotice(null);
+    }
+    activeBrandIdRef.current = brandId;
+    brandContextRef.current = storeId;
+    setActiveBrandId(brandId);
+    if (brandId) {
+      try {
+        window.localStorage.setItem(`foundr1-menu-brand:v1:${storeId || "all"}`, brandId);
+      } catch { /* A disabled/full storage must not prevent switching brands. */ }
+    }
+  }
+
   function selectBrand(brandId: string) {
+    if (!data.brands.some((brand) => brand.id === brandId)) return;
     const brandItems = data.items.filter((item) => item.brandId === brandId && !item.storeId);
     const nextItem = brandItems[0];
-    setActiveBrandId(brandId);
+    activateBrand(brandId, data.selectedStoreId);
     setActiveCategory(nextItem?.category || null);
     setSelectedItemId(nextItem?.id ?? "");
     setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId });
@@ -1765,6 +1822,7 @@ export default function MenuAdminPage() {
     }
 
     setTranslationBusy("preview");
+    const generation = brandGeneration.current;
     setTranslationStatus("");
     setTranslationPreview(null);
     try {
@@ -1778,6 +1836,7 @@ export default function MenuAdminPage() {
         })
       });
       const result = await response.json().catch(() => ({})) as MenuTranslationPreview & { error?: string };
+      if (generation !== brandGeneration.current) return;
       if (!response.ok) {
         setTranslationStatus(result.error || "翻訳プレビューを作成できませんでした。");
         return;
@@ -1785,9 +1844,9 @@ export default function MenuAdminPage() {
       setTranslationPreview(result);
       setTranslationStatus(result.entries.length ? `${result.entries.length}件の翻訳候補を作成しました。` : "翻訳が必要な空欄・日本語混入はありません。");
     } catch {
-      setTranslationStatus("通信エラーで翻訳プレビューを作成できませんでした。");
+      if (generation === brandGeneration.current) setTranslationStatus("通信エラーで翻訳プレビューを作成できませんでした。");
     } finally {
-      setTranslationBusy("");
+      if (generation === brandGeneration.current) setTranslationBusy("");
     }
   }
 
@@ -1886,9 +1945,11 @@ export default function MenuAdminPage() {
   }
 
   async function uploadMenuPhoto(file: File) {
+    const generation = brandGeneration.current;
     setPhotoStatus("写真を処理中...");
     setMessage("");
     const uploadFile = await prepareMenuPhoto(file);
+    if (generation !== brandGeneration.current) return;
     setPhotoStatus("アップロード中...");
     const formData = new FormData();
     formData.append("file", uploadFile);
@@ -1900,6 +1961,7 @@ export default function MenuAdminPage() {
         body: formData
       });
       const result = await response.json().catch(() => ({})) as { url?: string; error?: string };
+      if (generation !== brandGeneration.current) return;
       if (!response.ok || !result.url) {
         setPhotoStatus(result.error || "写真をアップロードできませんでした。");
         return;
@@ -1908,15 +1970,18 @@ export default function MenuAdminPage() {
       setItemDraft((current) => ({ ...current, imageUrl: result.url ?? "" }));
       setPhotoStatus("アップロードしました。商品を保存すると公開メニューに反映されます。");
     } catch {
+      if (generation !== brandGeneration.current) return;
       setPhotoStatus("通信エラーで写真をアップロードできませんでした。");
       setMessage("写真をアップロードできませんでした。");
     }
   }
 
   async function uploadMenuOptionPhoto(file: File) {
+    const generation = brandGeneration.current;
     setOptionPhotoStatus("写真を処理中...");
     setMessage("");
     const uploadFile = await prepareMenuPhoto(file);
+    if (generation !== brandGeneration.current) return;
     setOptionPhotoStatus("アップロード中...");
     const formData = new FormData();
     formData.append("file", uploadFile);
@@ -1928,6 +1993,7 @@ export default function MenuAdminPage() {
         body: formData
       });
       const result = await response.json().catch(() => ({})) as { url?: string; error?: string };
+      if (generation !== brandGeneration.current) return;
       if (!response.ok || !result.url) {
         setOptionPhotoStatus(result.error || "写真をアップロードできませんでした。");
         return;
@@ -1936,6 +2002,7 @@ export default function MenuAdminPage() {
       setOptionDraft((current) => ({ ...current, imageUrl: result.url ?? "" }));
       setOptionPhotoStatus("アップロードしました。選択肢を保存すると公開メニューに反映されます。");
     } catch {
+      if (generation !== brandGeneration.current) return;
       setOptionPhotoStatus("通信エラーで写真をアップロードできませんでした。");
       setMessage("写真をアップロードできませんでした。");
     }
@@ -2168,11 +2235,37 @@ export default function MenuAdminPage() {
             <h2>メニュー管理</h2>
             <p>分類、商品、サイズ・温度・辛さなどの選択肢を人が編集しやすい単位で管理します。</p>
           </div>
-          <a className="secondary-button" href={publicMenuUrl} target="_blank" rel="noreferrer">
+          {menuScope === "brand" ? <a className="secondary-button" href={publicMenuUrl} target="_blank" rel="noreferrer">
             公開 API を確認
-          </a>
+          </a> : null}
         </div>
 
+        <div className={styles.brandBar}>
+          <label htmlFor="menu-management-brand">ブランド</label>
+          <select
+            id="menu-management-brand"
+            aria-label="メニュー管理全体のブランド"
+            aria-describedby="menu-management-brand-help"
+            value={activeBrandId}
+            disabled={!data.brands.length || Boolean(savingKind) || translationBusy === "apply" || Boolean(publishAction) || availabilityLinkSaving || dineInBusy}
+            onChange={(event) => selectBrand(event.target.value)}
+          >
+            <option value="" disabled>ブランドを選択</option>
+            {data.brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
+          </select>
+          <p id="menu-management-brand-help">この画面全体に適用します。選択はこのブラウザで店舗ごとに記憶します。</p>
+        </div>
+
+        <div className={styles.scopeBar} role="group" aria-label="編集するメニュー">
+          <button type="button" aria-pressed={menuScope === "brand"} disabled={dineInBusy || Boolean(savingKind) || Boolean(translationBusy) || Boolean(publishAction) || availabilityLinkSaving} onClick={() => changeMenuScope("brand")}>
+            <span>ブランド共通メニュー</span><small>Web予約・Webサイト・外部デリバリー</small>
+          </button>
+          <button type="button" aria-pressed={menuScope === "dine-in"} disabled={dineInBusy || Boolean(savingKind) || Boolean(translationBusy) || Boolean(publishAction) || availabilityLinkSaving} onClick={() => changeMenuScope("dine-in")}>
+            <span>店舗の店内飲食メニュー</span><small>店舗ごとに名前・商品を独立して管理</small>
+          </button>
+        </div>
+
+        {menuScope === "dine-in" ? <DineInMenuEditor brandId={activeBrandId} brandName={data.brands.find(brand => brand.id === activeBrandId)?.name} stores={data.stores} initialStoreId={data.selectedStoreId} onBusyChange={setDineInBusy} /> : <>
         <section className="info-panel">
           <strong>編集の考え方</strong>
           <p>
@@ -2304,6 +2397,8 @@ export default function MenuAdminPage() {
           </div>
         </details>
 
+        <PosMenuSettings brandId={activeBrandId} stores={data.stores} initialStoreId={data.selectedStoreId} />
+
         <details className="menu-sync-panel" open>
           <summary className="section-heading menu-sync-summary">
             <span className="menu-sync-summary-title">
@@ -2318,10 +2413,6 @@ export default function MenuAdminPage() {
             </span>
           </summary>
           <div className="menu-sync-body">
-            <label><span>ブランド</span><select value={activeBrandId} onChange={(event) => selectBrand(event.target.value)}>
-              <option value="">ブランドを選択</option>
-              {data.brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
-            </select></label>
             <UberSourcePanel key={activeBrandId} brandId={activeBrandId}/>
             {legacyPublishAvailable && <>
             <section className="menu-publish-preview" aria-live="polite">
@@ -2342,13 +2433,10 @@ export default function MenuAdminPage() {
               </div>
               <div className="menu-publish-controls">
                 <div className="menu-publish-scope-fields">
-                  <label>
+                  <div className={styles.publishBrand}>
                     <span>対象ブランド</span>
-                    <select value={activeBrandId} onChange={(event) => selectBrand(event.target.value)}>
-                      <option value="">ブランドを選択</option>
-                      {data.brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
-                    </select>
-                  </label>
+                    <strong>{data.brands.find((brand) => brand.id === activeBrandId)?.name}</strong>
+                  </div>
                   <label>
                     <span>対象店舗</span>
                     <select value={publishStoreId} onChange={(event) => setPublishStoreId(event.target.value)}>
@@ -2817,13 +2905,6 @@ export default function MenuAdminPage() {
         </details>
 
         <div className="filter-bar">
-          <label>
-            <span>ブランド</span>
-            <select value={activeBrandId} onChange={(event) => selectBrand(event.target.value)}>
-              <option value="">選択</option>
-              {data.brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
-            </select>
-          </label>
           <code>{publicMenuUrl}</code>
         </div>
 
@@ -3834,6 +3915,7 @@ export default function MenuAdminPage() {
             )}
           </section>
         </div>
+        </>}
       </section>
       {translationPreview ? (
         <ModalHistoryScope historyKey="menus-translation-preview" onClose={() => setTranslationPreview(null)}>

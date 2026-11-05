@@ -1,0 +1,19 @@
+.recovery {display:grid;gap:10px;min-width:0;padding:12px 0;border-block:1px solid var(--line);font-size:13px;overflow-wrap:anywhere;}
+.recovery strong {font-weight:600;}
+.recovery p {margin:0;line-height:1.65;}
+.recovery small {font-size:11px;color:var(--muted);line-height:1.6;}
+.target {display:grid;gap:4px;}
+.target>span {font-size:11px;color:var(--muted);}
+.target>strong {font-size:14px;}
+.facts {display:grid;gap:8px;margin:0;}
+.facts>div {display:grid;gap:3px;min-width:0;}
+.facts dt {font-size:11px;color:var(--muted);}
+.facts dd {margin:0;line-height:1.6;}
+.plan {display:grid;gap:8px;border-left:3px solid var(--green);padding-left:10px;}
+.warning {color:var(--amber-ink,var(--ink));background:var(--amber-soft);padding:8px 10px;}
+.success {color:var(--green);}
+.continuation {border-top:1px solid var(--line);padding-top:8px;}
+.confirm {display:grid;gap:8px;background:var(--bg);padding:10px;}
+.actions {display:flex;flex-wrap:wrap;gap:8px;}
+.recovery button {max-width:100%;white-space:normal;min-height:36px;height:auto;}
+.recovery button:focus-visible {outline:2px solid var(--green);outline-offset:3px;}

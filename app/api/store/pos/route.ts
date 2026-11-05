@@ -1,12 +1,42 @@
+import { getTodaySummary } from "../../../../lib/pos-daily-summary-data";
+import { rejectDebugWrite } from '../../../../lib/pos-debug-write';
+import { validateInvoiceDetails } from '../../../../lib/pos-invoice';
+import { isPosOptionAllowed } from '../../../../lib/pos-option-dependencies';
+import { createPosOptionGift } from "../../../../lib/pos-option-gifts";
+import { evaluatePosBowlBenefits, matchesPosBowlQuote, type PosBowlChoice } from "../../../../lib/pos-bowl-benefits";
+import { normalizePosCampaignFields, evaluatePosDiscounts, matchesPosDiscountQuote, type PosCampaignFields } from "../../../../lib/pos-discount-campaigns";
+import { normalizePosItemPricing, resolvePosItemPricingMode, type PosItemPricingInput } from '../../../../lib/pos-item-pricing';
+import { buildPosPrintDocumentSnapshots } from '../../../../lib/pos-print-document-builder';
+import { posPrintSnapshotWrites, readPosCheckoutPrintDocuments } from '../../../../lib/pos-print-document-ledger';
+import type { PosPrintMode } from '../../../../lib/pos-print-document-contract';
+import { defaultPosScaleFilterSettings, normalizePosScaleFilterSettings } from '../../../../lib/pos-scale-filter';
+import { defaultPosScaleTareSettings, normalizePosScaleTareSettings, posWeightMeasurementFromReading } from '../../../../lib/pos-scale-tare';
+import type { PosWeightMeasurement } from '../../../../lib/pos-scale-tare';
+import { readPosMenuConfig, readPosMenuRevision, applyPosMenu, posMenuGuard, posMenuLock } from '../../../../lib/pos-menu-settings';
+import { applyPosItems, applyPosOptions } from '../../../../lib/pos-menu-policy';
+import { dineInSourceFulfillmentModes } from "../../../../lib/store-dine-in-fulfillment";
+import { getPosItemFulfillmentMode, createPosItemFulfillmentSnapshot, type PosItemFulfillmentMode } from "../../../../lib/pos-item-fulfillment";
+import { readDineInMenus, readDineInMenuRevision, dineInMenuGuard } from '../../../../lib/store-dine-in-menu';
+import { resolveDineInCatalog, flattenDineInOptions } from '../../../../lib/store-dine-in-runtime';
+import { dineInOptionAppliesToItem, isLocalDineInOption } from '../../../../lib/store-dine-in-menu-policy';
+import { getPosOptionSelectionType, getPosOptionSelectionRules, isStoreDineInSelection } from '../../../../lib/dine-in-option-selection';
+import { assertRelayOrigin, relayStations, requireRelayOwner, ownerGuardSql, relayResponse } from '../../../../lib/store-relay';
+import { buildRelayDocuments } from '../../../../lib/store-relay-documents';
+import type { RelayOwner } from '../../../../lib/store-relay-policy';
+import { createHash, randomUUID } from "node:crypto";
+import { allocatePosBowlCodes, isPosCashSessionOpen, PosCashSessionChangedError, posCashSessionGuards, readPosServingTickets } from "../../../../lib/pos-bowl-data";
+import { expandPosBowls, isPosBowl, isDineInBowlOptionGroup, offlineServingTickets } from "../../../../lib/pos-serving-policy";
 import { after } from "next/server";
 import { isPosSellableItem } from "../../../../lib/pos-catalog-policy";
 import { requireOsSession } from "../../../../lib/api-auth";
 import { createPickupCode, findCustomerOrderById } from "../../../../lib/customer-orders";
 import { sql } from "../../../../lib/db";
-import { awardLoyaltyForPaidOrder, calculateCouponDiscount, getUsableMemberCoupon, isMemberExchangeCoupon, redeemMemberCouponForOrder, resolveMemberForOrder } from "../../../../lib/loyalty";
+import { awardLoyaltyForPaidOrder, calculateCouponDiscount, getUsableMemberCoupon, isMemberExchangeCoupon, resolveMemberForOrder } from "../../../../lib/loyalty";
 import { ensureProductionTasksForOrder } from "../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { normalizePosPrinterSettings } from "../../../../lib/pos-printer";
+import { defaultPosFulfillmentWorkspaceSettings, normalizePosFulfillmentWorkspaceSettings } from "../../../../lib/pos-fulfillment-settings";
+import { defaultPosDisplayStandbySettings, normalizePosDisplayStandbySettings } from "../../../../lib/pos-display-standby";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
 import { markDiningOrdersPaid } from "../../../../lib/store-dining-sessions";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
@@ -14,11 +44,20 @@ import { markInventoryOrderReady } from "../../../../lib/inventory-order-usage";
 
 export const dynamic = "force-dynamic";
 
+// Debug checkouts exist only in the browser's mounted workspace. Reject a
+// mistakenly submitted debug request before authentication or any SQL work.
+
+
 type PosCheckoutItemInput = {
+  fulfillmentMode?: string;
+  bowlBenefit?: PosBowlChoice;
+  scaleCaptureId?: string;
+  weightMeasurement?: PosWeightMeasurement;
   menuCatalogItemId?: string;
   quantity?: number;
   measuredQuantity?: number | string;
   measuredUnit?: string;
+  preparationNote?: string;
   selectedOptions?: Array<{
     groupId?: string;
     optionIds?: string[];
@@ -34,6 +73,12 @@ function publishPosOrderEventAfterResponse(eventName: "order.created" | "order.u
 }
 
 type PosCheckoutBody = {
+  posFulfillmentPolicyVersion?: number;
+  printDocumentVersion?: number;
+  printMode?: PosPrintMode;
+  relayOwner?: RelayOwner;
+  posMenuRevision?: string;
+  dineInMenuRevision?: string;
   offlineQueued?: boolean;
   offlineClientOrderId?: string;
   offlineCreatedAt?: string;
@@ -46,6 +91,8 @@ type PosCheckoutBody = {
   tableSessionKey?: string;
   diningSessionId?: string;
   bowlNumber?: string;
+  bowlTicketVersion?: number;
+  dineInAssociationVersion?: number;
   memberId?: string;
   memberToken?: string;
   memberPhone?: string;
@@ -54,7 +101,10 @@ type PosCheckoutBody = {
   memberLanguage?: string;
   couponId?: string;
   discountPresetKey?: string;
+  discountQuote?: unknown;
   receiptRequested?: boolean;
+  receiptRecipientName?: string;
+  receiptPurposeText?: string;
   note?: string;
   items?: PosCheckoutItemInput[];
 };
@@ -68,7 +118,7 @@ type PosTableAdjustmentBody = {
   quantity?: number | string;
 };
 
-type PosDiscountPreset = {
+type PosDiscountPreset = PosCampaignFields & {
   key: string;
   name: string;
   displayNames?: Record<string, string>;
@@ -114,6 +164,7 @@ const defaultDiscountPresets: PosDiscountPreset[] = [{
 }];
 
 const defaultCustomerDisplayMediaSettings = {
+  standby: defaultPosDisplayStandbySettings(),
   mode: "default",
   transition: "fade",
   slideDurationSeconds: 8,
@@ -123,29 +174,8 @@ const defaultCustomerDisplayMediaSettings = {
   assets: []
 };
 
-const dineInWeightMalatangOptionGroupKeys = new Set([
-  "heat",
-  "numb",
-  "dine-in-customer-ingredient",
-  "dine-in-customer-ingredients",
-  "customer-requested-ingredient",
-  "customer-requested-ingredients",
-  "counter-ingredient",
-  "counter-ingredients",
-  "counter-requested-ingredient",
-  "counter-requested-ingredients"
-]);
-const dineInWeightMalatangOptionGroupNames = new Set([
-  "堂吃客人指定食材",
-  "堂食客人指定食材",
-  "柜台指定食材",
-  "カウンター指定食材",
-  "店内客指定食材",
-  "店内お客様指定食材"
-]);
-
-function isDineInWeightMalatangOptionGroup(group: { groupKey: string; groupName: string }) {
-  return dineInWeightMalatangOptionGroupKeys.has(group.groupKey) || dineInWeightMalatangOptionGroupNames.has(group.groupName);
+function isDineInWeightMalatangOptionGroup(group: { groupKey: string; groupName: string; posEnabled?: boolean }) {
+  return isDineInBowlOptionGroup(group);
 }
 
 function normalizeText(value: unknown) {
@@ -204,7 +234,7 @@ function normalizeDiscountPresets(value: unknown) {
     const discountType = discountTypes.has(normalizeText(record.discountType)) ? normalizeText(record.discountType) as PosDiscountPreset["discountType"] : "percent";
     const maxValue = discountType === "percent" ? 100 : 999999;
     const discountValue = Math.max(0, Math.min(maxValue, Math.round(Number(record.discountValue) || 0)));
-    if (discountValue <= 0) return [];
+    if (discountValue <= 0 && !(record.applicationMode === "campaign" && record.campaignBasis === "bowl_choice" && record.bowlBenefitMode === "gift_only")) return [];
     const targetScope = discountTargetScopes.has(normalizeText(record.targetScope)) ? normalizeText(record.targetScope) as PosDiscountPreset["targetScope"] : "all";
     const targetValue = targetScope === "all" ? "" : normalizeText(record.targetValue);
     if (targetScope !== "all" && !targetValue) return [];
@@ -221,7 +251,8 @@ function normalizeDiscountPresets(value: unknown) {
       targetValue,
       enabled: record.enabled !== false,
       stampEligible: record.stampEligible === true,
-      allowCouponCombination: record.allowCouponCombination === true
+      allowCouponCombination: record.allowCouponCombination === true,
+      ...normalizePosCampaignFields(record)
     }];
   });
   return presets.length ? presets : defaultDiscountPresets;
@@ -234,6 +265,8 @@ function normalizeCustomerDisplayMediaSettings(value: unknown) {
   const backgroundColor = normalizeText(record.backgroundColor);
   const assets = Array.isArray(record.assets) ? record.assets : [];
   return {
+    ...record,
+    standby: normalizePosDisplayStandbySettings(record.standby),
     mode: modeValue === "slideshow" || modeValue === "video" ? modeValue : "default",
     transition: transitionValue === "slide" || transitionValue === "none" ? transitionValue : "fade",
     slideDurationSeconds: Math.max(3, Math.min(60, Math.round(Number(record.slideDurationSeconds) || defaultCustomerDisplayMediaSettings.slideDurationSeconds))),
@@ -350,8 +383,8 @@ function getNestedNumberFromSchema(schema: Record<string, unknown> | undefined, 
   return getNumberFromSchema(parent as Record<string, unknown>, keys);
 }
 
-function getWeightPricingConfig(item: { posPricingMode?: string; posWeightUnit?: string; posWeightUnitPrice?: number | null; variableSchema?: Record<string, unknown> }, orderType: string) {
-  if (orderType !== "eat_in" || item.posPricingMode !== "weight") return null;
+function getWeightPricingConfig(item: PosItemPricingInput & { posPricingMode?: string; posWeightUnit?: string; posWeightUnitPrice?: number | null; variableSchema?: Record<string, unknown> }, orderType: string) {
+  if (orderType !== "eat_in" || resolvePosItemPricingMode(item) !== "weight") return null;
   const schema = item.variableSchema ?? {};
   const unit = normalizeText(item.posWeightUnit) || String(schema.weightUnit ?? schema.measuredUnit ?? (schema.posWeightPricing as Record<string, unknown> | undefined)?.unit ?? "g").trim() || "g";
   const unitPrice = Number(item.posWeightUnitPrice ?? 0) > 0
@@ -361,17 +394,8 @@ function getWeightPricingConfig(item: { posPricingMode?: string; posWeightUnit?:
   return { unit, unitPrice };
 }
 
-function getOptionGroupLimit(ruleJson: Record<string, unknown>, fallback: number) {
-  const limit = Number(ruleJson?.limit);
-  if (!Number.isFinite(limit)) return fallback;
-  return Math.max(0, Math.floor(limit));
-}
-
-function getEffectiveSelectionType(group: { groupKey: string; selectionType: string }) {
-  if (group.selectionType === "quantity") return "quantity";
-  if (["size", "temperature", "sweetness", "ice", "option"].includes(group.groupKey)) return "single";
-  if (group.groupKey === "topping") return "multiple";
-  return group.selectionType || "single";
+function getEffectiveSelectionType(group: { groupKey: string; selectionType: string; sourceGroupId?: string; localKind?: string }) {
+  return getPosOptionSelectionType(group);
 }
 
 function getAllowedRuleKey(groupKey: string) {
@@ -412,6 +436,8 @@ async function getSelectedStoreId(request: Request, session: Awaited<ReturnType<
 async function getPosMenu(selectedStoreId: string) {
   if (!selectedStoreId) return { brands: [], categories: [], items: [], optionGroups: [] };
 
+  const config = await readPosMenuConfig(selectedStoreId);
+  const shownItemIds = config.settings.filter(s=>s.kind==='item'&&s.visible===true).map(s=>s.targetId);
   const [brands, categories, items] = await Promise.all([
     sql`
       select brands.id::text, brands.name
@@ -467,13 +493,13 @@ async function getPosMenu(selectedStoreId: string) {
         and menu_categories.name = coalesce(nullif(menu_catalog_items.category, ''), '未分類')
       where menu_catalog_items.is_active = true
         and menu_catalog_items.store_id is null
-        and coalesce(menu_store_settings.pos_enabled, true) = true
+        and (coalesce(menu_store_settings.pos_enabled, true) = true or menu_catalog_items.id::text = any(${shownItemIds}))
         and coalesce(menu_store_settings.is_available, true) = true
       order by brands.name, coalesce(menu_categories.sort_order, 9999), menu_catalog_items.sort_order, menu_catalog_items.name
     `
   ]);
 
-  const sellableItems = (items as Array<{ id: string; name: string }>).filter(isPosSellableItem);
+  const sellableItems = (items as Array<{ id: string; brandId: string; brandName: string; name: string; basePrice: number; priceOverride: number | null } & PosItemPricingInput>).filter(isPosSellableItem).map(normalizePosItemPricing);
   const itemIds = sellableItems.map((item) => item.id);
   const optionGroups = itemIds.length
     ? await sql`
@@ -524,45 +550,7 @@ async function getPosMenu(selectedStoreId: string) {
     `
     : [];
 
-  return { brands, categories, items: sellableItems, optionGroups };
-}
-
-async function getTodaySummary(selectedStoreId: string) {
-  if (!selectedStoreId) return { orderCount: 0, total: 0, average: 0, latestOrders: [] };
-
-  const rows = await sql`
-    select
-      count(*)::int as "orderCount",
-      coalesce(sum(amount), 0)::int as total
-    from store_customer_orders
-    where store_id::text = ${selectedStoreId}
-      and order_source in ('store_pos', 'table_qr')
-      and created_at >= (date_trunc('day', now() at time zone 'Asia/Tokyo') at time zone 'Asia/Tokyo')
-      and created_at < ((date_trunc('day', now() at time zone 'Asia/Tokyo') + interval '1 day') at time zone 'Asia/Tokyo')
-      and status <> 'cancelled'
-  `;
-  const latestOrders = await sql`
-    select
-      id::text,
-      pickup_code as "pickupCode",
-      amount,
-      payment_provider as "paymentMethod",
-      to_char(created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime"
-    from store_customer_orders
-    where store_id::text = ${selectedStoreId}
-      and order_source in ('store_pos', 'table_qr')
-    order by created_at desc
-    limit 8
-  `;
-  const summary = rows[0] as { orderCount: number; total: number } | undefined;
-  const orderCount = Number(summary?.orderCount ?? 0);
-  const total = Number(summary?.total ?? 0);
-  return {
-    orderCount,
-    total,
-    average: orderCount ? Math.round(total / orderCount) : 0,
-    latestOrders
-  };
+  return { brands, categories, ...applyPosMenu(sellableItems, optionGroups as Array<{id:string;options:Array<{id:string;priceDelta:number|null}>}>, config) };
 }
 
 async function getTableCheckoutRequests(selectedStoreId: string) {
@@ -789,7 +777,7 @@ async function refreshTableQrOrderAfterAdjustment(input: {
 }
 
 async function getPosSettings(selectedStoreId: string) {
-  const defaults = { dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: defaultDiscountPresets, customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings, printerSettings: normalizePosPrinterSettings(null) };
+  const defaults = { dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: defaultDiscountPresets, customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings, printerSettings: normalizePosPrinterSettings(null), scaleTareSettings: defaultPosScaleTareSettings(), scaleFilterSettings: defaultPosScaleFilterSettings(), fulfillmentWorkspace: defaultPosFulfillmentWorkspaceSettings() };
   if (!selectedStoreId) return defaults;
   const rows = await sql`
     select
@@ -801,7 +789,9 @@ async function getPosSettings(selectedStoreId: string) {
       coalesce(nullif(price_tax_mode, ''), 'tax_included') as "priceTaxMode",
       coalesce(discount_presets, '[]'::jsonb) as "discountPresets",
       coalesce(customer_display_media_settings, '{}'::jsonb) as "customerDisplayMediaSettings",
-      coalesce(printer_settings, '{}'::jsonb) as "printerSettings"
+      coalesce(printer_settings, '{}'::jsonb) as "printerSettings",
+      coalesce(scale_tare_settings, '{}'::jsonb) as "scaleTareSettings",
+      coalesce(scale_filter_settings, '{}'::jsonb) as "scaleFilterSettings"
     from pos_store_settings
     where store_id::text = ${selectedStoreId}
     limit 1
@@ -811,7 +801,10 @@ async function getPosSettings(selectedStoreId: string) {
     ...settings,
     discountPresets: normalizeDiscountPresets(settings.discountPresets),
     customerDisplayMediaSettings: normalizeCustomerDisplayMediaSettings(settings.customerDisplayMediaSettings),
-    printerSettings: normalizePosPrinterSettings(settings.printerSettings)
+    printerSettings: normalizePosPrinterSettings(settings.printerSettings),
+    fulfillmentWorkspace: normalizePosFulfillmentWorkspaceSettings((settings.printerSettings as unknown as Record<string, unknown> | null)?.fulfillmentWorkspace),
+    scaleTareSettings: normalizePosScaleTareSettings(settings.scaleTareSettings),
+    scaleFilterSettings: normalizePosScaleFilterSettings(settings.scaleFilterSettings)
   } : defaults;
 }
 
@@ -822,24 +815,53 @@ export async function GET(request: Request) {
   const { access, selectedStoreId, forbidden } = await getSelectedStoreId(request, session);
   if (forbidden) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
+  if (new URL(request.url).searchParams.get('menuRevisionOnly') === '1') {
+    const [posRevision, dineInRevision] = selectedStoreId
+      ? await Promise.all([readPosMenuRevision(selectedStoreId), readDineInMenuRevision(selectedStoreId)])
+      : [{ revision: '' }, { revision: '' }];
+    return Response.json({ selectedStoreId, posMenuRevision: posRevision.revision, dineInMenuRevision: dineInRevision.revision },
+      { headers: { 'Cache-Control': 'no-store' } });
+  }
+
+  const debugMode = new URL(request.url).searchParams.get("debug") === "1";
   const [menu, todaySummary, posSettings, tableCheckoutRequests] = await Promise.all([
     getPosMenu(selectedStoreId),
-    getTodaySummary(selectedStoreId),
+    debugMode ? { orderCount: 0, total: 0, average: 0, latestOrders: [] } : getTodaySummary(selectedStoreId),
     getPosSettings(selectedStoreId),
-    getTableCheckoutRequests(selectedStoreId)
+    debugMode ? [] : getTableCheckoutRequests(selectedStoreId)
   ]);
 
+  const dineInState = selectedStoreId ? await readDineInMenus(selectedStoreId) : null;
+  const localMenu = dineInState ? await resolveDineInCatalog(selectedStoreId, dineInState) : null;
+  const independentBrands = new Set(localMenu?.brandIds ?? []);
+  const fulfillmentModes = dineInState ? dineInSourceFulfillmentModes(dineInState) : new Map<string, PosItemFulfillmentMode>();
+  const physicalItems = menu.items.map(item => ({ ...item, fulfillmentMode: getPosItemFulfillmentMode({
+    brandName: String(item.brandName || ''), itemKind: String(item.itemKind || ''), posPricingMode: String(item.posPricingMode || ''),
+    fulfillmentMode: fulfillmentModes.get(String(item.id))
+  }) }));
   return Response.json({
     access,
     selectedStoreId,
     ...menu,
+    items: physicalItems,
+    posFulfillmentPolicyVersion: 1,
+    dineInMenuRevision: dineInState?.ready ? dineInState.revision : '',
+    dineInMenu: localMenu && independentBrands.size ? {
+      items: [...physicalItems.filter(item => !independentBrands.has(String((item as {brandId?:string}).brandId))), ...localMenu.items],
+      optionGroups: [...menu.optionGroups.filter(group => !independentBrands.has(String((group as {brandId?:string}).brandId))), ...localMenu.optionGroups],
+      categories: [...menu.categories.filter(category => !independentBrands.has(String(category.brandId))), ...localMenu.categories]
+    } : null,
     posSettings,
+    serverTime: new Date().toISOString(),
     todaySummary,
-    tableCheckoutRequests
-  });
+    tableCheckoutRequests,
+    ...(debugMode ? { debugMode: true } : {})
+  }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function PATCH(request: Request) {
+  const debugRejection = rejectDebugWrite(request);
+  if (debugRejection) return debugRejection;
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -930,10 +952,13 @@ export async function PATCH(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const debugRejection = rejectDebugWrite(request);
+  if (debugRejection) return debugRejection;
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => ({})) as PosCheckoutBody;
+  const checkoutFingerprint = createHash("sha256").update(JSON.stringify({ ...body, offlineQueued: undefined, dineInAssociationVersion: undefined })).digest("hex");
   const offlineQueued = body.offlineQueued === true;
   const offlineClientOrderId = normalizeText(body.offlineClientOrderId);
   const offlineCreatedAt = normalizeText(body.offlineCreatedAt);
@@ -949,15 +974,20 @@ export async function POST(request: Request) {
   const memberName = normalizeText(body.memberName);
   const memberLanguage = normalizeMemberLanguage(body.memberLanguage);
   const couponId = normalizeText(body.couponId);
-  const discountPresetKey = normalizeText(body.discountPresetKey);
+  const requestedDiscountPresetKey = normalizeText(body.discountPresetKey);
+  let discountPresetKey = requestedDiscountPresetKey;
   const tableSessionKey = normalizeText(body.tableSessionKey);
   const diningSessionId = normalizeText(body.diningSessionId);
-  const bowlNumber = normalizeText(body.bowlNumber);
   const cashTenderedAmount = body.cashTenderedAmount === null || body.cashTenderedAmount === undefined || body.cashTenderedAmount === ""
     ? null
     : Math.round(Number(body.cashTenderedAmount));
   const note = normalizeText(body.note);
   const receiptRequested = body.receiptRequested === true;
+  let invoiceDetails: ReturnType<typeof validateInvoiceDetails> = { receiptRecipientName: undefined, receiptPurposeText: undefined };
+  try { invoiceDetails = receiptRequested ? validateInvoiceDetails(body) : { receiptRecipientName: undefined, receiptPurposeText: undefined }; }
+  catch (error) { return Response.json({ error: error instanceof Error ? error.message : '宛名を確認してください。' }, { status: 400 }); }
+  const durablePrintDocuments = body.printDocumentVersion === 1 && !tableSessionKey;
+  if (durablePrintDocuments && !["auto", "deferred", "none"].includes(String(body.printMode))) return Response.json({ error: "伝票の印刷方法を選択してください。" }, { status: 400 });
   const cartItems = Array.isArray(body.items) ? body.items : [];
 
   if (!storeId || (!tableSessionKey && cartItems.length === 0)) {
@@ -978,24 +1008,52 @@ export async function POST(request: Request) {
   ) {
     return Response.json({ error: "オフライン会計は、会員・クーポン・割引・テーブル会計を使わない現金注文のみ同期できます。" }, { status: 400 });
   }
-  if (offlineClientOrderId) {
+  // A sibling request may finish this sale while we wait for a cash-session
+  // lock. Reuse its saved documents before suggesting a fresh checkout.
+  async function findRecordedCheckout(): Promise<Response | null> {
+    if (!offlineClientOrderId) return null;
     const existingRows = await sql`
-      select id::text as "orderId", pickup_code as "pickupCode", amount
+      select id::text as "orderId", pickup_code as "pickupCode", amount, status, payment_status as "paymentStatus", customer_summary as "customerSummary"
       from store_customer_orders
       where offline_client_order_id = ${offlineClientOrderId}
         and store_id::text = ${storeId}
       limit 1
     `;
     if (existingRows[0]) {
+      if (existingRows[0].customerSummary?.checkoutFingerprint && existingRows[0].customerSummary.checkoutFingerprint !== checkoutFingerprint) {
+        return Response.json({ error: "同じ会計IDの内容が変わっています。元の会計を確認してください。" }, { status: 409 });
+      }
+      await markInventoryOrderReady(String(existingRows[0].orderId));
+      await ensureProductionTasksForOrder(String(existingRows[0].orderId));
+      await awardLoyaltyForPaidOrder(String(existingRows[0].orderId));
+      await syncWebReservationToSalesOrder(String(existingRows[0].orderId));
+      const existingTickets = await readPosServingTickets(String(existingRows[0].orderId));
       return Response.json({
         ok: true,
         duplicate: true,
         ...existingRows[0],
+        ...existingRows[0].customerSummary,
+        reprintAllowed: existingRows[0].paymentStatus === "paid" && ["new", "preparing", "ready"].includes(String(existingRows[0].status)) && !existingTickets.some(ticket => ticket.handedOffAt),
+        servingTickets: existingTickets,
+        ...(durablePrintDocuments ? { printDocuments: await readPosCheckoutPrintDocuments(storeId, String(existingRows[0].orderId)) } : {}),
         todaySummary: await getTodaySummary(storeId)
       });
     }
+    return null;
   }
+  const recordedCheckout = await findRecordedCheckout();
+  if (recordedCheckout) return recordedCheckout;
   const posSettings = await getPosSettings(storeId);
+  const printMode: PosPrintMode = durablePrintDocuments ? body.printMode === "auto" && !posSettings.printerSettings.enabled ? "deferred" : body.printMode! : "auto";
+  const relayRows = await relayStations(storeId);
+  const relayRequired = relayRows.some(row => row.enabled && (row.print_enabled || row.scale_enabled));
+  const relayStation = relayRows.find(row => row.id === body.relayOwner?.stationId && row.enabled);
+  if (relayRequired) {
+    if (!relayStation || !body.relayOwner || offlineQueued) return Response.json({error:'レジを取得し、オンラインで会計してください。'},{status:409});
+    try { assertRelayOrigin(request); await requireRelayOwner(storeId,body.relayOwner,session); } catch(e) { return relayResponse(e); }
+    if (relayStation.print_enabled && ((!relayStation.device_online && !(durablePrintDocuments && printMode !== 'auto')) || tableSessionKey)) return Response.json({error:tableSessionKey?'中継印刷ではテーブル会計を利用できません。':'中継端末の接続を確認してください。'},{status:409});
+  }
+  const relayPrinting = Boolean(relayRequired && relayStation?.print_enabled && (!durablePrintDocuments || printMode === "auto"));
   if (orderType === "eat_in" && !posSettings.dineInEnabled) {
     return Response.json({ error: "この店舗では店内飲食の会計は無効です。" }, { status: 400 });
   }
@@ -1006,6 +1064,8 @@ export async function POST(request: Request) {
   if (tableSessionKey) {
     const cashSessionId = await getOpenCashSessionId(storeId);
     if (!cashSessionId) {
+      const recorded = await findRecordedCheckout();
+      if (recorded) return recorded;
       return Response.json({ error: "POS 会計の前に開店前のレジ金額を確認してください。" }, { status: 400 });
     }
     const orders = await sql`
@@ -1086,6 +1146,7 @@ export async function POST(request: Request) {
       pickupCode: (orders as Array<{ pickupCode: string }>).map((order) => order.pickupCode).join("・"),
       amount,
       receiptRequested,
+      ...invoiceDetails,
       subtotalAmount: amount,
       taxableAmount: taxSummary.taxableAmount,
       taxAmount: taxSummary.taxAmount,
@@ -1108,6 +1169,23 @@ export async function POST(request: Request) {
     });
   }
 
+  const posMenuConfig = await readPosMenuConfig(storeId);
+  const dineInState = await readDineInMenus(storeId);
+  if (orderType === 'eat_in' && body.dineInAssociationVersion !== 1 && dineInState.menus.some(menu => menu.enabled && menu.catalog.optionGroups.some(group => group.explicitItemLinks))) {
+    return Response.json({ error: '選択グループの関連設定が更新されました。メニュー更新だけでなく、POS のページ全体を再読み込みしてから会計してください。', code: 'POS_DINE_IN_ASSOCIATION_REFRESH_REQUIRED' }, { status: 409 });
+  }
+  const localMenu = orderType === 'eat_in' ? await resolveDineInCatalog(storeId, dineInState) : null;
+  const fulfillmentModes = dineInSourceFulfillmentModes(dineInState);
+  const enforcePhysicalFulfillmentRevision = body.posFulfillmentPolicyVersion === 1 && dineInState.ready;
+  if (enforcePhysicalFulfillmentRevision && body.dineInMenuRevision !== dineInState.revision) {
+    return Response.json({error:'提供方法の設定が変更されました。メニューを更新して内容を確認してください。',code:'POS_FULFILLMENT_MENU_CHANGED'},{status:409});
+  }
+  const independentBrands = new Set(localMenu?.brandIds ?? []);
+  if (orderType === 'eat_in' && (independentBrands.size || body.dineInMenuRevision) && body.dineInMenuRevision !== dineInState.revision) {
+    return Response.json({error:'店内飲食メニューが変更されました。再読込して商品を選び直してください。'},{status:409});
+  }
+  if (posMenuConfig.settings.length && body.posMenuRevision !== posMenuConfig.revision) return Response.json({error:'店内メニューが変更されました。再読込して内容を確認してください。'},{status:409});
+  const shownItemIds = posMenuConfig.settings.filter(s=>s.kind==='item'&&s.visible===true).map(s=>s.targetId);
   const requestedIds = Array.from(new Set(cartItems.map((item) => normalizeText(item.menuCatalogItemId)).filter(Boolean)));
   if (requestedIds.length === 0) {
     return Response.json({ error: "商品を選択してください。" }, { status: 400 });
@@ -1118,6 +1196,7 @@ export async function POST(request: Request) {
       menu_catalog_items.id::text,
       menu_catalog_items.brand_id::text as "brandId",
       menu_catalog_items.name,
+      brands.name as "brandName",
       coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
       menu_catalog_items.item_kind as "itemKind",
       coalesce(menu_catalog_items.category, '') as category,
@@ -1125,36 +1204,52 @@ export async function POST(request: Request) {
       coalesce(nullif(store_brands.pos_pricing_mode, ''), 'fixed') as "posPricingMode",
       coalesce(nullif(store_brands.pos_weight_unit, ''), 'g') as "posWeightUnit",
       store_brands.pos_weight_unit_price::float as "posWeightUnitPrice",
+      menu_catalog_items.base_price::float as "basePrice",
       coalesce(menu_store_settings.price_override, menu_catalog_items.base_price, 0)::int as price
     from menu_catalog_items
+    join brands on brands.id = menu_catalog_items.brand_id
     join store_brands
       on store_brands.brand_id = menu_catalog_items.brand_id
       and store_brands.store_id = ${storeId}
     left join menu_store_settings
       on menu_store_settings.menu_catalog_item_id = menu_catalog_items.id
       and menu_store_settings.store_id = ${storeId}
-    where menu_catalog_items.id::text = any(${requestedIds})
-      and menu_catalog_items.is_active = true
+    where menu_catalog_items.is_active = true
       and menu_catalog_items.store_id is null
-      and coalesce(menu_store_settings.pos_enabled, true) = true
+      and (coalesce(menu_store_settings.pos_enabled, true) = true or menu_catalog_items.id::text = any(${shownItemIds}))
       and coalesce(menu_store_settings.is_available, true) = true
   `;
-  if ((menuRows as Array<{ name: string }>).some((item) => !isPosSellableItem(item))) {
+  if ((menuRows as Array<{ id: string; name: string }>).some((item) => requestedIds.includes(item.id) && !isPosSellableItem(item))) {
     return Response.json({ error: "案内専用の商品は会計できません。商品を選び直してください。" }, { status: 400 });
   }
-  const menuById = new Map((menuRows as Array<{
+  type CheckoutMenuItem = {
     id: string;
     brandId: string;
+    brandName: string;
     name: string;
     displayNames?: Record<string, string>;
     itemKind: string;
     category: string;
     posPricingMode: string;
+    posPricingOverride?: 'fixed' | 'weight';
     posWeightUnit: string;
     posWeightUnitPrice: number | null;
     price: number;
+    basePrice: number | null;
     variableSchema: Record<string, unknown>;
-  }>).filter(isPosSellableItem).map((item) => [item.id, item]));
+    sourceItemId?: string;
+    optionGroupIds?: string[];
+    fulfillmentMode?: PosItemFulfillmentMode;
+    productionType?: 'bowl' | 'drink' | 'item';
+    dineInMenuRevision?: string;
+  };
+  const checkoutMenuItems: CheckoutMenuItem[] = [
+    ...applyPosItems((menuRows as CheckoutMenuItem[]).map(normalizePosItemPricing), posMenuConfig.settings).filter(item => !independentBrands.has(item.brandId)),
+    ...(localMenu?.items ?? []).map(item => ({...item, price:Number(item.price ?? item.priceOverride ?? item.basePrice ?? 0)}))
+  ].map(item => ({ ...item, fulfillmentMode: getPosItemFulfillmentMode({ ...item,
+    fulfillmentMode: item.sourceItemId ? item.fulfillmentMode : fulfillmentModes.get(item.id)
+  }) }));
+  const menuById = new Map(checkoutMenuItems.filter(isPosSellableItem).map(item => [item.id, item]));
   const optionRows = await sql`
     select
       menu_options.id::text,
@@ -1183,12 +1278,9 @@ export async function POST(request: Request) {
     where menu_options.is_active = true
       and menu_option_groups.is_active = true
       and coalesce(menu_option_store_settings.is_available, true) = true
-      and (
-        menu_option_groups.menu_catalog_item_id is null
-        or menu_option_groups.menu_catalog_item_id::text = any(${requestedIds})
-      )
+
   `;
-  const optionsById = new Map((optionRows as Array<{
+  type CheckoutMenuOption = {
     id: string;
     optionKey: string;
     name: string;
@@ -1204,16 +1296,49 @@ export async function POST(request: Request) {
     groupDisplayNames?: Record<string, string>;
     selectionType: string;
     ruleJson: Record<string, unknown>;
-  }>).map((option) => [option.id, option]));
+    posEnabled?: boolean;
+    sourceOptionId?: string;
+    localOnly?: true;
+    localOriginId?: string;
+    sourceGroupId?: string;
+    sourceGroupRuleJson?: Record<string, unknown>;
+    sourceName?: string;
+    groupSourceName?: string;
+    localKind?: string;
+    explicitItemLinks?: true;
+    itemOptionExclusions?: Record<string, string[]>;
+    linkedItemId?: string;
+    linkedSourceItemId?: string;
+    complimentary?: true;
+    campaignKey?: string;
+    originalUnitPrice?: number;
+    giftSourceGroupName?: string;
+  };
+  const checkoutOptions: CheckoutMenuOption[] = [
+    ...applyPosOptions(optionRows as CheckoutMenuOption[],posMenuConfig.settings).filter(option => !independentBrands.has(option.brandId)),
+    ...(localMenu ? flattenDineInOptions(localMenu) : []).map(option => ({...option,priceDelta:Number(option.priceDelta ?? 0)}))
+  ];
+  const optionsById = new Map(checkoutOptions.map(option => [option.id, option]));
+
+  // Read immutable captures only from this cashier's scoped station. Client metadata is display-only.
+  const requestedCaptures=cartItems.map(item=>normalizeText(item.scaleCaptureId)).filter(Boolean);
+  const captureRows=requestedCaptures.length?await sql`select c.id::text,c.grams::float,c.reading
+    from store_relay_scale_captures c join store_relay_stations s on s.id=c.station_id
+    where s.store_id::text=${storeId} and c.id::text=any(${requestedCaptures}::text[])
+      and c.station_id::text=${body.relayOwner?.stationId||''} and c.epoch=${body.relayOwner?.epoch??-1}
+      and c.employee_id::text=${session.id} and c.order_id is null`:[];
+  const captureById=new Map(captureRows.map(c=>[String(c.id),c]));
 
   let normalizedItems: Array<{
     id: string;
     brandId: string;
+    brandName: string;
     name: string;
     displayNames?: Record<string, string>;
     itemKind: string;
     category: string;
     posPricingMode: string;
+    posPricingOverride?: 'fixed' | 'weight';
     posWeightUnit: string;
     posWeightUnitPrice: number | null;
     quantity: number;
@@ -1222,14 +1347,25 @@ export async function POST(request: Request) {
     measuredQuantity: number | null;
     measuredUnit: string;
     measuredUnitPrice: number | null;
+    preparationNote: string;
+    scaleCaptureId: string;
+    weightMeasurement?: PosWeightMeasurement;
     selectedOptions: Array<NonNullable<ReturnType<typeof optionsById.get>>>;
+    bowlBenefit?: PosBowlChoice;
+    sourceItemId?: string;
+    fulfillmentMode?: PosItemFulfillmentMode;
+    productionType?: 'bowl' | 'drink' | 'item';
+    dineInMenuRevision?: string;
   }> = [];
   try {
     normalizedItems = cartItems.map((item) => {
       const menuItem = menuById.get(normalizeText(item.menuCatalogItemId));
-      if (!menuItem) return null;
+      if (!menuItem) throw new Error("商品の販売状態が変わりました。商品を選び直してください。");
+      if (offlineQueued && body.posFulfillmentPolicyVersion === 1 && item.fulfillmentMode !== getPosItemFulfillmentMode(menuItem))
+        throw new Error('オフライン会計時の提供方法と現在の設定が一致しません。元の会計を確認してください。');
+      if (item.bowlBenefit && (!isPosBowl(menuItem) || Number(item.quantity) !== 1 || offlineQueued)) throw new Error("特典はオンラインで1杯ずつ選択してください。");
       const weightPricing = getWeightPricingConfig(menuItem, orderType);
-      const quantity = weightPricing ? 1 : toPositiveInt(item.quantity);
+      const quantity = toPositiveInt(item.quantity);
       const measuredQuantity = weightPricing ? toPositiveMeasuredQuantity(item.measuredQuantity) : null;
       const measuredUnit = weightPricing?.unit ?? "";
       const measuredUnitPrice = weightPricing?.unitPrice ?? null;
@@ -1239,31 +1375,55 @@ export async function POST(request: Request) {
       if (weightPricing && measuredQuantity === null) {
         throw new Error(`${menuItem.name} は重量を入力してください。`);
       }
+      const captureId=normalizeText(item.scaleCaptureId);
+      let weightMeasurement:PosWeightMeasurement|undefined;
+      if(weightPricing){
+        if(captureId){
+          const capture=captureById.get(captureId);
+          const grams=Number(measuredQuantity)*(measuredUnit==='kg'?1000:measuredUnit==='g'?1:NaN);
+          if(!capture||!Number.isFinite(grams)||Math.abs(Number(capture.grams)-grams)>=0.0001)
+            throw Object.assign(new Error('計量データを確認してください。'),{status:409});
+          weightMeasurement=posWeightMeasurementFromReading(capture.reading);
+          if(posSettings.scaleTareSettings.enabled&&weightMeasurement.mode!=='preset')
+            throw Object.assign(new Error('ボウルの重量設定が変わりました。POSを再読み込みして量り直してください。'),{status:409});
+        }else if(item.weightMeasurement?.mode==='manual_net')weightMeasurement={mode:'manual_net'};
+        else if(posSettings.scaleTareSettings.enabled)throw Object.assign(new Error('ボウルの重量設定が変わりました。POSを再読み込みし、食材の正味重量を確認してください。'),{status:409});
+      }
       const unitPrice = weightPricing ? Math.round((measuredQuantity ?? 0) * (measuredUnitPrice ?? 0)) : Number(menuItem.price ?? 0);
       const selectedOptions = Array.isArray(item.selectedOptions) ? item.selectedOptions : [];
       const selected = selectedOptions.flatMap((group) => asStringArray(group.optionIds).map((optionId) => optionsById.get(optionId)).filter(Boolean)) as Array<NonNullable<ReturnType<typeof optionsById.get>>>;
-      const validSelected = selected.filter((option) => {
-        if (option.brandId !== menuItem.brandId) return false;
-        if (option.menuCatalogItemId && option.menuCatalogItemId !== menuItem.id) return false;
-        if (!option.menuCatalogItemId && option.groupApplicableCategories.length && !option.groupApplicableCategories.includes(menuItem.category || "未分類")) return false;
-        if (option.applicableCategories.length && !option.applicableCategories.includes(menuItem.category || "未分類")) return false;
-        if (weightPricing && !isDineInWeightMalatangOptionGroup(option)) return false;
-        const allowedKeys = asStringArray(menuItem.variableSchema?.[getAllowedRuleKey(option.groupKey)]);
-        if (!allowedKeys.length) return true;
-        return allowedKeys.includes(option.optionKey) || allowedKeys.includes(option.name);
-      });
-      const groupedCounts = new Map<string, { count: number; optionIds: Set<string>; selectionType: string; limit: number; groupName: string }>();
+      // Build the dependency context from trusted option rows, not client-supplied group IDs.
+      const dependencySelection: Record<string, string[]> = {};
+      for (const option of selected) (dependencySelection[option.groupId] ||= []).push(option.id);
+      const isAllowedOption = (option: NonNullable<ReturnType<typeof optionsById.get>>) => {
+        if (!isPosOptionAllowed(option, option.id, dependencySelection)) return false;
+        if (menuItem.optionGroupIds && !menuItem.optionGroupIds.includes(option.groupId)) return false;
+        const scopedGroup = { id: option.groupId, brandId: option.brandId, menuCatalogItemId: option.menuCatalogItemId,
+          applicableCategories: option.groupApplicableCategories, groupKey: option.groupKey, name: option.groupName,
+          sourceName: option.groupSourceName, posEnabled: option.posEnabled, localKind: option.localKind,
+          explicitItemLinks: option.explicitItemLinks, itemOptionExclusions: option.itemOptionExclusions };
+        const scopedItem = { ...menuItem, posPricingMode: weightPricing ? 'weight' : 'fixed' };
+        return dineInOptionAppliesToItem(option, scopedGroup, scopedItem);
+      };
+      const validSelected = selected.filter(isAllowedOption);
+      const requestedOptionCount = selectedOptions.reduce((sum, group) => sum + asStringArray(group.optionIds).length, 0);
+      if (validSelected.length !== requestedOptionCount) throw new Error("選択肢の販売状態が変わりました。内容を選び直してください。");
+      const groupedCounts = new Map<string, { count: number; optionIds: Set<string>; optionCounts: Map<string, number>; selectionType: string; limit: number; perOptionMax: number; storeOwned: boolean; groupName: string }>();
       for (const option of validSelected) {
         const selectionType = getEffectiveSelectionType(option);
         const current = groupedCounts.get(option.groupId) ?? {
           count: 0,
           optionIds: new Set<string>(),
+          optionCounts: new Map<string, number>(),
           selectionType,
-          limit: getOptionGroupLimit(option.ruleJson, selectionType === "single" ? 1 : 99),
+          limit: getPosOptionSelectionRules(option).max,
+          perOptionMax: getPosOptionSelectionRules(option).perOptionMax,
+          storeOwned: isStoreDineInSelection(option),
           groupName: option.groupName
         };
         current.count += 1;
         current.optionIds.add(option.id);
+        current.optionCounts.set(option.id, (current.optionCounts.get(option.id) || 0) + 1);
         groupedCounts.set(option.groupId, current);
       }
       for (const group of groupedCounts.values()) {
@@ -1273,28 +1433,48 @@ export async function POST(request: Request) {
         if (group.selectionType === "multiple" && group.optionIds.size !== group.count) {
           throw new Error(`${group.groupName} は同じ選択肢を重複して選べません。`);
         }
+        if (group.storeOwned && [...group.optionCounts.values()].some(count => count > group.perOptionMax)) {
+          throw new Error(`${group.groupName} は同じ選択肢を最大${group.perOptionMax}点までです。`);
+        }
         if (group.count > group.limit) {
           throw new Error(`${group.groupName} は最大${group.limit}点までです。`);
         }
       }
+      const applicableGroups = new Map(Array.from(optionsById.values()).filter(isAllowedOption).map((option) => [option.groupId, option]));
+      for (const [groupId, option] of applicableGroups) {
+        const minimum = getPosOptionSelectionRules(option).min;
+        if ((groupedCounts.get(groupId)?.count || 0) < minimum) throw new Error(`${option.groupName} を選択してください。`);
+      }
       const optionTotal = validSelected.reduce((sum, option) => sum + Number(option.priceDelta ?? 0), 0);
       return {
         ...menuItem,
+        bowlBenefit: item.bowlBenefit,
         quantity,
         unitPrice,
         measuredQuantity,
         measuredUnit,
         measuredUnitPrice,
-        selectedOptions: validSelected,
+        preparationNote: normalizeText(item.preparationNote).slice(0, 300),
+        scaleCaptureId: captureId,
+        weightMeasurement,
+        // Association scopes validate the current menu, not a historical sale. Do not
+        // repeat a whole group's per-product exclusions in every ordered option.
+        selectedOptions: validSelected.map(({ explicitItemLinks: _links, itemOptionExclusions: _exclusions, ...option }) => option),
         amount: (unitPrice + optionTotal) * quantity
       };
     }).filter(Boolean) as typeof normalizedItems;
+    normalizedItems = expandPosBowls(normalizedItems);
+    if (normalizedItems.length > 99) throw new Error("1回の会計は99明細までです。");
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "選択数が正しくありません。" }, { status: 400 });
+    return Response.json({ error: error instanceof Error ? error.message : "選択数が正しくありません。" }, { status: (error as {status?:number}).status===409?409:400 });
   }
 
   if (normalizedItems.length === 0) {
     return Response.json({ error: "POS で販売できる商品がありません。" }, { status: 400 });
+  }
+  const hasPreparation = normalizedItems.some(item => getPosItemFulfillmentMode(item) !== 'immediate');
+  if (normalizedItems.some(item => getPosItemFulfillmentMode(item) === 'immediate') && body.posFulfillmentPolicyVersion !== 1) {
+    return Response.json({error:'提供方法の設定が更新されました。POS のページ全体を再読み込みしてください。',code:'POS_FULFILLMENT_REFRESH_REQUIRED'},{status:409});
   }
   const containsMalatang = await containsMalatangBrand(Array.from(new Set(normalizedItems.map((item) => item.brandId))));
   if (orderType === "eat_in" && !containsMalatang) {
@@ -1302,52 +1482,97 @@ export async function POST(request: Request) {
       error: "ドリンクのみのご注文はお持ち帰りです。店内利用にはマーラータンのご注文が必要です。"
     }, { status: 400 });
   }
-  if (containsMalatang && !/^\d{1,2}$/.test(bowlNumber)) {
-    return Response.json({ error: "マーラータンはボウル番号（1〜30）を入力してください。" }, { status: 400 });
-  }
-  const normalizedBowlNumber = containsMalatang ? Number(bowlNumber) : 0;
-  if (containsMalatang && (normalizedBowlNumber < 1 || normalizedBowlNumber > 30)) {
-    return Response.json({ error: "ボウル番号は1〜30で入力してください。" }, { status: 400 });
-  }
 
   const subtotalAmount = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
-  const discountPreset = discountPresetKey
-    ? posSettings.discountPresets.find((preset) => preset.key === discountPresetKey && preset.enabled) ?? null
-    : null;
-  if (discountPresetKey && !discountPreset) {
+  const manualPreset = requestedDiscountPresetKey
+    ? posSettings.discountPresets.find(preset => preset.key === requestedDiscountPresetKey && preset.enabled && preset.applicationMode !== "campaign")
+    : undefined;
+  if (requestedDiscountPresetKey && !manualPreset) {
     return Response.json({ error: "利用できない割引です。" }, { status: 400 });
   }
-  if (discountPreset && !discountPreset.allowCouponCombination && couponId) {
+  const discountEvaluatedAt = new Date();
+  // Queued offline sales keep the amount recorded at sale time; do not apply today's promotion retroactively.
+  const discountEvaluation = evaluatePosDiscounts(offlineQueued ? [] : posSettings.discountPresets,
+    requestedDiscountPresetKey, normalizedItems, subtotalAmount, discountEvaluatedAt);
+  const giftCatalog = [...checkoutMenuItems.filter(item => !isPosBowl(item)).map(item => ({
+    id: item.id, sourceItemId: item.sourceItemId, brandId: item.brandId, category: item.category,
+    name: item.name, displayNames: item.displayNames, price: Number(item.price), available: true,
+    fixed: !getWeightPricingConfig(item, orderType),
+    requiresOptions: checkoutOptions.some(option => (!item.optionGroupIds || item.optionGroupIds.includes(option.groupId)) && getPosOptionSelectionRules(option).min > 0 && dineInOptionAppliesToItem(option, {
+      ...option, id:option.groupId, name:option.groupName, applicableCategories:option.groupApplicableCategories
+    }, item))
+  })), ...checkoutOptions.map(option => createPosOptionGift(option))];
+  const bowlEvaluation = evaluatePosBowlBenefits(offlineQueued ? [] : posSettings.discountPresets, requestedDiscountPresetKey,
+    normalizedItems.map(item => ({ ...item, isBowl:isPosBowl(item), choice:item.bowlBenefit })), giftCatalog, discountEvaluatedAt);
+  const hasBowlChoice = bowlEvaluation.applications.length > 0 || normalizedItems.some(item => item.bowlBenefit);
+  if (bowlEvaluation.errors.length) return Response.json({code:"POS_BOWL_BENEFIT_CHANGED",error:bowlEvaluation.errors[0]}, {status:409});
+  const discountPreset = bowlEvaluation.preset;
+  discountPresetKey = bowlEvaluation.appliedKey;
+  const posDiscountAmount = bowlEvaluation.amount;
+  if (!offlineQueued && (hasBowlChoice ? !matchesPosBowlQuote(body.discountQuote, bowlEvaluation) :
+    (body.discountQuote !== undefined || discountPreset?.applicationMode === "campaign") && !matchesPosDiscountQuote(body.discountQuote, discountEvaluation))) {
+    return Response.json({ code: hasBowlChoice ? "POS_BOWL_BENEFIT_CHANGED" : "POS_DISCOUNT_CHANGED",
+      error: hasBowlChoice ? "特典設定が変わりました。メニューを更新して、特典を選び直してください。" : "割引・キャンペーン条件が変わりました。金額を確認し直してください。",
+      storeId, discountPresets: posSettings.discountPresets, serverTime: discountEvaluatedAt.toISOString() }, { status: 409 });
+  }
+  if (bowlEvaluation.usedRules.some(rule => !rule.allowCouponCombination) && couponId) {
     return Response.json({ error: "割引とクーポンは同時に利用できません。" }, { status: 400 });
   }
-  const posDiscountAmount = calculatePosDiscount(discountPreset, normalizedItems, subtotalAmount);
-  if (discountPreset && posDiscountAmount <= 0) {
+  if (discountPreset && posDiscountAmount <= 0 && !bowlEvaluation.applications.some(a => a.kind === "gift")) {
     return Response.json({ error: "この注文では割引を適用できません。" }, { status: 400 });
+  }
+  for (const application of bowlEvaluation.applications) {
+    if (!application.gift) continue;
+    const gift = application.gift;
+    if (gift.kind === "option") {
+      const source = optionsById.get(gift.optionId!);
+      if (!source) return Response.json({code:"POS_BOWL_BENEFIT_CHANGED",error:"プレゼントの選択肢を選び直してください。"},{status:409});
+      normalizedItems[application.index].selectedOptions.push({ ...source, priceDelta:0, complimentary:true,
+        campaignKey:application.campaignKey, originalUnitPrice:gift.price, giftSourceGroupName:source.groupName,
+        groupKey:"campaign_gift",groupName:"サービス ¥0",groupDisplayNames:{en:"Complimentary ¥0",zh:"赠品 ¥0","zh-Hans":"赠品 ¥0","zh-Hant":"贈品 ¥0"} });
+      continue;
+    }
+    normalizedItems[application.index].selectedOptions.push({
+      complimentary:true, campaignKey:application.campaignKey, originalUnitPrice:gift.price,
+      id: `campaign-gift:${gift.id}`, optionKey: `campaign-gift:${gift.id}`, name:gift.name,
+      displayNames:gift.displayNames, priceDelta:0, groupId:`campaign:${application.campaignKey}`,
+      groupKey:"campaign_gift", groupName:"サービス ¥0", groupDisplayNames:{en:"Complimentary ¥0",zh:"赠品 ¥0","zh-Hans":"赠品 ¥0","zh-Hant":"贈品 ¥0",ko:"증정 ¥0",vi:"Quà tặng ¥0",ne:"उपहार ¥0"},
+      brandId:gift.brandId, menuCatalogItemId:"", applicableCategories:[], groupApplicableCategories:[],
+      selectionType:"single", ruleJson:{}, linkedItemId:gift.id, linkedSourceItemId:gift.sourceItemId || gift.id
+    });
   }
   const cashSessionId = await getOpenCashSessionId(storeId);
   if (!cashSessionId) {
+    const recorded = await findRecordedCheckout();
+    if (recorded) return recorded;
     return Response.json({ error: "POS 会計の前に開店前のレジ金額を確認してください。" }, { status: 400 });
   }
   const { pickupDate, pickupTime } = getJstParts();
-  const pickupCode = containsMalatang
-    ? String(normalizedBowlNumber).padStart(2, "0")
-    : offlineClientOrderId && /^[A-Z0-9-]{1,12}$/.test(offlinePickupCode)
-      ? offlinePickupCode
-      : createPickupCode("D");
-  if (containsMalatang) {
-    const activeBowl = await sql`
-      select 1
-      from store_customer_orders
-      where store_id::text = ${storeId}
-        and pickup_code = ${pickupCode}
-        and status in ('new', 'preparing', 'ready')
-        and created_at > now() - interval '1 day'
-      limit 1
-    `;
-    if (activeBowl.length) {
-      return Response.json({ error: `${pickupCode}番は使用中です。別のボウルを使用してください。` }, { status: 409 });
-    }
+  const legacyOfflineBowl = offlineQueued && body.bowlTicketVersion !== 1 && /^(?:0?[1-9]|[12]\d|30)$/.test(normalizeText(body.bowlNumber))
+    && offlinePickupCode === String(Number(body.bowlNumber)).padStart(2, "0");
+  if (containsMalatang && !offlineQueued && body.bowlTicketVersion !== 1) {
+    return Response.json({ error: "POSを再読み込みしてください。新しい1杯ごとの伝票発行に更新されました。" }, { status: 409 });
   }
+  const bowlIndexes = legacyOfflineBowl ? [] : normalizedItems.flatMap((item, index) => isPosBowl(item) ? [index] : []);
+  if (offlineQueued && bowlIndexes.length && !/^O[A-F0-9]{8,20}$/.test(offlinePickupCode)) {
+    return Response.json({ error: "オフライン受付番号が正しくありません。" }, { status: 400 });
+  }
+  let bowlCodes: string[] = [];
+  try {
+    if (bowlIndexes.length && !offlineQueued) bowlCodes = await allocatePosBowlCodes(storeId, bowlIndexes.length, cashSessionId);
+  } catch (error) {
+    if (error instanceof PosCashSessionChangedError) {
+      const recorded = await findRecordedCheckout();
+      if (recorded) return recorded;
+      return Response.json({ error: error.message, code: error.code }, { status: error.status });
+    }
+    throw error;
+  }
+  const servingTickets = legacyOfflineBowl ? [] : offlineQueued
+    ? offlineServingTickets(normalizedItems, offlinePickupCode)
+    : bowlIndexes.map((itemIndex, index) => ({ itemIndex, pickupCode: bowlCodes[index] }));
+  const pickupCode = (offlineClientOrderId && /^[A-Z0-9-]{1,24}$/.test(offlinePickupCode)
+    ? offlinePickupCode : createPickupCode("D"));
   const brandId = normalizedItems[0]?.brandId ?? null;
   const firstItemName = normalizedItems[0]?.name ?? "";
   const member = await resolveMemberForOrder({
@@ -1384,14 +1609,7 @@ export async function POST(request: Request) {
     }
     if (couponDiscountAmount <= 0) return Response.json({ error: "この注文ではクーポンを適用できません。" }, { status: 400 });
   }
-  const discountBases = normalizedItems.map((item) => {
-    if (!discountPreset) return 0;
-    if (discountPreset.targetScope === "category" && item.category !== discountPreset.targetValue) return 0;
-    if (discountPreset.targetScope === "item_kind" && item.itemKind !== discountPreset.targetValue) return 0;
-    if (discountPreset.targetScope === "brand" && item.brandId !== discountPreset.targetValue) return 0;
-    return item.amount;
-  });
-  const itemDiscountAmounts = allocateAmountByWeight(posDiscountAmount, discountBases);
+  const itemDiscountAmounts = bowlEvaluation.allocations;
   const couponBases = normalizedItems.map((item, index) => Math.max(0, item.amount - itemDiscountAmounts[index]));
   const itemCouponDiscountAmounts = normalizedItems.map(() => 0);
   if (couponDiscountAmount > 0 && coupon) {
@@ -1415,7 +1633,9 @@ export async function POST(request: Request) {
   });
   const amount = taxSummary.amount;
   if (offlineClientOrderId && Number.isFinite(offlineExpectedAmount) && offlineExpectedAmount > 0 && amount !== Math.round(offlineExpectedAmount)) {
-    return Response.json({ error: `オフライン会計時の金額と現在のメニュー金額が一致しません（会計時 ${offlineExpectedAmount}円 / 現在 ${amount}円）。管理者の確認が必要です。` }, { status: 409 });
+    return Response.json({ error: offlineQueued
+      ? `オフライン会計時の金額と現在のメニュー金額が一致しません（会計時 ${offlineExpectedAmount}円 / 現在 ${amount}円）。管理者の確認が必要です。`
+      : 'メニューの価格が変更されました。再読込して商品を選び直してください。' }, { status: 409 });
   }
   if (
     paymentMethod === "cash" &&
@@ -1425,8 +1645,22 @@ export async function POST(request: Request) {
   }
   const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount !== null ? cashTenderedAmount - amount : null;
 
-  const orderRows = await sql`
+  const orderId = randomUUID();
+  const orderItemIds = normalizedItems.map(() => randomUUID());
+  const handoffTime = new Date().toISOString();
+  const posItemFulfillment = createPosItemFulfillmentSnapshot(normalizedItems.map((item, index) => ({ ...item, orderItemId: orderItemIds[index] })), handoffTime);
+  const printSnapshots = durablePrintDocuments ? buildPosPrintDocumentSnapshots(posSettings.printerSettings,
+    access.stores.find(store => store.id === storeId)?.name || 'Foundr1 STORE', {
+      pickupCode, orderType, paymentMethod, amount, subtotalAmount, discountAmount: posDiscountAmount, couponDiscountAmount,
+      taxAmount: taxSummary.taxAmount, taxRate, cashTenderedAmount, cashChangeAmount, receiptRequested, ...invoiceDetails, note,
+      memberLanguage: normalizeMemberLanguage(member?.preferredLanguage || memberLanguage), cashierName: session.name
+    }, normalizedItems.map((item, index) => ({ ...item, orderItemId: orderItemIds[index] })),
+    servingTickets.map(ticket => ({ ...ticket, itemId: orderItemIds[ticket.itemIndex] })), printMode) : [];
+  const printDocuments = durablePrintDocuments ? { version: 1 as const, orderId, mode: printMode,
+    documentCount: printSnapshots.length, pendingCount: printSnapshots.filter(snapshot => snapshot.requested).length } : undefined;
+  const writes = [sql`
     insert into store_customer_orders (
+      id,
       brand_id,
       store_id,
       order_source,
@@ -1450,13 +1684,14 @@ export async function POST(request: Request) {
       updated_at
     )
     values (
+      ${orderId},
       ${brandId},
       ${storeId},
       'store_pos',
       ${offlineClientOrderId || null},
       ${offlineCreatedAt || null},
       ${pickupCode},
-      'new',
+      ${hasPreparation ? 'new' : 'completed'},
       'paid',
       ${paymentMethod},
       ${member?.id ?? null},
@@ -1466,7 +1701,14 @@ export async function POST(request: Request) {
       'JPY',
       ${JSON.stringify({
         orderType,
-        bowlNumber: containsMalatang ? pickupCode : "",
+        servingTickets,
+        posItemFulfillment,
+        hasPreparation,
+        posFulfillmentPolicyVersion: 1,
+        checkoutFingerprint,
+        relayPrinting,
+        printDocuments,
+        relayStationId: relayPrinting ? relayStation?.id : undefined,
         note,
         cashierId: session.id,
         cashierName: session.name,
@@ -1481,41 +1723,53 @@ export async function POST(request: Request) {
         priceTaxMode: posSettings.priceTaxMode,
         discountPresetKey,
         discountPresetName: discountPreset?.name ?? "",
+        bowlBenefits: bowlEvaluation.applications.map(a => ({ ...a, evaluatedAt:discountEvaluatedAt.toISOString(), rule:posSettings.discountPresets.find(r => r.key === a.campaignKey) })),
+        discountSource: discountPreset?.applicationMode === "campaign" ? "campaign" : "manual",
+        discountCampaign: discountPreset?.applicationMode === "campaign" ? {
+          key: discountPreset.key, name: discountPreset.name, startsOn: discountPreset.startsOn, endsOn: discountPreset.endsOn,
+          minimumSubtotal: discountPreset.minimumSubtotal, discountType: discountPreset.discountType,
+          discountValue: discountPreset.discountValue, targetScope: discountPreset.targetScope, targetValue: discountPreset.targetValue,
+          evaluatedAt: discountEvaluatedAt.toISOString(), amount: posDiscountAmount
+        } : null,
         discountAmount: posDiscountAmount,
-        stampEligible: discountPreset ? discountPreset.stampEligible : true,
+        stampEligible: bowlEvaluation.usedRules.every(rule => rule.stampEligible),
         couponId: coupon?.id ?? "",
         couponCode: coupon?.couponCode ?? "",
         couponName: coupon?.name ?? "",
         couponDiscountAmount,
         receiptRequested,
+        ...invoiceDetails,
         cashTenderedAmount,
         cashChangeAmount,
         itemCount: normalizedItems.reduce((sum, item) => sum + item.quantity, 0),
         items: normalizedItems.map((item) => ({
-          menuCatalogItemId: item.id,
+          menuCatalogItemId: item.sourceItemId || item.id,
+          storeMenuItemId: item.sourceItemId ? item.id : undefined,
+          storeMenuRevision: item.dineInMenuRevision,
           name: item.name,
+          displayNames: item.displayNames,
+          productionType: item.productionType,
+          fulfillmentMode: getPosItemFulfillmentMode(item),
           quantity: item.quantity,
+          scaleCaptureId: item.scaleCaptureId || undefined,
+          weightMeasurement: item.weightMeasurement,
           measuredQuantity: item.measuredQuantity,
           measuredUnit: item.measuredUnit,
           measuredUnitPrice: item.measuredUnitPrice,
+          preparationNote: item.preparationNote,
           options: "selectedOptions" in item ? item.selectedOptions : []
         }))
       })},
       ${firstItemName},
       now(),
-      null,
+      ${hasPreparation ? null : handoffTime}::timestamptz,
       now(),
       ${cashSessionId ?? null},
       now()
     )
+    on conflict (offline_client_order_id) where offline_client_order_id is not null do nothing
     returning id::text
-  `;
-  const orderId = orderRows[0]?.id as string | undefined;
-  if (!orderId) return Response.json({ error: "会計を保存できませんでした。" }, { status: 500 });
-  if (coupon && member?.id) {
-    const redeemedCoupon = await redeemMemberCouponForOrder({ memberId: member.id, couponId: coupon.id, orderId, storeId });
-    if (!redeemedCoupon) return Response.json({ error: "クーポンを使用処理できませんでした。もう一度会員情報を確認してください。" }, { status: 409 });
-  }
+  `];
 
   for (let index = 0; index < normalizedItems.length; index += 1) {
     const item = normalizedItems[index];
@@ -1534,18 +1788,46 @@ export async function POST(request: Request) {
       .filter((option) => option.groupKey === "option")
       .map((option) => option.name);
     const toppingOptions = selectedOptions.filter((option) => option.groupKey === "topping" || !["size", "temperature", "sweetness", "ice", "option"].includes(option.groupKey));
-    const customizations = Array.from(new Set(selectedOptions.map((option) => option.groupId))).map((groupId) => {
-      const options = selectedOptions.filter((option) => option.groupId === groupId);
+    // A store addon group can combine several canonical source groups. Persist each
+    // source group separately so inventory keeps canonical identities; local labels remain snapshots.
+    const customizationKey = (option: CheckoutMenuOption) => `${option.groupId}:${option.sourceGroupId || option.groupId}:${option.linkedItemId ? "product" : isLocalDineInOption(option) ? "local" : "option"}:${option.complimentary ? "gift" : "paid"}`;
+    const customizations = Array.from(new Set(selectedOptions.map(customizationKey))).map((key) => {
+      const options = selectedOptions.filter((option) => customizationKey(option) === key);
+      const groupId = options[0].groupId;
       const group = options[0];
       return {
-        groupId, groupKey: group.groupKey, groupName: group.groupName, selectionType: getEffectiveSelectionType(group),
-        optionIds: options.map((option) => option.id), optionKeys: options.map((option) => option.optionKey),
+        groupId: group.sourceGroupId || groupId,
+        storeMenuGroupId: isStoreDineInSelection(group) ? groupId : undefined,
+        storeMenuOptionIds: isStoreDineInSelection(group) ? options.map(option => option.id) : undefined,
+        groupKey: group.groupKey, groupName: group.groupName, groupDisplayNames: group.groupDisplayNames, selectionType: getEffectiveSelectionType(group),
+        optionDisplayNames: options.map(option => option.displayNames),
+        ...(group.complimentary ? { complimentary:true, campaignKey:group.campaignKey, giftSourceGroupName:group.giftSourceGroupName,
+          originalOptionPrices:options.map(option=>option.originalUnitPrice ?? 0) } : {}),
+        // Native store choices and product-backed choices never become canonical
+        // menu_option identities. Separate groups keep all display arrays aligned.
+        optionIds: options.filter(option => !option.linkedItemId && !isLocalDineInOption(option)).map((option) => option.sourceOptionId || option.id),
+        ...(options.some(isLocalDineInOption) ? { localOptions: options.filter(isLocalDineInOption).map(option => {
+          const grams = Number((option.sourceGroupRuleJson || option.ruleJson).portionGrams);
+          return { storeMenuOptionId: option.id, localOriginId: option.localOriginId!, name: option.name,
+            displayNames: option.displayNames || {}, quantity: 1, unitPrice: option.priceDelta,
+            ...(option.complimentary ? {complimentary:true,campaignKey:option.campaignKey,originalUnitPrice:option.originalUnitPrice} : {}),
+            portionGrams: Number.isFinite(grams) && grams > 0 && grams <= 99_999 ? grams : null };
+        }) } : {}),
+        ...(options.some(option => option.linkedItemId) ? { linkedItems: options.filter(option => option.linkedItemId).map(option => ({
+          menuCatalogItemId: option.linkedSourceItemId!, storeMenuItemId: option.linkedItemId!,
+          name: option.name, displayNames: option.displayNames, quantity: 1, unitPrice: option.priceDelta,
+          ...(option.complimentary ? { complimentary:true, campaignKey:option.campaignKey, originalUnitPrice:option.originalUnitPrice ?? 0 } : {})
+        })) } : {}),
+        optionKeys: options.map((option) => option.optionKey),
         optionLabels: options.map((option) => option.name), optionPrices: options.map((option) => option.priceDelta)
       };
     });
-    await sql`
+    writes.push(sql`
       insert into store_customer_order_items (
+        id,
         order_id,
+        pickup_code,
+        preparation_note,
         menu_catalog_item_id,
         item_name,
         size_key,
@@ -1562,6 +1844,7 @@ export async function POST(request: Request) {
         measured_quantity,
         measured_unit,
         measured_unit_price,
+        weight_measurement,
         amount,
         gross_amount,
         discount_amount,
@@ -1570,9 +1853,12 @@ export async function POST(request: Request) {
         coupon_id,
         sort_order
       )
-      values (
-        ${orderId},
-        ${item.id},
+      select
+        ${orderItemIds[index]}::uuid,
+        ${orderId}::uuid,
+        ${servingTickets.find((ticket) => ticket.itemIndex === index)?.pickupCode || ""},
+        ${item.preparationNote},
+        ${item.sourceItemId || item.id}::uuid,
         ${item.name},
         ${selectedOptions.filter((option) => option.groupKey === "size").map((option) => option.optionKey).join(",")},
         ${sizeLabel},
@@ -1588,6 +1874,7 @@ export async function POST(request: Request) {
         ${item.measuredQuantity},
         ${item.measuredUnit},
         ${item.measuredUnitPrice},
+        ${JSON.stringify(item.weightMeasurement||{})}::jsonb,
         ${item.amount},
         ${item.amount},
         ${itemDiscountAmounts[index]},
@@ -1595,9 +1882,98 @@ export async function POST(request: Request) {
         ${itemPaidAmounts[index]},
         ${itemCouponDiscountAmounts[index] > 0 && coupon?.id ? coupon.id : null},
         ${index}
-      )
-    `;
+      where exists (select 1 from store_customer_orders where id = ${orderId}::uuid)
+    `);
   }
+
+  if (coupon && member?.id) {
+    writes.push(sql`update member_coupons set status='used', used_order_id=${orderId}::uuid,
+      used_store_id=${storeId}::uuid, used_at=now()
+      where id::text=${coupon.id} and member_id::text=${member.id} and status='available'
+        and (expires_at is null or expires_at > now())
+        and exists (select 1 from store_customer_orders where id=${orderId}::uuid)`);
+    // A raced/expired coupon must roll back the new order and all its items, not leave a paid partial order.
+    writes.push(sql`select 1 / case when
+      not exists (select 1 from store_customer_orders where id=${orderId}::uuid)
+      or exists (select 1 from member_coupons where id::text=${coupon.id} and used_order_id=${orderId}::uuid)
+      then 1 else 0 end as coupon_committed`);
+  }
+  if (durablePrintDocuments) {
+    try { writes.push(...posPrintSnapshotWrites({ storeId, orderId, mode: printMode, snapshots: printSnapshots,
+      relayStationId: relayPrinting ? String(relayStation?.id || '') : undefined, employeeId: session.id })); }
+    catch (error) { return Response.json({ error: error instanceof Error ? error.message : '印刷設定を確認してください。' }, { status: 409 }); }
+  }
+  if (!durablePrintDocuments && relayPrinting && relayStation) {
+    let documents;
+    try { documents = buildRelayDocuments(posSettings.printerSettings, access.stores.find(s=>s.id===storeId)?.name || 'Foundr1 STORE', {
+      pickupCode,orderType,paymentMethod,amount,subtotalAmount,discountAmount:posDiscountAmount,couponDiscountAmount,
+      taxAmount:taxSummary.taxAmount,taxRate,cashTenderedAmount,cashChangeAmount,receiptRequested,...invoiceDetails,note,
+      memberLanguage:normalizeMemberLanguage(member?.preferredLanguage || memberLanguage)
+    },normalizedItems,servingTickets); } catch(e) { return Response.json({error:e instanceof Error?e.message:'印刷設定を確認してください。'},{status:409}); }
+    for (const [sequence,doc] of documents.entries()) writes.push(sql`insert into store_relay_print_jobs(station_id,store_id,order_id,document_key,sequence,kind,payload,created_by)
+      select ${relayStation.id}::uuid,${storeId}::uuid,${orderId}::uuid,${`${orderId}:${sequence}`},${sequence},${doc.kind},${JSON.stringify(doc.payload)}::jsonb,${session.id}::uuid
+      where exists(select 1 from store_customer_orders where id=${orderId}::uuid)`);
+  }
+  const captureIds=new Set<string>();
+  for(const item of normalizedItems){
+    if(!item.scaleCaptureId)continue;
+    if(captureIds.has(item.scaleCaptureId)||item.quantity!==1||!body.relayOwner)return Response.json({error:'計量データを確認してください。'},{status:409});
+    captureIds.add(item.scaleCaptureId);
+    const grams=Number(item.measuredQuantity)*(item.measuredUnit==='kg'?1000:item.measuredUnit==='g'?1:NaN);
+    if(!Number.isFinite(grams))return Response.json({error:'計量単位を確認してください。'},{status:409});
+    writes.push(sql`update store_relay_scale_captures set order_id=${orderId}::uuid where id::text=${item.scaleCaptureId}
+      and station_id::text=${body.relayOwner.stationId} and epoch=${body.relayOwner.epoch} and employee_id::text=${session.id}
+      and abs(grams-${grams})<0.0001 and order_id is null and exists(select 1 from store_customer_orders where id=${orderId}::uuid)`);
+    writes.push(sql`select 1 / case when not exists(select 1 from store_customer_orders where id=${orderId}::uuid)
+      or exists(select 1 from store_relay_scale_captures where id::text=${item.scaleCaptureId} and order_id=${orderId}::uuid) then 1 else 0 end`);
+  }
+  if(normalizedItems.some(item=>item.measuredQuantity!==null))writes.push(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`pos-scale-tare:${storeId}`},0))`,
+    sql`select 1 / case when coalesce((select scale_tare_settings->>'revision' from pos_store_settings where store_id::text=${storeId}),'')=${posSettings.scaleTareSettings.revision}
+      then 1 else 0 end as tare_settings_current`
+  );
+  const insertResultIndex = offlineClientOrderId ? 2 : 0;
+  if (offlineClientOrderId) writes.unshift(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`pos:${storeId}:${offlineClientOrderId}`},0))`,
+    sql`select 1 / case when not exists (select 1 from pos_abandoned_checkouts where store_id::text=${storeId} and request_id=${offlineClientOrderId}) then 1 else 0 end as request_allowed`
+  );
+  if (relayRequired && body.relayOwner) writes.unshift(
+    sql`select id from store_relay_stations where id::text=${body.relayOwner.stationId} for update`,
+    ownerGuardSql(storeId,body.relayOwner,session)
+  );
+  const dineInGuardCount = dineInState.ready && (orderType === 'eat_in' || enforcePhysicalFulfillmentRevision || normalizedItems.some(item => getPosItemFulfillmentMode(item) === 'immediate')) ? 2 : 0;
+  if (dineInGuardCount) writes.unshift(posMenuLock(storeId),dineInMenuGuard(storeId,dineInState.revision));
+  if(posMenuConfig.ready) writes.unshift(posMenuLock(storeId),posMenuGuard(storeId,posMenuConfig.revision));
+  const cashGuards = posCashSessionGuards(storeId, cashSessionId);
+  let writeResults;
+  try { writeResults = await sql.transaction([...cashGuards, ...writes]); }
+  catch (error) {
+    if ((error as { code?: string }).code === "22012") {
+      if (!await isPosCashSessionOpen(storeId, cashSessionId)) {
+        const recorded = await findRecordedCheckout();
+        if (recorded) return recorded;
+        const failure = new PosCashSessionChangedError();
+        return Response.json({ error: failure.message, code: failure.code }, { status: failure.status });
+      }
+      return Response.json({ error: "会計リクエストまたはクーポンの状態が変わりました。会計は保存していません。内容を確認してください。" }, { status: 409 });
+    }
+    throw error;
+  }
+  if (!writeResults[cashGuards.length + insertResultIndex + (relayRequired ? 2 : 0) + (posMenuConfig.ready ? 2 : 0) + dineInGuardCount]?.length) {
+    const existing = await sql`select id::text as "orderId", pickup_code as "pickupCode", amount, status, payment_status as "paymentStatus", customer_summary as summary
+      from store_customer_orders where store_id::text = ${storeId} and offline_client_order_id = ${offlineClientOrderId} limit 1`;
+    if (!existing[0]) return Response.json({ error: "会計を確認できませんでした。" }, { status: 409 });
+    if (existing[0].summary?.checkoutFingerprint && existing[0].summary.checkoutFingerprint !== checkoutFingerprint) return Response.json({ error: "同じ会計IDの内容が変わっています。" }, { status: 409 });
+    await markInventoryOrderReady(String(existing[0].orderId));
+    await ensureProductionTasksForOrder(String(existing[0].orderId));
+    await awardLoyaltyForPaidOrder(String(existing[0].orderId));
+    await syncWebReservationToSalesOrder(String(existing[0].orderId));
+    const existingTickets = await readPosServingTickets(String(existing[0].orderId));
+    return Response.json({ ok: true, duplicate: true, ...existing[0], ...existing[0].summary,
+      reprintAllowed: existing[0].paymentStatus === "paid" && ["new", "preparing", "ready"].includes(String(existing[0].status)) && !existingTickets.some(ticket => ticket.handedOffAt),
+      servingTickets: existingTickets, ...(durablePrintDocuments ? { printDocuments: await readPosCheckoutPrintDocuments(storeId, String(existing[0].orderId)) } : {}), todaySummary: await getTodaySummary(storeId) });
+  }
+
 
   await markInventoryOrderReady(orderId);
   await ensureProductionTasksForOrder(orderId);
@@ -1607,10 +1983,17 @@ export async function POST(request: Request) {
   const todaySummary = await getTodaySummary(storeId);
   return Response.json({
     ok: true,
+    relayPrinting,
+    printDocuments,
+    hasPreparation,
+    posFulfillmentPolicyVersion: 1,
+    posItemFulfillment,
     orderId,
     pickupCode,
+    servingTickets: await readPosServingTickets(orderId),
     amount,
     receiptRequested,
+    ...invoiceDetails,
     subtotalAmount,
     taxableAmount: taxSummary.taxableAmount,
     taxAmount: taxSummary.taxAmount,

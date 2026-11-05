@@ -1,4 +1,6 @@
 import { sql } from "./db";
+import { posPreparationItemSql } from "./pos-item-fulfillment";
+import { posOrderHasPreparationOrLegacySql, posPreparationTaskSql } from "./pos-production-task-filter";
 import {
   localizeMaamaaProductionSummary,
   normalizeMaamaaProductionReferenceSettings,
@@ -134,6 +136,7 @@ export async function refreshActiveProductionTasksForStore(storeId: string, limi
     where store_customer_orders.store_id::text = ${normalizedStoreId}
       and store_customer_orders.payment_status in ('paid', 'partial_refunded')
       and store_customer_orders.status in ('new', 'preparing', 'ready')
+      and ${sql.unsafe(posOrderHasPreparationOrLegacySql('store_customer_orders'))}
       and store_customer_orders.created_at > now() - interval '14 days'
       and (
         order_production_tasks.id is null
@@ -187,6 +190,8 @@ export async function ensureProductionTasksForOrder(
 
   const itemRows = await sql`
     select
+      store_customer_order_items.id::text as "itemId",
+      store_customer_order_items.pickup_code as "pickupCode",
       coalesce(menu_catalog_items.brand_id::text, store_customer_orders.brand_id::text, '') as "brandId",
       coalesce(brands.name, '制作') as "brandName",
       store_customer_order_items.item_name as "itemName",
@@ -207,12 +212,15 @@ export async function ensureProductionTasksForOrder(
     left join brands on brands.id = coalesce(menu_catalog_items.brand_id, store_customer_orders.brand_id)
     where store_customer_order_items.order_id::text = ${normalizedOrderId}
       and coalesce(store_customer_order_items.refund_status, '') <> 'refunded'
+      and ${sql.unsafe(posPreparationItemSql('store_customer_orders', 'store_customer_order_items'))}
     order by store_customer_order_items.sort_order, store_customer_order_items.created_at
   `;
   const maamaaSettings = providedMaamaaSettings ?? await readMaamaaProductionReferenceSettings();
 
-  const grouped = new Map<string, { brandId: string; areaKey: string; areaLabel: string; lines: string[] }>();
+  const grouped = new Map<string, { brandId: string; areaKey: string; areaLabel: string; itemId: string; pickupCode: string; lines: string[] }>();
   for (const row of itemRows as Array<{
+    itemId: string;
+    pickupCode: string;
     brandId: string;
     brandName: string;
     itemName: string;
@@ -228,9 +236,11 @@ export async function ensureProductionTasksForOrder(
     measuredQuantity: number | null;
     measuredUnit: string;
   }>) {
-    const area = getProductionArea(row.brandName);
-    const key = `${row.brandId || ""}:${area.key}`;
-    const current = grouped.get(key) ?? { brandId: row.brandId || "", areaKey: area.key, areaLabel: area.label, lines: [] };
+    const area = row.pickupCode ? { key: "cooking", label: "調理" } : getProductionArea(row.brandName);
+    const key = row.pickupCode ? row.itemId : `${row.brandId || ""}:${area.key}`;
+    const current = grouped.get(key) ?? { brandId: row.brandId || "", areaKey: area.key,
+      areaLabel: row.pickupCode ? `${area.label} / ${row.pickupCode}` : area.label,
+      itemId: row.pickupCode ? row.itemId : "", pickupCode: row.pickupCode, lines: [] };
     current.lines.push(...buildProductionItemLines(row, maamaaSettings));
     grouped.set(key, current);
   }
@@ -245,7 +255,10 @@ export async function ensureProductionTasksForOrder(
         brand_id,
         production_area,
         production_area_label,
-        item_summary
+        item_summary,
+        order_item_id,
+        pickup_code,
+        print_status
       )
       values (
         ${normalizedOrderId},
@@ -253,7 +266,10 @@ export async function ensureProductionTasksForOrder(
         ${task.brandId || null},
         ${task.areaKey},
         ${task.areaLabel},
-        ${task.lines.join('\n')}
+        ${task.lines.join('\n')},
+        ${task.itemId || null}::uuid,
+        ${task.pickupCode},
+        ${order.orderSource === 'store_pos' ? 'pos_managed' : 'pending'}
       )
       on conflict (order_id, production_area, production_area_label)
       do update set
@@ -276,6 +292,9 @@ export async function getProductionTasksForOrder(orderId: string) {
       production_area as "productionArea",
       production_area_label as "productionAreaLabel",
       status,
+      coalesce(order_item_id::text, '') as "orderItemId",
+      pickup_code as "pickupCode",
+      handed_off_at::text as "handedOffAt",
       print_status as "printStatus",
       item_summary as "itemSummary",
       coalesce(started_at::text, '') as "startedAt",
@@ -289,54 +308,59 @@ export async function getProductionTasksForOrder(orderId: string) {
 }
 
 export async function syncOrderStatusFromProductionTasks(orderId: string) {
-  const tasks = await getProductionTasksForOrder(orderId) as Array<{ status: ProductionTaskStatus }>;
-  if (!tasks.length) return null;
-  const nextStatus = tasks.every((task) => task.status === "ready")
-    ? "ready"
-    : tasks.some((task) => task.status === "preparing" || task.status === "ready")
-      ? "preparing"
-      : "new";
-  const rows = await sql`
+  // Lock first, then read all active task states using the next transaction snapshot.
+  const [, rows] = await sql.transaction([
+    sql`select id from store_customer_orders where id::text = ${orderId} for update`,
+    sql`with task_status as (
+      select case when bool_and(tasks.status = 'ready') then 'ready'
+        when bool_or(tasks.status in ('preparing', 'ready')) then 'preparing' else 'new' end as next_status
+      from order_production_tasks tasks
+      join store_customer_orders active_orders on active_orders.id=tasks.order_id
+      left join store_customer_order_items items on items.id = tasks.order_item_id
+      where tasks.order_id::text = ${orderId} and ${sql.unsafe(posPreparationTaskSql('active_orders', 'tasks'))}
+      having count(*) > 0
+    )
     update store_customer_orders
     set
-      status = case when status in ('cancelled', 'completed', 'refund_pending') then status else ${nextStatus} end,
+      status = case when status in ('cancelled', 'completed', 'refund_pending') then status else task_status.next_status end,
       inventory_first_prepared_at = case
         when status in ('cancelled', 'refund_pending') then inventory_first_prepared_at
-        when ${nextStatus} in ('preparing','ready') then coalesce(inventory_first_prepared_at,preparing_at,ready_at,
+        when task_status.next_status in ('preparing','ready') then coalesce(inventory_first_prepared_at,preparing_at,ready_at,
           case when order_source in ('store_pos','table_qr','nanacha_web','maamaa_web') then completed_at end,
           (select min(tasks.started_at) from order_production_tasks tasks where tasks.order_id=store_customer_orders.id),now())
         else inventory_first_prepared_at
       end,
-      inventory_preparation_source_snapshot = case when ${nextStatus} in ('preparing','ready')
+      inventory_preparation_source_snapshot = case when task_status.next_status in ('preparing','ready')
         then coalesce(inventory_preparation_source_snapshot,inventory_source_snapshot) else inventory_preparation_source_snapshot end,
       preparing_at = case
         when status in ('cancelled', 'completed', 'refund_pending') then preparing_at
-        when ${nextStatus} = 'new' then null
-        when ${nextStatus} in ('preparing', 'ready') and preparing_at is null then now()
+        when task_status.next_status = 'new' then null
+        when task_status.next_status in ('preparing', 'ready') and preparing_at is null then now()
         else preparing_at
       end,
       ready_at = case
         when status in ('cancelled', 'completed', 'refund_pending') then ready_at
-        when ${nextStatus} = 'ready' and ready_at is null then now()
-        when ${nextStatus} <> 'ready' then null
+        when task_status.next_status = 'ready' and ready_at is null then now()
+        when task_status.next_status <> 'ready' then null
         else ready_at
       end,
       estimated_prep_minutes = case
         when status in ('cancelled', 'completed', 'refund_pending') then estimated_prep_minutes
-        when ${nextStatus} = 'new' then null
+        when task_status.next_status = 'new' then null
         else estimated_prep_minutes
       end,
       estimated_ready_at = case
         when status in ('cancelled', 'completed', 'refund_pending') then estimated_ready_at
-        when ${nextStatus} = 'new' then null
+        when task_status.next_status = 'new' then null
         else estimated_ready_at
       end,
       updated_at = now()
+    from task_status
     where id::text = ${orderId}
-    returning id::text
-  `;
+    returning id::text, status
+  `]);
   if (rows[0]?.id) {
-    if (nextStatus === "preparing") await ensureOrderProductionEstimate(rows[0].id as string);
+    if (rows[0].status === "preparing") await ensureOrderProductionEstimate(rows[0].id as string);
     await syncWebReservationToSalesOrder(rows[0].id as string);
   }
   return rows[0]?.id as string | undefined;
@@ -360,6 +384,7 @@ export async function ensureOrderProductionEstimate(orderId: string) {
     from store_customer_orders
     left join store_customer_order_items on store_customer_order_items.order_id = store_customer_orders.id
       and coalesce(store_customer_order_items.refund_status, '') <> 'refunded'
+      and ${sql.unsafe(posPreparationItemSql('store_customer_orders', 'store_customer_order_items'))}
     where store_customer_orders.id::text = ${orderId}
     group by store_customer_orders.id
     limit 1
@@ -384,7 +409,8 @@ export async function setProductionTaskStatus(taskId: string, status: Production
   const rows = await sql`
     with locked_order as materialized (
       select orders.id from store_customer_orders orders join order_production_tasks tasks on tasks.order_id=orders.id
-      where tasks.id::text=${taskId} and orders.status not in ('cancelled','refund_pending','payment_failed','checkout_failed')
+      where tasks.id::text=${taskId} and orders.status not in ('cancelled','completed','refund_pending','payment_failed','checkout_failed')
+        and ${sql.unsafe(posPreparationTaskSql('orders', 'tasks'))}
       for update of orders
     ), changed as (
     update order_production_tasks tasks
@@ -405,7 +431,8 @@ export async function setProductionTaskStatus(taskId: string, status: Production
         else null::uuid
       end,
       updated_at = now()
-    from locked_order where tasks.id::text = ${taskId} and tasks.order_id=locked_order.id
+    from locked_order where tasks.id::text = ${taskId} and tasks.order_id=locked_order.id and tasks.handed_off_at is null
+      and (tasks.order_item_id is null or exists (select 1 from store_customer_order_items items where items.id=tasks.order_item_id and items.refund_status <> 'refunded'))
     returning tasks.order_id,tasks.started_at
     ), remembered as (
       update store_customer_orders orders set

@@ -6,7 +6,7 @@ The app is heavily used on mobile and half-width/tablet browser windows.
 
 When editing UI:
 
-- Use the Foundr1 theme direction: deep green primary with clean neutral surfaces and no decorative accent color. Prefer shared tokens over one-off hex colors. Keep neutral surfaces dominant, use green for primary actions/success/brand emphasis, blue only for information/link states, amber only for warnings, red for destructive/error states, and violet only when there is a clear module meaning.
+- Use the Foundr1 theme direction: deep green is the default primary, with clean neutral surfaces and no decorative accent color. Store supports an authorized per-store primary color through [Store themes](store-theme.md); use its derived theme tokens for actions, selected states, focus and coordinated neutrals. Keep neutral surfaces dominant. Separate primary/brand emphasis from success, information, warning and destructive/error semantics. OS retains its existing default theme. Prefer shared tokens over one-off hex colors.
 - Avoid horizontal overflow.
 - Keep dense operational screens compact.
 - Keep operational typography light and scannable. Routine table cells, list rows, form labels, helper text, and status pills should generally use `font-weight` 400-600. Reserve 650+ for page titles, important metric values, and rare emphasis; avoid 800/900 weights for ordinary OS data because Japanese text becomes visually heavy and harder to scan.
@@ -20,4 +20,4 @@ When editing UI:
 - Product cards and comparison history must wrap before tablet widths overflow.
 - The OS navigation/sidebar must always keep language switching available near the top of the navigation, including collapsed desktop sidebars and mobile navigation. In collapsed desktop sidebars, show only a globe icon for language switching; when the sidebar is expanded, show the full language selector/name.
 - Keep sidebar active states minimal. Do not add decorative accent lines or extra highlight colors; use only the restrained active background/text treatment.
-- Do not let native form controls fall back to browser/system blue. Checkboxes and compact selectors should use the Foundr1 green theme and stable compact dimensions. Broad input styles must not accidentally stretch checkboxes into large blocks.
+- Do not let native form controls fall back to browser/system blue. Checkboxes and compact selectors should use the active workbench theme and stable compact dimensions. Broad input styles must not accidentally stretch checkboxes into large blocks.

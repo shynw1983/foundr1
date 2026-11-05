@@ -1,0 +1,27 @@
+.card {
+  display: grid;
+  gap: 6px;
+  width: 260px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel, white);
+}
+.top, .metrics { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.top > span, .metrics > span, .metrics small, .note { font-size: 12px; color: var(--muted); }
+.toggle { display: flex; gap: 2px; padding: 2px; background: var(--green-soft); border-radius: 6px; }
+.toggle button { min-height: 28px; padding: 3px 8px; border: 0; border-radius: 4px; color: var(--muted); background: transparent; font-size: 12px; font-weight: 600; cursor: pointer; }
+.toggle button[aria-pressed="true"] { background: var(--store-primary, var(--green)); color: white; }
+.toggle button:focus-visible, .select:focus-visible { outline: 2px solid var(--store-primary, var(--green)); outline-offset: 2px; }
+.metrics strong { font-size: 20px; font-weight: 700; white-space: nowrap; }
+.metrics > span, .metrics small { white-space: nowrap; }
+.card .select { width: 100%; min-width: 0; min-height: 32px; padding: 3px 26px 3px 7px; border: 1px solid var(--line); border-radius: 6px; background-color: var(--panel, white); color: var(--text); font-size: 13px; text-overflow: ellipsis; }
+.note { line-height: 1.4; }
+@media (max-width: 560px) { .card { width: 100%; } }
+
+.label { display: inline-flex; align-items: center; gap: 3px; }
+.card .refresh { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; min-height: 28px; padding: 3px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; }
+.card .refresh:disabled { opacity: .45; cursor: default; }
+.card .refresh:focus-visible { outline: 2px solid var(--store-primary); outline-offset: 1px; }

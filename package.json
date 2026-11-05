@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/app-web-versions.cjs && next dev",
+    "build": "node scripts/app-web-versions.cjs && next build",
     "start": "next start",
     "lint": "next lint",
     "test:payroll": "node --experimental-strip-types --test lib/timecard.test.ts",

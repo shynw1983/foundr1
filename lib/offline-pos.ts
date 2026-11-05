@@ -1,3 +1,4 @@
+import type { PosPrintJob } from "./pos-print-jobs";
 export type OfflinePosSnapshot = {
   storeId: string;
   savedAt: string;
@@ -15,7 +16,9 @@ export type OfflinePosOrder = {
 };
 
 const databaseName = "foundr1-store-offline";
-const databaseVersion = 1;
+const databaseVersion = 3;
+const printStore = "pos-print-jobs";
+const recoveryStore = "pos-checkout-recovery";
 const snapshotStore = "pos-snapshots";
 const orderStore = "pos-orders";
 
@@ -24,6 +27,8 @@ function openDatabase() {
     const request = window.indexedDB.open(databaseName, databaseVersion);
     request.onupgradeneeded = () => {
       const database = request.result;
+      if (!database.objectStoreNames.contains(recoveryStore)) database.createObjectStore(recoveryStore, { keyPath: "storeId" });
+      if (!database.objectStoreNames.contains(printStore)) database.createObjectStore(printStore, { keyPath: "id" });
       if (!database.objectStoreNames.contains(snapshotStore)) database.createObjectStore(snapshotStore, { keyPath: "storeId" });
       if (!database.objectStoreNames.contains(orderStore)) {
         const store = database.createObjectStore(orderStore, { keyPath: "clientOrderId" });
@@ -40,10 +45,12 @@ async function runRequest<T>(storeName: string, mode: IDBTransactionMode, operat
   return new Promise<T>((resolve, reject) => {
     const transaction = database.transaction(storeName, mode);
     const request = operation(transaction.objectStore(storeName));
-    request.onsuccess = () => resolve(request.result);
+    let result: T;
+    request.onsuccess = () => { result = request.result; };
     request.onerror = () => reject(request.error);
-    transaction.oncomplete = () => database.close();
-    transaction.onerror = () => reject(transaction.error);
+    transaction.oncomplete = () => { database.close(); resolve(result); };
+    transaction.onerror = () => { database.close(); reject(transaction.error); };
+    transaction.onabort = () => { database.close(); reject(transaction.error || new Error("Local transaction aborted")); };
   });
 }
 
@@ -69,4 +76,36 @@ export function removeOfflinePosOrder(clientOrderId: string) {
 
 export function updateOfflinePosOrderError(order: OfflinePosOrder, lastError: string) {
   return addOfflinePosOrder({ ...order, lastError });
+}
+
+export function savePosPrintJob(job: PosPrintJob) {
+  return runRequest(printStore, "readwrite", (store) => store.put(job));
+}
+// Persist the entire layout together: a reload must never recover half of a new batch.
+export async function savePosPrintBatch(jobs: PosPrintJob[]) {
+  const database = await openDatabase();
+  return new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(printStore, "readwrite");
+    for (const job of jobs) transaction.objectStore(printStore).put(job);
+    transaction.oncomplete = () => { database.close(); resolve(); };
+    transaction.onerror = transaction.onabort = () => { database.close(); reject(transaction.error || new Error("Local print batch aborted")); };
+  });
+}
+export async function listPosPrintJobs() {
+  const jobs = await runRequest<PosPrintJob[]>(printStore, "readonly", (store) => store.getAll());
+  return jobs.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")) || (a.sequence || 0) - (b.sequence || 0));
+}
+export function removePosPrintJob(id: string) {
+  return runRequest(printStore, "readwrite", (store) => store.delete(id));
+}
+
+export type PosCheckoutRecovery = { storeId: string; request: Record<string, unknown>; cart: unknown[] };
+export function savePosCheckoutRecovery(record: PosCheckoutRecovery) {
+  return runRequest(recoveryStore, "readwrite", (store) => store.put(record));
+}
+export function listPosCheckoutRecovery() {
+  return runRequest<PosCheckoutRecovery[]>(recoveryStore, "readonly", (store) => store.getAll());
+}
+export function removePosCheckoutRecovery(storeId: string) {
+  return runRequest(recoveryStore, "readwrite", (store) => store.delete(storeId));
 }

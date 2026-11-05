@@ -141,7 +141,7 @@ function driverFixture(platform='demae_can') {
   return {...f,driver,targets,calls};
 }
 
-test('Demae proven no-op skips full snapshots and writer calls only for the three supported retirement kinds',async()=>{
+test('Demae client-proven no-op skips snapshots while an item without exact fresh proof retains its native path',async()=>{
   const f=driverFixture();for(const target of f.targets.slice(0,3))await f.driver.retire(target);
   assert.deepEqual(f.calls,[]);assert.deepEqual(f.writes,[]);
   await f.driver.retire(f.targets[3]);assert.deepEqual(f.calls,['snapshot','retireItem']);

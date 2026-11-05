@@ -1,6 +1,10 @@
+import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
+import { handoffPosBowl } from "../../../../../lib/pos-bowl-data";
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { findCustomerOrderById } from "../../../../../lib/customer-orders";
 import { sql } from "../../../../../lib/db";
+import { posPreparationItemSql } from "../../../../../lib/pos-item-fulfillment";
+import { posPreparationTaskSql } from "../../../../../lib/pos-production-task-filter";
 import { getKitchenBusinessDayWindow } from "../../../../../lib/kitchen-business-day";
 import { buildKitchenDisplayItemGroups } from "../../../../../lib/kitchen-display-groups";
 import { resolveKitchenDisplayAmounts } from "../../../../../lib/kitchen-display-pricing";
@@ -55,19 +59,22 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
       order_production_tasks.production_area as "productionArea",
       order_production_tasks.production_area_label as "productionAreaLabel",
       order_production_tasks.status,
+      coalesce(order_production_tasks.order_item_id::text, '') as "orderItemId",
+      order_production_tasks.handed_off_at::text as "handedOffAt",
+      coalesce((select preparation_note from store_customer_order_items where id=order_production_tasks.order_item_id), '') as "preparationNote",
       order_production_tasks.print_status as "printStatus",
       order_production_tasks.item_summary as "itemSummary",
       coalesce(order_production_tasks.started_at::text, '') as "startedAt",
       coalesce(store_customer_orders.estimated_prep_minutes, 0)::int as "estimatedPrepMinutes",
       coalesce(store_customer_orders.estimated_ready_at::text, '') as "estimatedReadyAt",
-      store_customer_orders.pickup_code as "pickupCode",
+      coalesce(nullif(order_production_tasks.pickup_code, ''), store_customer_orders.pickup_code) as "pickupCode",
       concat(
         store_customer_orders.pickup_date::text,
         'T',
         left(store_customer_orders.pickup_time, 5),
         ':00+09:00'
       ) as "scheduledAt",
-      store_customer_orders.amount::int as amount,
+      coalesce((select amount from store_customer_order_items where id=order_production_tasks.order_item_id), store_customer_orders.amount)::int as amount,
       store_customer_orders.currency,
       coalesce(
         store_customer_orders.customer_summary #>> '{customer,name}',
@@ -85,6 +92,8 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
         from store_customer_order_items
         where store_customer_order_items.order_id = store_customer_orders.id
           and coalesce(store_customer_order_items.refund_status, '') <> 'refunded'
+          and ${sql.unsafe(posPreparationItemSql('store_customer_orders', 'store_customer_order_items'))}
+          and (order_production_tasks.order_item_id is null or store_customer_order_items.id = order_production_tasks.order_item_id)
       ), 0)::int as "itemCount",
       coalesce((
         select jsonb_agg(
@@ -102,6 +111,8 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
         left join menu_catalog_items on menu_catalog_items.id = store_customer_order_items.menu_catalog_item_id
         where store_customer_order_items.order_id = store_customer_orders.id
           and coalesce(store_customer_order_items.refund_status, '') <> 'refunded'
+          and ${sql.unsafe(posPreparationItemSql('store_customer_orders', 'store_customer_order_items'))}
+          and (order_production_tasks.order_item_id is null or store_customer_order_items.id = order_production_tasks.order_item_id)
           and (
             order_production_tasks.brand_id is null
             or coalesce(menu_catalog_items.brand_id, store_customer_orders.brand_id) = order_production_tasks.brand_id
@@ -120,15 +131,32 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
       )
       and store_customer_orders.status not in ('cancelled', 'refund_pending')
       and order_production_tasks.status in ('new', 'preparing', 'ready')
+      and (${includeCompleted} = true or order_production_tasks.handed_off_at is null)
+      and ${sql.unsafe(posPreparationTaskSql('store_customer_orders', 'order_production_tasks'))}
       and (
-        concat(
-          store_customer_orders.pickup_date::text,
-          'T',
-          left(store_customer_orders.pickup_time, 5)
-        ) between ${businessDay.startAt} and ${businessDay.endAt}
+        (
+          concat(
+            store_customer_orders.pickup_date::text,
+            'T',
+            left(store_customer_orders.pickup_time, 5)
+          ) between ${businessDay.startAt} and ${businessDay.endAt}
+          and (
+            not ${businessDay.endExclusive === true}
+            or concat(
+              store_customer_orders.pickup_date::text,
+              'T',
+              left(store_customer_orders.pickup_time, 5)
+            ) < ${businessDay.endAt}
+          )
+        )
         or (
-          store_customer_orders.created_at at time zone 'Asia/Tokyo'
-        ) between ${businessDay.startAt}::timestamp and ${businessDay.endAt}::timestamp
+          (store_customer_orders.created_at at time zone 'Asia/Tokyo')
+            between ${businessDay.startAt}::timestamp and ${businessDay.endAt}::timestamp
+          and (
+            not ${businessDay.endExclusive === true}
+            or (store_customer_orders.created_at at time zone 'Asia/Tokyo') < ${businessDay.endAt}::timestamp
+          )
+        )
       )
       and (${area} = '' or order_production_tasks.production_area = ${area})
     order by
@@ -138,11 +166,12 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
       order_production_tasks.created_at asc
     limit 120
   `, sql`
-    select distinct production_area as value, production_area_label as label
-    from order_production_tasks
-    where store_id::text = ${storeId}
-      and created_at > now() - interval '14 days'
-    order by production_area_label
+    select distinct tasks.production_area as value, split_part(tasks.production_area_label, ' / ', 1) as label
+    from order_production_tasks tasks join store_customer_orders orders on orders.id=tasks.order_id
+    where tasks.store_id::text = ${storeId}
+      and tasks.created_at > now() - interval '14 days'
+      and ${sql.unsafe(posPreparationTaskSql('orders', 'tasks'))}
+    order by label
   `, sql`
     select coalesce(printer_settings, '{}'::jsonb) as "printerSettings"
     from pos_store_settings
@@ -198,8 +227,8 @@ async function getKitchenTasks(storeId: string, area: string, businessHours: unk
     const brandMenuOptions = menuCandidates.filter((candidate) => candidate.brandId === brandId && candidate.kind === "option");
     const { customerSummary, orderedItems, ...task } = row;
     const summary = asRecord(customerSummary);
-    const noteOriginal = normalizeText(summary.note);
-    const noteZh = normalizeText(asRecord(summary.noteTranslations).zh);
+    const noteOriginal = [normalizeText(row.preparationNote), normalizeText(summary.note)].filter(Boolean).join(" / ");
+    const noteZh = row.preparationNote ? "" : normalizeText(asRecord(summary.noteTranslations).zh);
     const localizedItemSummary = localizeMaamaaProductionSummary(
       normalizeText(row.itemSummary),
       customerSummary,
@@ -391,6 +420,15 @@ export async function PATCH(request: Request) {
       serverNow: new Date().toISOString()
     });
   }
+  if (status === "completed" && taskId) {
+    const orderId = await handoffPosBowl(taskId, storeFilter);
+    if (!orderId) return Response.json({ error: "受け渡し可能な料理が見つかりません。" }, { status: 409 });
+    await safeSyncInventoryOrderUsage(orderId);
+    await syncWebReservationToSalesOrder(orderId);
+    await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(orderId));
+    const { tasks, areas, displayLanguage } = await getKitchenTasks(storeFilter, normalizeText(body.area), selectedStore?.businessHours);
+    return Response.json({ ok: true, tasks, areas, displayLanguage, serverNow: new Date().toISOString() });
+  }
   if (status === "completed" && requestedOrderId) {
     const completedRows = await sql`
       update store_customer_orders
@@ -400,6 +438,9 @@ export async function PATCH(request: Request) {
       where id::text = ${requestedOrderId}
         and store_id::text = ${storeFilter}
         and status = 'ready'
+        and not exists (select 1 from order_production_tasks tasks where tasks.order_id=store_customer_orders.id
+          and tasks.order_item_id is not null and tasks.handed_off_at is null
+          and ${sql.unsafe(posPreparationTaskSql('store_customer_orders', 'tasks'))})
       returning id::text
     `;
     if (!completedRows[0]) return Response.json({ error: "受け渡し可能な注文が見つかりません。" }, { status: 409 });

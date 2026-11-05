@@ -6,6 +6,7 @@ export type StoreBusinessDay = {
   open: string;
   close: string;
   closed: boolean;
+  open24Hours?: boolean;
 };
 
 export type StoreBusinessHours = Record<WeekdayKey, StoreBusinessDay>;
@@ -74,7 +75,22 @@ function toMinutes(value: string) {
 }
 
 function crossesMidnight(day: StoreBusinessDay) {
-  return toMinutes(day.close) <= toMinutes(day.open);
+  return day.open24Hours !== true && toMinutes(day.close) <= toMinutes(day.open);
+}
+
+/** Effective hours for calculations; saved timed fields remain available when 24-hour mode is unchecked. */
+export function getStoreBusinessDayTimeRange(day: StoreBusinessDay) {
+  const isOpen24Hours = !day.closed && day.open24Hours === true;
+  const open = isOpen24Hours ? "00:00" : day.open;
+  const close = isOpen24Hours ? "00:00" : day.close;
+  const openMinutes = toMinutes(open);
+  const closeMinutes = toMinutes(close);
+  return {
+    open,
+    close,
+    openMinutes,
+    closeMinutes: closeMinutes <= openMinutes ? closeMinutes + 1440 : closeMinutes
+  };
 }
 
 function tokyoDateTimeToDate(dateString: string, timeString: string) {
@@ -108,7 +124,8 @@ export function normalizeBusinessHours(value: unknown): StoreBusinessHours {
     result[key] = {
       open: normalizeTime(day.open, fallback.open),
       close: normalizeTime(day.close, fallback.close),
-      closed: day.closed === true
+      closed: day.closed === true,
+      ...(day.open24Hours === true ? { open24Hours: true } : {})
     };
     return result;
   }, {} as StoreBusinessHours);
@@ -127,7 +144,7 @@ export function formatBusinessHoursSummary(value: unknown) {
   const grouped = new Map<string, WeekdayKey[]>();
   for (const key of openDays) {
     const day = hours[key];
-    const label = `${day.open}-${day.close}`;
+    const label = day.open24Hours ? "24時間営業" : `${day.open}-${day.close}`;
     grouped.set(label, [...(grouped.get(label) ?? []), key]);
   }
 
@@ -143,6 +160,7 @@ export function isPickupWithinBusinessHours(value: unknown, pickupDate: string, 
   if (!key) return false;
   const day = hours[key];
   if (!day.closed) {
+    if (day.open24Hours) return pickupTime >= "00:00" && pickupTime <= "23:59";
     if (!crossesMidnight(day)) {
       return pickupTime >= day.open && pickupTime <= day.close;
     }
@@ -168,6 +186,7 @@ export type StoreCashBusinessDayState = {
   businessDate: string;
   openAt: string;
   closeAt: string;
+  closeExclusive?: true;
   openLabel: string;
   closeLabel: string;
   status: "before_open" | "business_open" | "after_close" | "closed_day";
@@ -198,6 +217,23 @@ export function getStoreCashBusinessDayState(value: unknown, now = new Date()): 
   };
   if (!currentKey) return fallback;
 
+  const currentDay = hours[currentKey];
+  if (!currentDay.closed && currentDay.open24Hours) {
+    const nextDate = addDays(current.date, 1);
+    return {
+      businessDate: current.date,
+      openAt: `${current.date}T00:00`,
+      closeAt: `${nextDate}T00:00`,
+      closeExclusive: true,
+      openLabel: formatBusinessDateTimeLabel(current.date, "00:00"),
+      closeLabel: formatBusinessDateTimeLabel(nextDate, "00:00"),
+      status: "business_open",
+      statusLabel: "営業時間内",
+      detailLabel: "24時間営業です。営業日は午前0時に切り替わります。",
+      tone: "active"
+    };
+  }
+
   const previousDate = addDays(current.date, -1);
   const previousKey = getPreviousWeekdayKey(currentKey);
   const previousDay = hours[previousKey];
@@ -215,7 +251,6 @@ export function getStoreCashBusinessDayState(value: unknown, now = new Date()): 
     };
   }
 
-  const currentDay = hours[currentKey];
   if (currentDay.closed) {
     return {
       businessDate: current.date,
@@ -281,8 +316,9 @@ export function getNextBusinessOpening(value: unknown, now = new Date()) {
     if (!key) continue;
     const day = hours[key];
     if (day.closed) continue;
-    if (compareDateTime(date, day.open, current.date, current.time) > 0) {
-      return `${date} ${day.open}`;
+    const { open } = getStoreBusinessDayTimeRange(day);
+    if (compareDateTime(date, open, current.date, current.time) > 0) {
+      return `${date} ${open}`;
     }
   }
 
@@ -295,6 +331,11 @@ export function getCurrentBusinessDayClosing(value: unknown, now = new Date()) {
   const current = getTokyoDateTimeParts(now);
   const currentKey = getWeekdayKey(current.date);
   if (!currentKey) return null;
+
+  const currentDay = hours[currentKey];
+  if (!currentDay.closed && currentDay.open24Hours) {
+    return tokyoDateTimeToDate(addDays(current.date, 1), "00:00");
+  }
 
   const candidates: Date[] = [];
   const currentTimeMinutes = toMinutes(current.time);
@@ -310,8 +351,9 @@ export function getCurrentBusinessDayClosing(value: unknown, now = new Date()) {
     if (!key) continue;
     const day = hours[key];
     if (day.closed) continue;
-    const closeDate = crossesMidnight(day) ? addDays(date, 1) : date;
-    const closeAt = tokyoDateTimeToDate(closeDate, day.close);
+    const { close } = getStoreBusinessDayTimeRange(day);
+    const closeDate = day.open24Hours || crossesMidnight(day) ? addDays(date, 1) : date;
+    const closeAt = tokyoDateTimeToDate(closeDate, close);
     if (closeAt.getTime() > now.getTime()) candidates.push(closeAt);
   }
 
@@ -371,4 +413,34 @@ export function getStoreReceptionState(input: {
     isAcceptingNow: true,
     tone: "active"
   };
+}
+
+/** Signed minutes relative to opening / closing; zero follows business hours exactly. */
+export function normalizeShiftRequestOffset(value: unknown): number | null {
+  const minutes = Number(value ?? 0);
+  return Number.isInteger(minutes) && Math.abs(minutes) <= 720 ? minutes : null;
+}
+
+export function getShiftRequestDefaultTimes(
+  businessHours: unknown,
+  workDate: string,
+  startOffset: unknown = 0,
+  endOffset: unknown = 0
+): { availableStart: string; availableEnd: string } {
+  const empty = { availableStart: "", availableEnd: "" };
+  if (!businessHours || (typeof businessHours === "object" && !Object.keys(businessHours).length)) return empty;
+  const key = getWeekdayKey(workDate);
+  if (!key) return empty;
+  const day = normalizeBusinessHours(businessHours)[key];
+  if (day.closed) return empty;
+  const range = getStoreBusinessDayTimeRange(day);
+  const start = range.openMinutes + (normalizeShiftRequestOffset(startOffset) ?? 0);
+  const end = range.closeMinutes + (normalizeShiftRequestOffset(endOffset) ?? 0);
+  // Time-only request windows cannot represent a nonpositive or >24-hour span.
+  if (end <= start || end - start > 1440) return empty;
+  const format = (minutes: number) => {
+    const wrapped = ((minutes % 1440) + 1440) % 1440;
+    return `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}`;
+  };
+  return { availableStart: format(start), availableEnd: format(end) };
 }

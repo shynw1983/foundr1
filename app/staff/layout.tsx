@@ -35,10 +35,10 @@ export default function StaffLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const version = getAppVersion();
+  const version = getAppVersion("staff");
   return (
     <div className="staff-interface">
-      <AppVersionNotice appName="Staff" initialVersion={version} initialShortVersion={getShortAppVersion(version)} pathPrefixes={["/staff"]} />
+      <AppVersionNotice appId="staff" appName="Staff" initialVersion={version} initialShortVersion={getShortAppVersion(version)} pathPrefixes={["/staff"]} />
       <PrivacyConsentGate />
       {children}
     </div>

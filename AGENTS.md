@@ -34,6 +34,16 @@ For food product photography, menu images, or Uber listing images, read [Product
 
 `/os` is the management workbench; `/store` is the store operation workbench. Before changing store operations, procedures, kitchen/order-production data, or native device capabilities, read the relevant [Store Operation Rules](docs/store-operation-rules.md). Menu and checkout changes that feed kitchen production must also follow its structured-item contract. Native foreground alerts must work without a per-launch web sound-enable tap; ordinary browsers retain explicit sound activation.
 
+## Realtime Refresh, Polling, and Recovery
+
+Before adding or changing background network refresh, Pusher/WebSocket subscriptions, polling, reconnect recovery, task watching, or device cadence, read [Realtime Refresh Policy](docs/realtime-refresh-policy.md). It is the shared requirement across OS, Store, associated brand flows, native shells, and Bridge; the [2026-11-03 audit](docs/realtime-refresh-audit-20261103.md) records the pre-change implementation gaps; the [Web rollout record](docs/realtime-refresh-rollout-20261103.md) defines the implemented scope, protocol exceptions and separate publication/device evidence.
+
+- Use push-first authoritative refresh, with a risk-appropriate low-frequency integrity check and subscription-unavailable fallback. Do not add unconditional fast polling merely to mask missed pushes, or stop all reads solely because a socket says connected.
+- Check writer/event coverage and all required authorized subscriptions. Re-subscription/resume must reconcile authoritative state; in-flight events need trailing refresh or equivalent revision/cursor handling. Keep scope isolation and stale-response protection.
+- Within each page/client runtime, use one coordinator per identity/store/resource; independent devices retain their own scoped reconciliation. Separate subscription outage, HTTP failures, healthy reconciliation, and active-task timing; document the chosen profile, request budget, lifecycle, and exceptions.
+- Preserve heartbeat/lease renewal, active weighing/freshness, task claim/ACK/idempotency, and unknown-result protections. Push does not grant authority or prove physical completion. Ordinary read refresh must not replace manually published menus or active drafts.
+- Test connected-but-missed events, read/event races, partial subscription failure, reconnect/visibility recovery, 401/403 and cross-store denial, bounded HTTP request counts, and affected business side effects before changing cadence. Documentation alone must never be reported as a runtime change.
+
 ## Associated Brand Websites
 
 Foundr1 OS is connected to two separate brand website projects on this machine. When working on public customer flows, menu sync, pickup reservations, checkout, kitchen display data, or member/loyalty integration for these brands, check these projects directly instead of rediscovering their paths:

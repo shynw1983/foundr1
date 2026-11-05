@@ -1,0 +1,193 @@
+.page:global(.customer-display-page) { display: block; height: 100dvh; min-height: 0; max-height: 100dvh; padding: 0; overflow: hidden; }
+.surface { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+.debugPage:global(.customer-display-page) { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 0; }
+.debugNotice { width: auto; margin: 8px 26px 8px 8px; box-sizing: border-box; }
+
+.menuHeading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.menuHeading :global(.secondary-button) { width: auto; padding: 6px 10px; min-height: 36px; }
+
+/* A short landscape phone needs a different height budget from a portrait tablet. */
+.shortLandscape:global(.customer-display-page) {
+  display: flex;
+  flex-direction: column;
+  height: var(--customer-display-usable-height, 100dvh);
+  min-height: 0;
+  max-height: var(--customer-display-usable-height, 100dvh);
+  gap: 6px;
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.shortLandscape:global(.customer-display-page) :global(.customer-display-topbar) {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 4px 38px 4px 10px;
+  gap: 0;
+  flex-wrap: nowrap;
+}
+.shortLandscape:global(.customer-display-page) :global(.customer-display-clock) { display: none; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-status-title) {
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  justify-content: flex-start;
+}
+.shortLandscape:global(.customer-display-page) :global(.customer-display-status-title h1) { font-size: 14px; line-height: 20px; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-message) {
+  flex: 0 0 auto;
+  max-height: 38px;
+  overflow-y: auto;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 15px;
+}
+.shortLandscape:global(.customer-display-page) :global(.customer-display-layout) {
+  flex: 1 1 0;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1.1fr) minmax(260px, .9fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 8px;
+}
+.shortLandscape:global(.customer-display-page) :global(.customer-display-items) {
+  min-height: 0;
+  padding: 8px;
+  gap: 6px;
+  overflow: hidden;
+}
+.shortLandscape:global(.customer-display-page) :global(.customer-display-section-head span),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-section-head strong),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-meta span) { font-size: 12px; line-height: 16px; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-item-list) {
+  min-height: 0;
+  grid-auto-rows: max-content;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  gap: 6px;
+}
+.shortLandscape:global(.customer-display-page) :global(.customer-display-item) {
+  min-height: 46px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(65px, auto);
+  gap: 7px;
+  padding: 7px 8px;
+}
+.shortLandscape:global(.customer-display-page) :global(.customer-display-item strong),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-item span) {
+  display: block;
+  -webkit-line-clamp: unset;
+  max-height: none;
+  overflow: visible;
+  white-space: normal;
+}
+.shortLandscape:global(.customer-display-page) :global(.customer-display-item strong) { font-size: 16px; line-height: 1.2; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-item span) { font-size: 12px; line-height: 1.35; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-item em),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-item b) { font-size: 17px; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-empty) { gap: 7px; font-size: 15px; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-empty svg) { width: 28px; height: 28px; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-empty p) { margin: 0; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-payment) { padding: 8px; gap: 6px; overflow: hidden; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-total) { padding: 8px 10px; gap: 3px 8px; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-total strong) { font-size: clamp(32px, 8dvh, 42px); line-height: 1; white-space: nowrap; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-total span),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-total small) { font-size: 11px; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-total small b) { font-size: 13px; }
+.shortLandscape:global(.customer-display-page) .paymentDetails {
+  display: grid;
+  flex: 1 1 0;
+  min-height: 0;
+  align-content: start;
+  gap: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.shortLandscape:global(.customer-display-page) :global(.customer-display-member),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-discount) { padding: 5px 7px; gap: 2px 7px; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-member span) { font-size: 13px; line-height: 1.2; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-member strong),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-discount span) { font-size: 10px; line-height: 1.2; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-discount strong),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-discount b) { font-size: 12px; line-height: 1.2; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-settlement),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-settlement.is-terminal.has-promotions) {
+  flex: 0 0 auto;
+  margin-top: auto;
+  grid-template-rows: auto;
+  grid-auto-rows: auto;
+  gap: 6px;
+}
+.shortLandscape:global(.customer-display-page) :global(.customer-display-settlement.is-cash) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-cash-card) { min-height: 58px; padding: 6px 8px; gap: 3px; grid-template-rows: auto auto; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-cash-card span) { font-size: 11px; line-height: 14px; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-cash-card strong),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-settlement.has-promotions .customer-display-cash-card strong) { font-size: clamp(22px, 6.5dvh, 28px); line-height: 1.05; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-cash-card small) { font-size: 10px; line-height: 13px; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-terminal) { min-height: 80px; padding: 8px 10px; gap: 4px; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-terminal strong) { font-size: 21px; line-height: 1.1; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-terminal span),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-terminal small) { font-size: 11px; line-height: 1.25; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-menu-button) { width: 44px; height: 36px; top: env(safe-area-inset-top); right: env(safe-area-inset-right); }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-menu) {
+  top: max(8px, env(safe-area-inset-top));
+  right: max(8px, env(safe-area-inset-right));
+  max-height: calc(var(--customer-display-usable-height, 100dvh) - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  gap: 8px;
+}
+.shortLandscape:global(.customer-display-page) .menuHeading { position: sticky; top: -14px; z-index: 1; padding: 4px 0; background: white; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-scanner-overlay) { padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-scanner-dialog) {
+  width: min(720px, 100%);
+  height: calc(var(--customer-display-usable-height, 100dvh) - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)));
+  max-height: calc(var(--customer-display-usable-height, 100dvh) - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)));
+  min-height: 0;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  padding: 10px;
+  box-sizing: border-box;
+}
+.shortLandscape:global(.customer-display-page) :global(.store-pos-scanner-head) { grid-column: 1 / -1; align-items: center; }
+.shortLandscape:global(.customer-display-page) :global(.store-pos-scanner-head .eyebrow),
+.shortLandscape:global(.customer-display-page) :global(.store-pos-scanner-head span) { display: none; }
+.shortLandscape:global(.customer-display-page) :global(.store-pos-scanner-head h3) { font-size: 16px; }
+.shortLandscape:global(.customer-display-page) :global(.store-pos-scanner-head button) { min-height: 36px; padding: 6px 12px; }
+.shortLandscape:global(.customer-display-page) :global(.store-pos-scanner-video) { grid-row: 2 / span 2; min-height: 0; height: 100%; aspect-ratio: auto; }
+.shortLandscape:global(.customer-display-page) :global(.store-pos-scanner-message),
+.shortLandscape:global(.customer-display-page) :global(.store-pos-scanner-fallback) { font-size: 12px; font-weight: 450; overflow-y: auto; }
+.shortLandscape:global(.customer-display-page.is-advertising) { gap: 0; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-advertising) { flex: 1 1 0; min-height: 0; height: 100%; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-advertising-copy),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-advertising.is-thanks .customer-display-advertising-copy) { width: calc(100% - 32px); gap: 12px; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-advertising-copy strong),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-advertising.is-thanks .customer-display-advertising-copy strong) { font-size: clamp(28px, 8dvh, 40px); line-height: 1.1; }
+.shortLandscape:global(.customer-display-page) :global(.customer-display-advertising-copy p),
+.shortLandscape:global(.customer-display-page) :global(.customer-display-advertising.is-thanks .customer-display-advertising-copy p) { font-size: clamp(15px, 4dvh, 18px); }
+.shortLandscape.page:global(.customer-display-page) { gap: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.shortLandscape.page .surface { flex: 1 1 0; height: auto; min-height: 0; }
+.shortLandscape:global(.customer-display-page[data-pos-debug-display]) :global(.customer-display-topbar) { padding: 0 30px 0 0; background: transparent; }
+.shortLandscape:global(.customer-display-page[data-pos-debug-display]) :global(.customer-display-status-title) { display: none; }
+.shortLandscape:global(.customer-display-page) :global([data-pos-debug-display-status]) { flex-wrap: nowrap; gap: 6px; min-width: 0; padding: 5px 7px; font-size: 11px; line-height: 15px; }
+.shortLandscape:global(.customer-display-page) :global([data-pos-debug-display-status] span) { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shortLandscape:global(.customer-display-page) :global([data-pos-debug-display-status] strong) { flex: 0 1 auto; }
+.shortLandscape:global(.customer-display-page) :global([data-pos-debug-display-status] a) { flex: 0 0 auto; font-size: 10px; }
+.shortLandscape:global(.customer-display-page) :global([data-pos-debug-weighing]) { margin: 0; padding: 6px 8px; }
+.shortLandscape:global(.customer-display-page) :global([data-pos-debug-weighing] > div span) { font-size: 10px; }
+.shortLandscape:global(.customer-display-page) :global([data-pos-debug-weighing] > div strong) { font-size: 13px; }
+.shortLandscape:global(.customer-display-page) :global([data-pos-debug-weighing] p) { margin: 4px 0 0; gap: 5px; }
+.shortLandscape:global(.customer-display-page) :global([data-pos-debug-weighing] p strong),
+.shortLandscape:global(.customer-display-page) :global([data-pos-debug-weighing] p b) { font-size: 24px; }
+.shortLandscape:global(.customer-display-page) :global([data-pos-debug-weighing] p span) { font-size: 11px; }
+
+.accountingNumber {
+  font-size: clamp(13px, 2.5vmin, 18px);
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  opacity: .8;
+}

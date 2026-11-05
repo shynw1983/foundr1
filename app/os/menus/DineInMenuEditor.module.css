@@ -1,0 +1,212 @@
+.panel { display: grid; gap: 16px; min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.panel h3,.panel h4,.panel p { margin: 0; }
+.panel h3 { font-size: 19px; font-weight: 650; }
+.panel h4 { font-size: 16px; font-weight: 600; }
+.heading,.initialize,.activation { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
+.heading > div,.initialize > div { display: grid; gap: 6px; flex: 1 1 260px; }
+.heading p,.initialize p,.activation p,.help { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.heading button,.initialize button,.activation button { flex-shrink: 0; }
+.context { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.context label { flex: 0 1 260px; }
+.context > div { display: grid; gap: 5px; flex: 1 1 220px; min-width: 0; }
+.context > div > span,.itemHeading > span { color: var(--muted); font-size: 12px; }
+.context strong { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.context strong svg { flex-shrink: 0; }
+.enabled,.paused { padding: 5px 8px; border-radius: 5px; font-size: 12px; line-height: 1.5; }
+.enabled { color: var(--green); background: var(--green-soft); }
+.paused { color: var(--muted); background: var(--soft,#f5f7f8); }
+.panel label { display: grid; gap: 6px; min-width: 0; font-size: 13px; font-weight: 500; }
+.panel input,.panel select { width: 100%; min-width: 0; max-width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--panel); font: inherit; font-size: 14px; accent-color: var(--green); }
+.panel :is(button,input,select,summary):focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.panel button { max-width: 100%; }
+.error,.success,.pending { padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.error { color: #9b2c30; background: #fff1f0; }
+.success { color: var(--green); background: var(--green-soft); }
+.pending { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; background: var(--soft,#f5f7f8); color: var(--ink); }
+.pending span { flex: 1 1 220px; }
+.initialize { padding-block: 8px 16px; border-bottom: 1px solid var(--line); }
+.initializeModes { display: grid; gap: 10px; width: 100%; margin: 0; padding: 12px 0; border: 0; }
+.initializeModes legend { padding: 0 0 6px; color: var(--muted); font-size: 12px; }
+.panel .initializeModes label { display: flex; align-items: start; gap: 9px; font-size: 13px; line-height: 1.6; cursor: pointer; }
+.panel .initializeModes input { width: 16px; height: 16px; min-height: 16px; max-width: 16px; margin: 2px 0 0; padding: 0; flex: 0 0 16px; }
+.initialize > p { flex-basis: 100%; }
+.activation p { flex: 1 1 260px; }
+.composer { display: grid; gap: 12px; min-width: 0; padding-block: 4px 16px; border-bottom: 1px solid var(--line); }
+.composerActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.composeForm { display: grid; gap: 14px; min-width: 0; padding-top: 8px; }
+.composeHeading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+.composeHeading h4 { font-size: 15px; }
+.creationForm { display: grid; gap: 10px; min-width: 0; }
+.creationForm > button { justify-self: start; }
+.formColumns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 16px; min-width: 0; }
+.importSummary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; padding-block: 8px; font-size: 13px; }
+.importSummary strong { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.importSummary small { width: 100%; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.addonPicker { display: grid; gap: 10px; min-width: 0; }
+.selectionCount { color: var(--muted); font-size: 12px; }
+.addonCandidates { display: grid; gap: 14px; max-height: 340px; overflow-y: auto; padding: 2px 4px; min-width: 0; }
+.addonCandidates fieldset { display: grid; gap: 7px; margin: 0; padding: 10px 0 0; border: 0; border-top: 1px solid var(--line); min-width: 0; }
+.addonCandidates legend { padding: 0 8px 0 0; font-size: 13px; font-weight: 500; }
+.panel .addonChoice { display: flex; align-items: start; gap: 9px; padding: 6px 2px; min-width: 0; font-weight: 400; line-height: 1.5; cursor: pointer; }
+.panel .addonChoice input { width: 16px; height: 16px; min-height: 16px; max-width: 16px; flex: 0 0 16px; padding: 0; margin: 2px 0 0; }
+.addonChoice > span { flex: 1 1 120px; min-width: 0; overflow-wrap: anywhere; }
+.addonChoice small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.addonOrder { display: grid; gap: 10px; min-width: 0; padding-top: 14px; border-top: 1px solid var(--line); }
+.addonOrder > button { justify-self: start; }
+.addonOrder h4 { font-size: 14px; font-weight: 500; }
+.orderRows { display: grid; min-width: 0; }
+.orderRow { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; padding-block: 9px; border-bottom: 1px solid var(--line); min-width: 0; }
+.orderRow > span { display: grid; gap: 3px; flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+.orderRow small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.orderRow > div { display: flex; gap: 6px; }
+.filters { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 20px; }
+.filters > label { flex: 0 1 300px; }
+.kinds { display: flex; flex-wrap: wrap; gap: 4px; }
+.kinds button { min-height: 38px; padding: 8px 12px; border: 1px solid transparent; border-radius: 7px; color: var(--muted); background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+.kinds button[aria-pressed="true"] { border-color: var(--line); color: var(--green); background: var(--green-soft); }
+.body { display: grid; grid-template-columns: minmax(220px,0.95fr) minmax(0,1.05fr); gap: 24px; align-items: start; min-width: 0; }
+.list { max-height: 660px; min-width: 0; overflow-y: auto; border-top: 1px solid var(--line); }
+.list button { display: grid; gap: 5px; width: 100%; min-width: 0; padding: 12px 10px; border: 0; border-bottom: 1px solid var(--line); color: var(--ink); background: transparent; text-align: left; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.list button[aria-pressed="true"] { background: var(--green-soft); }
+.list button:disabled,.kinds button:disabled { cursor: default; opacity: .7; }
+.rowTitle { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 14px; font-size: 14px; font-weight: 500; }
+.price { flex-shrink: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.list small { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
+.hiddenBadge,.visibleBadge { flex-shrink: 0; font-size: 11px; }
+.visibleBadge { color: var(--green); }
+.editor { display: grid; gap: 18px; min-width: 0; overflow-wrap: anywhere; }
+.itemHeading { display: grid; gap: 5px; }
+.itemHeading p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.priceSummary { display: flex; flex-wrap: wrap; gap: 6px 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.priceSummary > span { color: var(--muted); font-size: 12px; }
+.priceSummary strong { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.priceSummary small { width: 100%; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.pricingRate { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; min-width: 0; font-size: 12px; color: var(--muted); }
+.pricingRate strong { color: var(--ink); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.form,.derive form { display: grid; gap: 10px; justify-items: start; min-width: 0; }
+.form label,.derive label { width: 100%; }
+.form p,.derive p { color: var(--muted); font-size: 12px; line-height: 1.65; }
+.derive { padding-top: 16px; border-top: 1px solid var(--line); }
+.derive summary { color: var(--green); font-size: 13px; font-weight: 500; line-height: 1.6; cursor: pointer; }
+.derive form { margin-top: 12px; }
+.empty { padding: 18px 4px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+@media(max-width:800px) { .panel { padding: 16px; } .body { grid-template-columns: minmax(0,1fr); gap: 20px; } .list { max-height: 300px; } .context label,.filters > label { flex: 1 1 220px; } }
+@media(max-width:480px) { .panel { padding: 14px; gap: 14px; } .panel h3 { font-size: 18px; } .context > div { flex-basis: 100%; } .heading > div,.initialize > div { flex-basis: 100%; } .initialize button { width: 100%; } .kinds { width: 100%; gap: 0; } .kinds button { flex: 1 1 auto; padding-inline: 8px; } .formColumns { grid-template-columns: minmax(0,1fr); } .composerActions > button { flex: 1 1 180px; } }
+
+.deleteSection { display: grid; gap: 10px; padding-top: 16px; border-top: 1px solid var(--line); justify-items: start; }
+.deleteSection p { color: var(--muted); font-size: 12px; line-height: 1.65; }
+.deleteDialog { width: min(520px,calc(100vw - 28px)); max-height: calc(100dvh - 32px); margin: auto; padding: 20px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--panel); }
+.deleteDialog::backdrop { background: rgb(20 28 38 / 44%); }
+.deleteDialogBody { display: grid; gap: 14px; min-width: 0; }
+.deleteDialogBody h4 { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.deleteDialogBody p { font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.deleteDialogActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.deleteDialogActions button { min-height: 40px; }
+
+.candidateOrigin { margin-left: 8px; color: var(--muted); font-size: 11px; font-weight: 400; }
+
+.workspace { display: grid; gap: 16px; min-width: 0; }
+.workspace[hidden] { display: none; }
+
+.statusFilters { display: flex; flex-wrap: wrap; gap: 6px; }
+.statusFilters button { color: var(--muted); font-size: 12px; }
+.statusFilters button[aria-pressed="true"] { border-color: var(--green); color: var(--green); background: var(--green-soft); }
+.recoveryHelp { min-width: 0; font-size: 12px; color: var(--muted); }
+.recoveryHelp summary { cursor: pointer; line-height: 1.6; }
+.recoveryHelp > p { padding-top: 8px; }
+.visibilityAction { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding-block: 10px; border-block: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.orderDisclosure { display: grid; min-width: 0; padding-block: 6px; font-size: 13px; }
+.orderDisclosure > summary { color: var(--green); cursor: pointer; line-height: 1.6; }
+.orderDisclosure[open] > summary { margin-bottom: 10px; }
+.orderDisclosure > button { margin-top: 10px; }
+.orderDisclosure .orderRows { max-height: 340px; overflow-y: auto; padding-inline: 3px; }
+.groupSettings { display: grid; gap: 12px; min-width: 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.groupSettings > button { justify-self: start; }
+.pickerToolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+.panel .choiceHint { display: block; color: var(--muted); font-size: 11px; line-height: 1.6; white-space: normal; overflow-wrap: anywhere; }
+.linkedItem { display: grid; gap: 8px; padding-block: 12px; border-block: 1px solid var(--line); font-size: 13px; }
+.linkedItem strong { font-weight: 500; }
+.linkedItem p { color: var(--muted); font-size: 12px; line-height: 1.65; }
+.linkedItem > button { justify-self: start; }
+.trashRow { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 10px; min-width: 0; padding: 12px 8px; border-bottom: 1px solid var(--line); }
+.trashRow > div { display: grid; gap: 4px; flex: 1 1 140px; min-width: 0; }
+.trashRow strong { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.list .trashRow > button { display: inline-flex; justify-content: center; align-items: center; width: auto; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--green); background: var(--panel); font-size: 12px; }
+@media(max-width:480px) { .statusFilters > button { flex: 1 1 70px; } .orderRow > div { flex-shrink: 0; } .visibilityAction > button { width: 100%; } }
+
+.optionGroupsToolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 14px; min-width: 0; color: var(--muted); font-size: 12px; }
+.optionGroupsToolbar > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.optionGroupsToolbar > p { flex-basis: 100%; line-height: 1.6; }
+.optionGroupsToolbar button { min-height: 34px; font-size: 12px; }
+.optionListGroup { min-width: 0; border-bottom: 1px solid var(--line); }
+.list .optionGroupToggle { display: flex; align-items: center; gap: 10px; min-width: 0; border-bottom: 0; padding: 12px 10px; }
+.list .optionGroupToggle:disabled { opacity: 1; cursor: default; }
+.optionListGroup[data-option-group-selected="true"] > .optionGroupToggle { background: var(--green-soft); }
+.optionGroupTitle { display: grid; gap: 5px; flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
+.optionGroupTitle strong { font-size: 13px; font-weight: 550; line-height: 1.5; }
+.list .optionGroupTitle > small { display: block; font-size: 11px; line-height: 1.6; }
+.optionGroupMeta { display: grid; justify-items: end; gap: 4px; flex-shrink: 0; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1.5; }
+.optionGroupMeta em { color: var(--green); font-size: 10px; font-style: normal; font-weight: 400; }
+.optionGroupChevron { flex: 0 0 16px; color: var(--muted); }
+.optionGroupToggle[aria-expanded="false"] > .optionGroupChevron { transform: rotate(-90deg); }
+.optionGroupOptions { min-width: 0; margin: 0 10px 8px; padding-left: 8px; border-left: 1px solid var(--line); }
+.optionGroupOptions[hidden] { display: none; }
+.list .optionGroupOptions > button { padding: 10px 8px; }
+.list .optionGroupOptions > button:last-child { border-bottom: 0; }
+@media(max-width:480px) { .list .optionGroupToggle { gap: 7px; padding: 11px 8px; } .optionGroupTitle { flex-basis: 100px; } .optionGroupMeta { font-size: 10px; } .optionGroupOptions { margin-inline: 7px; } }
+
+.associations { display: grid; gap: 10px; min-width: 0; padding-block: 14px; border-block: 1px solid var(--line); }
+.associationCount { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px 12px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.associationChoices { min-width: 0; max-height: 300px; overflow-y: auto; padding: 2px 4px; border-block: 1px solid var(--line); }
+.associationChoices .addonChoice { padding-block: 9px; border-bottom: 1px solid var(--line); }
+.associationChoices .addonChoice:last-child { border-bottom: 0; }
+.importModes { display: flex; flex-wrap: wrap; gap: 10px 18px; min-width: 0; padding: 10px 0; margin: 0; border: 0; }
+.importModes legend { color: var(--muted); font-size: 12px; padding-bottom: 7px; }
+.panel .importModes label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 400; }
+.panel .importModes input { width: 16px; max-width: 16px; height: 16px; min-height: 16px; flex: 0 0 16px; margin: 0; padding: 0; }
+.addonSourceGroup { min-width: 0; border-top: 1px solid var(--line); }
+.addonSourceToggle { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 7px 12px; width: 100%; min-width: 0; min-height: 42px; padding: 9px 2px; border: 0; color: var(--ink); background: transparent; text-align: left; font: inherit; cursor: pointer; }
+.addonSourceToggle > span:first-child { display: grid; gap: 4px; flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.addonSourceToggle strong { color: var(--green); font-size: 13px; font-weight: 500; }
+.addonSourceToggle strong::before { content: "▸ "; }
+.addonSourceToggle[aria-expanded="true"] strong::before { content: "▾ "; }
+.addonSourceToggle small,.addonSourceToggle > span:last-child { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.addonSourceOptions { min-width: 0; padding-left: 8px; }
+.addonSourceOptions[hidden] { display: none; }
+
+.groupOptions { display: grid; gap: 10px; min-width: 0; padding-block: 14px; border-block: 1px solid var(--line); }
+.groupOptionsHeading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 12px; }
+.groupOptionsHeading > span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.groupOptionRows { display: grid; min-width: 0; max-height: 380px; overflow-y: auto; padding-inline: 3px; }
+.groupOptionRow { display: grid; gap: 6px; width: 100%; min-width: 0; padding: 12px 8px; border: 0; border-bottom: 1px solid var(--line); color: var(--ink); background: transparent; text-align: left; font: inherit; cursor: pointer; }
+.groupOptionRow:hover:not(:disabled) { background: var(--green-soft); }
+.groupOptionRow:disabled { cursor: default; opacity: .7; }
+.groupOptionTitle { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 5px 12px; min-width: 0; }
+.groupOptionTitle > strong { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; font-size: 14px; font-weight: 550; line-height: 1.5; }
+.groupOptionTitle > span { display: grid; gap: 3px; flex-shrink: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.groupOptionTitle small { color: var(--muted); font-size: 11px; }
+.groupOptionStatus { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; }
+.groupOptionEdit { margin-left: auto; color: var(--green); font-size: 12px; }
+.groupOptionHint { color: var(--muted); overflow-wrap: anywhere; font-size: 11px; line-height: 1.6; }
+.returnToGroup { justify-self: start; overflow-wrap: anywhere; text-align: left; }
+
+
+.bulkOptions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; min-width: 0; padding-block: 10px; border-block: 1px solid var(--line); }
+.bulkOptions > span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.bulkOptions > p { flex-basis: 100%; font-size: 12px; }
+.bulkOptionActions { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.bulkOptionActions > button { min-height: 36px; min-width: 0; white-space: normal; overflow-wrap: anywhere; font-size: 12px; }
+.optionSelectableRow { display: grid; grid-template-columns: 30px minmax(0,1fr); align-items: stretch; min-width: 0; border-bottom: 1px solid var(--line); }
+.optionSelectableRow[data-option-selected="true"] { background: var(--green-soft); }
+.panel .optionSelect { display: flex; align-items: center; justify-content: center; min-height: 42px; margin: 0; cursor: pointer; }
+.panel .optionSelect input { width: 17px; max-width: 17px; height: 17px; min-height: 17px; flex: 0 0 17px; margin: 0; padding: 0; accent-color: var(--green); }
+.optionSelectableRow > button,.list .optionSelectableRow > button { border-bottom: 0; }
+.bulkDeleteNames { display: grid; gap: 0; max-height: min(34dvh,240px); min-width: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; border-block: 1px solid var(--line); }
+.bulkDeleteNames li { display: grid; gap: 4px; min-width: 0; padding: 8px 4px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.bulkDeleteNames li:last-child { border-bottom: 0; }
+.bulkDeleteNames strong { font-size: 13px; font-weight: 500; }
+.bulkDeleteNames span { color: var(--muted); font-size: 11px; }
+@media(max-width:480px) { .bulkOptionActions { flex: 1 1 100%; } .bulkOptionActions > button { flex: 1 1 100px; } .optionSelectableRow { grid-template-columns: 28px minmax(0,1fr); } }
+
+.optionCreateScope { display: grid; gap: 7px; min-width: 0; padding-block: 8px; color: var(--muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.groupOptionsHeading > button { min-height: 36px; white-space: normal; text-align: left; }

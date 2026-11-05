@@ -1,0 +1,78 @@
+.editor {
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+  gap: 8px;
+}
+
+.grid {
+  display: grid;
+  gap: 8px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.dayControls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+
+.dayControls .weekday {
+  flex: 0 0 3em;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.editor .choice {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 5px;
+  min-height: 28px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.editor .choice input[type="checkbox"] {
+  appearance: auto;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  accent-color: var(--green);
+}
+
+.editor .time {
+  min-width: 0;
+  width: 100%;
+}
+
+.editor .time:disabled {
+  color: var(--muted);
+  background: var(--surface, #f5f6f5);
+  opacity: 0.65;
+}
+
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .dayControls {
+    grid-column: 1 / -1;
+  }
+}

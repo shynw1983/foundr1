@@ -24,6 +24,7 @@ import { MobileNavMenu } from "../../components/MobileNavMenu";
 import { OsNavList } from "../../components/OsNavList";
 import { UserBadge } from "../../components/UserBadge";
 import { yenDenominations, type CashBreakdown } from "../../../../lib/pos-cash-denominations";
+import { useOsTranslation } from "../../components/OsTranslationProvider";
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
@@ -190,6 +191,7 @@ function getTime(value: string) {
 }
 
 export default function PosReconciliationPage() {
+  const { t } = useOsTranslation();
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [access, setAccess] = useState<PosCashAccess | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState("");
@@ -415,6 +417,7 @@ export default function PosReconciliationPage() {
               <div>
                 <h3>精算サマリー</h3>
                 <p>支払方法別売上と現金の入出金をまとめて確認します。</p>
+                <p data-pos-opening-number-help>{t("開店確認で指定した呼出番号（初期値001）から開始します。未受渡しの番号は飛ばします。再読込やアプリの再起動ではリセットしません。")}</p>
               </div>
             </div>
             <div className="pos-admin-cash-grid">
@@ -432,7 +435,7 @@ export default function PosReconciliationPage() {
             {previousClosedSession ? (
               <div className={`pos-admin-handover ${handoverDifference ? "is-warning" : ""}`}>
                 <div>
-                  <span>前回閉店金額</span>
+                  <span>前回レジ締め金額</span>
                   <strong>{formatYen(previousClosedSession.countedCashAmount)}</strong>
                   <small>{previousClosedSession.businessDate} / {previousClosedSession.closedByName || "-"} / {getTime(previousClosedSession.closedAt)}</small>
                 </div>

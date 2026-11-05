@@ -2,6 +2,7 @@
 
 import { AlertTriangle, ChevronDown, MapPin, PackageSearch, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useOsTranslation } from "../app/os/components/OsTranslationProvider";
 import type { ReplenishmentResponse, ReplenishmentSource } from "../lib/replenishment-policy";
 
@@ -12,6 +13,7 @@ export function ReplenishmentPanel({ storeId, refreshKey = 0, open, onOpenChange
   focus?: ReplenishmentFocus | null; onClearFocus?: () => void;
 }) {
   const { t, language } = useOsTranslation();
+  const storeSurface = usePathname().startsWith("/store");
   const [data, setData] = useState<ReplenishmentResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -57,7 +59,7 @@ export function ReplenishmentPanel({ storeId, refreshKey = 0, open, onOpenChange
   const unmapped = visibleData?.unmapped.filter(matchesFocus) ?? [];
   const total = visibleData ? visibleData.risks.length + visibleData.unmapped.length + visibleData.restrictedSourceCount : 0;
   const displayName = (source: { name: string; displayNames?: Record<string, string> }) => language === "ja" ? source.name : source.displayNames?.[language] || source.displayNames?.en || source.name;
-  const orderHref = (productId: string) => `/os/orders?${new URLSearchParams({ replenishStoreId: storeId, replenishProductId: productId })}`;
+  const demandHref = (productId: string) => `${storeSurface ? "/store/replenishment" : "/os/replenishment"}?${new URLSearchParams({ storeId, productId })}`;
   const mappingHref = (kind: string, id: string) => `/os/menus?${new URLSearchParams({ menuStockKind: kind, menuStockTargetId: id })}`;
   const number = (value: number | null | undefined) => value === null || value === undefined ? t("未記録") : new Intl.NumberFormat(language === "ja" ? "ja-JP" : language === "zh-Hant" ? "zh-TW" : "zh-CN", { maximumFractionDigits: 6 }).format(value);
   const status = (value: string) => t(({ requested: "未購入", purchased: "購入済み", in_delivery: "配送中", delivered: "納品済み" } as Record<string, string>)[value] || value);
@@ -92,7 +94,7 @@ export function ReplenishmentPanel({ storeId, refreshKey = 0, open, onOpenChange
       {visibleData?.restrictedSourceCount ? <p className="inline-alert"><AlertTriangle size={16} />{t("商品関連付け・公開範囲の確認が必要な報告 {count} 件があります。本部に確認してください。", { count: visibleData.restrictedSourceCount })}</p> : null}
       {risks.map(risk => <article className="replenishment-row" key={risk.key}>
         <div className="replenishment-row-head"><div><strong>{risk.product.name}</strong><small>{t("発注単位")} · {risk.product.unit}</small></div>
-          {risk.blockedReason ? <span className="replenishment-blocked">{t(risk.blockedReason === "not_orderable" ? "発注停止中" : "本部確認が必要")}</span> : visibleData?.canCreateOrder ? <a className="primary-button compact-button" href={orderHref(risk.product.id)}>{t(risk.openOrders.length ? "追加の発注を確認" : "発注依頼を作成")}</a> : <small>{t("発注できる担当者に確認してください。")}</small>}
+          {risk.blockedReason ? <span className="replenishment-blocked">{t(risk.blockedReason === "not_orderable" ? "発注停止中" : "本部確認が必要")}</span> : storeSurface || visibleData?.canCreateOrder ? <a className="primary-button compact-button" href={demandHref(risk.product.id)}>{t("補充依頼を確認")}</a> : <small>{t("発注できる担当者に確認してください。")}</small>}
         </div>
         <ul className="replenishment-sources">{risk.sources.map(sourceLine)}</ul>
         {risk.openOrders.length ? <div className="replenishment-open-orders"><strong>{t("未受領の発注 {count} 件", { count: risk.openOrders.length })}</strong>

@@ -1,6 +1,11 @@
 import {ensureUberAuthorityObject} from './uber-authority-create.mjs';
 import {isCreationHoldReleased} from './uber-authority-hold-release.mjs';
 
+export function authorityTargetProgress(target,payload) {
+  const parent=payload.targets.find(row=>row.targetId===target.parentId);
+  return {sourceKey:target.sourceKey,targetName:target.name,targetKind:target.kind,parentName:parent?.name};
+}
+
 export function validateAuthorityCommand(payload,platform,merchantId) {
   if(payload?.authoritativePublication!==true||payload.platformKey!==platform
     ||String(payload.merchantId)!==String(merchantId)||!payload.sourceId||!payload.storeId
@@ -28,7 +33,7 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
   }
   validateAuthorityCommand(payload,driver.platform,driver.merchantId);
   if(typeof reportProgress!=='function')throw Error('uber_authority_progress_required');
-  await reportProgress({phase:'preflight',total:payload.targets.length});
+  await reportProgress({phase:'preflight',total:payload.targets.length,telemetryVersion:2});
   const plan=await driver.preflight(payload);
   if(!plan||!Array.isArray(plan.issues))throw Error('uber_authority_preflight_missing');
   if(plan.issues.length) {
@@ -38,29 +43,39 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
     throw error;
   }
   const active=payload.targets.filter(target=>!target.archived&&!target.quarantined);
+  // Preflight has already compared the complete graph. Only actual content
+  // differences (or records still needing creation/proof) enter the content
+  // execution phase. Relationship/stock/identity verification remains separate.
+  const contentWork=active.filter(target=>!target.mappings.length
+    ||typeof driver.contentNeedsUpdate!=='function'||driver.contentNeedsUpdate(target));
+  const contentSummary={checkedTargets:active.length,totalTargets:active.length,
+    skippedTargets:active.length-contentWork.length,contentChanges:contentWork.length};
+  await reportProgress({phase:'preflight',...contentSummary,contentCompleted:0});
   const retireTargets=async targets=>{
     if(!targets.length)return;
     let retired=0;
     await reportProgress({phase:'retiring',completed:0,total:targets.length});
     for(const target of targets) {
-      await reportProgress({phase:'retiring',sourceKey:target.sourceKey,targetName:target.name,completed:retired,total:targets.length});
-      await driver.retire(target,payload);
+      await reportProgress({phase:'retiring',...authorityTargetProgress(target,payload),completed:retired,total:targets.length});
+      await withTarget(target,()=>driver.retire(target,payload));
       await reportProgress({phase:'retiring',completed:++retired,total:targets.length});
     }
   };
+  const withTarget=(target,operation)=>driver.withTargetProgress?driver.withTargetProgress(target,operation):operation();
   let completed=0;
-  await reportProgress({phase:'content',completed,total:active.length});
+  await reportProgress({phase:'content',...contentSummary,contentCompleted:0,completed,total:contentWork.length});
   await driver.beginPhase?.('content');
   // Categories/groups must exist before creating products/options. Native
   // drivers may stage all children with a group creation, journaled separately.
   for(const kind of ['category','option_group','option','item']) {
-    for(const target of active.filter(target=>target.kind===kind)) {
-      await reportProgress({phase:'content',sourceKey:target.sourceKey,targetName:target.name,completed,total:active.length});
-      if(!target.mappings.length)await ensureUberAuthorityObject(target,payload,driver,reportProgress);
-      await reportProgress({phase:'content',sourceKey:target.sourceKey,targetName:target.name,completed,total:active.length});
-      try {await driver.updateContent(target,payload);}
+    for(const target of contentWork.filter(target=>target.kind===kind)) {
+      await reportProgress({phase:'content',...authorityTargetProgress(target,payload),completed,total:contentWork.length});
+      if(!target.mappings.length)await withTarget(target,()=>ensureUberAuthorityObject(target,payload,driver,
+        update=>reportProgress({...authorityTargetProgress(target,payload),...update})));
+      await reportProgress({phase:'content',...authorityTargetProgress(target,payload),completed,total:contentWork.length});
+      try {await withTarget(target,()=>driver.updateContent(target,payload));}
       catch(error) {throw new Error(`uber_authority_content_failed:${target.sourceKey}:${target.name}:${error.message}`,{cause:error});}
-      await reportProgress({phase:'content',completed:++completed,total:active.length});
+      await reportProgress({phase:'content',contentCompleted:++completed,completed,total:contentWork.length});
     }
   }
   // Remove retired choices before validating the remaining group membership.
@@ -74,8 +89,8 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
   for(const kind of ['option_group','item','category']) {
     if(kind==='category')await driver.beginPhase?.('categories');
     for(const target of active.filter(target=>target.kind===kind)) {
-      await reportProgress({phase:'relationships',sourceKey:target.sourceKey,targetName:target.name,completed,total:relationshipTotal});
-      await driver.updateRelationships(target,payload);
+      await reportProgress({phase:'relationships',...authorityTargetProgress(target,payload),completed,total:relationshipTotal});
+      await withTarget(target,()=>driver.updateRelationships(target,payload));
       await reportProgress({phase:'relationships',completed:++completed,total:relationshipTotal});
     }
   }
@@ -91,8 +106,8 @@ export async function runUberAuthorityPublication(payload,driver,reportProgress)
   const observations=[];
   for(const target of payload.targets) {
     if(target.quarantined){observations.push({sourceKey:target.sourceKey,quarantined:true});continue;}
-    await reportProgress({phase:'verifying',sourceKey:target.sourceKey,targetName:target.name,completed,total:verifyTotal});
-    const rows=await driver.observe(target,payload);
+    await reportProgress({phase:'verifying',...authorityTargetProgress(target,payload),completed,total:verifyTotal});
+    const rows=await withTarget(target,()=>driver.observe(target,payload));
     if(!Array.isArray(rows)||!rows.length)throw Error(`uber_authority_observation_missing:${target.sourceKey}`);
     for(const row of rows) {
       if(row.sourceKey!==target.sourceKey)throw Error('uber_authority_observation_identity_mismatch');

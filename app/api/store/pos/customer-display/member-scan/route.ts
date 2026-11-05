@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { getDisplayState } from "../../../../../../lib/pos-customer-display-server";
 import { requireOsSession } from "../../../../../../lib/api-auth";
 import { sql } from "../../../../../../lib/db";
 import { publishPosCustomerDisplayEvent } from "../../../../../../lib/order-realtime";
@@ -73,35 +75,26 @@ export async function POST(request: Request) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (forbidden || !selectedStoreId) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const currentRows = await sql`
-    select display_state as "displayState"
-    from pos_customer_display_states
-    where store_id::text = ${selectedStoreId}
-    limit 1
-  `;
-  const currentState = currentRows[0]?.displayState && typeof currentRows[0].displayState === "object"
-    ? currentRows[0].displayState as Record<string, unknown>
-    : {};
   const createdAt = new Date().toISOString();
   const action = normalizeText(body.action);
   const code = normalizeText(body.code);
   const memberScanCommand = action === "open_scanner"
     ? {
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         action: "open_scanner",
         createdAt
       }
     : null;
   const memberScanRequest = !memberScanCommand
     ? {
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         code,
         createdAt
       }
     : null;
   if (!memberScanCommand && !code) return Response.json({ error: "会員 QR を読み取れませんでした。" }, { status: 400 });
   const displayState = {
-    ...currentState,
+    revision: 1,
     ...(memberScanCommand ? { memberScanCommand } : {}),
     ...(memberScanRequest ? { memberScanRequest } : {})
   };
@@ -121,12 +114,14 @@ export async function POST(request: Request) {
     )
     on conflict (store_id)
     do update set
-      display_state = excluded.display_state,
+      display_state = coalesce(pos_customer_display_states.display_state, '{}'::jsonb) || (excluded.display_state - 'revision')
+        || jsonb_build_object('revision', coalesce((pos_customer_display_states.display_state->>'revision')::bigint, 0) + 1),
       updated_by = excluded.updated_by,
       updated_at = now()
   `;
 
-  await publishPosCustomerDisplayEvent(selectedStoreId, displayState).catch(() => undefined);
+  const nextState = await getDisplayState(selectedStoreId);
+  await publishPosCustomerDisplayEvent(selectedStoreId, nextState).catch(() => undefined);
 
   return Response.json({ ok: true, scanRequest: memberScanRequest, scanCommand: memberScanCommand });
 }

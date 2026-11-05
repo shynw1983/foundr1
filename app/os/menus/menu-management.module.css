@@ -1,0 +1,100 @@
+.brandBar {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 260px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.brandBar label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.brandBar select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  accent-color: var(--green);
+}
+
+.brandBar select:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.brandBar p {
+  margin: 0;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.publishBrand {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.publishBrand span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.publishBrand strong {
+  padding: 10px 0;
+  font-weight: 500;
+}
+
+.scopeBar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scopeBar button {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.scopeBar button[aria-pressed="true"] { background: var(--green-soft); border-color: var(--green); color: var(--green); }
+.scopeBar button:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.scopeBar small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.scopeBar button:disabled { cursor: default; opacity: .7; }
+
+@media (max-width: 760px) {
+  .scopeBar { grid-template-columns: minmax(0, 1fr); }
+  .brandBar {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .brandBar p {
+    grid-column: 1 / -1;
+  }
+}

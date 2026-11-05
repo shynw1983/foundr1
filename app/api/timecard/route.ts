@@ -1,3 +1,6 @@
+import { dispatchGoogleHours } from '../../../lib/google-business-hours-dispatch';
+import { requireGoogleBusinessAccess, googleBusinessSameOrigin } from "../../../lib/google-business-access";
+import { reconcileScheduleMutation, writeScheduleShiftsBulk } from "../../../lib/shift-confirmation";
 import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import { writeAuditLog } from "../../../lib/audit-log";
 import { getBusinessCalendarEvents, getBusinessCalendarMaintenanceStatus } from "../../../lib/business-calendar";
@@ -19,6 +22,8 @@ import {
   type TimecardPunch,
   type WithholdingTaxRow
 } from "../../../lib/timecard";
+
+export const maxDuration = 120;
 
 type TimecardPostBody = {
   action?: string;
@@ -846,6 +851,7 @@ function getBusinessDayCloseMinutes(businessHours: StoreBusinessHours | null | u
   const weekdayKey = getWeekdayKeyForDate(workDate);
   const day = weekdayKey ? businessHours[weekdayKey] : null;
   if (!day || day.closed) return null;
+  if (day.open24Hours) return 0;
   const open = timeValueToMinutes(day.open);
   const close = timeValueToMinutes(day.close);
   if (open === null || close === null || close > open) return null;
@@ -1714,6 +1720,9 @@ export async function POST(request: Request) {
   }
 
   if (action === "save_shift" || action === "delete_shift" || action === "save_shifts_bulk" || action === "delete_shifts_bulk") {
+    const scheduleAccess = await requireGoogleBusinessAccess(storeId);
+    if (scheduleAccess.error) return scheduleAccess.error;
+    if (!googleBusinessSameOrigin(request)) return Response.json({ error: "このリクエストは許可されていません。" }, { status: 403 });
     if (action === "save_shifts_bulk" || action === "delete_shifts_bulk") {
       const shifts = Array.isArray(body.shifts) ? body.shifts : [];
       if (!shifts.length) {
@@ -1737,14 +1746,7 @@ export async function POST(request: Request) {
       }
 
       if (action === "delete_shifts_bulk") {
-        for (const shift of normalizedShifts) {
-          await sql`
-            delete from timecard_shifts
-            where employee_id = ${shift.employeeId}
-              and store_id = ${storeId}
-              and work_date = ${shift.workDate}::date
-          `;
-        }
+        await writeScheduleShiftsBulk(storeId, session.id, normalizedShifts, true);
 
         await writeAuditLog({
           actorEmployeeId: session.id,
@@ -1755,52 +1757,14 @@ export async function POST(request: Request) {
           request
         });
 
-        return Response.json({ ok: true, count: normalizedShifts.length });
+        const scheduleSync = await reconcileScheduleMutation(storeId, normalizedShifts.map(shift => shift.workDate), session.id);
+        dispatchGoogleHours(storeId, scheduleSync.queued);
+        return Response.json({ ok: true, count: normalizedShifts.length, scheduleSync });
       }
 
-      const upsertedIds: string[] = [];
-      for (const shift of normalizedShifts) {
-        const scheduledStart = normalizeTimeValue(shift.scheduledStart);
-        const scheduledEnd = normalizeTimeValue(shift.scheduledEnd);
-        const breakMinutes = Math.max(0, Math.min(720, Math.round(Number(shift.breakMinutes ?? 0) || 0)));
-        if (!scheduledStart || !scheduledEnd) {
-          return Response.json({ error: "開始時刻と終了時刻を入力してください。" }, { status: 400 });
-        }
-
-        await sql`
-          delete from timecard_shifts
-          where employee_id = ${shift.employeeId}
-            and store_id = ${storeId}
-            and work_date = ${shift.workDate}::date
-        `;
-
-        const inserted = await sql`
-          insert into timecard_shifts (
-            employee_id,
-            store_id,
-            work_date,
-            scheduled_start,
-            scheduled_end,
-            break_minutes,
-            note,
-            created_by,
-            updated_at
-          )
-          values (
-            ${shift.employeeId},
-            ${storeId},
-            ${shift.workDate}::date,
-            ${scheduledStart}::time,
-            ${scheduledEnd}::time,
-            ${breakMinutes},
-            ${String(shift.note ?? "").trim() || null},
-            ${session.id},
-            now()
-          )
-          returning id::text
-        `;
-        upsertedIds.push(String(inserted[0]?.id ?? ""));
-      }
+      let upsertedIds: string[];
+      try { upsertedIds = await writeScheduleShiftsBulk(storeId, session.id, normalizedShifts); }
+      catch (error) { return Response.json({ error: error instanceof Error && error.message === "開始時刻と終了時刻を入力してください。" ? error.message : "シフトを保存できませんでした。再確認してください。" }, { status: 400 }); }
 
       await writeAuditLog({
         actorEmployeeId: session.id,
@@ -1811,7 +1775,9 @@ export async function POST(request: Request) {
         request
       });
 
-      return Response.json({ ok: true, count: normalizedShifts.length, ids: upsertedIds.filter(Boolean) });
+      const scheduleSync = await reconcileScheduleMutation(storeId, normalizedShifts.map(shift => shift.workDate), session.id);
+      dispatchGoogleHours(storeId, scheduleSync.queued);
+      return Response.json({ ok: true, count: normalizedShifts.length, ids: upsertedIds.filter(Boolean), scheduleSync });
     }
 
     const shiftId = String(body.shiftId ?? "");
@@ -1852,7 +1818,9 @@ export async function POST(request: Request) {
         request
       });
 
-      return Response.json({ ok: true });
+      const scheduleSync = await reconcileScheduleMutation(storeId, [workDate], session.id);
+      dispatchGoogleHours(storeId, scheduleSync.queued);
+      return Response.json({ ok: true, scheduleSync });
     }
 
     const scheduledStart = normalizeTimeValue(body.scheduledStart);
@@ -1912,7 +1880,9 @@ export async function POST(request: Request) {
       request
     });
 
-    return Response.json({ ok: true, id: saved[0]?.id ?? null });
+    const scheduleSync = await reconcileScheduleMutation(storeId, [workDate], session.id);
+    dispatchGoogleHours(storeId, scheduleSync.queued);
+    return Response.json({ ok: true, id: saved[0]?.id ?? null, scheduleSync });
   }
 
   if (action === "save_actual_time" || action === "delete_actual_time") {

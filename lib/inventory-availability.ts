@@ -431,7 +431,8 @@ async function applyInventoryAvailabilityUnlocked(input: {
         operation,
         soldOutMode: "indefinite",
         targets: commandTargets,
-        ...(input.verifyAvailability === true ? { verifyAvailability: true } : {}),
+        ...(input.verifyAvailability === true || (platform === "rocket_now" && syncSource === "store" && commandTargets.length > 0)
+          ? { verifyAvailability: true } : {}),
         ...(platform === "demae_can" && syncSource === "store" && commandTargets.length
           ? { manualItemRelease: true, verifyAvailability: true, demaeStaging: await loadDemaeStagingHints(storeId) }
           : {})

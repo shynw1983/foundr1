@@ -81,8 +81,9 @@ test('Demae category item order is applied and verified independently, excluding
   const driver=new AuthorityNativeDriver({},payload);driver.categorySnapshot=rows;
   assert.deepEqual(driver.structureIssues(category,rows,{preflight:true}),[]);
   assert.equal(driver.structureIssues(category,rows).length,1);
-  let writes=0;
-  driver.client.updateCategory=async(id,patch)=>{writes++;assert.equal(id,'12');assert.deepEqual(patch,{itemCodes:['1','2']});if(!ignored)rows[0].childIds=patch.itemCodes;};
+  let writes=0,freshProofs=0;
+  driver.snapshot=async()=>{freshProofs++;return structuredClone(rows);};
+  driver.client.updateCategory=async(id,patch)=>{writes++;assert.equal(freshProofs,1);assert.equal(id,'12');assert.deepEqual(patch,{itemCodes:['1','2']});if(!ignored)rows[0].childIds=patch.itemCodes;};
   await driver.updateRelationships(category);
   assert.equal(writes,1);driver.observationSnapshot=rows;
   assert.equal((await driver.observe(category))[0].structureVerified,!ignored);

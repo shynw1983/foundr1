@@ -13,8 +13,10 @@ An already-authorized automatic source does not require a new manual confirmatio
 - Uber owns menu identity, source names, descriptions, images, category placement,
   groups, option membership, ordering and Uber channel prices.
 - OS keeps stable operational IDs, website/POS data and supplementary translations.
-  All linked item and option prices use exact contextual Uber yen prices, including
-  OS, Web予約, POS, Rocket and Demae. No 80% conversion, rounding or manual price mode.
+  Linked item and option brand prices use exact contextual Uber yen prices, including
+  OS, Web予約, Rocket and Demae. POS inherits these prices unless an explicit
+  POS-only store price is configured under the 2026-10-16 decision below.
+  No 80% conversion or rounding is applied to brand/channel prices.
   The `uber-exact-v1` policy forces reconciliation on the next successful read even
   when Uber content is unchanged. Linked store overrides are cleared; existing
   platform overrides are reconciled. Unlinked products are not guessed or repriced.
@@ -34,6 +36,17 @@ An already-authorized automatic source does not require a new manual confirmatio
   retain their holds; zero price never implies an exemption.
 - Authority is explicitly scoped to one configured brand/store, not every brand.
   The nanacha and maamaa frontends continue consuming OS menu IDs and display names.
+
+### POS-only store menu decision (2026-10-16)
+
+The operator authorized separate physical-store visibility and pricing while retaining
+existing 50g topping specifications. `menu_pos_settings` holds item/group/option
+visibility and item/option POS prices by store. Explicit POS prices are owned by the
+store configuration; source imports continue updating the shared brand prices but
+must not overwrite this separate table. Inherited POS prices follow the brand master.
+This exception does not change Web予約, table-order, Uber, Rocket or Demae prices,
+content ownership, availability or old order snapshots. Configuration implementation
+is distinct from live activation; see [POS menu configuration](pos-menu-settings.md).
 
 ## Implemented foundation
 

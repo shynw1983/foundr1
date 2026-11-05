@@ -89,9 +89,16 @@ export function acquireSharedPusher(config: RealtimeConfig) {
 
   return {
     connection: {
+      get state() { return state.client.connection.state; },
       bind(eventName: string, handler: ConnectionHandler) {
         connectionHandlers.push({ eventName, handler });
         state.client.connection.bind(eventName, handler);
+      },
+      unbind(eventName: string, handler: ConnectionHandler) {
+        state.client.connection.unbind(eventName, handler);
+        for (let index = connectionHandlers.length - 1; index >= 0; index -= 1) {
+          if (connectionHandlers[index].eventName === eventName && connectionHandlers[index].handler === handler) connectionHandlers.splice(index, 1);
+        }
       }
     },
     subscribe(channelName: string) {
@@ -103,6 +110,7 @@ export function acquireSharedPusher(config: RealtimeConfig) {
       const bindings = channelHandlers.get(channelName) ?? [];
       channelHandlers.set(channelName, bindings);
       return {
+        get subscribed() { return channel.subscribed; },
         get name() {
           return channel.name;
         },

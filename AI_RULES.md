@@ -9,6 +9,7 @@
 | 产品与架构 | [README.md](README.md)、[PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)、[运营平台路线图](docs/operations-platform-roadmap.md) |
 | 数据库 | [DATABASE.md](DATABASE.md)、`db/schema.sql`、相关 API 与 `lib/` 数据访问代码 |
 | OS / 门店 UI | [界面细则](docs/os-ui-guidelines.md)、`app/os/`、`app/store/`、相关组件、`app/globals.css`、`public/locales/os/` |
+| 推送 / 自动刷新 / 轮询 / 重连 / 心跳 | [统一刷新与恢复规范](docs/realtime-refresh-policy.md)、[已发布版本排查与待整改项](docs/realtime-refresh-audit-20261103.md)；先区分读模型、任务进度、采样与租约 |
 | 菜单与品牌网站 | [菜单翻译与标准 API](docs/customer-menu-i18n.md)、`app/api/public/menus/route.ts`、`app/os/menus/` |
 | 订单 / POS / 厨房 | [门店与厨房数据规则](docs/store-operation-rules.md)、`lib/customer-orders.ts`、`lib/sales-orders.ts`、`lib/order-production.ts`、相关 public/store API |
 | 采购 / レシート / 商品总表 / 比较 | [采购业务框架](docs/procurement-backoffice-framework.md)、`lib/procurement-data.ts`、`lib/receipt-data.ts`、`components/receipts/` |

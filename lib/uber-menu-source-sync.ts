@@ -4,7 +4,7 @@ import { uberMenuChanges } from './uber-menu-diff.ts';
 import { sql } from './db.ts';
 import { resolveUberOptionMove, missingUberSourceObjects, pendingUberRemovals } from './uber-menu-identity.ts';
 import { buildUberPublication, type UberPublicationMapping, type UberPublicationNode, type UberMenuNameAdaptation } from './uber-menu-publication.ts';
-import { splitUberName, uberContextPrice, resolveUberBasePrice, uberSourceContentHash, validateUberSourceCatalog, confirmedUberRemovals, UBER_PRICE_RULE_VERSION, type UberSourceCatalog } from './uber-menu-authority.ts';
+import { splitUberName, uberContextPrice, resolveUberBasePrice, uberSourceContentHash, validateUberSourceCatalog, confirmedUberRemovals, uberStructuralRemovals, matchesUberRemovalReview, canApplyUberRemovalReview, UBER_PRICE_RULE_VERSION, type UberSourceCatalog, type UberRemovalReview } from './uber-menu-authority.ts';
 import {reconcileUberPublications} from './uber-menu-publication-reconcile.ts';
 import {publishBridgeCommandAvailable} from './local-bridge-realtime.ts';
 import {loadVerifiedCreationHoldReleases} from './uber-creation-hold-releases.ts';
@@ -23,7 +23,7 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
   // the import; capture identity in each queued payload prevents double enqueue.
   if (previousRun.length) {
     const summary=previousRun[0].summary as Record<string,unknown>;
-    if(summary.noChanges===true&&!input.dryRun&&!input.verifyRollback&&!input.bootstrap&&Number(previousRun[0].revision)===Number(source.revision)) {
+    if(!source.publish_config?.removalReview&&summary.noChanges===true&&!input.dryRun&&!input.verifyRollback&&!input.bootstrap&&Number(previousRun[0].revision)===Number(source.revision)) {
       const acknowledged=validateUberSourceCatalog(input.catalog,String(source.uber_store_uuid));
       // A delayed ACK from an older observation is not a new manual decision
       // to verify today's revision, even if a later scan kept the same revision.
@@ -147,12 +147,44 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
   const summary = {added:nodes.filter(row=>row.isNew).length,moved:nodes.filter(row=>row.kind==='option' && options.some(old=>old.id===row.targetId && old.parentId!==row.parentId)).length,observed:nodes.length,archived:archived.length,pendingRemoval:missingObjects.length,contentChanged:hash!==source.last_content_hash,changes,renamed:changes.filter(row=>row.kind==='renamed').length,repriced:changes.filter(row=>row.kind==='repriced').length,noChanges:false,sourceCapturedAt:catalog.capturedAt};
   Object.assign(summary,{placementRuleVersion:UBER_PLACEMENT_RULE_VERSION,placementPolicyChanged});
   Object.assign(summary,{priceRuleVersion:UBER_PRICE_RULE_VERSION,pricePolicyChanged,priceDrift});
+  const review = source.publish_config?.removalReview as UberRemovalReview | undefined;
+  const revisionBefore = Number(source.revision);
+  const targets = [
+    ...uberStructuralRemovals(previous,catalog),
+    ...[...missingObjects,...nodes.filter(node=>node.movedFromSourceKey)].map(row=>({
+      key:JSON.stringify([row.sourceKey,row.targetId]),name:String(objects.find(old=>old.sourceKey===row.sourceKey)?.sourceName??row.sourceKey)
+    }))
+  ];
+  const sameReview = matchesUberRemovalReview(review,revisionBefore,hash,targets);
+  const approved = sameReview && canApplyUberRemovalReview(review,catalog.capturedAt)
+    && missingObjects.every(row=>archived.some(retired=>retired.sourceKey===row.sourceKey));
+  // With the source row locked, reject a concurrently replaced or approved
+  // review. Never overwrite a newer decision with this scan's stale copy.
+  const checkReview = () => sql`select 1/count(*)::int from menu_uber_sources
+    where id=${source.id} and coalesce(publish_config->'removalReview','null'::jsonb)=${JSON.stringify(review??null)}::jsonb`;
   if(input.dryRun) return {...summary, dryRun:true, additions:nodes.filter(row=>row.isNew).map(row=>({kind:row.kind,name:row.name,uberId:row.uberId})), prices:nodes.filter(row=>row.price!==null).map(row=>({kind:row.kind,name:row.name,uberPrice:row.uberPrice,osPrice:row.price,mode:row.priceMode})), nodes};
+  if(targets.length && !approved) {
+    if(input.verifyRollback || input.bootstrap) throw new Error('uber_source_removal_approval_required');
+    const pending: UberRemovalReview = sameReview ? review! : {
+      token:randomUUID(),revision:revisionBefore,hash,observedAt:catalog.capturedAt,targets
+    };
+    const held = {...summary,added:0,moved:0,archived:0,renamed:0,repriced:0,removalApprovalRequired:true,pendingRemoval:targets.length};
+    await sql.transaction([
+      sql`select lock_menu_uber_revision(${source.id},${source.revision})`,
+      checkReview(),
+      sql`update menu_uber_sources set publish_config=jsonb_set(publish_config,'{removalReview}',${JSON.stringify(pending)}::jsonb),
+        missing_keys=${pendingKeys},last_checked_at=now(),last_error='',updated_at=now() where id=${source.id}`,
+      sql`insert into menu_uber_sync_runs(source_id,command_id,revision,content_hash,summary)
+        values(${source.id},${input.commandId},${source.revision},${hash},${JSON.stringify(held)}::jsonb)`
+    ]);
+    return held;
+  }
   if(!input.verifyRollback&&!input.bootstrap&&!pricePolicyChanged&&!priceDrift&&!placementPolicyChanged&&!summary.contentChanged&&!summary.added&&!summary.moved&&!missingObjects.length) {
     summary.noChanges=true;
     await sql.transaction([
       sql`select lock_menu_uber_revision(${source.id},${source.revision})`,
-      sql`update menu_uber_sources set last_catalog=${JSON.stringify(catalog)}::jsonb,missing_keys=${pendingKeys},last_checked_at=now(),last_error='',updated_at=now() where id=${source.id}`,
+      checkReview(),
+      sql`update menu_uber_sources set publish_config=publish_config-'removalReview',last_catalog=${JSON.stringify(catalog)}::jsonb,missing_keys=${pendingKeys},last_checked_at=now(),last_error='',updated_at=now() where id=${source.id}`,
       sql`insert into menu_uber_sync_runs(source_id,command_id,revision,content_hash,summary) values(${source.id},${input.commandId},${source.revision},${hash},${JSON.stringify(summary)}::jsonb)`
     ]);
     const retired:UberPublicationNode[]=sourceObjects.filter(row=>row.archived&&!nodes.some(node=>node.sourceKey===row.sourceKey))
@@ -160,6 +192,8 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
     return reconcileUnchangedSource(input,Number(source.revision),summary,[...nodes,...retired],catalog);
   }
   const statements = input.bootstrap?[sql`with locked as materialized(select id from menu_uber_sources where id=${source.id} and revision=0 and enabled=false and auto_publish=false for update) select 1/count(*)::int from locked`]:input.verifyRollback ? [sql`update menu_uber_sources set enabled=true where id=${source.id}`,sql`select lock_menu_uber_revision(${source.id},${source.revision})`] : [sql`select lock_menu_uber_revision(${source.id},${source.revision})`];
+  statements.push(checkReview());
+  if(targets.length && approved) Object.assign(summary,{removalApproval:{...review,targets}});
   for (const node of legacyMissing) statements.push(sql`insert into menu_uber_objects(source_id,source_key,kind,uber_id,parent_uber_id,target_id,price_mode) values(${source.id},${node.sourceKey},${node.kind},${node.uberId},${node.parentUberId},${node.targetId},'manual') on conflict do nothing`);
   // Every write and checkpoint shares one transaction. Failed imports cannot
   // leave half a menu or enqueue a downstream publication of partial data.
@@ -237,7 +271,7 @@ export async function ingestUberMenuSource(input: { sourceId: string; commandId:
       statements.push(sql`insert into local_bridge_commands(store_id,platform,command_type,idempotency_key,payload,status,last_error) values(${source.store_id},${platform},'publish_menu_changes',${`uber-publish:${source.id}:${revision}:${platform}`},${JSON.stringify(payload)}::jsonb,${pendingError?'failed':'pending'},${pendingError}) on conflict(idempotency_key) do nothing`);
     }
   }
-  statements.push(sql`update menu_uber_sources set revision=${revision},last_catalog=${JSON.stringify(catalog)}::jsonb,last_content_hash=${hash},missing_keys=${pendingKeys},last_checked_at=now(),last_error='',updated_at=now() where id=${source.id}`);
+  statements.push(sql`update menu_uber_sources set publish_config=publish_config-'removalReview',revision=${revision},last_catalog=${JSON.stringify(catalog)}::jsonb,last_content_hash=${hash},missing_keys=${pendingKeys},last_checked_at=now(),last_error='',updated_at=now() where id=${source.id}`);
   statements.push(sql`insert into menu_uber_sync_runs(source_id,command_id,revision,content_hash,summary) values(${source.id},${input.commandId},${revision},${hash},${JSON.stringify(summary)}::jsonb)`);
   if(input.verifyRollback) {
     // Execute every real constraint/write, then deliberately fail the final

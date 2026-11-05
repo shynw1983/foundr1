@@ -6,6 +6,8 @@ import { getStoreCashBusinessDayState, isPickupWithinBusinessHours } from "../..
 import { getStoreReservationWindowsForDate } from "../../../../../../lib/store-reservation-windows";
 import { getTemporaryClosureForPickup } from "../../../../../../lib/store-temporary-closures";
 
+import { maamaaSameDayReceptionStartTime } from "../../../../../../lib/maamaa-reception-policy";
+
 export const dynamic = "force-dynamic";
 
 function compareDateTime(dateA: string, timeA: string, dateB: string, timeB: string) {
@@ -38,9 +40,6 @@ function getTokyoMinimumPickup(leadMinutes: number) {
 function getTokyoNow() {
   return getTokyoMinimumPickup(0);
 }
-
-// Conservative launch setting while staffing/opening time is unstable; consider allowing pre-open reservations after operations stabilize.
-const maamaaSameDayReceptionStartTime = "12:00";
 
 function findChoice(items: MaamaaPricedOption[], id: string, required = true) {
   if (!id && !required) return null;
@@ -311,7 +310,8 @@ export async function POST(request: Request) {
     return Response.json({ error: `Pickup time must be at least ${minimumPickupMinutes} minutes from now` }, { status: 400 });
   }
   const pickupDateTime = `${pickupDate}T${pickup}`;
-  if (!businessDay.openAt || !businessDay.closeAt || pickupDateTime < businessDay.openAt || pickupDateTime > businessDay.closeAt) {
+  if (!businessDay.openAt || !businessDay.closeAt || pickupDateTime < businessDay.openAt
+    || (businessDay.closeExclusive ? pickupDateTime >= businessDay.closeAt : pickupDateTime > businessDay.closeAt)) {
     return Response.json({ error: "Pickup time is outside the current business day" }, { status: 409 });
   }
   if (!isPickupWithinBusinessHours(operation.businessHours, pickupDate, pickup)) {

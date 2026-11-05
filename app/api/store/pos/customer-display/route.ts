@@ -1,48 +1,16 @@
+import { randomUUID } from "node:crypto";
+import { customerDisplayRecord, customerDisplayRevision, customerDisplayUuidPattern, normalizeCustomerDisplayWeighing } from "../../../../../lib/pos-customer-display";
+import { getDisplayState, getStoreName, normalizeDisplayState, normalizeText, readMemberScanCommand, readMemberScanRequest } from "../../../../../lib/pos-customer-display-server";
+import { assertRelayOrigin, ownerGuardSql } from "../../../../../lib/store-relay";
+import type { RelayOwner } from "../../../../../lib/store-relay-policy";
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { resolveCustomerStoreDisplayName } from "../../../../../lib/customer-display-names";
 import { sql } from "../../../../../lib/db";
 import { publishPosCustomerDisplayEvent } from "../../../../../lib/order-realtime";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
+import { normalizePosDisplayStandbySettings } from "../../../../../lib/pos-display-standby";
 
 export const dynamic = "force-dynamic";
-
-function normalizeText(value: unknown) {
-  return String(value ?? "").trim();
-}
-
-function normalizeDisplayLanguage(value: unknown) {
-  const language = normalizeText(value);
-  return ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(language) ? language : "";
-}
-
-function isFreshIsoTime(value: string, ttlMs = 2 * 60 * 1000) {
-  const ageMs = Date.now() - new Date(value).getTime();
-  return Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= ttlMs;
-}
-
-function readMemberScanCommand(value: unknown) {
-  const state = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-  const command = state.memberScanCommand && typeof state.memberScanCommand === "object" && !Array.isArray(state.memberScanCommand)
-    ? state.memberScanCommand as Record<string, unknown>
-    : {};
-  const id = normalizeText(command.id);
-  const action = normalizeText(command.action);
-  const createdAt = normalizeText(command.createdAt);
-  if (!id || action !== "open_scanner" || !createdAt || !isFreshIsoTime(createdAt)) return null;
-  return { id, action, createdAt };
-}
-
-function readMemberScanRequest(value: unknown) {
-  const state = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-  const request = state.memberScanRequest && typeof state.memberScanRequest === "object" && !Array.isArray(state.memberScanRequest)
-    ? state.memberScanRequest as Record<string, unknown>
-    : {};
-  const id = normalizeText(request.id);
-  const code = normalizeText(request.code);
-  const createdAt = normalizeText(request.createdAt);
-  if (!id || !code || !createdAt || !isFreshIsoTime(createdAt)) return null;
-  return { id, code, createdAt };
-}
 
 function normalizeCustomerDisplayMediaSettings(value: unknown) {
   const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -51,12 +19,14 @@ function normalizeCustomerDisplayMediaSettings(value: unknown) {
   const backgroundColor = normalizeText(record.backgroundColor);
   const assets = Array.isArray(record.assets) ? record.assets : [];
   return {
+    ...record,
     mode: modeValue === "slideshow" || modeValue === "video" ? modeValue : "default",
     transition: transitionValue === "slide" || transitionValue === "none" ? transitionValue : "fade",
     slideDurationSeconds: Math.max(3, Math.min(60, Math.round(Number(record.slideDurationSeconds) || 8))),
     videoMuted: record.videoMuted !== false,
     videoLoop: record.videoLoop !== false,
     backgroundColor: /^#[0-9a-f]{6}$/i.test(backgroundColor) ? backgroundColor : "#fbfbf8",
+    standby: normalizePosDisplayStandbySettings(record.standby),
     assets: assets.flatMap((item, index) => {
       const asset = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
       const url = normalizeText(asset.url);
@@ -80,76 +50,6 @@ async function resolveStoreId(request: Request, session: NonNullable<Awaited<Ret
   const storeFilter = getScopedStoreFilter(access, requestedStoreId);
   if (storeFilter === "__forbidden__") return { access, selectedStoreId: "", forbidden: true };
   return { access, selectedStoreId: storeFilter ?? access.stores[0]?.id ?? "", forbidden: false };
-}
-
-function normalizeDisplayState(value: unknown, fallbackStoreName = "") {
-  const state = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
-  const memberScanCommand = readMemberScanCommand(state);
-  const toAmount = (amount: unknown) => {
-    const nextAmount = Number(amount ?? 0);
-    return Number.isFinite(nextAmount) ? Math.round(nextAmount) : 0;
-  };
-  const toNullableAmount = (amount: unknown) => {
-    if (amount === null || amount === undefined || amount === "") return null;
-    const nextAmount = Number(amount);
-    return Number.isFinite(nextAmount) ? Math.round(nextAmount) : null;
-  };
-  const cashTenderedAmount = toNullableAmount(state.cashTenderedAmount);
-  return {
-    status: normalizeText(state.status) || "idle",
-    storeName: normalizeText(state.storeName) || fallbackStoreName,
-    orderType: normalizeText(state.orderType),
-    paymentMethod: normalizeText(state.paymentMethod) || "cash",
-    paymentLabel: normalizeText(state.paymentLabel),
-    externalPaymentTerminalBrand: normalizeText(state.externalPaymentTerminalBrand) || "PayCAS",
-    pickupCode: normalizeText(state.pickupCode),
-    preferredLanguage: normalizeDisplayLanguage(state.preferredLanguage),
-    memberDisplayName: normalizeText(state.memberDisplayName).slice(0, 80),
-    memberMessage: normalizeText(state.memberMessage).slice(0, 120),
-    discountName: normalizeText(state.discountName).slice(0, 80),
-    discountAmount: Math.max(0, toAmount(state.discountAmount)),
-    couponName: normalizeText(state.couponName).slice(0, 80),
-    couponDiscountAmount: Math.max(0, toAmount(state.couponDiscountAmount)),
-    subtotal: Math.max(0, toAmount(state.subtotal)),
-    taxLabel: normalizeText(state.taxLabel).slice(0, 40),
-    taxAmount: Math.max(0, toAmount(state.taxAmount)),
-    cashTenderedAmount: cashTenderedAmount === null ? null : Math.max(0, cashTenderedAmount),
-    cashChangeAmount: toNullableAmount(state.cashChangeAmount),
-    updatedLabel: normalizeText(state.updatedLabel),
-    memberScanCommand,
-    items: Array.isArray(state.items)
-      ? state.items.slice(0, 50).map((item) => {
-          const row = typeof item === "object" && item !== null ? item as Record<string, unknown> : {};
-          return {
-            name: normalizeText(row.name),
-            optionLabel: normalizeText(row.optionLabel),
-            weightLabel: normalizeText(row.weightLabel),
-            quantity: Math.max(1, Math.min(99, toAmount(row.quantity || 1))),
-            unitPrice: Math.max(0, toAmount(row.unitPrice)),
-            amount: Math.max(0, toAmount(row.amount))
-          };
-        }).filter((item) => item.name)
-      : []
-  };
-}
-
-async function getStoreName(storeId: string) {
-  if (!storeId) return "";
-  const rows = await sql`
-    select
-      name,
-      coalesce(customer_display_names, '{}'::jsonb) as "customerDisplayNames"
-    from stores
-    where id::text = ${storeId}
-    limit 1
-  `;
-  const row = rows[0] as { name?: string; customerDisplayNames?: unknown } | undefined;
-  if (!row) return "";
-  return resolveCustomerStoreDisplayName({
-    settings: row.customerDisplayNames,
-    internalStoreName: normalizeText(row.name),
-    platform: "foundr1_pos"
-  });
 }
 
 async function getCustomerDisplayStoreOptions(stores: Array<{ id: string; name: string }>) {
@@ -176,24 +76,6 @@ async function getCustomerDisplayStoreOptions(stores: Array<{ id: string; name: 
   }));
 }
 
-async function getDisplayState(storeId: string) {
-  const [storeName, rows] = await Promise.all([
-    getStoreName(storeId),
-    sql`
-      select display_state as "displayState", updated_at as "updatedAt"
-      from pos_customer_display_states
-      where store_id::text = ${storeId}
-      limit 1
-    `
-  ]);
-  const state = normalizeDisplayState(rows[0]?.displayState, storeName);
-  return {
-    ...state,
-    storeName,
-    updatedAt: rows[0]?.updatedAt ? String(rows[0].updatedAt) : ""
-  };
-}
-
 async function getCustomerDisplayMediaSettings(storeId: string) {
   const rows = await sql`
     select coalesce(customer_display_media_settings, '{}'::jsonb) as "customerDisplayMediaSettings"
@@ -214,69 +96,120 @@ export async function GET(request: Request) {
   return Response.json({
     access: { ...access, stores: await getCustomerDisplayStoreOptions(access.stores) },
     selectedStoreId,
-    state: await getDisplayState(selectedStoreId),
+    state: new URL(request.url).searchParams.get("debug") === "1" ? normalizeDisplayState({}, await getStoreName(selectedStoreId)) : await getDisplayState(selectedStoreId),
+    ...(new URL(request.url).searchParams.get("debug") === "1" ? { debugMode: true } : {}),
     customerDisplayMediaSettings: await getCustomerDisplayMediaSettings(selectedStoreId)
   }, { headers: { "Cache-Control": "no-store" } });
 }
 
+function displayLock(storeId: string) {
+  return sql`select pg_advisory_xact_lock(hashtextextended(${`pos-customer-display:${storeId}`},0))`;
+}
+function displayError(message: string, status = 409): never { throw Object.assign(new Error(message), { status }); }
+
+async function writerGuard(storeId: string, value: unknown, session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>) {
+  const owner = customerDisplayRecord(value);
+  const configured = await sql`select id from store_relay_stations where store_id::text=${storeId} and enabled and (print_enabled or scale_enabled)`;
+  if (!configured.length) {
+    return { owner: null, statements: [sql`select 1 / case when not exists(select 1 from store_relay_stations
+      where store_id::text=${storeId} and enabled and (print_enabled or scale_enabled)) then 1 else 0 end as display_unowned`] };
+  }
+  if (!customerDisplayUuidPattern.test(String(owner.stationId)) || typeof owner.token !== "string"
+    || !owner.token || !Number.isSafeInteger(owner.epoch)) displayError("レジの操作権を確認してください。");
+  const validated = owner as RelayOwner;
+  return { owner: validated, statements: [
+    sql`select id from store_relay_stations where id::text=${validated.stationId} for update`,
+    ownerGuardSql(storeId, validated, session)
+  ] };
+}
+
 export async function POST(request: Request) {
-  const session = await requireOsSession();
-  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    assertRelayOrigin(request);
+    const session = await requireOsSession();
+    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const raw = await request.json().catch(() => null);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return Response.json({ error: "表示内容を確認してください。" }, { status: 400 });
+    const body = raw as Record<string, unknown>;
+    const { access, selectedStoreId, forbidden } = await resolveStoreId(request, session, normalizeText(body.storeId));
+    if (forbidden || !selectedStoreId || !access.stores.some(store => store.id === selectedStoreId)) return Response.json({ error: "権限がありません。" }, { status: 403 });
+    const init = sql`insert into pos_customer_display_states(store_id) values(${selectedStoreId}::uuid) on conflict(store_id) do nothing`;
+    const guard = await writerGuard(selectedStoreId, body.owner, session);
 
-  const body = await request.json().catch(() => ({})) as { storeId?: string; state?: unknown };
-  const { selectedStoreId, forbidden } = await resolveStoreId(request, session, normalizeText(body.storeId));
-  if (forbidden || !selectedStoreId) return Response.json({ error: "権限がありません。" }, { status: 403 });
-
-  const [storeName, currentRows] = await Promise.all([
-    getStoreName(selectedStoreId),
-    sql`
-      select display_state as "displayState"
-      from pos_customer_display_states
-      where store_id::text = ${selectedStoreId}
-      limit 1
-    `
-  ]);
-  const currentDisplayState = currentRows[0]?.displayState;
-  const state = normalizeDisplayState(body.state, storeName);
-  const memberScanCommand = readMemberScanCommand(body.state) ?? readMemberScanCommand(currentDisplayState);
-  const memberScanRequest = readMemberScanRequest(body.state) ?? readMemberScanRequest(currentDisplayState);
-  const updatedLabel = new Intl.DateTimeFormat("ja-JP", {
-    timeZone: "Asia/Tokyo",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false
-  }).format(new Date());
-  const displayState = {
-    ...state,
-    storeName,
-    updatedLabel,
-    ...(memberScanCommand ? { memberScanCommand } : {}),
-    ...(memberScanRequest ? { memberScanRequest } : {})
-  };
-
-  await sql`
-    insert into pos_customer_display_states (
-      store_id,
-      display_state,
-      updated_by,
-      updated_at
-    )
-    values (
-      ${selectedStoreId},
-      ${JSON.stringify(displayState)}::jsonb,
-      ${session.id},
-      now()
-    )
-    on conflict (store_id)
-    do update set
-      display_state = excluded.display_state,
-      updated_by = excluded.updated_by,
-      updated_at = now()
-  `;
-
-  const nextState = await getDisplayState(selectedStoreId);
-  await publishPosCustomerDisplayEvent(selectedStoreId, nextState).catch(() => undefined);
-
-  return Response.json({ ok: true, selectedStoreId, state: nextState });
+    if (body.action === "claim") {
+      if (!Number.isSafeInteger(body.expectedRevision) || Number(body.expectedRevision) < 0) displayError("客席表示を再読み込みしてください。", 400);
+      const streamId = randomUUID();
+      const writer = { id: streamId, sequence: 0, sessionId: session.sessionId, employeeId: session.id,
+        stationId: guard.owner?.stationId ?? null, epoch: guard.owner?.epoch ?? null };
+      const result = await sql.transaction([...guard.statements, displayLock(selectedStoreId), init,
+        sql`update pos_customer_display_states set display_state=coalesce(display_state,'{}'::jsonb)
+          ||jsonb_build_object('_displayWriter',${JSON.stringify(writer)}::jsonb,'weighing',null,
+            'revision',coalesce((display_state->>'revision')::bigint,0)+1),updated_by=${session.id}::uuid,updated_at=now()
+          where store_id::text=${selectedStoreId} and coalesce((display_state->>'revision')::bigint,0)=${Number(body.expectedRevision)} returning store_id`
+      ]);
+      if (!result.at(-1)?.length) displayError("客席表示の操作端末が変わりました。", 409);
+      const state = await getDisplayState(selectedStoreId);
+      await publishPosCustomerDisplayEvent(selectedStoreId, state).catch(() => undefined);
+      return Response.json({ ok: true, selectedStoreId, streamId, revision: state.revision, state }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (body.action) displayError("表示の操作を確認してください。", 400);
+    const inputState = customerDisplayRecord(body.state);
+    if (!body.state || typeof body.state !== "object" || Array.isArray(body.state)) displayError("表示内容を確認してください。", 400);
+    const ordered = body.streamId !== undefined || body.sequence !== undefined;
+    if (ordered && (!customerDisplayUuidPattern.test(String(body.streamId)) || !Number.isSafeInteger(body.sequence) || Number(body.sequence) < 1)) displayError("表示の更新順を確認してください。", 400);
+    const preview = ordered ? normalizeCustomerDisplayWeighing(inputState.weighing) : null;
+    if (ordered && inputState.weighing != null && !preview) displayError("計量表示の内容を確認してください。", 400);
+    if (preview?.source === "capture" && !guard.owner) displayError("レジの操作権を確認してください。");
+    const storeName = await getStoreName(selectedStoreId);
+    const normalized = normalizeDisplayState(inputState, storeName);
+    const updatedLabel = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date());
+    const { revision: _revision, serverNow: _serverNow, ...display } = normalized;
+    const displayState = { ...display, weighing: preview, storeName, updatedLabel,
+      ...(readMemberScanCommand(inputState) ? { memberScanCommand: readMemberScanCommand(inputState) } : {}),
+      ...(readMemberScanRequest(inputState) ? { memberScanRequest: readMemberScanRequest(inputState) } : {}) };
+    const waitingState = preview?.source === "capture" ? {
+      ...displayState, weighing: normalizeCustomerDisplayWeighing({ ...preview, source: "waiting", status: "waiting",
+        quantity: null, amount: null, captureId: undefined, grossGrams: undefined, tareGrams: undefined, tarePresetId: undefined })
+    } : displayState;
+    const result = await sql.transaction([...guard.statements, displayLock(selectedStoreId), init,
+      sql`update pos_customer_display_states set display_state=case when ${preview?.source === "capture"}
+        and not exists(select 1 from store_relay_scale_captures c join store_relay_stations s on s.id=c.station_id
+          where c.id::text=${preview?.captureId ?? ""} and s.store_id::text=${selectedStoreId} and s.scale_enabled
+            and c.station_id::text=${guard.owner?.stationId ?? ""} and c.epoch=${guard.owner?.epoch ?? -1}
+            and c.employee_id::text=${session.id} and c.order_id is null
+            and round(c.grams / ${preview?.unit === "kg" ? 1000 : 1}::numeric,3)=${Number(preview?.quantity) || 0}::numeric)
+        then ${JSON.stringify(waitingState)}::jsonb else ${JSON.stringify(displayState)}::jsonb end
+        ||jsonb_build_object('revision',coalesce((display_state->>'revision')::bigint,0)+1)
+        ||case when ${ordered} then jsonb_build_object('_displayWriter',display_state->'_displayWriter'
+          ||jsonb_build_object('sequence',${Number(body.sequence) || 0}::bigint)) else '{}'::jsonb end
+        ||case when display_state ? 'memberScanCommand' then jsonb_build_object('memberScanCommand',display_state->'memberScanCommand') else '{}'::jsonb end
+        ||case when display_state ? 'memberScanRequest' then jsonb_build_object('memberScanRequest',display_state->'memberScanRequest') else '{}'::jsonb end,
+        updated_by=${session.id}::uuid,updated_at=now()
+        where store_id::text=${selectedStoreId}
+          and ((${ordered} and display_state->'_displayWriter'->>'id'=${String(body.streamId || '')}
+            and display_state->'_displayWriter'->>'sessionId'=${session.sessionId || ''}
+            and display_state->'_displayWriter'->>'employeeId'=${session.id}
+            and coalesce((display_state->'_displayWriter'->>'sequence')::bigint,0)<${Number(body.sequence) || 0}
+            and display_state->'_displayWriter'->>'stationId' is not distinct from ${guard.owner?.stationId ?? null}
+            and (display_state->'_displayWriter'->>'epoch')::int is not distinct from ${guard.owner?.epoch ?? null}::int)
+          or (${!ordered} and not (display_state ? '_displayWriter')))
+        returning store_id`
+    ]);
+    const applied = Boolean(result.at(-1)?.length);
+    if (!applied) {
+      const current = await sql`select display_state->'_displayWriter' as writer from pos_customer_display_states where store_id::text=${selectedStoreId}`;
+      const writer = customerDisplayRecord(current[0]?.writer);
+      if (!ordered || writer.id !== body.streamId || writer.sessionId !== session.sessionId || writer.employeeId !== session.id
+        || Number(writer.sequence) < Number(body.sequence)) displayError("客席表示の操作端末が変わりました。", 409);
+    }
+    const state = await getDisplayState(selectedStoreId);
+    if (applied) await publishPosCustomerDisplayEvent(selectedStoreId, state).catch(() => undefined);
+    return Response.json({ ok: true, selectedStoreId, state, ...(!applied ? { ignored: true } : {}) }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    const failure = error as { status?: number; code?: string; message?: string };
+    if (failure.code === "22012") return Response.json({ error: "レジまたは計量の状態が変わりました。接続を確認してください。" }, { status: 409 });
+    if (failure.status) return Response.json({ error: failure.message }, { status: failure.status });
+    console.error("customer display", error);
+    return Response.json({ error: "客席表示を更新できませんでした。" }, { status: 500 });
+  }
 }

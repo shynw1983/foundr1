@@ -7,6 +7,7 @@ export type KitchenBusinessDayWindow = {
   businessDate: string;
   startAt: string;
   endAt: string;
+  endExclusive?: true;
 };
 
 export function getKitchenBusinessDayWindow(
@@ -18,7 +19,8 @@ export function getKitchenBusinessDayWindow(
     return {
       businessDate: businessDay.businessDate,
       startAt: businessDay.openAt,
-      endAt: businessDay.closeAt
+      endAt: businessDay.closeAt,
+      ...(businessDay.closeExclusive ? { endExclusive: true as const } : {})
     };
   }
 

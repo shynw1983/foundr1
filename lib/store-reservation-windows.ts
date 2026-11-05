@@ -45,7 +45,9 @@ export async function getStoreReservationWindowsForCurrentBusinessDay(input: {
     }
     return [
       { date: startDate, start: businessDay.openAt.slice(11, 16), end: "23:59" },
-      { date: endDate, start: "00:00", end: businessDay.closeAt.slice(11, 16) }
+      ...(businessDay.closeAt.slice(11, 16) === "00:00" ? [] : [
+        { date: endDate, start: "00:00", end: businessDay.closeAt.slice(11, 16) }
+      ])
     ];
   }
 

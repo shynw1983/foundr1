@@ -3,6 +3,7 @@ import {selectDemaeSalesMenu} from '../demae-menu-scope.mjs';
 import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 import { loadDemaeCredentials } from "../demae-credentials.mjs";
 import {publishNativeAuthority} from '../uber-authority-publisher.mjs';
+import {recoverNativeMenuSync} from '../menu-sync-recovery.mjs';
 import {validateAuthorityCommand} from '../uber-authority-runner.mjs';
 import {connectMerchantMenuClient} from '../merchant-menu-client.mjs';
 import {auditDestination} from '../inventory-destination-audit.mjs';
@@ -681,6 +682,10 @@ export class DemaeCanAdapter {
     const transport=await connectMerchantMenuClient(this.session,'https://partner.demae-can.com','MSA0000');
     try {await transport.request('/merchant-admin/api/v1/product/search/chain-menu-pattern');}
     finally {transport.close();}
+  }
+
+  async recoverMenuSync(payload, reportProgress) {
+    return recoverNativeMenuSync(this.session,'demae_can',payload,reportProgress,this.config.chainId);
   }
 
   async publishMenuChanges(payload, reportProgress = async () => undefined) {

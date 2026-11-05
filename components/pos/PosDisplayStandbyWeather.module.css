@@ -1,0 +1,35 @@
+.weather { display: grid; grid-template-columns: 2.4em minmax(0, 1fr); gap: .12em .4em; align-items: center; width: max-content; max-width: 100%; max-height: 100%; font-size: 1em; line-height: 1.2; text-align: left; }
+.weatherIcon { display: flex; align-items: center; width: 100%; aspect-ratio: 1; }
+.weatherIcon svg { width: 100%; height: 100%; }
+.iconButton, .iconPreview { display: block; width: 100%; min-width: 0; min-height: 0; padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; }
+.iconButton { cursor: pointer; }
+.iconButton:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; border-radius: 6px; }
+.iconOnly { display: flex; width: 100%; height: 100%; justify-content: inherit; container-type: size; }
+.iconOnly .iconButton, .iconOnly .iconPreview { width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); max-width: 100%; max-height: 100%; aspect-ratio: 1; }
+.iconOnly .weatherIcon { height: 100%; aspect-ratio: auto; }
+.iconOnly .weatherIcon svg { object-fit: contain; }
+.unavailableIcon { opacity: .5; }
+.unavailableIcon > .weatherIcon { width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); }
+.weatherSummary { display: flex; flex-direction: column; gap: .13em; min-width: 0; }
+.weatherHeading { display: block; font-size: .58em; font-weight: 400; opacity: .7; }
+.weatherCondition { display: block; font-size: 1em; overflow-wrap: anywhere; }
+.weatherTemperatures { display: flex; justify-content: flex-start; gap: .8em; flex-wrap: wrap; font-size: .65em; font-weight: 400; }
+.weatherTemperatures strong { font-size: 1.3em; font-weight: 500; font-variant-numeric: tabular-nums; }
+.weatherStatus { display: block; font-size: .55em; font-weight: 400; opacity: .65; }
+.weatherUnavailable { display: block; width: 100%; font-size: .5em; font-weight: 400; opacity: .65; overflow-wrap: anywhere; }
+.detailsDialog { width: min(380px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); box-sizing: border-box; margin: auto; padding: 22px; border: 1px solid #dce4df; border-radius: 14px; background: #fff; color: #20332e; font: 400 15px/1.5 system-ui, sans-serif; text-align: left; overflow: auto; }
+.detailsDialog::backdrop { background: #14271e66; }
+.dialogHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dialogHeading h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.dialogHeading button { min-height: 40px; padding: 7px 12px; border: 1px solid #ccd7d0; border-radius: 7px; background: white; color: #20332e; font: inherit; cursor: pointer; }
+.dialogHeading button:focus-visible, .credits a:focus-visible { outline: 2px solid #226d5e; outline-offset: 2px; }
+.forecastLabel { margin: 18px 0 4px; color: #65756d; font-size: 13px; }
+.dialogForecast { display: flex; align-items: center; gap: 14px; }
+.dialogForecast strong { font-size: 24px; font-weight: 500; overflow-wrap: anywhere; }
+.dialogIcon { display: block; flex: 0 0 56px; width: 56px; height: 56px; }
+.dialogIcon svg { width: 100%; height: 100%; }
+.dialogTemperatures { display: flex; flex-wrap: wrap; gap: 20px; margin: 10px 0 18px; font-size: 18px; font-variant-numeric: tabular-nums; }
+.dialogStatus { color: #65756d; font-size: 13px; }
+.credits { border-top: 1px solid #e5ebe7; padding-top: 10px; color: #65756d; font-size: 12px; overflow-wrap: anywhere; }
+.credits p { margin: 5px 0; }
+.credits a { color: #226d5e; text-decoration: underline; text-underline-offset: 2px; }

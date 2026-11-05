@@ -9,6 +9,14 @@ const release=(platform:'rocket_now'|'demae_can',source:UberPublicationNode,exte
   externalId,externalParentId,inventoryCommandId:'11111111-1111-4111-8111-111111111111',auditCommandId:'22222222-2222-4222-8222-222222222222',
   completedAt:'2026-10-05T00:00:00.000Z',capturedAt:'2026-10-05T00:01:00.000Z',verified:true,isAvailable:true,validation:'persisted-native-audit-v1'
 });
+test('Uber channel hiding does not propagate availability or retirement to another merchant',()=>{
+ for(const platform of ['rocket_now','demae_can'] as const) {
+  const payload={attached:true,visibility:'hidden',suspensionInfo:{until:42},hidden:true};
+  const target=buildUberPublication({...input,platform,nodes:[{...node,payload}]}).targets[0];
+  assert.equal(target.archived,false);
+  assert.deepEqual(target.source,{attached:true});
+ }
+});
 test('Demae hidden identity survives repeated group moves without relaxing isolation',()=>{
  const original={...node,kind:'option',sourceKey:'option:first:a'};
  const before=buildUberPublication({...input,platform:'demae_can',nodes:[original]}).targets[0];

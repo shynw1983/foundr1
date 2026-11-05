@@ -11,6 +11,7 @@ import {
   type StoreInventorySyncRun
 } from "../components/StoreInventorySyncStatus";
 import { StoreNavTabs } from "../components/StoreNavTabs";
+import { getScopedInventorySyncNotificationStore } from "../../../lib/inventory-sync-alert-client";
 import { clearStoredStoreSelection, getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
 type SharedPusher = ReturnType<(typeof import("../../../lib/shared-pusher-client"))["acquireSharedPusher"]>;
@@ -311,6 +312,8 @@ export default function StoreMenuPage() {
     // so an older response cannot replace newer availability or reset the view.
     if (mutationPending.current) return;
     const sequence = ++loadSequence.current;
+    const storeSelectionAtStart = getStoredStoreSelection();
+    const selectionChanged = () => { const current = getStoredStoreSelection(); return current !== storeSelectionAtStart && current !== nextStoreId; };
     setLoading(true);
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 15000);
@@ -318,7 +321,7 @@ export default function StoreMenuPage() {
       const params = new URLSearchParams();
       if (nextStoreId) params.set("storeId", nextStoreId);
       const response = await fetch(`/api/store/menu-settings${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store", signal: controller.signal });
-      if (sequence !== loadSequence.current || mutationPending.current) return;
+      if (sequence !== loadSequence.current || mutationPending.current || selectionChanged()) return;
       if (!response.ok) {
         if (response.status === 403 && nextStoreId) {
           clearStoredStoreSelection();
@@ -330,7 +333,7 @@ export default function StoreMenuPage() {
       }
 
       const body = await response.json();
-      if (sequence !== loadSequence.current || mutationPending.current) return;
+      if (sequence !== loadSequence.current || mutationPending.current || selectionChanged()) return;
       const nextAccess = body.access as StoreMenuAccess;
       const nextBrands = body.brands as BrandOption[];
       const nextCategories = body.categories as StoreMenuCategory[];
@@ -373,9 +376,19 @@ export default function StoreMenuPage() {
   }
 
   useEffect(() => {
-    // Restore browser storage after hydration so store-specific panels have
-    // the same initial tree on the server and client.
-    void load(getStoredStoreSelection());
+    // Notification scope is shared with the alert panel and navigation. Do
+    // not let an initial read for the previously stored store undo that target.
+    let active = true;
+    const initialStoreId = getStoredStoreSelection();
+    void getScopedInventorySyncNotificationStore().then(notificationStoreId => {
+      if (!active) return;
+      const currentStoreId = getStoredStoreSelection();
+      const targetStoreId = notificationStoreId && (!currentStoreId || currentStoreId === initialStoreId || currentStoreId === notificationStoreId)
+        ? notificationStoreId : currentStoreId;
+      if (targetStoreId && targetStoreId !== currentStoreId) setStoredStoreSelection(targetStoreId);
+      void load(targetStoreId);
+    });
+    return () => { active = false; loadSequence.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -857,7 +870,7 @@ export default function StoreMenuPage() {
             <h1>販売状態</h1>
           </div>
         </a>
-        <StoreNavTabs active="menu" />
+        <StoreNavTabs active="menu" storeId={selectedStoreId} />
       </header>
 
       <section className={`store-menu-page${selecting ? " is-selecting" : ""}`}>

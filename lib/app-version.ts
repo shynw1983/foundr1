@@ -1,10 +1,13 @@
-export function getAppVersion() {
-  return (
-    process.env.VERCEL_GIT_COMMIT_SHA ||
-    process.env.VERCEL_DEPLOYMENT_ID ||
-    process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ||
-    "local"
-  );
+import generated from "./generated/app-web-versions.json";
+import { isContentAppVersion, type AppVersionScope } from "./app-version-protocol";
+
+export function getAppVersion(app: AppVersionScope = "os") {
+  if (process.env.NODE_ENV !== "production") return "local";
+  const version = generated.versions[app];
+  if (generated.schema !== 1 || !isContentAppVersion(version)) {
+    throw new Error(`Missing content version for ${app}; generate application versions before building.`);
+  }
+  return version;
 }
 
 export function getShortAppVersion(version = getAppVersion()) {

@@ -1,0 +1,19 @@
+.line { display: grid; gap: 0; min-width: 0; }
+.options { display: grid; gap: 6px; padding: 8px 8px 10px 16px; border-left: 2px solid var(--line); }
+.options > small { color: var(--muted); font-size: 12px; }
+.options > button { display: flex; justify-content: space-between; gap: 10px; text-align: left; border: 1px solid var(--line); border-radius: 7px; padding: 9px; background: white; color: var(--ink); }
+.options > button > span { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.options > button > span:last-child { text-align: right; flex-shrink: 0; }
+.options strong { font-size: 12px; font-weight: 600; }
+.options small { font-size: 11px; color: var(--muted); }
+.options > button.selected { border-color: var(--store-primary, var(--green)); background: var(--store-primary-soft, var(--green-soft)); }
+.options > button:disabled { opacity: .55; }
+.error { padding: 10px; border: 1px solid #e9b6b0; border-radius: 6px; color: #9f2620; background: #fff5f4; font-size: 12px; overflow-wrap: anywhere; }
+
+.dialog :global(.store-pos-refund-panel) > div:first-child { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 6px; }
+.dialog :global(.store-pos-refund-panel) > div:first-child > span { grid-column: 1 / -1; }
+@media(max-width: 680px) {
+ .dialog :global(.store-pos-transaction-summary) { grid-template-columns: minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr); gap: 6px; }
+ .dialog :global(.store-pos-transaction-summary) strong { font-size: 12px; overflow-wrap: anywhere; }
+ .dialog :global(.store-pos-transaction-summary) > div { padding: 8px; }
+}

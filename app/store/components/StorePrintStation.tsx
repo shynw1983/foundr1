@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { getKitchenPrinterForBrand, hasPosPrinterDestination, printWithAndroidBridge, resolvePosKitchenTicketTemplate, type PosPrintPayload, type PosPrinterSettings } from "../../../lib/pos-printer";
 import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../lib/store-polling-client";
+import { bindStoreRealtimeChannels } from "../../../lib/store-realtime-refresh";
+import { createReadError } from "../../../components/useReadRequest";
 import { getStoredStoreSelection } from "./store-selection";
 
 type PrintJob = {
@@ -87,8 +89,14 @@ export function StorePrintStation() {
   useEffect(() => {
     let active = true;
     let pusher: any;
-    let channels: any[] = [];
+    let unbindRealtime: (() => void) | undefined;
+    const configController = new AbortController();
     let printingConfigured: boolean | null = null;
+
+    const deny = () => {
+      active = false; configController.abort(); unbindRealtime?.(); pusher?.disconnect();
+      poller.stop(); setStatus("厨房印刷の確認に失敗しました。");
+    };
 
     async function updatePrintStatus(storeId: string, taskId: string, printStatus: "printing" | "printed" | "failed") {
       const response = await fetch("/api/store/print-station", {
@@ -108,7 +116,13 @@ export function StorePrintStation() {
         const params = new URLSearchParams();
         if (storeId) params.set("storeId", storeId);
         const response = await fetch(`/api/store/print-station${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
-        if (!response.ok || !active) return;
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            deny();
+          }
+          throw createReadError(response);
+        }
+        if (!active) return;
         const body = await response.json() as PrintStationResponse;
         rememberStoreBusinessHours(body.stores);
         const hasConfiguredKitchenPrinter = Boolean(
@@ -122,7 +136,6 @@ export function StorePrintStation() {
         printingConfigured = hasConfiguredKitchenPrinter;
         if (!hasConfiguredKitchenPrinter) {
           setStatus("");
-          stopPolling();
           return;
         }
         for (const job of body.jobs ?? []) {
@@ -146,61 +159,44 @@ export function StorePrintStation() {
           setStatus(result.ok ? `厨房印刷済み ${job.pickupCode}（${copies}枚）` : `厨房印刷失敗 ${job.pickupCode}`);
           if (result.ok) await waitForPrinterBuffer(3000);
         }
-      } catch {
-        setStatus("厨房印刷の確認に失敗しました。");
+      } catch (error) {
+        if (active) setStatus("厨房印刷の確認に失敗しました。");
+        throw error;
       } finally {
         busyRef.current = false;
       }
     }
 
+    // This task includes authenticated claim, physical print and ACK. Keep its bounded
+    // single-flight protocol loop without the ordinary read coordinator's abort timeout.
     const poller = createStoreFallbackPoller(poll, {
-      baseIntervalMs: 60_000,
-      storeIds: () => [getStoredStoreSelection()].filter(Boolean)
+      baseIntervalMs: () => printingConfigured === false ? 5 * 60_000 : 60_000,
+      maxIntervalMs: 5 * 60_000,
+      respectBusinessHours: false
     });
-    const startPolling = () => {
-      if (printingConfigured !== false) poller.start();
-    };
-    const stopPolling = () => poller.stop();
-
-    void poll();
-    startPolling();
+    poller.start({ immediate: true });
     const selectedStoreId = getStoredStoreSelection();
-    fetch(`/api/store/realtime-config${selectedStoreId ? `?storeId=${encodeURIComponent(selectedStoreId)}` : ""}`, { cache: "no-store" })
+    fetch(`/api/store/realtime-config${selectedStoreId ? `?storeId=${encodeURIComponent(selectedStoreId)}` : ""}`, { cache: "no-store", signal: configController.signal })
       .then((response) => (response.ok ? response.json() : null))
       .then(async (config) => {
         if (!active || !config?.key || !config?.cluster || !config?.channels?.length) return;
         const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
         if (!active) return;
         pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
-        pusher.connection.bind("unavailable", () => startPolling());
-        pusher.connection.bind("failed", () => startPolling());
-        pusher.connection.bind("disconnected", () => startPolling());
-        channels = config.channels.map((channelName: string) => {
-          const channel = pusher.subscribe(channelName);
-          channel.bind("pusher:subscription_succeeded", stopPolling);
-          channel.bind("pusher:subscription_error", () => startPolling());
-          channel.bind("order.created", poll);
-          channel.bind("order.updated", poll);
-          return channel;
+        unbindRealtime = bindStoreRealtimeChannels(pusher, {
+          onUnauthorized: deny,
+          channels: config.channels, events: ["order.created", "order.updated"],
+          onEvent: () => { poller.runNow(); },
+          onHealthChange: healthy => { if (active && healthy) poller.runNow(); }
         });
       })
-      .catch(() => startPolling());
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") void poll();
-    };
-    window.addEventListener("focus", poll);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+      .catch(() => undefined);
     return () => {
       active = false;
+      configController.abort();
       poller.stop();
-      channels.forEach((channel) => {
-        channel.unbind("order.created", poll);
-        channel.unbind("order.updated", poll);
-        pusher?.unsubscribe(channel.name);
-      });
+      unbindRealtime?.();
       pusher?.disconnect();
-      window.removeEventListener("focus", poll);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 

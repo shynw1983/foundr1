@@ -10,6 +10,7 @@ type StoreVersionNoticeProps = {
 export function StoreVersionNotice({ initialVersion, initialShortVersion }: StoreVersionNoticeProps) {
   return (
     <AppVersionNotice
+      appId="store"
       appName="Store"
       initialVersion={initialVersion}
       initialShortVersion={initialShortVersion}
@@ -17,8 +18,6 @@ export function StoreVersionNotice({ initialVersion, initialShortVersion }: Stor
       hiddenPaths={["/store/pos/customer-display"]}
       versionEndpoint="/api/store/version"
       publishEndpoint="/api/store/version"
-      realtimeConfigEndpoint="/api/store/realtime-config"
-      realtimeEventName="store.version.updated"
     />
   );
 }

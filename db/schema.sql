@@ -42,6 +42,9 @@ alter table stores add column if not exists attendance_accuracy_threshold_meters
 alter table stores add column if not exists shift_first_half_submission_deadline_day integer not null default 25;
 alter table stores add column if not exists shift_second_half_submission_deadline_day integer not null default 10;
 alter table stores add column if not exists shift_submission_deadline_time time not null default '23:59';
+alter table stores add column if not exists shift_request_start_offset_minutes integer not null default 0 check (shift_request_start_offset_minutes between -720 and 720);
+alter table stores add column if not exists shift_request_end_offset_minutes integer not null default 0 check (shift_request_end_offset_minutes between -720 and 720);
+
 
 create table if not exists business_calendar_events (
   id uuid primary key default gen_random_uuid(),
@@ -2297,6 +2300,8 @@ create table if not exists pos_store_settings (
   discount_presets jsonb not null default '[]'::jsonb,
   customer_display_media_settings jsonb not null default '{}'::jsonb,
   printer_settings jsonb not null default '{}'::jsonb,
+  scale_tare_settings jsonb not null default '{}'::jsonb,
+  scale_filter_settings jsonb not null default '{"enabled":false,"revision":"","toleranceGrams":2,"settleMs":2000}'::jsonb,
   updated_by uuid references employees(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -2308,6 +2313,8 @@ alter table pos_store_settings add column if not exists external_payment_termina
 alter table pos_store_settings add column if not exists discount_presets jsonb not null default '[]'::jsonb;
 alter table pos_store_settings add column if not exists customer_display_media_settings jsonb not null default '{}'::jsonb;
 alter table pos_store_settings add column if not exists printer_settings jsonb not null default '{}'::jsonb;
+alter table pos_store_settings add column if not exists scale_tare_settings jsonb not null default '{}'::jsonb;
+alter table pos_store_settings add column if not exists scale_filter_settings jsonb not null default '{"enabled":false,"revision":"","toleranceGrams":2,"settleMs":2000}'::jsonb;
 
 create table if not exists pos_customer_display_states (
   store_id uuid primary key references stores(id) on delete cascade,
@@ -3386,6 +3393,7 @@ create table if not exists store_customer_order_items (
   customizations jsonb not null default '[]'::jsonb,
   quantity integer not null default 1,
   measured_quantity numeric(12, 3),
+  weight_measurement jsonb not null default '{}'::jsonb,
   measured_unit text not null default '',
   measured_unit_price numeric(12, 3),
   amount integer not null default 0,
@@ -3408,6 +3416,7 @@ create table if not exists store_customer_order_items (
 alter table store_customer_order_items add column if not exists quantity integer not null default 1;
 alter table store_customer_order_items add column if not exists customizations jsonb not null default '[]'::jsonb;
 alter table store_customer_order_items add column if not exists measured_quantity numeric(12, 3);
+alter table store_customer_order_items add column if not exists weight_measurement jsonb not null default '{}'::jsonb;
 alter table store_customer_order_items add column if not exists measured_unit text not null default '';
 alter table store_customer_order_items add column if not exists measured_unit_price numeric(12, 3);
 alter table store_customer_order_items add column if not exists gross_amount integer not null default 0;
@@ -4894,3 +4903,468 @@ create or replace function inventory_transfer_source_immutable() returns trigger
  end if; return new; end $$;
 drop trigger if exists inventory_transfer_source_immutable on inventory_transfers;
 create trigger inventory_transfer_source_immutable before update or delete on inventory_transfers for each row execute function inventory_transfer_source_immutable();
+
+-- Additive only: existing orders keep their original pickup codes and production grouping.
+create table if not exists pos_pickup_counters (
+  store_id uuid primary key references stores(id) on delete cascade,
+  last_number bigint not null default 0 check (last_number >= 0)
+);
+-- Tombstones prevent an abandoned, unrecorded request from arriving late and creating a sale.
+create table if not exists pos_abandoned_checkouts (
+  store_id uuid not null references stores(id) on delete cascade,
+  request_id text not null,
+  abandoned_by uuid not null references employees(id),
+  abandoned_at timestamptz not null default now(),
+  primary key (store_id, request_id)
+);
+alter table store_customer_order_items add column if not exists pickup_code text not null default '';
+alter table store_customer_order_items add column if not exists preparation_note text not null default '';
+alter table order_production_tasks add column if not exists order_item_id uuid references store_customer_order_items(id) on delete cascade;
+alter table order_production_tasks add column if not exists pickup_code text not null default '';
+alter table order_production_tasks add column if not exists handed_off_at timestamptz;
+create index if not exists idx_production_order_item on order_production_tasks(order_item_id) where order_item_id is not null;
+create index if not exists idx_customer_items_pickup on store_customer_order_items(order_id, pickup_code) where pickup_code <> '';
+
+-- Additive. No store is enabled by this migration. Configure and verify before enabling.
+create table if not exists store_relay_stations (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id),
+  name text not null default 'レジ A',
+  enabled boolean not null default false,
+  print_enabled boolean not null default false,
+  scale_enabled boolean not null default false,
+  epoch integer not null default 0,
+  owner_hash text not null default '',
+  owner_employee_id uuid references employees(id),
+  owner_session_id text not null default '',
+  owner_until timestamptz,
+  scale_session uuid,
+  scale_tare_context jsonb not null default '{}'::jsonb,
+  scale_filter_state jsonb not null default '{}'::jsonb,
+  scale_sequence bigint not null default -1,
+  scale_reading jsonb,
+  scale_received_at timestamptz,
+  updated_at timestamptz not null default now(),
+  unique(store_id, name)
+);
+create table if not exists store_relay_devices (
+  id uuid primary key default gen_random_uuid(),
+  station_id uuid not null unique references store_relay_stations(id),
+  token_hash text not null default '',
+  pairing_hash text not null default '',
+  pairing_until timestamptz,
+  revoked boolean not null default false,
+  heartbeat_at timestamptz,
+  status jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+create table if not exists store_relay_print_jobs (
+  id uuid primary key default gen_random_uuid(),
+  station_id uuid not null references store_relay_stations(id),
+  store_id uuid not null references stores(id),
+  order_id uuid references store_customer_orders(id),
+  document_key text not null unique,
+  sequence integer not null,
+  kind text not null check (kind in ('kitchen','pickup','receipt','test')),
+  payload jsonb not null,
+  state text not null default 'pending' check (state in ('pending','sending','sent','uncertain','cancelled')),
+  claim_token uuid,
+  claimed_by uuid references store_relay_devices(id),
+  claimed_at timestamptz,
+  error text not null default '',
+  reprint_of uuid references store_relay_print_jobs(id),
+  created_by uuid references employees(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists store_relay_jobs_station_queue on store_relay_print_jobs(station_id,created_at,sequence);
+create table if not exists store_relay_events (
+  id bigint generated always as identity primary key,
+  station_id uuid not null references store_relay_stations(id),
+  employee_id uuid references employees(id),
+  kind text not null,
+  detail jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+alter table store_relay_stations add column if not exists scale_tare_context jsonb not null default '{}'::jsonb;
+alter table store_relay_stations add column if not exists scale_filter_state jsonb not null default '{}'::jsonb;
+
+create table if not exists store_relay_scale_captures (
+  id uuid primary key default gen_random_uuid(),
+  station_id uuid not null references store_relay_stations(id),
+  session_id uuid not null unique,
+  epoch integer not null,
+  employee_id uuid not null references employees(id),
+  grams numeric not null check(grams>0 and grams<=3000),
+  reading jsonb not null,
+  received_at timestamptz not null,
+  order_id uuid references store_customer_orders(id),
+  created_at timestamptz not null default now()
+);
+
+-- POS-only sales configuration. No menu or price is changed by applying this migration.
+create table if not exists menu_pos_settings (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  brand_id uuid not null references brands(id) on delete cascade,
+  item_id uuid references menu_catalog_items(id) on delete cascade,
+  group_id uuid references menu_option_groups(id) on delete cascade,
+  option_id uuid references menu_options(id) on delete cascade,
+  visible boolean,
+  price_override numeric(12,2) check (price_override >= 0 and price_override <= 999999),
+  revision bigint not null default 1,
+  updated_by uuid references employees(id),
+  updated_at timestamptz not null default now(),
+  check (num_nonnulls(item_id,group_id,option_id)=1),
+  check (group_id is null or price_override is null),
+  unique(store_id,item_id),
+  unique(store_id,group_id),
+  unique(store_id,option_id)
+);
+create index if not exists menu_pos_settings_store_brand on menu_pos_settings(store_id,brand_id);
+-- Internal push delivery receipts. 'sent' means provider acceptance, not device acknowledgement.
+-- This additive migration does not change menu availability or bridge command state.
+create table if not exists menu_inventory_sync_alert_deliveries (
+  command_id uuid not null references local_bridge_commands(id) on delete cascade,
+  recipient_employee_id uuid not null references employees(id) on delete cascade,
+  channel text not null check (channel in ('web_push', 'fcm')),
+  destination_key text not null,
+  status text not null default 'sending' check (status in ('sending', 'sent', 'failed')),
+  attempt_count integer not null default 1 check (attempt_count > 0),
+  lease_token uuid not null,
+  lease_until timestamptz not null,
+  next_attempt_at timestamptz not null default now(),
+  last_error text not null default '',
+  accepted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (command_id, recipient_employee_id, channel, destination_key)
+);
+create index if not exists menu_inventory_sync_alert_deliveries_retry
+  on menu_inventory_sync_alert_deliveries(next_attempt_at, lease_until)
+  where status <> 'sent';
+-- Demand is a shared store/SKU observation and review record, not an order or stock movement.
+-- Apply separately after reviewing the target; this migration is additive and keeps existing purchase/receipt facts.
+create table if not exists replenishment_demands (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id),
+  product_id uuid not null references products(id),
+  status text not null default 'open' check (status in ('open','reviewing','deferred','ordered','resolved','dismissed')),
+  cycle integer not null default 1 check (cycle > 0),
+  version integer not null default 1 check (version > 0),
+  quantity integer check (quantity between 1 and 999),
+  unit text not null check (length(btrim(unit)) > 0),
+  note text not null default '',
+  deferred_until timestamptz,
+  sources jsonb not null default '[]'::jsonb check (jsonb_typeof(sources) = 'array'),
+  automatic_fingerprint text,
+  automatic_observed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (store_id, product_id)
+);
+create index if not exists replenishment_demands_pool_idx on replenishment_demands(store_id,status,updated_at desc);
+create table if not exists replenishment_demand_events (
+  id uuid primary key default gen_random_uuid(),
+  demand_id uuid not null references replenishment_demands(id),
+  kind text not null check (kind in ('report','automatic','review','create_order')),
+  actor_id uuid references employees(id) on delete set null,
+  actor_name text,
+  request_id uuid unique,
+  request_fingerprint text,
+  quantity integer check (quantity between 1 and 999),
+  note text not null default '',
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists replenishment_demand_events_history_idx on replenishment_demand_events(demand_id,created_at desc,id);
+create table if not exists replenishment_demand_issues (
+  request_id uuid primary key,
+  request_fingerprint text not null,
+  actor_id uuid references employees(id) on delete set null,
+  purchase_order_id uuid references purchase_orders(id) on delete set null,
+  order_no text not null,
+  created_at timestamptz not null default now()
+);
+create table if not exists replenishment_demand_order_items (
+  id uuid primary key default gen_random_uuid(),
+  demand_id uuid not null references replenishment_demands(id),
+  issue_request_id uuid not null references replenishment_demand_issues(request_id),
+  purchase_order_id uuid references purchase_orders(id) on delete set null,
+  purchase_order_item_id uuid unique references purchase_order_items(id) on delete set null,
+  order_no text not null,
+  cycle integer not null default 1 check (cycle > 0),
+  requested_quantity integer not null check (requested_quantity between 1 and 999),
+  unit text not null check (length(btrim(unit)) > 0),
+  created_at timestamptz not null default now(),
+  unique(demand_id,issue_request_id)
+);
+create index if not exists replenishment_demand_order_items_history_idx on replenishment_demand_order_items(demand_id,created_at desc);
+
+-- Store watermark also covers empty snapshots and SKUs that have never had a demand row.
+create table if not exists replenishment_demand_sync_state (
+  store_id uuid primary key references stores(id),
+  observed_at timestamptz not null
+);
+
+-- Durable document snapshots are separate from transport-specific relay jobs.
+create table if not exists pos_print_documents (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  order_id uuid not null references store_customer_orders(id) on delete cascade,
+  item_id uuid references store_customer_order_items(id) on delete cascade,
+  brand_id uuid references brands(id) on delete set null,
+  document_key text not null,
+  kind text not null check (kind in ('kitchen','finishing','pickup','receipt')),
+  sequence integer not null,
+  copy_number integer not null default 1,
+  pickup_code text not null default '',
+  target text not null check (target in ('receipt','kitchen')),
+  payload jsonb not null,
+  mode text not null check (mode in ('auto','deferred','none')),
+  state text not null check (state in ('not_requested','pending','sending','sent','uncertain','cancelled')),
+  revision integer not null default 0,
+  transport text check (transport in ('direct','relay')),
+  relay_job_id uuid references store_relay_print_jobs(id),
+  claim_token uuid,
+  claim_operation_id uuid,
+  claimed_by uuid references employees(id) on delete set null,
+  claimed_at timestamptz,
+  error text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(order_id,document_key)
+);
+create index if not exists pos_print_documents_store_queue on pos_print_documents(store_id,state,created_at,id);
+create index if not exists pos_print_documents_order on pos_print_documents(order_id,sequence);
+create table if not exists pos_print_document_operations (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid not null references pos_print_documents(id) on delete cascade,
+  operation_id uuid not null,
+  action text not null check (action in ('claim','ack','confirmPrinted','voidIneligible')),
+  employee_id uuid not null,
+  request_fingerprint text not null,
+  result jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique(document_id,operation_id)
+);
+
+-- OS-owned local sales snapshots. No catalog is initialized or enabled by DDL.
+create table if not exists store_dine_in_menus (
+  store_id uuid not null references stores(id) on delete cascade,
+  brand_id uuid not null references brands(id) on delete cascade,
+  revision bigint not null default 1 check (revision > 0),
+  enabled boolean not null default false,
+  catalog jsonb not null default '{"version":1,"items":[],"optionGroups":[],"categories":[]}'::jsonb,
+  updated_by uuid references employees(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (store_id,brand_id),
+  check (coalesce(jsonb_typeof(catalog)='object' and catalog->>'version'='1'
+    and jsonb_typeof(catalog->'items')='array' and jsonb_typeof(catalog->'optionGroups')='array'
+    and jsonb_typeof(catalog->'categories')='array',false))
+);
+create table if not exists store_dine_in_menu_operations (
+  store_id uuid not null,
+  brand_id uuid not null,
+  operation_id uuid not null,
+  employee_id uuid not null references employees(id),
+  request_fingerprint text not null check (request_fingerprint ~ '^[0-9a-f]{64}$'),
+  created_at timestamptz not null default now(),
+  primary key (store_id,brand_id,operation_id),
+  foreign key (store_id,brand_id) references store_dine_in_menus(store_id,brand_id) on delete cascade
+);
+-- Separate from account/bell notifications. Additive; no existing business rows changed.
+create table if not exists store_hq_alerts (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id),
+  sender_employee_id uuid references employees(id) on delete set null,
+  sender_name text not null,
+  request_id uuid not null,
+  message text not null check (char_length(message) between 1 and 1000),
+  created_at timestamptz not null default now(),
+  unique (sender_employee_id, request_id)
+);
+create index if not exists store_hq_alerts_store_created_idx on store_hq_alerts(store_id, created_at desc, id desc);
+create table if not exists store_hq_alert_receipts (
+  alert_id uuid not null references store_hq_alerts(id) on delete cascade,
+  device_id uuid not null,
+  device_label text not null,
+  delivered_at timestamptz not null default now(),
+  read_at timestamptz,
+  reader_employee_id uuid references employees(id) on delete set null,
+  reader_name text,
+  primary key (alert_id, device_id),
+  check (read_at is null or read_at >= delivered_at),
+  check (read_at is null or reader_name is not null)
+);
+create index if not exists store_hq_alert_receipts_read_idx on store_hq_alert_receipts(alert_id, read_at) where read_at is not null;
+
+
+-- Additive: preserve existing orders, original item amounts and all prior refunds.
+alter table store_customer_order_items add column if not exists refund_snapshot jsonb;
+alter table store_customer_order_items add column if not exists refunded_option_keys text[] not null default '{}';
+create table if not exists pos_refund_events (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  order_id uuid not null references store_customer_orders(id) on delete cascade,
+  request_id uuid not null,
+  request_fingerprint text not null,
+  amount integer not null check (amount >= 0),
+  allocations jsonb not null,
+  reason text not null default '',
+  payment_method text not null,
+  external_refund_confirmed boolean not null default false,
+  created_by uuid references employees(id) on delete set null,
+  created_by_name text not null default '',
+  created_at timestamptz not null default now(),
+  unique (store_id, request_id)
+);
+create index if not exists idx_pos_refund_events_order on pos_refund_events(order_id, created_at);
+
+create table if not exists local_bridge_execution_routes (
+  store_id uuid not null references stores(id) on delete cascade,
+  platform text not null,
+  device_id uuid not null references local_bridge_devices(id),
+  probe_command_id uuid references local_bridge_commands(id) on delete set null,
+  primary key (store_id, platform)
+);
+
+-- Apply before deploying the Google Business hours integration. No existing shift/business-hour data is rewritten.
+alter table timecard_shift_publications add column if not exists shift_snapshot jsonb;
+create table if not exists google_business_connections (
+  store_id uuid primary key references stores(id) on delete cascade,
+  token_ciphertext text,
+  location_name text unique,
+  location_title text,
+  preparation_minutes integer check (preparation_minutes between 0 and 720),
+  cleanup_minutes integer check (cleanup_minutes between 0 and 720),
+  enabled boolean not null default false,
+  revision integer not null default 1,
+  applied_dates jsonb not null default '{}'::jsonb,
+  lease_id uuid,
+  lease_until timestamptz,
+  updated_by uuid references employees(id),
+  updated_at timestamptz not null default now(),
+  check (not enabled or (token_ciphertext is not null and location_name is not null and preparation_minutes is not null and cleanup_minutes is not null))
+);
+create table if not exists google_business_hours_jobs (
+  id uuid primary key default gen_random_uuid(),
+  sequence bigint generated always as identity unique,
+  publication_id uuid not null unique references timecard_shift_publications(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  schedule_month text not null,
+  connection_revision integer not null,
+  location_name text not null,
+  rules jsonb not null,
+  closed_dates jsonb not null default '[]'::jsonb,
+  status text not null default 'pending' check (status in ('pending','failed','conflict','synced','superseded')),
+  attempts integer not null default 0,
+  next_attempt_at timestamptz not null default now(),
+  last_error text,
+  intended_periods jsonb,
+  synced_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists google_business_hours_jobs_queue on google_business_hours_jobs(status, next_attempt_at);
+create index if not exists google_business_hours_jobs_store on google_business_hours_jobs(store_id, created_at desc);
+create table if not exists google_business_oauth_states (
+  state_hash text primary key,
+  employee_id uuid not null references employees(id) on delete cascade,
+  session_id uuid not null references employee_sessions(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  verifier_ciphertext text not null,
+  expires_at timestamptz not null default now() + interval '10 minutes'
+);
+
+
+-- Requires 20261031_google_business_hours.sql. Additive; never infer historical blank dates as closed.
+create table if not exists timecard_schedule_settings (
+  store_id uuid primary key references stores(id) on delete cascade,
+  auto_confirm boolean not null default false,
+  last_checked_at timestamptz,
+  first_day integer check(first_day between 0 and 31),
+  first_time time,
+  second_day integer check(second_day between 1 and 16),
+  second_time time,
+  revision integer not null default 1,
+  updated_by uuid references employees(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  check(not auto_confirm or(first_day is not null and first_time is not null and second_day is not null and second_time is not null))
+);
+create table if not exists timecard_schedule_days (
+  store_id uuid not null references stores(id) on delete cascade,
+  work_date date not null,
+  business_status text not null default 'pending' check(business_status in('pending','open','closed')),
+  revision integer not null default 1,
+  confirmed_at timestamptz,
+  confirmed_by uuid references employees(id) on delete set null,
+  confirmation_source text check(confirmation_source in('manual','automatic','change')),
+  shift_snapshot jsonb,
+  needs_refresh boolean not null default false,
+  refresh_after timestamptz not null default now(),
+  attention_reason text,
+  updated_at timestamptz not null default now(),
+  primary key(store_id,work_date)
+);
+create index if not exists timecard_schedule_days_dirty on timecard_schedule_days(needs_refresh,work_date) where needs_refresh;
+alter table google_business_hours_jobs add column if not exists work_date date;
+alter table google_business_hours_jobs add column if not exists day_revision integer;
+alter table timecard_shift_publications add column if not exists period_key text;
+alter table timecard_shift_publications add column if not exists work_date date;
+-- Unsent month-only work has no explicit day/period confirmation contract. Retain it as history.
+update google_business_hours_jobs set status='superseded' where work_date is null and status in('pending','failed','conflict');
+create index if not exists google_business_hours_jobs_day on google_business_hours_jobs(store_id,work_date,sequence desc);
+
+create or replace function mark_confirmed_schedule_day_dirty() returns trigger language plpgsql as $$
+begin
+  if TG_OP='UPDATE' then
+    if (old.store_id,old.work_date,old.scheduled_start,old.scheduled_end) is not distinct from
+       (new.store_id,new.work_date,new.scheduled_start,new.scheduled_end) then return new; end if;
+  end if;
+  if TG_OP in('UPDATE','DELETE') then
+    update timecard_schedule_days set needs_refresh=true,refresh_after=now(),attention_reason=null,revision=revision+1,updated_at=now()
+    where store_id=old.store_id and work_date between old.work_date-1 and old.work_date+1 and confirmed_at is not null;
+  end if;
+  if TG_OP in('INSERT','UPDATE') then
+    if TG_OP='INSERT' then
+      update timecard_schedule_days set needs_refresh=true,refresh_after=now(),attention_reason=null,revision=revision+1,updated_at=now()
+      where store_id=new.store_id and work_date between new.work_date-1 and new.work_date+1 and confirmed_at is not null;
+    elsif (old.store_id,old.work_date) is distinct from (new.store_id,new.work_date) then
+      update timecard_schedule_days set needs_refresh=true,refresh_after=now(),attention_reason=null,revision=revision+1,updated_at=now()
+      where store_id=new.store_id and work_date between new.work_date-1 and new.work_date+1 and confirmed_at is not null;
+    end if;
+  end if;
+  if TG_OP='DELETE' then return old; end if;
+  return new;
+end $$;
+drop trigger if exists timecard_shifts_confirmation_dirty on timecard_shifts;
+create trigger timecard_shifts_confirmation_dirty after insert or update or delete on timecard_shifts
+for each row execute function mark_confirmed_schedule_day_dirty();
+
+
+-- Requires both 20261031 migrations. Formal business arrangements are the Google source.
+alter table timecard_schedule_days add column if not exists hours_source text not null default 'schedule' check(hours_source in('schedule','manual'));
+alter table timecard_schedule_days add column if not exists manual_periods jsonb;
+alter table timecard_schedule_days add column if not exists business_periods jsonb;
+alter table timecard_shift_publications add column if not exists business_periods jsonb;
+-- Old confirmed snapshots must be resolved once before external sync; preserve all original data.
+update timecard_schedule_days set needs_refresh=true,refresh_after=now(),revision=revision+1
+where confirmed_at is not null and business_periods is null and not needs_refresh;
+
+-- Import existing rule values once. Clearing them later must remain an explicit unset value.
+do $$ begin
+  if not exists(select 1 from information_schema.columns where table_name='timecard_schedule_settings' and column_name='preparation_minutes' and table_schema=current_schema()) then
+    alter table timecard_schedule_settings add column preparation_minutes integer check(preparation_minutes between 0 and 720);
+    alter table timecard_schedule_settings add column cleanup_minutes integer check(cleanup_minutes between 0 and 720);
+    update timecard_schedule_settings s set preparation_minutes=c.preparation_minutes,cleanup_minutes=c.cleanup_minutes from google_business_connections c where c.store_id=s.store_id;
+  end if;
+end $$;
+-- Google connectivity no longer depends on staffing conversion settings.
+do $$ declare item record; begin
+  for item in select conname from pg_constraint where conrelid='google_business_connections'::regclass and contype='c' and pg_get_constraintdef(oid) like '%enabled%' and pg_get_constraintdef(oid) like '%preparation_minutes%' loop
+    execute format('alter table google_business_connections drop constraint %I',item.conname);
+  end loop;
+end $$;
+alter table google_business_connections drop constraint if exists google_business_connection_ready;
+alter table google_business_connections add constraint google_business_connection_ready check(not enabled or(token_ciphertext is not null and location_name is not null));

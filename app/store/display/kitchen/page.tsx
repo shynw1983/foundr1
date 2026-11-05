@@ -8,14 +8,16 @@ import { useOsTranslation } from "../../../os/components/OsTranslationProvider";
 import { Menu } from "lucide-react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
-import { useVisibleRefresh } from "../../components/useVisibleRefresh";
-import { createStoreFallbackPoller, rememberStoreBusinessHours, storeOrderAlertEventName } from "../../../../lib/store-polling-client";
+import { createStoreRefreshCoordinator, rememberStoreBusinessHours, storeOrderAlertEventName } from "../../../../lib/store-polling-client";
+import { bindStoreRealtimeChannels } from "../../../../lib/store-realtime-refresh";
 import { playStoreOrderAlertSound } from "../../../../lib/store-order-alert-sounds";
 import { defaultStoreModuleSettings, type StoreModuleSettings, type StoreOrderAlertSound } from "../../../../lib/module-setting-defaults";
 
 type KitchenTask = {
   id: string;
   orderId: string;
+  orderItemId?: string;
+  handedOffAt?: string;
   brandId: string;
   productionArea: string;
   productionAreaLabel: string;
@@ -275,7 +277,10 @@ export default function StoreKitchenPage() {
   const [savingId, setSavingId] = useState("");
   const [reprintQueuedId, setReprintQueuedId] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
-  const readState = useReadRequest();
+  const readState = useReadRequest(15000, 0, true);
+  const mutationVersionRef = useRef(0);
+  const refreshRef = useRef<ReturnType<typeof createStoreRefreshCoordinator> | null>(null);
+  const realtimeStopRef = useRef<(() => void) | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const [bridgePresence, setBridgePresence] = useState<"connecting" | "online" | "offline">("connecting");
@@ -394,13 +399,15 @@ export default function StoreKitchenPage() {
     void playNewOrderAlert();
   }
 
-  async function load(storeId = selectedStoreIdRef.current, area = selectedArea, dayOffset = businessDayOffset) {
+  async function loadSnapshot(storeId: string, area: string, dayOffset: number, externalSignal: AbortSignal) {
+    const mutationVersion = mutationVersionRef.current;
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
     if (area) params.set("area", area);
     if (dayOffset === -1) params.set("dayOffset", "-1");
     params.set("ts", String(Date.now()));
     return readState.run(`${storeId}:${area}:${dayOffset}`, (signal) => readJson(`/api/store/display/kitchen?${params.toString()}`, signal), (body) => {
+      if (mutationVersion !== mutationVersionRef.current) { void refreshRef.current?.refresh(); return; }
       syncServerTime(body.serverNow);
       const nextStoreId = String(body.selectedStoreId || storeId || "");
       setStores(body.access?.stores ?? []);
@@ -436,12 +443,12 @@ export default function StoreKitchenPage() {
       });
       setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()));
       setLoading(false);
-    }).then(() => setLoading(false));
+    }, externalSignal).finally(() => { if (!externalSignal.aborted) setLoading(false); });
   }
 
-  useVisibleRefresh(() => {
-    void load();
-  });
+  function load() {
+    return refreshRef.current?.refresh() ?? Promise.resolve();
+  }
 
   useEffect(() => {
     let active = true;
@@ -696,6 +703,7 @@ export default function StoreKitchenPage() {
     });
     if (response.ok) {
       const body = await response.json();
+      mutationVersionRef.current += 1;
       syncServerTime(body.serverNow);
       setTasks(body.tasks ?? []);
       setAreas(body.areas ?? areas);
@@ -725,10 +733,11 @@ export default function StoreKitchenPage() {
     const response = await fetch("/api/store/display/kitchen", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storeId: selectedStoreId, orderId: task.orderId, status: "completed", area: selectedArea })
+      body: JSON.stringify({ storeId: selectedStoreId, orderId: task.orderItemId ? undefined : task.orderId, taskId: task.orderItemId ? task.id : undefined, status: "completed", area: selectedArea })
     });
     if (response.ok) {
       const body = await response.json();
+      mutationVersionRef.current += 1;
       syncServerTime(body.serverNow);
       setTasks(body.tasks ?? []);
       setAreas(body.areas ?? areas);
@@ -752,6 +761,7 @@ export default function StoreKitchenPage() {
     });
     if (response.ok) {
       const body = await response.json();
+      mutationVersionRef.current += 1;
       syncServerTime(body.serverNow);
       setTasks(body.tasks ?? []);
       setAreas(body.areas ?? areas);
@@ -802,18 +812,31 @@ export default function StoreKitchenPage() {
     if (!response.ok) setKitchenDisplayMode(previous);
   }
 
+  const denyKitchen = (status?: number) => {
+    if (status) readState.reportFailure(status);
+    refreshRef.current?.stop();
+    setTasks([]); setStores([]); setAreas([]); setBridgeStatus(null);
+    setLastUpdatedAt(""); setLoading(false); resetNewOrderBaseline();
+    realtimeStopRef.current?.();
+  };
+
   useEffect(() => {
-    void load();
-    if (businessDayOffset === -1) return;
-    if (realtimeStatus === "connected") return;
-    const poller = createStoreFallbackPoller(
-      () => load(selectedStoreIdRef.current, selectedArea),
-      { baseIntervalMs: 60_000, storeIds: () => [selectedStoreIdRef.current].filter(Boolean) }
+    const coordinator = createStoreRefreshCoordinator(
+      signal => loadSnapshot(selectedStoreId, selectedArea, businessDayOffset, signal),
+      {
+        healthyIntervalMs: businessDayOffset === -1 ? 15 * 60_000 : 60_000,
+        fallbackIntervalMs: businessDayOffset === -1 ? 15 * 60_000 : 30_000,
+        onUnauthorized: denyKitchen
+      }
     );
-    poller.start();
-    return () => poller.stop();
+    refreshRef.current = coordinator;
+    coordinator.start({ immediate: true });
+    return () => {
+      coordinator.stop(); readState.cancel();
+      if (refreshRef.current === coordinator) refreshRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessDayOffset, realtimeStatus, selectedArea]);
+  }, [businessDayOffset, selectedArea, selectedStoreId]);
 
   useEffect(() => {
     if (selectedStoreId) void loadUnavailableInventory(selectedStoreId);
@@ -824,7 +847,11 @@ export default function StoreKitchenPage() {
   useEffect(() => {
     let pusher: any;
     let channels: any[] = [];
+    let unbindRealtime: (() => void) | undefined;
+    const configController = new AbortController();
     let active = true;
+    realtimeStopRef.current = () => { active = false; configController.abort(); unbindRealtime?.(); pusher?.disconnect(); setRealtimeStatus("polling"); };
+    refreshRef.current?.setRealtimeHealthy(false);
     const storeId = selectedStoreIdRef.current;
     if (businessDayOffset === -1) {
       setRealtimeStatus("history");
@@ -839,10 +866,10 @@ export default function StoreKitchenPage() {
       };
     }
     const refreshFromEvent = () => {
-      void load(selectedStoreIdRef.current, selectedArea);
+      void refreshRef.current?.refresh();
     };
     setRealtimeStatus("connecting");
-    fetch(`/api/store/realtime-config?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store" })
+    fetch(`/api/store/realtime-config?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store", signal: configController.signal })
       .then((response) => (response.ok ? response.json() : null))
       .then(async (config) => {
         if (!active) return;
@@ -853,36 +880,23 @@ export default function StoreKitchenPage() {
         const { acquireSharedPusher } = await import("../../../../lib/shared-pusher-client");
         if (!active) return;
         pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
-    pusher.connection.bind("unavailable", () => {
-          if (active) {
-            setRealtimeStatus("polling");
-            setBridgePresence("connecting");
+        unbindRealtime = bindStoreRealtimeChannels(pusher, {
+          onUnauthorized: denyKitchen,
+          channels: config.channels,
+          events: ["order.created", "order.updated"],
+          onEvent: refreshFromEvent,
+          onHealthChange: healthy => {
+            if (!active) return;
+            refreshRef.current?.setRealtimeHealthy(healthy);
+            setRealtimeStatus(healthy ? "connected" : "polling");
+            if (healthy) void refreshRef.current?.refresh({ force: true });
+            else setBridgePresence("connecting");
           }
         });
-        pusher.connection.bind("failed", () => {
-          if (active) {
-            setRealtimeStatus("polling");
-            setBridgePresence("connecting");
-          }
-        });
-        pusher.connection.bind("disconnected", () => {
-          if (active) {
-            setRealtimeStatus("polling");
-            setBridgePresence("connecting");
-          }
-        });
-        channels = config.channels.map((channelName: string) => {
-          const channel = pusher.subscribe(channelName);
-          channel.bind("pusher:subscription_succeeded", () => {
-            if (active) setRealtimeStatus("connected");
-          });
-          channel.bind("pusher:subscription_error", () => {
-            if (active) setRealtimeStatus("polling");
-          });
-          channel.bind("order.created", refreshFromEvent);
-          channel.bind("order.updated", refreshFromEvent);
-          return channel;
-        });
+        realtimeStopRef.current = () => {
+          active = false; configController.abort(); unbindRealtime?.();
+          pusher?.disconnect(); setRealtimeStatus("polling");
+        };
         if (config.bridgeChannel) {
           const bridgeChannel = pusher.subscribe(config.bridgeChannel);
           bridgeChannel.bind("pusher:subscription_succeeded", (members: any) => {
@@ -982,6 +996,9 @@ export default function StoreKitchenPage() {
 
     return () => {
       active = false;
+      configController.abort();
+      unbindRealtime?.();
+      realtimeStopRef.current = null;
       channels.forEach((channel) => {
         channel.unbind("order.created", refreshFromEvent);
         channel.unbind("order.updated", refreshFromEvent);
@@ -1049,7 +1066,6 @@ export default function StoreKitchenPage() {
                 setSelectedStoreId(storeId);
                 selectedStoreIdRef.current = storeId;
                 setStoredStoreSelection(storeId);
-                void load(storeId, selectedArea);
               }}>
                 {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
               </select>
@@ -1507,11 +1523,11 @@ export default function StoreKitchenPage() {
                   })}
                 </div>
                 {!task.isHistorical ? <div className="store-kitchen-actions">
-                  <button className="secondary-button store-kitchen-reprint-button" type="button" disabled={savingId === task.id} onClick={() => void requestReprint(task)}>
+                  {task.orderItemId ? <a className="secondary-button store-kitchen-reprint-button" href={`/store/pos?ticketOrderId=${encodeURIComponent(task.orderId)}#pos-print-documents`}>{t("POSで伝票を確認")}</a> : <button className="secondary-button store-kitchen-reprint-button" type="button" disabled={savingId === task.id} onClick={() => void requestReprint(task)}>
                     {reprintQueuedId === task.id
                       ? (t("再印刷を予約しました"))
                       : (t("再印刷"))}
-                  </button>
+                  </button>}
                   {task.status === "new" ? (
                     <button className="secondary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "preparing")}>{t("制作開始")}</button>
                   ) : null}
@@ -1525,9 +1541,9 @@ export default function StoreKitchenPage() {
                       {t("制作中に戻す")}
                     </button>
                   ) : (
-                    <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "ready")}>{task.orderType === "eat_in" ? t("提供完了") : t("完成")}</button>
+                    <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => updateTask(task, "ready")}>{t("完成")}</button>
                   )}
-                  {task.status === "ready" && tasks.every((candidate) => candidate.orderId !== task.orderId || candidate.status === "ready") ? (
+                  {task.status === "ready" && !task.handedOffAt && (task.orderItemId || tasks.every((candidate) => candidate.orderId !== task.orderId || candidate.status === "ready")) ? (
                     <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => void completeHandoff(task)}>
                       {t("受渡完了")}
                     </button>

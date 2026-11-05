@@ -4,6 +4,8 @@ import { mergeDuplicateToppingGroups } from "../../../../lib/menu-customization-
 import { publicMenuCacheHeaders } from "../../../../lib/public-cache";
 import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "../../../../lib/store-staff-presence";
 import { getStoreReservationWindowsForCurrentBusinessDay, getStoreReservationWindowsForDate } from "../../../../lib/store-reservation-windows";
+import { getStoreCashBusinessDayState } from "../../../../lib/store-business-hours";
+import { applyMaamaaReceptionWindowPolicy } from "../../../../lib/maamaa-reception-policy";
 
 type MenuOption = {
   id: string;
@@ -139,6 +141,7 @@ export async function GET(request: Request) {
     from menu_catalog_items
     where menu_catalog_items.brand_id = ${brand.id}
       and menu_catalog_items.is_active = true
+      and coalesce(menu_catalog_items.variable_schema->>'storeDineInOnly', 'false') <> 'true'
       and (
         menu_catalog_items.store_id is null
         or (${store?.id ?? null}::uuid is not null and menu_catalog_items.store_id = ${store?.id ?? null})
@@ -350,10 +353,13 @@ export async function GET(request: Request) {
   const isMaamaa = /maamaa|まぁ麻/i.test(String(brand.name ?? ""));
   const reservationWindows = store?.id
     ? isMaamaa
-      ? await getStoreReservationWindowsForCurrentBusinessDay({
+      ? applyMaamaaReceptionWindowPolicy(await getStoreReservationWindowsForCurrentBusinessDay({
           storeId: store.id,
           businessHours: storeOperation.businessHours,
           ignoreStaffSchedule: storeOperation.acceptanceMode === "force_open"
+        }), {
+          businessDay: getStoreCashBusinessDayState(storeOperation.businessHours),
+          acceptanceMode: storeOperation.acceptanceMode
         })
       : await getStoreReservationWindowsForDate({ storeId: store.id, pickupDate: today })
     : [];

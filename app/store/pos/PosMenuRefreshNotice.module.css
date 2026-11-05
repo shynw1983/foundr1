@@ -1,0 +1,6 @@
+.notice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel, white); font-size: 13px; line-height: 1.6; }
+.notice > div { flex: 1 1 220px; min-width: 0; }
+.notice p { margin: 0; overflow-wrap: anywhere; }
+.notice p + p { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.notice button { flex-shrink: 0; min-height: 36px; font-size: 12px; }
+.refresh { min-height: 34px; padding: 6px 8px; font-size: 12px; font-weight: 500; }

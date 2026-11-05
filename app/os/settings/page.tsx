@@ -128,6 +128,7 @@ type RolePermissionState = {
     key: string;
     enabled: boolean;
     locked: boolean;
+    available?: boolean;
   }>;
 };
 
@@ -693,7 +694,7 @@ export default function OsSettingsPage() {
                                     disabled={!canEditRolePermissions || permission?.locked === true}
                                     onChange={(event) => toggleRolePermission(roleState.role, definition.key, event.currentTarget.checked)}
                                   />
-                                  <span>{permission?.locked ? "固定" : permission?.enabled ? "許可" : "なし"}</span>
+                                  <span>{permission?.available === false ? "対象外" : permission?.locked ? "固定" : permission?.enabled ? "許可" : "なし"}</span>
                                 </label>
                               </td>
                             );

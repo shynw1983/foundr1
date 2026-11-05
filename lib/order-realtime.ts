@@ -1,6 +1,7 @@
 import Pusher from "pusher";
 import { type CustomerOrderRow, toPublicCustomerOrder } from "./customer-orders";
 import { getAppVersion, getShortAppVersion } from "./app-version";
+import { appVersionChannel, appVersionEventName, isContentAppVersion, type AppVersionScope } from "./app-version-protocol";
 import { recordExternalServiceUsage } from "./external-service-usage";
 
 let pusherClient: Pusher | null = null;
@@ -95,11 +96,12 @@ export async function publishStoreOperationalEvent(
   });
 }
 
-export async function publishStoreVersionUpdatedEvent(version = getAppVersion()) {
+export async function publishAppVersionUpdatedEvent(app: AppVersionScope, version = getAppVersion(app)) {
   const pusher = getPusher();
-  if (!pusher || !version || version === "local") return;
+  if (!pusher || !isContentAppVersion(version)) return;
 
-  await pusher.trigger("store-version", "store.version.updated", {
+  await pusher.trigger(appVersionChannel(app), appVersionEventName, {
+    app,
     version,
     shortVersion: getShortAppVersion(version),
     publishedAt: new Date().toISOString()
@@ -109,7 +111,11 @@ export async function publishStoreVersionUpdatedEvent(version = getAppVersion())
     metricKey: "messages",
     quantity: 1,
     unit: "count",
-    source: "store_version",
-    metadata: { version }
+    source: `${app}_version`,
+    metadata: { app, version }
   });
+}
+
+export async function publishStoreVersionUpdatedEvent(version = getAppVersion("store")) {
+  return publishAppVersionUpdatedEvent("store", version);
 }

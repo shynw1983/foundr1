@@ -426,12 +426,13 @@ export class DemaeMenuClient {
     if(!items.categoryList.some(row=>String(row.categoryCode)===String(id)))return;
     await this.updateCategory(id,{retire:true});
   }
-  async retirementNoop(kind,id) {
+  async retirementNoop(kind,id,{catalog,item}={}) {
     // This is exclusively a fresh read-only proof of an already retired live
     // relationship. Unknown/incomplete evidence falls back to the existing
     // full snapshot and native retirement guards; it never authorizes a write.
-    if(!proofCode(id)||!['option','option_group','category'].includes(kind))return false;
+    if(!proofCode(id)||!['item','option','option_group','category'].includes(kind))return false;
     try {
+      if(kind==='item')return await this.retiredItemNoop(id,{catalog,item});
       if(kind==='option_group') {
         await this.assertScope();
         const group=await this.group(id);
@@ -439,13 +440,13 @@ export class DemaeMenuClient {
           &&Array.isArray(group.items)&&proofComplete(group.items)&&group.items.length===0
           &&proofRows(group.options,'optionCode',this.chainId,{periods:true});
       }
-      const catalog=await this.catalog();
-      if(!proofCatalog(catalog,this.chainId))return false;
-      if(kind==='category')return !catalog.items.categoryList.some(row=>row.categoryCode===id);
-      if(!proofRows(catalog.groups,'optionGroupCode',this.chainId))return false;
+      const nativeCatalog=await this.catalog();
+      if(!proofCatalog(nativeCatalog,this.chainId))return false;
+      if(kind==='category')return !nativeCatalog.items.categoryList.some(row=>row.categoryCode===id);
+      if(!proofRows(nativeCatalog.groups,'optionGroupCode',this.chainId))return false;
       // Inspect all member periods, including future ones. A today-only view
       // would wrongly skip an association which can reappear tomorrow.
-      for(const group of catalog.groups) {
+      for(const group of nativeCatalog.groups) {
         const members=await this.transport.request(`${this.base}/option-group/${code(group.optionGroupCode)}/option-item-list`);
         if(!proofRows(members,'optionCode',this.chainId,{periods:true})
           ||members.some(row=>row.optionCode===id))return false;
@@ -455,6 +456,56 @@ export class DemaeMenuClient {
     } catch {
       return false;
     }
+  }
+  async retiredItemNoop(id,{catalog,item}={}) {
+    // Callers may reuse only the catalog and exact item freshly read for this
+    // same retirement attempt. This proof can skip a write, never authorize
+    // one, and the publication's independent final native snapshot remains.
+    [catalog,item]=await Promise.all([catalog??this.catalog(),item??this.item(id)]);
+    if(!proofCode(id)||!proofCatalog(catalog,this.chainId)
+      ||!proofRows([item],'itemCode',this.chainId)||item.itemCode!==id
+      ||catalog.items.categoryList.some(category=>category.itemList.some(row=>row.itemCode===id))
+      ||!proofRows(item.categoryItemLinkList,'categoryCode',this.chainId,{optionalPeriods:true,scopedSummary:true}))return false;
+    if(item.categoryItemLinkList.length===0)return true;
+    if(!proofCode(this.draftPatternCode)||this.draftPatternCode===this.pattern
+      ||item.categoryItemLinkList.length!==1
+      ||!proofRows(item.sizeInfoList,'sizeCode',this.chainId,{periods:true,scopedSummary:true})
+      ||!item.sizeInfoList.length||item.sizeInfoList.some(size=>
+        Object.hasOwn(size,'itemCode')&&size.itemCode!==id
+        ||!proofRows(size.sizeOptionGroupLinkList,'optionGroupCode',this.chainId,{optionalPeriods:true,scopedSummary:true})))return false;
+    const draft=new DemaeDraftClient(this.transport,this.chainId,this.pattern);
+    const hidden=await this.transport.request(`${this.base}/menu-pattern/${code(this.draftPatternCode)}/item-list`);
+    if(!proofCatalog({items:hidden},this.chainId))return false;
+    const categories=hidden.categoryList.filter(row=>/^未公開 FS[0-9a-f]{14}$/.test(row.categoryName));
+    if(categories.length!==1)return false;
+    const category=categories[0],detailLink=item.categoryItemLinkList[0];
+    if(category.categoryCode!==detailLink.categoryCode||!proofPeriod(category,true)
+      ||category.itemList.filter(row=>row.itemCode===id).length!==1)return false;
+    const categoryIdentity=row=>[row.categoryCode,row.applyStartDate?.replaceAll('/','-'),row.applyEndDate?.replaceAll('/','-')];
+    const linked=await this.transport.request(`${this.base}/item/${code(id)}/linked-category-list`);
+    if(!proofRows(linked,'categoryCode',this.chainId,{periods:true})||linked.length!==1
+      ||!sameMenuValue(categoryIdentity(linked[0]),categoryIdentity(category))
+      ||(detailLink.applyStartDate!==undefined||detailLink.applyEndDate!==undefined)
+        &&!sameMenuValue(categoryIdentity(detailLink),categoryIdentity(category)))return false;
+    const actual=await draft.category(category);
+    if(!proofRows([actual],'categoryCode',this.chainId,{periods:true})
+      ||!sameMenuValue(categoryIdentity(actual),categoryIdentity(category))
+      ||actual.categoryName!==category.categoryName
+      ||!proofRows(actual.menuPatternCategoryLinkList,'menuPatternCode',this.chainId)
+      ||actual.menuPatternCategoryLinkList.length!==1
+      ||actual.menuPatternCategoryLinkList[0].menuPatternCode!==this.draftPatternCode)return false;
+    // A future/unknown business link must not be mistaken for today's hidden
+    // placement. Read all links again after the exact category graph, then
+    // recheck assignment last so a concurrent merchant edit falls back.
+    const [after,afterLinks]=await Promise.all([this.item(id),
+      this.transport.request(`${this.base}/item/${code(id)}/linked-category-list`)]);
+    if(!proofRows([after],'itemCode',this.chainId)||after.itemCode!==id
+      ||!sameMenuValue(after.categoryItemLinkList,item.categoryItemLinkList)
+      ||!sameMenuValue(after.sizeInfoList,item.sizeInfoList)
+      ||!proofRows(afterLinks,'categoryCode',this.chainId,{periods:true})
+      ||!sameMenuValue(afterLinks,linked))return false;
+    const pattern=await draft.assertHiddenPattern(this.draftPatternCode,{completeProof:true});
+    return pattern.menuPatternName===`Foundr1 下書き ${category.categoryName.slice('未公開 '.length)}`;
   }
   async options() {
     await this.assertScope();

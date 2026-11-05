@@ -156,7 +156,10 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
       store_customer_order_items.measured_quantity::float as measured_quantity,
       coalesce(store_customer_order_items.measured_unit, '') as measured_unit,
       store_customer_order_items.measured_unit_price::float as measured_unit_price,
-      store_customer_order_items.amount,
+      case when store_customer_order_items.refund_snapshot is not null
+        then greatest(0,(store_customer_order_items.refund_snapshot->>'paidAmount')::int-store_customer_order_items.refunded_amount)
+        else store_customer_order_items.amount end as amount,
+      store_customer_order_items.refunded_amount,
       store_customer_order_items.sort_order
     from store_customer_order_items
     left join menu_catalog_items on menu_catalog_items.id = store_customer_order_items.menu_catalog_item_id
@@ -204,7 +207,8 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
           ice: item.ice,
           option: { key: item.option_key, label: item.option_label },
           toppings: { keys: item.topping_keys ?? [], labels: item.topping_labels ?? [] },
-          customizations: item.customizations ?? []
+          customizations: item.customizations ?? [],
+          refundedAmount: item.refunded_amount ?? 0
         })},
         ${item.sort_order ?? 0}
       )

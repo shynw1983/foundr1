@@ -21,6 +21,8 @@ import {
   Truck,
   UserCog
 } from "lucide-react";
+import { useOsTranslation } from "../components/OsTranslationProvider";
+import { createProcedureTrainingDraft, procedureTrainingTemplates } from "../../../lib/procedure-training-templates";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -143,6 +145,7 @@ type ProcedureStep = {
 };
 
 type ProcedureBook = {
+  canEdit?: boolean;
   id?: string;
   title: string;
   category: string;
@@ -242,6 +245,8 @@ const optionalVariants: ProcedureVariant[] = [
 ];
 
 const procedureTypes = [
+  { value: "service", label: "接客・提供" },
+  { value: "training", label: "研修" },
   { value: "product", label: "商品制作" },
   { value: "buildable_product", label: "組み立て商品" },
   { value: "prep", label: "仕込み" },
@@ -457,6 +462,7 @@ function shouldShowActionField(actionKey: string, field: ActionField) {
 }
 
 export default function ProcedureAdminPage() {
+  const { t } = useOsTranslation();
   const [procedures, setProcedures] = useState<ProcedureBook[]>([]);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [brands, setBrands] = useState<OptionItem[]>([]);
@@ -480,8 +486,10 @@ export default function ProcedureAdminPage() {
   const [selectedMaamaaReferenceIndex, setSelectedMaamaaReferenceIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [trainingDraftKey, setTrainingDraftKey] = useState("");
   const [referenceSaving, setReferenceSaving] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
+  const [canManageShared, setCanManageShared] = useState(false);
 
   async function loadProcedures() {
     setLoading(true);
@@ -506,6 +514,7 @@ export default function ProcedureAdminPage() {
       equipment?: ProcedureMasterItem[];
       containers?: ProcedureMasterItem[];
       canEdit?: boolean;
+      canManageShared?: boolean;
     };
 
     setProcedures((data.procedures ?? []).map(normalizeBook));
@@ -528,6 +537,7 @@ export default function ProcedureAdminPage() {
     setEquipment(data.equipment ?? []);
     setContainers(data.containers ?? []);
     setCanEdit(Boolean(data.canEdit));
+    setCanManageShared(Boolean(data.canManageShared));
     setLoading(false);
   }
 
@@ -804,7 +814,20 @@ export default function ProcedureAdminPage() {
     await loadProcedures();
   }
 
+  function startTrainingDraft(key: string) {
+    if (editingBook.title.trim() && !window.confirm(t("編集中の内容を閉じて研修下書きを作成しますか？"))) return;
+    const maamaaBrand = brands.find((brand) => /maamaa|まぁ麻|麻辣/i.test(brand.name));
+    const sakura = stores.find((store) => /桜並木/.test(store.name));
+    setTrainingDraftKey(key);
+    setEditingBook(createProcedureTrainingDraft(key, {
+      brandId: editingBook.brandId || maamaaBrand?.id || "",
+      storeIds: editingBook.storeIds.length ? editingBook.storeIds : sakura ? [sakura.id] : []
+    }));
+    setMessage("研修下書きを作成しました。適用店舗・担当・写真を確認して保存してください。公開は内容確認後に行ってください。");
+  }
+
   async function saveProcedure() {
+    if (trainingDraftKey && !editingBook.storeIds.length) { setMessage("研修下書きの適用店舗を選択してください。"); return; }
     setSaving(true);
     setMessage("");
     const method = editingBook.id ? "PUT" : "POST";
@@ -822,6 +845,7 @@ export default function ProcedureAdminPage() {
     }
 
     setMessage("手順書を保存しました。");
+    setTrainingDraftKey("");
     setEditingBook(cloneBook(emptyBook));
     await loadProcedures();
     setSaving(false);
@@ -1073,11 +1097,11 @@ export default function ProcedureAdminPage() {
               <BookOpen size={18} />
               閲覧画面
             </a>
-            <button className="secondary-button" type="button" onClick={() => document.getElementById("maamaa-reference-editor")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+            {canManageShared ? <button className="secondary-button" type="button" onClick={() => document.getElementById("maamaa-reference-editor")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
               <BookOpen size={18} />
               まぁ麻早見表編集
-            </button>
-            <button className="primary-button" type="button" onClick={() => setEditingBook(cloneBook(emptyBook))}>
+            </button> : null}
+            <button className="primary-button" type="button" onClick={() => { setTrainingDraftKey(""); setEditingBook(cloneBook(emptyBook)); }}>
               <Plus size={18} />
               新規作成
             </button>
@@ -1088,6 +1112,13 @@ export default function ProcedureAdminPage() {
         {!canEdit && !loading ? <div className="inline-alert is-warning">手順書の編集権限がありません。</div> : null}
 
         <div className="procedure-helper-actions">
+          <details className="procedure-reference-disclosure">
+            <summary><BookOpen size={17} /> 加盟店研修テンプレート</summary>
+            <p>通常手順・異常対応・実演確認をまとめた下書きを作成します。適用店舗を選び、写真と店舗の基準を確認してから公開してください。閲覧と研修合格の記録は別です。</p>
+            {procedureTrainingTemplates.map((template) => (
+              <button className="secondary-button" type="button" key={template.key} disabled={!canEdit || saving} onClick={() => startTrainingDraft(template.key)}>{template.title}</button>
+            ))}
+          </details>
           <details className="procedure-reference-disclosure">
             <summary>
               <Info size={17} />
@@ -1115,7 +1146,7 @@ export default function ProcedureAdminPage() {
             </div>
           </details>
 
-          <details className="procedure-settings-disclosure">
+          {canManageShared ? <details className="procedure-settings-disclosure">
           <summary>
             <SlidersHorizontal size={17} />
             手順書設定
@@ -1234,9 +1265,9 @@ export default function ProcedureAdminPage() {
               </div>
             </div>
           </section>
-          </details>
+          </details> : null}
 
-          <details className="procedure-settings-disclosure" id="maamaa-reference-editor" open>
+          {canManageShared ? <details className="procedure-settings-disclosure" id="maamaa-reference-editor" open>
             <summary>
               <BookOpen size={17} />
               まぁ麻 制作早見表
@@ -1561,7 +1592,7 @@ export default function ProcedureAdminPage() {
                 </section>
               </div>
             </section>
-          </details>
+          </details> : null}
         </div>
 
         <div className="procedures-admin-grid">
@@ -1585,13 +1616,13 @@ export default function ProcedureAdminPage() {
                     <p>{procedure.category} / {procedure.brand || "ブランド未設定"} / {procedure.menuCatalogItemName || "メニュー未連携"} / {procedure.stores?.length ? `${procedure.stores.length}店舗` : "全店共通"}</p>
                     <small>{procedure.status === "published" ? "公開中" : "下書き"} / v{procedure.versionNumber ?? 1} / {procedure.steps.length}ステップ</small>
                   </div>
-                  <div className="row-actions">
-                    <button className="text-button" type="button" onClick={() => setEditingBook(normalizeBook(procedure))}>編集</button>
+                  {canEdit && procedure.canEdit ? <div className="row-actions">
+                    <button className="text-button" type="button" onClick={() => { setTrainingDraftKey(""); setEditingBook(normalizeBook(procedure)); }}>編集</button>
                     <button className="danger-button" type="button" onClick={() => void deleteProcedure(procedure.id)}>
                       <Trash2 size={14} />
                       削除
                     </button>
-                  </div>
+                  </div> : null}
                 </article>
               ))}
               {!filteredProcedures.length ? <p className="empty-state">手順書はまだありません。</p> : null}

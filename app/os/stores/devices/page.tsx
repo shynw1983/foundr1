@@ -1,5 +1,7 @@
 "use client";
 
+import { DeviceRelaySettings } from "./DeviceRelaySettings";
+
 import {
   ArrowDown,
   ArrowUp,
@@ -664,6 +666,8 @@ export default function StoreDeviceSettingsPage() {
         </section>
 
         {hasUnsavedDeviceSettings ? <div className="action-notice is-warning">表示・設備設定に未保存の変更があります。移動前に保存してください。</div> : null}
+
+        <DeviceRelaySettings storeId={selectedStoreId} storeName={stores.find((store) => store.id === selectedStoreId)?.name} />
 
         <section className="panel store-terminal-settings">
           <div className="panel-title">
