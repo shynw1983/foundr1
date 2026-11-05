@@ -1,33 +1,45 @@
 import { requireOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
+import { inventorySyncCurrentBusinessDaySql } from "../../../lib/inventory-sync-business-day";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// Existing inventory notices follow the original operation's store business day.
+// Other notification types and historical records keep their existing behavior.
+const visibleNotificationSql = `(n.notification_type is distinct from 'inventory_sync_attention' or exists (
+  select 1 from local_bridge_commands c join stores s on s.id = c.store_id
+  where n.source_key = 'inventory-sync:' || c.id::text
+    and c.command_type = 'set_inventory_availability'
+    and ${inventorySyncCurrentBusinessDaySql('c', 's')}
+))`;
 
 export async function GET() {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const notifications = await sql`
+  const notifications = await sql.query(`
     select
-      id::text,
-      notification_type as "type",
-      title,
-      message,
-      coalesce(href, '') as href,
-      read_at as "readAt",
-      created_at as "createdAt"
-    from os_notifications
-    where recipient_employee_id = ${session.id}
-      and read_at is null
-    order by created_at desc
+      n.id::text,
+      n.notification_type as "type",
+      n.title,
+      n.message,
+      coalesce(n.href, '') as href,
+      n.read_at as "readAt",
+      n.created_at as "createdAt"
+    from os_notifications n
+    where n.recipient_employee_id = $1::uuid
+      and n.read_at is null
+      and ${visibleNotificationSql}
+    order by n.created_at desc
     limit 20
-  `;
-  const unreadCountRows = await sql`
+  `, [session.id]);
+  const unreadCountRows = await sql.query(`
     select count(*)::int as count
-    from os_notifications
-    where recipient_employee_id = ${session.id}
-      and read_at is null
-  `;
+    from os_notifications n
+    where n.recipient_employee_id = $1::uuid
+      and n.read_at is null
+      and ${visibleNotificationSql}
+  `, [session.id]);
 
   return Response.json({
     notifications,

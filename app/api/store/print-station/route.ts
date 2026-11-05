@@ -40,9 +40,9 @@ export async function GET(request: Request) {
       order_production_tasks.production_area_label as "productionAreaLabel",
       order_production_tasks.print_status as "printStatus",
       order_production_tasks.item_summary as "itemSummary",
-      store_customer_orders.pickup_code as "pickupCode",
+      coalesce(nullif(order_production_tasks.pickup_code, ''), store_customer_orders.pickup_code) as "pickupCode",
       coalesce(store_customer_orders.customer_summary ->> 'orderType', '') as "orderType",
-      coalesce(store_customer_orders.customer_summary ->> 'note', '') as note,
+      concat_ws(' / ', nullif((select preparation_note from store_customer_order_items where id=order_production_tasks.order_item_id), ''), nullif(store_customer_orders.customer_summary ->> 'note', '')) as note,
       store_customer_orders.customer_summary as "customerSummary",
       coalesce(stores.name, 'Foundr1 STORE') as "storeName",
       to_char(store_customer_orders.created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime"
@@ -51,6 +51,7 @@ export async function GET(request: Request) {
     left join stores on stores.id = store_customer_orders.store_id
     left join brands on brands.id = order_production_tasks.brand_id
     where order_production_tasks.store_id::text = ${selectedStoreId}
+      and coalesce((store_customer_orders.customer_summary->>'relayPrinting')::boolean,false)=false
       and store_customer_orders.payment_status in ('paid', 'partial_refunded')
       and store_customer_orders.status not in ('cancelled', 'refund_pending')
       and (
@@ -100,7 +101,7 @@ export async function GET(request: Request) {
       : "ja";
     const { customerSummary, ...job } = row;
     const summary = asRecord(customerSummary);
-    const noteOriginal = normalizeText(summary.note);
+    const noteOriginal = normalizeText(row.note);
     const noteZh = normalizeText(asRecord(summary.noteTranslations).zh);
     return {
       ...job,

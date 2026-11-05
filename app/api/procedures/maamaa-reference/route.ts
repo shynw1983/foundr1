@@ -12,7 +12,7 @@ async function requireProcedureReader() {
 
 async function requireProcedureEditor() {
   const session = await requireOsSession();
-  return session && (await roleHasPermission(session.role, "procedures.edit")) ? session : null;
+  return session && ["owner", "manager"].includes(session.role) && (await roleHasPermission(session.role, "procedures.edit", { fresh: true })) ? session : null;
 }
 
 async function readSettings() {
@@ -72,7 +72,7 @@ export async function GET() {
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const settings = await enrichSettingsWithSkuCategories(await readSettings());
-  const canEdit = await roleHasPermission(session.role, "procedures.edit");
+  const canEdit = ["owner", "manager"].includes(session.role) && await roleHasPermission(session.role, "procedures.edit", { fresh: true });
   return Response.json({ settings, canEdit });
 }
 

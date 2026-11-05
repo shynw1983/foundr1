@@ -223,6 +223,7 @@ async function readMenuAdminData(selectedStoreId = "") {
         on menu_categories.brand_id = menu_catalog_items.brand_id
         and coalesce(menu_categories.store_id::text, '') = coalesce(menu_catalog_items.store_id::text, '')
         and menu_categories.name = coalesce(nullif(menu_catalog_items.category, ''), '未分類')
+      where coalesce(menu_catalog_items.variable_schema->>'storeDineInOnly', 'false') <> 'true'
       order by coalesce(menu_categories.sort_order, 9999), menu_catalog_items.sort_order, menu_catalog_items.name
     `,
     sql`
@@ -307,6 +308,17 @@ export async function GET() {
   });
 }
 
+async function isStoreDineInItemWrite(body: Record<string, unknown>) {
+  const kind = String(body.kind ?? '');
+  if (kind === 'item' && String(parseJsonObject(body.variableSchema).storeDineInOnly) === 'true') return true;
+  const ids = kind === 'item' ? [String(body.id ?? '').trim()].filter(Boolean)
+    : kind === 'sortOrder' && Array.isArray(body.itemIds) ? body.itemIds.map(value => String(value).trim()).filter(Boolean) : [];
+  if (!ids.length) return false;
+  const rows = await sql`select id from menu_catalog_items where id::text=any(${ids}::text[])
+    and variable_schema->>'storeDineInOnly'='true' limit 1`;
+  return rows.length > 0;
+}
+
 export async function POST(request: Request) {
   const session = await requireOsSession();
   if (!session || !(await canEditMenus(session))) {
@@ -317,6 +329,7 @@ export async function POST(request: Request) {
   const kind = String(body.kind ?? "");
 
   try {
+    if (await isStoreDineInItemWrite(body)) return Response.json({ error: '店内専用商品は店舗の店内飲食メニューから編集してください。' }, { status: 409 });
     const { menuAuthorityWriteBlocked, MENU_AUTHORITY_MESSAGE } = await import('../../../lib/menu-authority-guard');
     if (await menuAuthorityWriteBlocked(body)) return Response.json({error:MENU_AUTHORITY_MESSAGE},{status:409});
     let result: unknown;
@@ -351,6 +364,8 @@ export async function DELETE(request: Request) {
   const body = await request.json().catch(() => ({})) as { kind?: string; id?: string };
   const id = String(body.id ?? "").trim();
   if (!id) return Response.json({ error: "IDが必要です。" }, { status: 400 });
+
+  if (await isStoreDineInItemWrite(body)) return Response.json({ error: '店内専用商品は店舗の店内飲食メニューから編集してください。' }, { status: 409 });
 
   const { menuAuthorityWriteBlocked, MENU_AUTHORITY_MESSAGE } = await import('../../../lib/menu-authority-guard');
   if (await menuAuthorityWriteBlocked(body)) return Response.json({error:MENU_AUTHORITY_MESSAGE},{status:409});

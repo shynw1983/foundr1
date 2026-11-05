@@ -3,6 +3,7 @@ import { executeMenuRequest } from './merchant-menu-receipt.mjs';
 import {createMerchantMenuPacer} from './merchant-menu-pacer.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {menuRequestAction} from './menu-progress.mjs';
+import {AsyncLocalStorage} from 'node:async_hooks';
 
 export async function retryTransientMenuRead(method,operation,wait=delay) {
   for(let attempt=0;;attempt++) {
@@ -20,6 +21,7 @@ export async function retryTransientMenuRead(method,operation,wait=delay) {
 // cookies or replay requests against an unverified origin.
 export async function connectMerchantMenuClient(session, origin, successCode, onProgress=async()=>{}) {
   const page = await CdpPage.connect(await session.ensureRunning(), origin);
+  const progressContext=new AsyncLocalStorage();
   if (await page.evaluate('location.origin') !== origin) {
     page.close();
     throw new Error('merchant_menu_origin_mismatch');
@@ -29,6 +31,7 @@ export async function connectMerchantMenuClient(session, origin, successCode, on
   const paced=createMerchantMenuPacer({intervalMs:origin==='https://store.rocketnow.co.jp'?1000:250});
   return {
     close: () => page.close(),
+    withProgress: (context,operation) => progressContext.run(context,operation),
     async creationReceipt(receiptKey) {
       if(!/^[A-Za-z0-9:_-]{1,160}$/.test(receiptKey))throw Error('merchant_menu_receipt_key_invalid');
       return page.evaluate(`(() => {if(location.origin!==${JSON.stringify(origin)})throw Error('merchant_menu_origin_changed');const value=localStorage.getItem(${JSON.stringify(`foundr1.menu-create.v1:${receiptKey}`)});return value?JSON.parse(value):null;})()`);
@@ -39,15 +42,19 @@ export async function connectMerchantMenuClient(session, origin, successCode, on
       // Writes are deliberately not retried here. Create retry safety belongs
       // to the persistent authority reservation/marker protocol.
       const action=menuRequestAction(path,method);
+      const context=progressContext.getStore();
       let attempt=0;
       const result=await retryTransientMenuRead(method,async()=>{
-        await onProgress({action,state:attempt++?'retrying':'waiting',retry:attempt-1});
         return paced(async()=>{
-        try {return await page.evaluate(`(${executeMenuRequest.toString()})(${JSON.stringify({path,method,body,successCode,origin,receiptKey})})`);}
+        await onProgress({action,state:attempt++?'retrying':'waiting',retry:attempt-1,context});
+        try {
+          const result=await page.evaluate(`(${executeMenuRequest.toString()})(${JSON.stringify({path,method,body,successCode,origin,receiptKey})})`);
+          await onProgress({action,state:'received',context});
+          return result;
+        }
         catch(error) {throw new Error(`merchant_menu_operation_failed:${method}:${path}:${error.message}`,{cause:error});}
         });
       });
-      await onProgress({action,state:'received'});
       return result;
     }
   };

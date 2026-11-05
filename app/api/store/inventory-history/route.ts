@@ -59,7 +59,7 @@ export async function GET(request: Request) {
   const days = Math.max(1, Math.min(90, Number(params.get("days") ?? 30) || 30));
   const latestFullSync = params.get("scope") === "latest_full_sync";
   const rows = await sql`
-    with recent_runs as (
+    with recent_runs as materialized (
       select
         runs.id,
         runs.store_id,
@@ -74,11 +74,17 @@ export async function GET(request: Request) {
         employees.name as actor_name
       from menu_inventory_sync_runs runs
       left join employees on employees.id = runs.requested_by
-      where runs.store_id::text = ${storeId}
+      where runs.store_id = (select id from stores where id::text = ${storeId})
         and runs.created_at >= now() - (${days}::text || ' days')::interval
         and (not ${latestFullSync} or (runs.run_type = 'full_sync' and runs.details->>'authority' = 'uber_eats'))
       order by runs.created_at desc
       limit ${latestFullSync ? 1 : 200}
+    ), command_links as materialized (
+      -- Extract each command's run identity once. A nested-loop JSON join
+      -- otherwise detoasts every store command for every history row.
+      select id, coalesce(nullif(payload->>'syncRunId', ''), payload->>'fullSyncRunId') as sync_run_id
+      from local_bridge_commands
+      where store_id = (select store_id from recent_runs limit 1)
     )
     select
       recent_runs.id::text,
@@ -126,9 +132,8 @@ export async function GET(request: Request) {
     from recent_runs
     left join menu_catalog_items catalog_item on recent_runs.inventory_key = concat('item:', catalog_item.id::text)
     left join menu_options catalog_option on recent_runs.inventory_key = concat('option:', catalog_option.id::text)
-    left join local_bridge_commands commands
-      on coalesce(nullif(commands.payload->>'syncRunId', ''), commands.payload->>'fullSyncRunId') = recent_runs.id::text
-      and commands.store_id::text = ${storeId}
+    left join command_links on command_links.sync_run_id = recent_runs.id::text
+    left join local_bridge_commands commands on commands.id = command_links.id
     order by recent_runs.created_at desc, commands.created_at
   `;
 

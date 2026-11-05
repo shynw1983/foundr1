@@ -1,9 +1,11 @@
 import type { EmployeeSession } from "./auth";
 import { getSessionStoreScope, requireOsSession } from "./api-auth";
 import { getPermissionsForRole } from "./role-permissions";
+import { sql } from "./db";
 
 const scopedAssignableRoles = new Set(["staff", "store_terminal"]);
 const headquarterAssignableRoles = new Set(["owner", "manager"]);
+const managerAssignableRoles = new Set(["store_owner", "store_manager", "staff", "store_terminal"]);
 
 export type StaffAdminAccess = {
   session: EmployeeSession;
@@ -15,7 +17,7 @@ export type StaffAdminAccess = {
 async function resolveStaffAccess(requiredPermission: "module.staff" | "staff.manage"): Promise<StaffAdminAccess | null> {
   const session = await requireOsSession();
   if (!session) return null;
-  const permissions = await getPermissionsForRole(session.role);
+  const permissions = await getPermissionsForRole(session.role, { fresh: true });
 
   if (!permissions.has(requiredPermission)) return null;
 
@@ -44,12 +46,14 @@ export function canAssignStaffRole(access: StaffAdminAccess, role: string) {
   if (access.session.role === "owner") return true;
   if (access.permissions.has("staff.assignHeadquarterRoles")) return role !== "owner";
   if (headquarterAssignableRoles.has(role)) return false;
+  if (access.session.role === "manager") return managerAssignableRoles.has(role);
   return scopedAssignableRoles.has(role);
 }
 
 export function canManageTargetRole(access: StaffAdminAccess, role: string) {
   if (!access.permissions.has("staff.manage")) return false;
   if (access.session.role === "owner") return true;
+  if (access.session.role === "manager") return ["manager", ...managerAssignableRoles].includes(role);
   if (access.permissions.has("staff.assignHeadquarterRoles")) return role !== "owner";
   if (headquarterAssignableRoles.has(role)) return false;
   return scopedAssignableRoles.has(role);
@@ -66,4 +70,26 @@ export function hasValidScopedStoreSelection(access: StaffAdminAccess, visibleSt
   const selectedStoreIds = new Set([...visibleStoreIds, ...workStoreIds]);
   if (selectedStoreIds.size === 0) return false;
   return Array.from(selectedStoreIds).every((storeId) => access.storeIds.includes(storeId));
+}
+
+/** Global account edits require authority over every existing assignment. */
+export async function getManageableStaffIds(access: StaffAdminAccess, employeeIds: string[]) {
+  if (access.allStores) return new Set(employeeIds);
+  if (!employeeIds.length || !access.storeIds.length) return new Set<string>();
+  const rows = await sql`
+    select employees.id::text from employees
+    where employees.id::text = any(${employeeIds})
+      and (
+        exists (select 1 from employee_scopes s where s.employee_id = employees.id and s.scope_type = 'store' and s.store_id::text = any(${access.storeIds}))
+        or exists (select 1 from employee_work_stores w where w.employee_id = employees.id and w.store_id::text = any(${access.storeIds}))
+      )
+      and not exists (
+        select 1 from employee_scopes s where s.employee_id = employees.id
+          and (s.scope_type <> 'store' or s.store_id is null or not (s.store_id::text = any(${access.storeIds})))
+      )
+      and not exists (
+        select 1 from employee_work_stores w where w.employee_id = employees.id and not (w.store_id::text = any(${access.storeIds}))
+      )
+  `;
+  return new Set(rows.map(row => String(row.id)));
 }

@@ -183,7 +183,7 @@ export async function reconcileUberPublications(input:UberPublicationReconcileIn
     if(!state||!state.enabled||!state.auto_publish)return blocked('uber_publication_reconcile_disabled');
     if(Number(state.revision)!==input.revision)return blocked('uber_publication_reconcile_conflict');
     if(input.catalog&&!equal(state.last_catalog,input.catalog))return blocked('uber_publication_reconcile_conflict');
-    if(hasUnconfirmedRemovals(state))return blocked('uber_publication_reconcile_pending_removal');
+    if(state.publish_config?.removalReview||hasUnconfirmedRemovals(state))return blocked('uber_publication_reconcile_pending_removal');
     // History can include tens of megabytes of native observations. Read only
     // active/capture metadata, then the two current publication heads. Loading
     // every historical result exceeded the database HTTP response limit.

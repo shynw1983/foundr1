@@ -1,0 +1,48 @@
+.banner {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #c5ad64;
+  border-radius: 10px;
+  background: #fff9e9;
+  color: #5b491d;
+  font-size: 13px;
+}
+.banner > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; min-width: 0; }
+.banner strong { font-weight: 650; white-space: nowrap; }
+.banner small { flex-basis: 100%; line-height: 1.5; font-size: 12px; }
+.banner button { flex: 0 0 auto; padding: 8px 10px; font-size: 12px; min-height: 36px; }
+.compact { padding: 8px 10px; font-size: 12px; }
+.result { border: 1px dashed #bba66e; border-radius: 10px; padding: 12px; background: #fffdf7; font-size: 13px; }
+.result header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.result header > div { display: grid; gap: 3px; }
+.result header strong { color: #6a5422; font-weight: 650; }
+.result header button { padding: 8px; font-size: 12px; }
+.result p { line-height: 1.5; margin: 10px 0; overflow-wrap: anywhere; }
+.meta { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; color: var(--muted, #5e6b66); }
+.lines { border-top: 1px solid var(--border, #dfe5e2); border-bottom: 1px solid var(--border, #dfe5e2); margin-top: 10px; }
+.line { display: flex; align-items: start; justify-content: space-between; gap: 12px; padding: 10px 0; }
+.line + .line { border-top: 1px solid var(--border, #dfe5e2); }
+.line > div { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.line > span { white-space: nowrap; }
+.line strong { font-weight: 500; }
+.line small { color: var(--muted, #5e6b66); line-height: 1.5; }
+.totals { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; margin: 12px 0 0; }
+.totals dd { margin: 0; text-align: right; }
+.displayPanel { border: 1px solid var(--border, #dfe5e2); border-radius: 10px; padding: 10px 12px; background: white; font-size: 13px; }
+.displayPanel summary { cursor: pointer; font-weight: 600; }
+.displayPanel summary span { margin-left: 10px; font-size: 12px; font-weight: 400; }
+.displayPanel p { line-height: 1.5; }
+.displayPairing { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.displayPairing > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.displayPairing img { max-width: 100%; height: auto; }
+.displayPairing a, .displayPairing button { font-size: 13px; padding: 8px 12px; }
+@media (max-width: 480px) {
+  .banner > div { gap: 2px 6px; }
+  .banner button { max-width: 108px; white-space: normal; }
+}

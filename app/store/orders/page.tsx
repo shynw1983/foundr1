@@ -1,6 +1,6 @@
 "use client";
 
-import { useReadRequest, readJson } from "../../../components/useReadRequest";
+import { useReadRequest, readJson, createReadError } from "../../../components/useReadRequest";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import { ReadStatusNotice } from "../../../components/ReadStatusNotice";
 
@@ -11,7 +11,8 @@ import { useStoreDialog } from "../components/useStoreDialog";
 import { defaultStoreModuleSettings, storeOrderAlertSoundOptions, type StoreModuleSettings, type StoreOrderAlertSound } from "../../../lib/module-setting-defaults";
 import { playStoreOrderAlertSound } from "../../../lib/store-order-alert-sounds";
 import { getStoreOrderAlertPhase, isStoreOrderAlertAcknowledged, shouldRepeatStoreOrderAlert, type StoreOrderAlertPhase } from "../../../lib/store-order-alert-timing";
-import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../lib/store-polling-client";
+import { createStoreRefreshCoordinator, rememberStoreBusinessHours } from "../../../lib/store-polling-client";
+import { bindStoreRealtimeChannels } from "../../../lib/store-realtime-refresh";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
@@ -57,6 +58,9 @@ type StoreOrder = {
     status: string;
     printStatus: string;
     itemSummary: string;
+    orderItemId?: string;
+    pickupCode?: string;
+    handedOffAt?: string;
   }>;
   createdAt: string;
   squareReceiptUrl: string;
@@ -303,8 +307,12 @@ export default function StoreOrdersPage() {
   const [historyHasNext, setHistoryHasNext] = useState<string | null>(null);
   const [historyPages, setHistoryPages] = useState<Array<string | null>>([]);
   const historyRead = useReadRequest();
-  const statsRead = useReadRequest();
-  const queueRead = useReadRequest();
+  const statsRead = useReadRequest(15000, 0, true);
+  const queueRead = useReadRequest(15000, 0, true);
+  const realtimeStopRef = useRef<(() => void) | null>(null);
+  const refreshRef = useRef<ReturnType<typeof createStoreRefreshCoordinator> | null>(null);
+  const statsRefreshRef = useRef<ReturnType<typeof createStoreRefreshCoordinator> | null>(null);
+  const snapshotRef = useRef<(signal: AbortSignal) => Promise<unknown>>(async () => undefined);
   const [access, setAccess] = useState<StoreOrderAccess | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [stats, setStats] = useState<StoreOrderStats | null>(null);
@@ -349,7 +357,6 @@ export default function StoreOrdersPage() {
   const ordersRef = useRef<StoreOrder[]>([]);
   const repeatAlertTimersRef = useRef<number[]>([]);
   const selectedStoreIdRef = useRef("");
-  const receivedOrdersRef = useRef(new Map<string, { order: StoreOrder; receivedAt: number }>());
 
   useEffect(() => {
     ordersRef.current = orders;
@@ -531,11 +538,12 @@ export default function StoreOrdersPage() {
     queueNextAlert();
   };
 
-  const refreshStats = () => {
+  const refreshStatsSnapshot = (externalSignal: AbortSignal) => {
     if (!access?.canViewSalesStats || !selectedStoreId) return;
     const params = new URLSearchParams({ storeId: selectedStoreId, days: String(statsDays) });
-    return statsRead.run(`${selectedStoreId}:${statsDays}`, signal => readJson<StoreOrderStats>(`/api/store/order-stats?${params}`, signal), setStats);
+    return statsRead.run(`${selectedStoreId}:${statsDays}`, signal => readJson<StoreOrderStats>(`/api/store/order-stats?${params}`, signal), setStats, externalSignal);
   };
+  const refreshStats = () => statsRefreshRef.current?.refresh() ?? Promise.resolve();
   const refreshHistory = () => {
     if (!historyMode || !selectedStoreId) return;
     const params = new URLSearchParams({ storeId: selectedStoreId, view: "history", status, q: query, pageSize: "50" });
@@ -547,11 +555,21 @@ export default function StoreOrdersPage() {
   };
   useEffect(() => {
     setStats(null);
-    if (!access?.canViewSalesStats) return;
-    void refreshStats();
-    const timer = window.setInterval(() => void refreshStats(), 60000);
-    return () => { clearInterval(timer); statsRead.cancel(); };
+    if (!access?.canViewSalesStats || !selectedStoreId) return;
+    const coordinator = createStoreRefreshCoordinator(signal => Promise.resolve(refreshStatsSnapshot(signal)), {
+      healthyIntervalMs: 5 * 60_000, fallbackIntervalMs: 60_000,
+      onUnauthorized: () => setStats(null)
+    });
+    statsRefreshRef.current = coordinator;
+    coordinator.setRealtimeHealthy(realtimeStatus === "connected");
+    coordinator.start({ immediate: true });
+    return () => {
+      coordinator.stop(); statsRead.cancel();
+      if (statsRefreshRef.current === coordinator) statsRefreshRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStoreId, statsDays, access?.canViewSalesStats, statsRead.run, statsRead.cancel]);
+
   useEffect(() => {
     setHistoryOrders([]);
     setHistoryHasNext(null);
@@ -560,19 +578,14 @@ export default function StoreOrdersPage() {
     return () => { clearTimeout(timer); historyRead.cancel(); };
   }, [selectedStoreId, status, query, historyCursor, historyMode, historyRead.run, historyRead.cancel]);
 
-  const refresh = () => {
+  const refreshSnapshot = (externalSignal: AbortSignal) => {
     const requestedStoreId = selectedStoreIdRef.current;
     return queueRead.run(requestedStoreId, async signal => {
       const startedAt = Date.now();
       const params = new URLSearchParams({ view: "active", pageSize: "100" });
       if (requestedStoreId) params.set("storeId", requestedStoreId);
       let response = await fetch(`/api/store/orders?${params}`, { cache: "no-store", signal });
-      // A saved selection can outlive its permission. Ask the API for the first allowed store.
-      if (response.status === 403 && requestedStoreId) {
-        params.delete("storeId");
-        response = await fetch(`/api/store/orders?${params}`, { cache: "no-store", signal });
-      }
-      if (!response.ok) throw new Error(`Orders read failed: ${response.status}`);
+      if (!response.ok) throw createReadError(response);
       const body = await response.json();
       if (body.selectedStoreId) params.set("storeId", body.selectedStoreId);
       const nextOrders: StoreOrder[] = [...(body.orders ?? [])];
@@ -596,13 +609,7 @@ export default function StoreOrdersPage() {
         setSelectedStoreId(responseStoreId);
       }
       if (responseStoreId) setStoredStoreSelection(responseStoreId);
-      // A realtime update received during pagination is newer than the fetched page.
-      const rows = new Map<string, StoreOrder>(body.orders.map((order: StoreOrder) => [order.id, order]));
-      for (const [id, event] of receivedOrdersRef.current) {
-        if (event.order.storeId === responseStoreId && event.receivedAt >= body.startedAt) rows.set(id, event.order);
-        else receivedOrdersRef.current.delete(id);
-      }
-      const nextOrders = [...rows.values()];
+      const nextOrders = body.orders as StoreOrder[];
       setOrders((current) => {
         const currentById = new Map(current.map((order) => [order.id, order]));
         const incomingIds = nextOrders
@@ -628,20 +635,34 @@ export default function StoreOrdersPage() {
           second: "2-digit"
         }).format(new Date())
       );
-    });
+    }, externalSignal);
+  };
+  snapshotRef.current = refreshSnapshot;
+  const refresh = () => refreshRef.current?.refresh() ?? Promise.resolve();
+
+  const denyOrders = (status?: number) => {
+    if (status) queueRead.reportFailure(status);
+    refreshRef.current?.stop();
+    statsRefreshRef.current?.stop(); statsRead.cancel(); historyRead.cancel();
+    setOrders([]); setHistoryOrders([]); setStats(null); setAccess(null);
+    setSelectedId(""); setOperation(null); setLastUpdatedAt("");
+    setRealtimeStatus("polling");
+    realtimeStopRef.current?.();
   };
 
   useEffect(() => {
-    void refresh();
-    const poller = createStoreFallbackPoller(refresh, {
-      baseIntervalMs: 60_000,
-      storeIds: () => [selectedStoreIdRef.current].filter(Boolean)
+    const coordinator = createStoreRefreshCoordinator(signal => snapshotRef.current(signal), {
+      healthyIntervalMs: 60_000, fallbackIntervalMs: 30_000,
+      onUnauthorized: denyOrders
     });
-    if (realtimeStatus !== "connected") poller.start();
+    refreshRef.current = coordinator;
+    coordinator.start({ immediate: true });
     return () => {
-      poller.stop();
+      coordinator.stop(); queueRead.cancel();
+      if (refreshRef.current === coordinator) refreshRef.current = null;
     };
-  }, [realtimeStatus, selectedStoreId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStoreId]);
 
   useEffect(() => {
     void loadOperation(selectedStoreId);
@@ -655,94 +676,45 @@ export default function StoreOrdersPage() {
   }, [operationMessage]);
 
   useEffect(() => {
-    let pusher: any;
-    let channels: any[] = [];
+    let pusher: ReturnType<(typeof import("../../../lib/shared-pusher-client"))["acquireSharedPusher"]> | undefined;
+    let unbindRealtime: (() => void) | undefined;
     let active = true;
+    const configController = new AbortController();
+    realtimeStopRef.current = () => { active = false; configController.abort(); unbindRealtime?.(); pusher?.disconnect(); };
+    refreshRef.current?.setRealtimeHealthy(false);
+    statsRefreshRef.current?.setRealtimeHealthy(false);
     if (!selectedStoreId) {
       setRealtimeStatus("polling");
-      return () => {
-        active = false;
-      };
+      return () => { active = false; configController.abort(); };
     }
-    const upsertOrder = ({ order }: { order: StoreOrder }) => {
-      if (!active || order.storeId !== selectedStoreId) return;
-      receivedOrdersRef.current.set(order.id, { order, receivedAt: Date.now() });
-      setHistoryOrders(current => current.map(item => item.id === order.id ? order : item));
-      setOrders((current) => {
-        if (selectedStoreId && order.storeId !== selectedStoreId) return current;
-        const previousOrder = current.find((item) => item.id === order.id);
-        const exists = Boolean(previousOrder);
-        const next = exists
-          ? current.map((item) => (item.id === order.id ? order : item))
-          : [order, ...current];
-
-        if (shouldNotifyNewOrder(previousOrder, order) || shouldNotifyCheckoutRequest(previousOrder, order)) {
-          setNewOrderIds([order.id]);
-          setSelectedId(order.id);
-          playArrivalAlert([order.id]);
-          scheduleRepeatAlert([order.id], getStoreOrderAlertPhase(order));
-          window.setTimeout(() => setNewOrderIds([]), 10000);
-        }
-
-        return next;
-      });
-      setLastUpdatedAt(
-        new Intl.DateTimeFormat("ja-JP", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit"
-        }).format(new Date())
-      );
-    };
-
     setRealtimeStatus("connecting");
-    fetch(`/api/store/realtime-config?storeId=${encodeURIComponent(selectedStoreId)}`, { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then(async (config) => {
+    void fetch(`/api/store/realtime-config?storeId=${encodeURIComponent(selectedStoreId)}`, { cache: "no-store", signal: configController.signal })
+      .then(response => response.ok ? response.json() : null)
+      .then(async config => {
         if (!active) return;
-        if (!config?.key || !config?.cluster || !config?.channels?.length) {
-          setRealtimeStatus("polling");
-          return;
-        }
+        if (!config?.key || !config?.cluster || !config?.channels?.length) { setRealtimeStatus("polling"); return; }
         const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
         if (!active) return;
         pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
-        pusher.connection.bind("unavailable", () => {
-          if (active) setRealtimeStatus("polling");
+        unbindRealtime = bindStoreRealtimeChannels(pusher, {
+          onUnauthorized: denyOrders,
+          channels: config.channels, events: ["order.created", "order.updated"],
+          onEvent: () => { void refresh(); void refreshStats(); },
+          onHealthChange: healthy => {
+            if (!active) return;
+            refreshRef.current?.setRealtimeHealthy(healthy);
+            statsRefreshRef.current?.setRealtimeHealthy(healthy);
+            setRealtimeStatus(healthy ? "connected" : "polling");
+            if (healthy) { void refreshRef.current?.refresh({ force: true }); void statsRefreshRef.current?.refresh({ force: true }); }
+          }
         });
-        pusher.connection.bind("failed", () => {
-          if (active) setRealtimeStatus("polling");
-        });
-        pusher.connection.bind("disconnected", () => {
-          if (active) setRealtimeStatus("polling");
-        });
-        channels = config.channels.map((channelName: string) => {
-          const channel = pusher.subscribe(channelName);
-          channel.bind("pusher:subscription_succeeded", () => {
-            if (active) setRealtimeStatus("connected");
-          });
-          channel.bind("pusher:subscription_error", () => {
-            if (active) setRealtimeStatus("polling");
-          });
-          channel.bind("order.created", upsertOrder);
-          channel.bind("order.updated", upsertOrder);
-          return channel;
-        });
-      })
-      .catch(() => {
-        if (active) setRealtimeStatus("polling");
-      });
-
+      }).catch(() => { if (active) setRealtimeStatus("polling"); });
     return () => {
-      active = false;
-      channels.forEach((channel) => {
-        channel.unbind("order.created", upsertOrder);
-        channel.unbind("order.updated", upsertOrder);
-        pusher?.unsubscribe(channel.name);
-      });
-      pusher?.disconnect();
+      active = false; configController.abort();
+      realtimeStopRef.current = null;
+      unbindRealtime?.(); pusher?.disconnect();
     };
-  }, [soundEnabled, selectedStoreId, storeSettings.orderAlerts.repeatUntilHandled, storeSettings.orderAlerts.sound]);
+  }, [selectedStoreId]);
 
   const visibleOrders = useMemo(() => (historyMode ? historyOrders : orders)
     .filter((order) => {
@@ -1435,8 +1407,8 @@ export default function StoreOrdersPage() {
                   <span>制作タスク</span>
                   {selectedOrder.productionTasks.map((task) => (
                     <div key={task.id}>
-                      <strong>{task.productionAreaLabel}</strong>
-                      <small>{getProductionTaskLabel(task.status)}</small>
+                      <strong>{task.pickupCode ? <span>#{task.pickupCode} </span> : null}{task.productionAreaLabel}</strong>
+                      <small>{task.handedOffAt ? "お渡し済み" : getProductionTaskLabel(task.status)}</small>
                       <p>{task.itemSummary}</p>
                     </div>
                   ))}
@@ -1459,7 +1431,9 @@ export default function StoreOrdersPage() {
                         : alertAcknowledgingId === selectedOrder.id ? "確認中..." : "確認して消音"}
                     </button>
                   ) : null}
-                  {(nextActions[selectedOrder.status] ?? []).map((action) => (
+                  {selectedOrder.orderSource === "store_pos" && selectedOrder.productionTasks.some(task => Boolean(task.orderItemId)) ? (
+                    <a className="primary-button" href="/store/display/kitchen">料理ごとの受け渡しを確認</a>
+                  ) : (nextActions[selectedOrder.status] ?? []).map((action) => (
                     <button type="button" className="primary-button" key={action.status} onClick={() => updateStatus(selectedOrder.id, action.status)}>
                       {action.label}
                     </button>

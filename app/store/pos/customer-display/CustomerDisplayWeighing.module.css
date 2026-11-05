@@ -1,0 +1,39 @@
+.card { min-height: 0; min-width: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 10px; padding: 14px; border: 1px solid var(--line, #dfe5e2); border-radius: 8px; background: #f5f8f6; }
+.heading { display: grid; min-width: 0; gap: 4px; }
+.heading > span, .values span { font-size: 12px; line-height: 1.35; color: var(--muted, #5e6b66); }
+.heading > strong { font-size: clamp(18px, 2.6vw, 24px); font-weight: 550; line-height: 1.25; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.values { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: 8px; }
+.values > div { min-width: 0; display: grid; gap: 5px; }
+.values strong { font-size: clamp(30px, 4.8vw, 54px); font-weight: 550; font-variant-numeric: tabular-nums; letter-spacing: -.035em; line-height: 1.1; white-space: nowrap; }
+.values small { margin-left: 4px; font-size: .4em; font-weight: 450; letter-spacing: 0; }
+.amount { text-align: right; }
+.amount strong { color: var(--store-primary-text, var(--green, #206e5b)); }
+.details { min-height: 0; max-height: 130px; overflow-y: auto; overscroll-behavior: contain; font-size: 12px; line-height: 1.45; color: var(--muted, #5e6b66); overflow-wrap: anywhere; }
+.details p { margin: 0 0 4px; }
+.formula { display: flex; flex-wrap: wrap; gap: 4px 12px; font-variant-numeric: tabular-nums; }
+.note { margin: 0; font-size: 12px; line-height: 1.3; color: var(--muted, #5e6b66); }
+.withPreview:global(.customer-display-items) { grid-template-rows: minmax(150px, 1fr) auto minmax(44px, .65fr); }
+.withPreview :global(.customer-display-item-list) { overflow-y: auto; overscroll-behavior: contain; grid-auto-rows: max-content; }
+.noItems { align-self: start; margin: 0; font-size: 13px; color: var(--muted, #5e6b66); }
+.page :global(.customer-display-meta), .page :global(.customer-display-settlement) { display: none; }
+@media (orientation: landscape) and (max-height: 500px) {
+  .card { padding: 8px 10px; gap: 5px; }
+  .heading { gap: 2px; }
+  .heading > span, .values span, .details, .note { font-size: 11px; }
+  .heading > strong { font-size: 16px; }
+  .values strong { font-size: clamp(26px, 8dvh, 36px); }
+  .values > div { gap: 2px; }
+  .details { max-height: 70px; }
+  .page .withPreview:global(.customer-display-items) { grid-template-rows: minmax(140px, 1fr) auto minmax(30px, .35fr); gap: 5px; }
+}
+@media (max-width: 600px) and (orientation: portrait) {
+  .page:global(.customer-display-page) { gap: 10px; padding: 12px; }
+  .page :global(.customer-display-topbar) { padding: 10px; min-height: 0; }
+  .page :global(.customer-display-clock) { display: none; }
+  .page :global(.customer-display-status-title h1) { font-size: 16px; }
+  .page :global(.customer-display-layout) { grid-template-rows: minmax(0, 1fr) auto; gap: 10px; }
+  .page .withPreview:global(.customer-display-items) { padding: 10px; gap: 8px; }
+  .page :global(.customer-display-payment) { padding: 10px; gap: 6px; }
+  .page :global(.customer-display-total) { padding: 10px; }
+  .page :global(.customer-display-total strong) { font-size: 32px; }
+}

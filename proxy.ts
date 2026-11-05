@@ -1,83 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canUseFullStoreWorkbench,isRestrictedStorePersonalRole,isRestrictedStoreExecutionPath } from "./lib/store-inventory-policy";
+import { getNavPathsForPermissions, getPermissionsForRole, isPermittedOsPagePath } from "./lib/role-permissions";
+import { canApproveTerminalLoginRole } from "./lib/store-terminal-login-policy";
 
 const authCookieName = "foundr1_os_session";
-const defaultRoleNavPaths: Record<string, string[]> = {
-  owner: [
-    "/os",
-    "/store",
-    "/staff",
-    "/os/orders",
-    "/os/procurement",
-    "/os/history",
-    "/os/vouchers",
-    "/os/field-notes",
-    "/os/reports",
-    "/os/feedback",
-    "/os/analytics",
-    "/os/analytics/sales",
-    "/os/sales",
-    "/os/analytics/labor",
-    "/os/analytics/cost",
-    "/os/analytics/expenses",
-    "/os/analytics/profit",
-    "/os/timecard",
-    "/os/timecard/schedule",
-    "/os/timecard/workload",
-    "/os/timecard/payroll",
-    "/os/staff",
-    "/os/products",
-    "/os/stores",
-    "/os/suppliers",
-    "/os/product-comparisons",
-    "/os/menus",
-    "/os/brand-sites",
-    "/os/loyalty",
-    "/os/procedures",
-    "/os/sns",
-    "/os/pos",
-    "/os/settings",
-    "/os/system-usage"
-  ],
-  manager: [
-    "/os",
-    "/store",
-    "/staff",
-    "/os/orders",
-    "/os/procurement",
-    "/os/history",
-    "/os/vouchers",
-    "/os/field-notes",
-    "/os/reports",
-    "/os/feedback",
-    "/os/analytics",
-    "/os/analytics/sales",
-    "/os/sales",
-    "/os/analytics/labor",
-    "/os/analytics/cost",
-    "/os/analytics/expenses",
-    "/os/analytics/profit",
-    "/os/timecard",
-    "/os/timecard/schedule",
-    "/os/timecard/workload",
-    "/os/timecard/payroll",
-    "/os/staff",
-    "/os/products",
-    "/os/stores",
-    "/os/suppliers",
-    "/os/product-comparisons",
-    "/os/menus",
-    "/os/brand-sites",
-    "/os/loyalty",
-    "/os/procedures",
-    "/os/sns",
-    "/os/pos"
-  ],
-  store_owner: ["/os", "/staff", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
-  store_manager: ["/os", "/staff", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
-  staff: ["/staff", "/os", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback"],
-  store_terminal: ["/os", "/store"]
-};
 const storeTerminalAllowedPaths = [
   "/store",
   "/store/orders",
@@ -87,6 +13,7 @@ const storeTerminalAllowedPaths = [
   "/store/display/pickup",
   "/store/menu",
   "/store/inventory",
+  "/store/replenishment",
   "/store/receiving",
   "/store/timecard",
   "/store/pos",
@@ -145,12 +72,9 @@ async function readValidSession(token?: string): Promise<ProxySession | null> {
   }
 }
 
-function getPermittedPagePaths(session: ProxySession) {
-  if (Array.isArray(session.permittedNavPaths) && session.permittedNavPaths.length > 0) {
-    return new Set(session.permittedNavPaths.map(String));
-  }
-
-  return new Set(defaultRoleNavPaths[session.role ?? ""] ?? ["/os"]);
+async function getPermittedPagePaths(session: ProxySession) {
+  // Signed navigation snapshots become stale when a group's permissions change.
+  return new Set(getNavPathsForPermissions(await getPermissionsForRole(session.role ?? "", { fresh: true })));
 }
 
 function isPermittedPagePath(pathname: string, permittedPaths: Set<string>) {
@@ -158,7 +82,9 @@ function isPermittedPagePath(pathname: string, permittedPaths: Set<string>) {
   if (pathname === "/os") return true;
   // Existing sessions already carry the parent module permission before SNS rollout.
   if ((pathname === "/os/sns" || pathname.startsWith("/os/sns/")) && permittedPaths.has("/os/procedures")) return true;
-  return Array.from(permittedPaths).some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  // Existing signed sessions have the same module's original paths until renewal.
+  if (pathname === "/os/replenishment" && permittedPaths.has("/os/orders")) return true;
+  return isPermittedOsPagePath(pathname, permittedPaths);
 }
 
 function getFallbackPagePath(permittedPaths: Set<string>) {
@@ -198,7 +124,10 @@ async function runFoundr1Proxy(request: NextRequest) {
   const session = await readValidSession(request.cookies.get(authCookieName)?.value);
   if (session) {
     if(isStorePath&&isRestrictedStorePersonalRole(session.role??"")) {
-      if(!isRestrictedStoreExecutionPath(pathname)) {
+      // The appearance page/API check the live permission and scope. This exact
+      // exception does not open the rest of the Store workbench to managers.
+      const isStoreAppearance = pathname === "/store/settings/appearance" && ["store_owner", "store_manager"].includes(session.role ?? "");
+      if(!isRestrictedStoreExecutionPath(pathname) && !isStoreAppearance) {
         const url=request.nextUrl.clone();url.pathname="/store/inventory";url.search="";
         return NextResponse.redirect(url);
       }
@@ -227,13 +156,23 @@ async function runFoundr1Proxy(request: NextRequest) {
       }
     }
 
-    const permittedPaths = getPermittedPagePaths(session);
-
-    if ((isOsPath || isStaffPath) && !isPermittedPagePath(pathname, permittedPaths)) {
-      const url = request.nextUrl.clone();
-      url.pathname = getFallbackPagePath(permittedPaths);
-      url.search = "";
-      return NextResponse.redirect(url);
+    if (isOsPath || isStaffPath) {
+      // This QR approval page is an account action, not a navigation module.
+      // The API revalidates the active session, role and assigned store/account.
+      if (pathname === "/os/store-terminal-login" && canApproveTerminalLoginRole(session.role ?? "")) {
+        return NextResponse.next();
+      }
+      try {
+        const permittedPaths = await getPermittedPagePaths(session);
+        if (!isPermittedPagePath(pathname, permittedPaths)) {
+          const url = request.nextUrl.clone();
+          url.pathname = getFallbackPagePath(permittedPaths);
+          url.search = "";
+          return NextResponse.redirect(url);
+        }
+      } catch {
+        return new NextResponse("権限を確認できません。時間をおいて再読み込みしてください。", { status: 503 });
+      }
     }
 
     return NextResponse.next();

@@ -1,12 +1,17 @@
 "use client";
 
-import { BellRing, BookOpen, ChefHat, ChevronDown, Clock3, ClipboardList, Home, Lightbulb, Menu, MessageSquareWarning, Monitor, PackageCheck, PackageSearch, Settings, ShoppingCart, Store, Tags, Users } from "lucide-react";
+import { ChevronDown, Clock3, FlaskConical, Menu, Palette, Store } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
 import { useCloseOnOutside } from "../../os/components/useCloseOnOutside";
 import { defaultStoreModuleSettings, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
 import { getStoredStoreSelection, setStoredStoreSelection } from "./store-selection";
+import { getScopedInventorySyncNotificationStore } from "../../../lib/inventory-sync-alert-client";
 import { rememberStoreBusinessHours, storeOrderAlertEventName } from "../../../lib/store-polling-client";
+import { useStoreTheme } from "./StoreThemeProvider";
+import { canUseFullStoreWorkbench } from "../../../lib/store-inventory-policy";
+
+import { getVisibleStoreNavigation, storeNavigationGroups, type StoreNavigationItem } from "./store-navigation";
 
 type StoreContextResponse = {
   access?: {
@@ -17,29 +22,38 @@ type StoreContextResponse = {
   selectedStoreId?: string;
 };
 
-const tabs = [
-  { label: "ホーム", href: "/store", icon: Home },
-  { label: "客席", href: "/store/seats", icon: Users },
-  { label: "注文", href: "/store/orders", icon: ClipboardList },
-  { label: "注文通知", href: "/store/notifications", icon: BellRing },
-  { label: "販売状態", href: "/store/menu", icon: Tags },
-  { label: "店舗設備", href: "/store/devices", icon: Lightbulb },
-  { label: "POS", href: "/store/pos", icon: ShoppingCart },
-  { label: "在庫確認", href: "/store/inventory", icon: PackageSearch },
-  { label: "納品・入庫", href: "/store/receiving", icon: PackageCheck },
-  { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
-  { label: "SNS素材作成", href: "/store/sns", icon: Tags },
-  { label: "手順書", href: "/store/procedures", icon: BookOpen },
-  { label: "問題報告", href: "/store/feedback", icon: MessageSquareWarning },
-  { label: "OS", href: "/os", icon: Settings }
-];
+type StoreNavigationAction = { label: string; onSelect: () => void };
 
-const displayTabs = [
-  { label: "キッチン", href: "/store/display/kitchen", icon: ChefHat },
-  { label: "受取表示", href: "/store/display/pickup", icon: Monitor },
-  { label: "Pick Up表示", href: "/store/display/courier", icon: Monitor },
-  { label: "POS客席表示", href: "/store/pos/customer-display", icon: Monitor }
-];
+function StoreNavigationGroup({ group, items, activeHref, alert, clearOrderAlert, action }: {
+  group: typeof storeNavigationGroups[number]; items: StoreNavigationItem[];
+  activeHref: string; alert: boolean; clearOrderAlert: () => void; action?: StoreNavigationAction;
+}) {
+  const ref = useRef<HTMLDetailsElement | null>(null);
+  const close = () => { if (ref.current) ref.current.open = false; };
+  useCloseOnOutside(ref, close);
+  const Icon = group.icon;
+  const isActive = items.some(item => item.href === activeHref || (item.href !== "/store" && activeHref.startsWith(`${item.href}/`)));
+  return <details className="store-group-menu" ref={ref}>
+    <summary className={`${isActive ? "is-active" : ""} ${alert ? "has-order-alert" : ""}`}>
+      <Icon size={17} /><span>{group.label}</span><ChevronDown size={15} />
+      {alert ? <span className="store-order-alert-dot" aria-label="新規注文あり" /> : null}
+    </summary>
+    <div className="store-group-list">
+      {items.map(item => {
+        const ItemIcon = item.icon;
+        return <a href={item.href} key={item.href} aria-current={item.href === activeHref ? "page" : undefined}
+          className={item.href === activeHref ? "is-active" : ""}
+          onClick={() => { if (item.href === "/store/orders") clearOrderAlert(); close(); }}>
+          <ItemIcon size={17} /><span>{item.label}</span>
+          {item.href === "/store/orders" && alert ? <span className="store-order-alert-dot" aria-label="新規注文あり" /> : null}
+        </a>;
+      })}
+      {action ? <button type="button" className="store-group-action" data-pos-debug-entry onClick={() => { close(); action.onSelect(); }}>
+        <FlaskConical size={17} aria-hidden="true" /><span>{action.label}</span>
+      </button> : null}
+    </div>
+  </details>;
+}
 
 function formatStoreClock(date: Date) {
   const dateText = new Intl.DateTimeFormat("ja-JP", {
@@ -58,9 +72,12 @@ function formatStoreClock(date: Date) {
   return { dateText, timeText };
 }
 
-export function StoreNavTabs({ active, storeId }: { storeId?: string; active: "home" | "seats" | "orders" | "notifications" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "receiving" | "inventory" | "feedback" | "devices" | "sns" }) {
+export function StoreNavTabs({ active, storeId, posDebugAction }: { storeId?: string; posDebugAction?: StoreNavigationAction; active: "home" | "seats" | "orders" | "notifications" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "receiving" | "inventory" | "replenishment" | "feedback" | "devices" | "sns" | "appearance" }) {
+  const { context: themeContext } = useStoreTheme();
   const activeHref = active === "home"
     ? "/store"
+    : active === "appearance"
+      ? "/store/settings/appearance"
     : active === "kitchen"
       ? "/store/display/kitchen"
       : active === "pickup-display"
@@ -74,22 +91,19 @@ export function StoreNavTabs({ active, storeId }: { storeId?: string; active: "h
   const [canUseInventory, setCanUseInventory] = useState(false);
   const [storeContext, setStoreContext] = useState<StoreContextResponse | null>(null);
   const [hasPendingOrderAlert, setHasPendingOrderAlert] = useState(false);
-  const [displayMenuOpen, setDisplayMenuOpen] = useState(false);
-  const [mobileDisplayMenuOpen, setMobileDisplayMenuOpen] = useState(false);
   const storeMenuRef = useRef<HTMLDetailsElement | null>(null);
-  const displayMenuRef = useRef<HTMLDivElement | null>(null);
-  const mobileDisplayMenuRef = useRef<HTMLDivElement | null>(null);
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
   const [snsAvailable, setSnsAvailable] = useState(false);
-  useEffect(() => { let alive = true; fetch("/api/sns").then(r => r.ok ? r.json() : null).then(d => { if (alive) setSnsAvailable(Boolean(d?.stores?.length)); }).catch(() => {}); return () => { alive = false; }; }, [storeContext?.selectedStoreId]);
-  const authorizedTabs = tabs.filter(tab => (tab.href !== "/store/sns" || snsAvailable) && (!["/store/inventory", "/store/receiving"].includes(tab.href) || canUseInventory));
-  const restricted = employeeRole === null || ["staff", "store_owner", "store_manager"].includes(employeeRole);
-  const visibleTabs = restricted
-    ? [...authorizedTabs.filter(tab => ["/store/inventory", "/store/receiving"].includes(tab.href)), ...(employeeRole === "staff" ? [{ label: "個人アプリ", href: "/staff", icon: Users }] : employeeRole ? [authorizedTabs.find(tab => tab.href === "/os")!] : [])]
-    : employeeRole === "store_terminal" ? authorizedTabs.filter(tab => tab.href !== "/os") : authorizedTabs;
-  const visibleDisplayTabs = restricted ? [] : displayTabs;
-  const isDisplayActive = visibleDisplayTabs.some((tab) => tab.href === activeHref);
+  useEffect(() => {
+    let alive = true;
+    if (!canUseFullStoreWorkbench(employeeRole ?? "")) return;
+    void fetch("/api/sns").then(response => response.ok ? response.json() : null)
+      .then(body => { if (alive) setSnsAvailable(Boolean(body?.stores?.length)); })
+      .catch(() => { if (alive) setSnsAvailable(false); });
+    return () => { alive = false; };
+  }, [employeeRole, storeContext?.selectedStoreId]);
+  const visibleItems = getVisibleStoreNavigation(employeeRole, canUseInventory).filter(item => item.href !== "/store/sns" || snsAvailable);
   const storeOptions = storeContext?.access?.stores ?? [];
   const selectedStoreId = storeContext?.selectedStoreId ?? "";
   const selectedStoreName = storeOptions.find((store) => store.id === selectedStoreId)?.name ?? "";
@@ -97,7 +111,7 @@ export function StoreNavTabs({ active, storeId }: { storeId?: string; active: "h
     storeOptions.length > 1 &&
     storeContext?.access &&
     (storeContext.access.canUseAllStoreView || !["staff", "store_terminal"].includes(storeContext.access.role) ||
-      (canUseInventory && ["inventory", "receiving"].includes(active) && storeContext.access.role === "staff"))
+      (canUseInventory && ["inventory", "replenishment", "receiving"].includes(active) && storeContext.access.role === "staff"))
   );
 
   const clearOrderAlert = () => {
@@ -114,13 +128,6 @@ export function StoreNavTabs({ active, storeId }: { storeId?: string; active: "h
   useCloseOnOutside(storeMenuRef, () => {
     if (storeMenuRef.current) storeMenuRef.current.open = false;
   });
-  useCloseOnOutside(displayMenuRef, () => {
-    setDisplayMenuOpen(false);
-  }, displayMenuOpen);
-  useCloseOnOutside(mobileDisplayMenuRef, () => {
-    setMobileDisplayMenuOpen(false);
-  }, mobileDisplayMenuOpen);
-
   useEffect(() => {
     setNow(new Date());
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -130,17 +137,26 @@ export function StoreNavTabs({ active, storeId }: { storeId?: string; active: "h
   useEffect(() => {
     let isMounted = true;
     async function loadStoreContext() {
-      const storedStoreId = storeId || getStoredStoreSelection();
+      const initialStoreId = getStoredStoreSelection();
+      const notificationStoreId = await getScopedInventorySyncNotificationStore();
+      if (!isMounted) return;
+      const currentStoreId = getStoredStoreSelection();
+      const scopedNotificationStoreId = notificationStoreId && (!currentStoreId || currentStoreId === initialStoreId || currentStoreId === notificationStoreId)
+        ? notificationStoreId : "";
+      const storedStoreId = storeId || scopedNotificationStoreId || currentStoreId;
+      if (scopedNotificationStoreId && !storeId && scopedNotificationStoreId !== currentStoreId) setStoredStoreSelection(scopedNotificationStoreId);
       const params = storedStoreId ? `?storeId=${encodeURIComponent(storedStoreId)}` : "";
       const response = await fetch(`/api/store/context${params}`, { cache: "no-store" });
       if (!response.ok) return;
       const body = await response.json() as StoreContextResponse;
-      if (!isMounted) return;
+      if (!isMounted || (storedStoreId && getStoredStoreSelection() !== storedStoreId)) return;
       setStoreContext(body);
       rememberStoreBusinessHours(body.access?.stores);
       if (body.selectedStoreId) setStoredStoreSelection(body.selectedStoreId);
     }
-    void loadStoreContext();
+    // Offline POS recovery owns its saved menu/register context. Navigation reads
+    // may fail without widening roles or replacing that independently validated state.
+    void loadStoreContext().catch(() => undefined);
     return () => {
       isMounted = false;
     };
@@ -157,7 +173,7 @@ export function StoreNavTabs({ active, storeId }: { storeId?: string; active: "h
         setCanUseInventory(Boolean(body.employee?.permissions?.includes("store.inventory") || body.employee?.permittedNavPaths?.includes("/store/inventory")));
       }
     }
-    void loadCurrentEmployee();
+    void loadCurrentEmployee().catch(() => undefined);
     return () => {
       isMounted = false;
     };
@@ -179,7 +195,7 @@ export function StoreNavTabs({ active, storeId }: { storeId?: string; active: "h
       const body = await response.json() as { settings?: StoreModuleSettings };
       if (isMounted && body.settings) setSettings(body.settings);
     }
-    void loadSettings();
+    void loadSettings().catch(() => undefined);
     return () => {
       isMounted = false;
     };
@@ -197,130 +213,45 @@ export function StoreNavTabs({ active, storeId }: { storeId?: string; active: "h
   function handleStoreSwitch(storeId: string) {
     if (!storeId || storeId === selectedStoreId) return;
     setStoredStoreSelection(storeId);
-    if (active === "inventory" || active === "receiving") { const url = new URL(window.location.href); url.searchParams.set("storeId", storeId); window.location.assign(url.toString()); } else window.location.reload();
+    if (active === "inventory" || active === "replenishment" || active === "receiving" || active === "appearance") { const url = new URL(window.location.href); url.searchParams.set("storeId", storeId); window.location.assign(url.toString()); } else window.location.reload();
   }
+
+  const navigation = <>
+    {visibleItems.filter(item => item.group === "home" || item.group === "pos").map(item => {
+      const Icon = item.icon;
+      return <a href={item.href} key={item.href} className={item.href === activeHref ? "is-active" : ""} aria-current={item.href === activeHref ? "page" : undefined}><Icon size={17} /><span>{item.label}</span></a>;
+    })}
+    {storeNavigationGroups.map(group => {
+      const items = visibleItems.filter(item => item.group === group.id);
+      return items.length ? <StoreNavigationGroup key={group.id} group={group} items={items} activeHref={activeHref}
+        alert={group.id === "orders" && shouldFlashOrdersTab} clearOrderAlert={clearOrderAlert}
+        action={active === "pos" && group.id === "operations" ? posDebugAction && { ...posDebugAction, onSelect: () => { if (storeMenuRef.current) storeMenuRef.current.open = false; posDebugAction.onSelect(); } } : undefined} /> : null;
+    })}
+    {themeContext?.canManageTheme ? <a href="/store/settings/appearance" className={active === "appearance" ? "is-active" : ""} aria-current={active === "appearance" ? "page" : undefined}><Palette size={17} /><span>表示設定</span></a> : null}
+    {employeeRole === "staff" ? <a href="/staff">個人アプリ</a> : null}
+  </>;
 
   return (
     <div className="store-nav-cluster">
-      {settings.header.showClock ? (
-        <div className="store-live-clock" aria-label="現在時刻">
-          <Clock3 size={17} />
-          <span>{clock.dateText}</span>
-          <strong>{clock.timeText}</strong>
-        </div>
-      ) : null}
+      {settings.header.showClock ? <div className="store-live-clock" aria-label="現在時刻"><Clock3 size={17} /><span>{clock.dateText}</span><strong>{clock.timeText}</strong></div> : null}
       <div className={`store-user-tools is-user-${settings.header.userDisplay}`}>
-        <UserBadge showNotifications={settings.header.showNotifications} showLanguagePicker={settings.header.showLanguagePicker} showStorePicker={false} logoutHref="/store/logout" />
+        {canSwitchStore ? <label className="store-nav-store-switch" title={selectedStoreName ? `現在: ${selectedStoreName}` : "店舗切替"}>
+          <Store size={17} /><span>店舗切替</span>
+          <select value={selectedStoreId} onChange={event => handleStoreSwitch(event.target.value)} aria-label="店舗切替">
+            {storeOptions.map(store => <option value={store.id} key={store.id}>{store.name}</option>)}
+          </select>
+        </label> : null}
+        <UserBadge showNotifications={settings.header.showNotifications} showLanguagePicker={settings.header.showLanguagePicker} logoutHref="/store/logout"
+          showOsLink={Boolean(employeeRole && employeeRole !== "staff" && employeeRole !== "store_terminal")} />
       </div>
-      <nav className="store-nav-tabs" aria-label="店舗ワークベンチ">
-        {visibleTabs.map((tab) => {
-          const Icon = tab.icon;
-          const isOrdersTab = tab.href === "/store/orders";
-          const className = [
-            tab.href === activeHref ? "is-active" : "",
-            isOrdersTab && shouldFlashOrdersTab ? "has-order-alert" : ""
-          ].filter(Boolean).join(" ");
-          return (
-            <a className={className} href={tab.href} key={tab.href} onClick={isOrdersTab ? clearOrderAlert : undefined}>
-              <Icon size={17} />
-              {tab.label}
-              {isOrdersTab && shouldFlashOrdersTab ? <span className="store-order-alert-dot" aria-label="新規注文あり" /> : null}
-            </a>
-          );
-        })}
-        {visibleDisplayTabs.length > 0 ? <div className="store-display-nav-menu" data-open={displayMenuOpen ? "true" : "false"} ref={displayMenuRef}>
-          <button
-            className={isDisplayActive ? "is-active" : ""}
-            type="button"
-            aria-expanded={displayMenuOpen}
-            onClick={() => setDisplayMenuOpen((open) => !open)}
-          >
-            <Monitor size={17} />
-            表示画面
-            <ChevronDown size={15} />
-          </button>
-          {displayMenuOpen ? <div className="store-display-nav-list">
-            {visibleDisplayTabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <a className={tab.href === activeHref ? "is-active" : ""} href={tab.href} key={tab.href} onClick={() => setDisplayMenuOpen(false)}>
-                  <Icon size={16} />
-                  {tab.label}
-                </a>
-              );
-            })}
-          </div> : null}
-        </div> : null}
-        {canSwitchStore ? (
-          <label className="store-nav-store-switch" title={selectedStoreName ? `現在: ${selectedStoreName}` : "店舗切替"}>
-            <Store size={17} />
-            <span>店舗切替</span>
-            <select value={selectedStoreId} onChange={(event) => handleStoreSwitch(event.target.value)} aria-label="店舗切替">
-              {storeOptions.map((store) => (
-                <option value={store.id} key={store.id}>{store.name}</option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-      </nav>
+      <nav className="store-nav-tabs" aria-label="店舗ワークベンチ">{navigation}</nav>
       <details className="mobile-nav-menu store-nav-menu" ref={storeMenuRef}>
         <summary aria-label="メニュー">
-          <span className="hamburger-button" aria-hidden="true">
-            <Menu size={18} />
-          </span>
+          <span className="hamburger-button" aria-hidden="true"><Menu size={18} /></span>
           <span className="mobile-nav-menu-label">メニュー</span>
+          {shouldFlashOrdersTab ? <span className="store-order-alert-dot" aria-label="新規注文あり" /> : null}
         </summary>
-        <nav className="mobile-nav-list store-nav-list" aria-label="店舗ワークベンチメニュー">
-          {visibleTabs.map((tab) => {
-            const Icon = tab.icon;
-            const isOrdersTab = tab.href === "/store/orders";
-            const className = [
-              tab.href === activeHref ? "is-active" : "",
-              isOrdersTab && shouldFlashOrdersTab ? "has-order-alert" : ""
-            ].filter(Boolean).join(" ");
-            return (
-              <a className={className} href={tab.href} key={tab.href} onClick={isOrdersTab ? clearOrderAlert : undefined}>
-                <Icon size={17} />
-                <span>{tab.label}</span>
-                {isOrdersTab && shouldFlashOrdersTab ? <span className="store-order-alert-dot" aria-label="新規注文あり" /> : null}
-              </a>
-            );
-          })}
-          {visibleDisplayTabs.length > 0 ? <div className="store-display-nav-menu is-mobile" data-open={mobileDisplayMenuOpen ? "true" : "false"} ref={mobileDisplayMenuRef}>
-            <button
-              className={isDisplayActive ? "is-active" : ""}
-              type="button"
-              aria-expanded={mobileDisplayMenuOpen}
-              onClick={() => setMobileDisplayMenuOpen((open) => !open)}
-            >
-              <Monitor size={17} />
-              <span>表示画面</span>
-              <ChevronDown size={15} />
-            </button>
-            {mobileDisplayMenuOpen ? <div className="store-display-nav-list">
-              {visibleDisplayTabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <a className={tab.href === activeHref ? "is-active" : ""} href={tab.href} key={tab.href} onClick={() => setMobileDisplayMenuOpen(false)}>
-                    <Icon size={16} />
-                    <span>{tab.label}</span>
-                  </a>
-                );
-              })}
-            </div> : null}
-          </div> : null}
-          {canSwitchStore ? (
-            <label className="store-nav-store-switch is-mobile" title={selectedStoreName ? `現在: ${selectedStoreName}` : "店舗切替"}>
-              <Store size={17} />
-              <span>店舗切替</span>
-              <select value={selectedStoreId} onChange={(event) => handleStoreSwitch(event.target.value)} aria-label="店舗切替">
-                {storeOptions.map((store) => (
-                  <option value={store.id} key={store.id}>{store.name}</option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-        </nav>
+        <nav className="mobile-nav-list store-nav-list" aria-label="店舗ワークベンチメニュー">{navigation}</nav>
       </details>
     </div>
   );

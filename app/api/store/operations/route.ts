@@ -1,5 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { requireOsSession } from "../../../../lib/api-auth";
+import { canUseFullStoreWorkbench } from "../../../../lib/store-inventory-policy";
 import { sql } from "../../../../lib/db";
 import { publishPublicMenuUpdatedEvent } from "../../../../lib/order-realtime";
 import { getCurrentBusinessDayClosing, getStoreReceptionState } from "../../../../lib/store-business-hours";
@@ -143,6 +144,7 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   const session = await requireOsSession();
   if (!session) return NextResponse.json({ error: "権限がありません。" }, { status: 403 });
+  if (!canUseFullStoreWorkbench(session.role)) return NextResponse.json({ error: "権限がありません。" }, { status: 403 });
 
   const access = await getStoreOrderAccess(session);
   const body = await request.json().catch(() => null) as StoreOperationPatch | null;

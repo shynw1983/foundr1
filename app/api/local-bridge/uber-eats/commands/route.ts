@@ -1,4 +1,7 @@
 import { sql } from "../../../../../lib/db";
+import { after } from "next/server";
+import { notifyBridgeMenuSync } from "../../../../../lib/bridge-menu-sync-notifications";
+import { notifyInventorySyncAttention } from "../../../../../lib/inventory-sync-notifications";
 import { reconcileInventoryCommandsSql } from "../../../../../lib/inventory-command-supersession";
 import { applyUberAvailabilitySync } from "../../../../../lib/inventory-manual-sync";
 import { menuSyncIssue } from "../../../../../lib/menu-sync-status";
@@ -6,6 +9,7 @@ import { findRejectedMenuNameTargets } from "../../../../../lib/menu-name-adapta
 import { mergePlatformSnapshotEntries } from "../../../../../lib/menu-platform-snapshot-merge";
 import { ingestUberMenuSource } from "../../../../../lib/uber-menu-source-sync";
 import { publishPublicMenuUpdatedEvent } from "../../../../../lib/order-realtime";
+import { lockBridgeExecutionRoute } from "../../../../../lib/bridge-execution-route";
 import { authorizeLocalBridge } from "../../../../../lib/local-bridge-auth";
 import { applyCompetitorBridgeSnapshot } from "../../../../../lib/competitor-bridge-snapshot";
 import {
@@ -34,14 +38,19 @@ async function authorize(request: Request) {
   if (!authorization.authorized) {
     authorization = await authorizeLocalBridge(request, storeId, "desktop");
   }
+  if (!authorization.authorized) {
+    authorization = await authorizeLocalBridge(request, storeId, "desktop_vps");
+  }
+  const isVps = authorization.devicePlatform === "desktop_vps";
   const platformMode = cleanText(params.get("platformMode"), 20);
-  const isDesktop = authorization.devicePlatform === "desktop";
+  const isDesktop = authorization.devicePlatform === "desktop" || isVps;
   return {
     storeId,
     isDesktop,
-    supportsUber: isDesktop || ["", "uber_eats", "dual", "all"].includes(platformMode),
+    isVps,
+    supportsUber: !isVps && (isDesktop || ["", "uber_eats", "dual", "all"].includes(platformMode)),
     supportsRocket: isDesktop || ["rocket_now", "dual", "all"].includes(platformMode),
-    supportsDemae: isDesktop,
+    supportsDemae: isDesktop && !isVps,
     ...authorization
   };
 }
@@ -294,106 +303,140 @@ export async function GET(request: Request) {
     `;
   }
 
-  // Inventory synchronization belongs exclusively to the desktop bridge. The
-  // tablet bridges remain dedicated to order operations so inventory changes
-  // can never navigate an order-taking tablet away from its operational page.
+  if (!authorization.isVps) {
+    await sql`update local_bridge_commands
+      set status='failed', last_error='bridge_probe_expired', completed_at=now(), updated_at=now()
+      where store_id::text=${authorization.storeId} and command_type='bridge_read_probe'
+        and ((status='pending' and created_at<now()-interval '5 minutes')
+          or (status='processing' and claim_expires_at<now()))`;
 
-  await sql`
-    update local_bridge_commands
-    set
-      status = 'failed',
-      claimed_by_device_id = null,
-      claimed_at = null,
-      claim_expires_at = null,
-      completed_at = coalesce(completed_at, now()),
-      last_error = 'Bridge command expired before execution.',
-      updated_at = now()
-    where store_id::text = ${authorization.storeId}
-      and (
-        (platform = 'uber_eats' and ${authorization.supportsUber})
-        or (platform = 'rocket_now' and ${authorization.supportsRocket})
-        or (platform = 'demae_can' and ${authorization.supportsDemae})
-      )
-      and (
-        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
-        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
-      )
-      and status in ('pending', 'processing')
-      -- A validated manual menu retry reuses its receipt-bearing command ID.
-      -- Start its bounded execution window again without changing created_at
-      -- (which is also used for revision ordering and history).
-      and greatest(created_at,case when payload->>'authoritativePublication'='true'
-        then (payload->'manualRetryHistory'->-1->>'at')::timestamptz
-        else null end) < now() - interval '2 hours'
-  `;
+    await sql`update local_bridge_commands set status='failed',last_error=case when command_type='reset_platform_connection' then 'connection_recovery_expired' else 'menu_sync_recovery_expired' end,completed_at=now(),updated_at=now()
+      where store_id::text=${authorization.storeId} and command_type in ('inspect_menu_sync','repair_menu_sync','reset_platform_connection')
+        and ((status='pending' and created_at<now()-interval '5 minutes') or (status='processing' and claim_expires_at<now()))`;
 
-  await sql`
-    update local_bridge_commands
-    set
-      status = case when (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3) or attempts >= 5 then 'failed' else 'pending' end,
-      available_at = case when (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3) or attempts >= 5 then available_at else now() end,
-      claimed_by_device_id = null,
-      claimed_at = null,
-      claim_expires_at = null,
-      last_error = case
-        when (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3) or attempts >= 5 then coalesce(nullif(last_error, ''), 'Bridge command timed out.')
-        else last_error
-      end,
-      updated_at = now()
-    where store_id::text = ${authorization.storeId}
-      and (
-        (platform = 'uber_eats' and ${authorization.supportsUber})
-        or (platform = 'rocket_now' and ${authorization.supportsRocket})
-        or (platform = 'demae_can' and ${authorization.supportsDemae})
-      )
-      and (
-        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
-        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
-      )
-      and status = 'processing'
-      and claim_expires_at < now()
-  `;
+    // Inventory synchronization belongs exclusively to the desktop bridge. The
+    // tablet bridges remain dedicated to order operations so inventory changes
+    // can never navigate an order-taking tablet away from its operational page.
 
-  await sql`
-    update menu_change_sync_tasks tasks
-    set
-      status = case commands.status when 'pending' then case when commands.attempts > 0 then 'retrying' else 'queued' end when 'processing' then 'processing' when 'failed' then 'failed' else tasks.status end,
-      phase = case commands.status when 'pending' then case when commands.attempts > 0 then 'retrying' else 'queued' end when 'processing' then 'processing' when 'failed' then 'failed' else tasks.phase end,
-      attempts = commands.attempts,
-      error_detail = commands.last_error,
-      completed_at = case when commands.status = 'failed' then coalesce(tasks.completed_at, now()) else tasks.completed_at end,
-      updated_at = now()
-    from local_bridge_commands commands
-    where tasks.command_id = commands.id
-      and commands.store_id::text = ${authorization.storeId}
-      and commands.command_type in ('publish_menu_changes', 'capture_menu_snapshot')
-      and tasks.status in ('queued', 'pending', 'processing', 'retrying')
-      and commands.status in ('pending', 'processing', 'failed')
-  `;
-  await reconcileMenuPublishBatches(authorization.storeId);
-  // A source-owned menu must never be overwritten by an old OS-led batch,
-  // including a retry queued before authority mode was enabled.
-  await sql`update local_bridge_commands c set status='failed',last_error='uber_authority_superseded_publication',completed_at=now(),updated_at=now() from menu_uber_sources s where c.store_id=s.store_id and c.store_id::text=${authorization.storeId} and s.enabled=true and c.payload->>'brandId'=s.brand_id::text and c.command_type='publish_menu_changes' and c.status='pending' and (c.payload->>'authoritativePublication' is distinct from 'true' or c.payload->>'revision' is distinct from s.revision::text)`;
+    const expiredMenuCommands = await sql`
+      update local_bridge_commands
+      set
+        status = 'failed',
+        claimed_by_device_id = null,
+        claimed_at = null,
+        claim_expires_at = null,
+        completed_at = coalesce(completed_at, now()),
+        last_error = 'Bridge command expired before execution.',
+        updated_at = now()
+      where store_id::text = ${authorization.storeId}
+        and (
+          (platform = 'uber_eats' and ${authorization.supportsUber})
+          or (platform = 'rocket_now' and ${authorization.supportsRocket})
+          or (platform = 'demae_can' and ${authorization.supportsDemae})
+        )
+        and (
+          (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot', 'inspect_menu_sync', 'repair_menu_sync', 'reset_platform_connection', 'bridge_read_probe'))
+          or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot', 'inspect_menu_sync', 'repair_menu_sync', 'reset_platform_connection', 'bridge_read_probe'))
+        )
+        and status in ('pending', 'processing')
+        -- Only server-validated manual retries renew the bounded execution
+        -- window. Inventory's locked retry writes manualRetryAt; available_at,
+        -- updated_at and heartbeats never renew it. Keep original created_at
+        -- for exact-target intent ordering and business-day/history membership.
+        -- The same epoch guards ACK selection and progress lease renewal below.
+        and greatest(created_at,case when payload->>'authoritativePublication'='true'
+          then (payload->'manualRetryHistory'->-1->>'at')::timestamptz
+          else null end,case when command_type='set_inventory_availability'
+            and jsonb_typeof(payload->'manualRetryAt')='string'
+            and payload->>'manualRetryAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,6})?(Z|[+-][0-9]{2}:[0-9]{2})$'
+            and pg_input_is_valid(payload->>'manualRetryAt','timestamp with time zone')
+          then case when (payload->>'manualRetryAt')::timestamptz between created_at and now()
+            then (payload->>'manualRetryAt')::timestamptz else null end
+          else null end) < now() - interval '2 hours'
+      returning id::text, command_type, status
+    `;
 
-  if (authorization.isDesktop) {
-    await sql.query(reconcileInventoryCommandsSql, [authorization.storeId, [
-      ...(authorization.supportsUber ? ["uber_eats"] : []),
-      ...(authorization.supportsRocket ? ["rocket_now"] : []),
-      ...(authorization.supportsDemae ? ["demae_can"] : [])
-    ]]);
+    const timedOutMenuCommands = await sql`
+      update local_bridge_commands
+      set
+        status = case when (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3) or attempts >= 5 then 'failed' else 'pending' end,
+        available_at = case when (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3) or attempts >= 5 then available_at else now() end,
+        claimed_by_device_id = null,
+        claimed_at = null,
+        claim_expires_at = null,
+        last_error = case
+          when (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3) or attempts >= 5 then coalesce(nullif(last_error, ''), 'Bridge command timed out.')
+          else last_error
+        end,
+        updated_at = now()
+      where store_id::text = ${authorization.storeId}
+        and (
+          (platform = 'uber_eats' and ${authorization.supportsUber})
+          or (platform = 'rocket_now' and ${authorization.supportsRocket})
+          or (platform = 'demae_can' and ${authorization.supportsDemae})
+        )
+        and (
+          (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot', 'inspect_menu_sync', 'repair_menu_sync', 'reset_platform_connection', 'bridge_read_probe'))
+          or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot', 'inspect_menu_sync', 'repair_menu_sync', 'reset_platform_connection', 'bridge_read_probe'))
+        )
+        and status = 'processing'
+        and command_type <> 'reset_platform_connection'
+        and claim_expires_at < now()
+      returning id::text, command_type, status
+    `;
+
+    await sql`
+      update menu_change_sync_tasks tasks
+      set
+        status = case commands.status when 'pending' then case when commands.attempts > 0 then 'retrying' else 'queued' end when 'processing' then 'processing' when 'failed' then 'failed' else tasks.status end,
+        phase = case commands.status when 'pending' then case when commands.attempts > 0 then 'retrying' else 'queued' end when 'processing' then 'processing' when 'failed' then 'failed' else tasks.phase end,
+        attempts = commands.attempts,
+        error_detail = commands.last_error,
+        completed_at = case when commands.status = 'failed' then coalesce(tasks.completed_at, now()) else tasks.completed_at end,
+        updated_at = now()
+      from local_bridge_commands commands
+      where tasks.command_id = commands.id
+        and commands.store_id::text = ${authorization.storeId}
+        and commands.command_type in ('publish_menu_changes', 'capture_menu_snapshot')
+        and tasks.status in ('queued', 'pending', 'processing', 'retrying')
+        and commands.status in ('pending', 'processing', 'failed')
+    `;
+    await reconcileMenuPublishBatches(authorization.storeId);
+    const failedMenuCommands = [...expiredMenuCommands, ...timedOutMenuCommands]
+      .filter(command => command.command_type === "publish_menu_changes" && command.status === "failed");
+    if (failedMenuCommands.length) {
+      const storeId = authorization.storeId;
+      after(async () => {
+        for (const command of failedMenuCommands) {
+          await notifyBridgeMenuSync(storeId, String(command.id))
+            .catch(() => console.error("bridge_menu_sync_timeout_notification_failed", command.id));
+        }
+      });
+    }
+    // A source-owned menu must never be overwritten by an old OS-led batch,
+    // including a retry queued before authority mode was enabled.
+    await sql`update local_bridge_commands c set status='failed',last_error='uber_authority_superseded_publication',completed_at=now(),updated_at=now() from menu_uber_sources s where c.store_id=s.store_id and c.store_id::text=${authorization.storeId} and s.enabled=true and c.payload->>'brandId'=s.brand_id::text and c.command_type='publish_menu_changes' and c.status='pending' and (c.payload->>'authoritativePublication' is distinct from 'true' or c.payload->>'revision' is distinct from s.revision::text)`;
+
+    if (authorization.isDesktop) {
+      await sql.query(reconcileInventoryCommandsSql, [authorization.storeId, [
+        ...(authorization.supportsUber ? ["uber_eats"] : []),
+        ...(authorization.supportsRocket ? ["rocket_now"] : []),
+        ...(authorization.supportsDemae ? ["demae_can"] : [])
+      ]]);
+    }
+    await sql`
+      update menu_change_sync_tasks tasks
+      set status = 'failed', phase = 'timeout', error_code = 'bridge_timeout',
+        error_detail = 'Bridge command expired before execution.', is_retryable = true,
+        completed_at = now(), updated_at = now()
+      from local_bridge_commands commands
+      where tasks.command_id = commands.id
+        and commands.store_id::text = ${authorization.storeId}
+        and commands.status = 'failed'
+        and commands.last_error = 'Bridge command expired before execution.'
+        and tasks.status in ('queued', 'processing', 'retrying')
+    `;
   }
-  await sql`
-    update menu_change_sync_tasks tasks
-    set status = 'failed', phase = 'timeout', error_code = 'bridge_timeout',
-      error_detail = 'Bridge command expired before execution.', is_retryable = true,
-      completed_at = now(), updated_at = now()
-    from local_bridge_commands commands
-    where tasks.command_id = commands.id
-      and commands.store_id::text = ${authorization.storeId}
-      and commands.status = 'failed'
-      and commands.last_error = 'Bridge command expired before execution.'
-      and tasks.status in ('queued', 'processing', 'retrying')
-  `;
 
   const existing = await sql`
     select
@@ -410,8 +453,8 @@ export async function GET(request: Request) {
         or (platform = 'demae_can' and ${authorization.supportsDemae})
       )
       and (
-        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
-        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
+        (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot', 'inspect_menu_sync', 'repair_menu_sync', 'reset_platform_connection', 'bridge_read_probe'))
+        or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot', 'inspect_menu_sync', 'repair_menu_sync', 'reset_platform_connection', 'bridge_read_probe'))
       )
       and status = 'processing'
       and (
@@ -419,12 +462,25 @@ export async function GET(request: Request) {
         or (${authorization.deviceId} = '' and claimed_by_device_id is null)
       )
       and claim_expires_at >= now()
+      and (command_type <> 'reset_platform_connection' or (
+        ${authorization.isDesktop} and ${authorization.deviceId || ''} <> ''
+        and payload->>'deviceId'=${authorization.deviceId || ''}
+        and exists(select 1 from local_bridge_devices recovery_device
+          where recovery_device.id::text=${authorization.deviceId || ''}
+            and recovery_device.store_id=local_bridge_commands.store_id
+            and recovery_device.platform='desktop' and recovery_device.is_enabled=true
+            and recovery_device.health_status->>'connectionRecoveryVersion'='1')
+        and (select count(*) from local_bridge_devices sole_device where sole_device.store_id=local_bridge_commands.store_id
+          and sole_device.platform='desktop' and sole_device.is_enabled=true)=1
+        and not exists(select 1 from local_bridge_commands busy where busy.store_id=local_bridge_commands.store_id
+          and busy.id<>local_bridge_commands.id and busy.status='processing')
+      ))
     order by claimed_at
     limit 1
   `;
   if (existing[0]) return Response.json({ command: existing[0] });
 
-  const rows = await sql`
+  const [, rows] = await sql.transaction([lockBridgeExecutionRoute(authorization.storeId), sql`
     update local_bridge_commands
     set
       status = 'processing',
@@ -432,6 +488,7 @@ export async function GET(request: Request) {
       claimed_by_device_id = ${authorization.deviceId || null}::uuid,
       claimed_at = now(),
       claim_expires_at = now() + case
+        when command_type in ('inspect_menu_sync','repair_menu_sync','reset_platform_connection','bridge_read_probe') then interval '5 minutes'
         when command_type in ('audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') then interval '30 minutes'
         when command_type = 'set_inventory_availability'
           and (${authorization.isDesktop} or platform = 'rocket_now') then interval '15 minutes'
@@ -448,13 +505,51 @@ export async function GET(request: Request) {
           or (platform = 'demae_can' and ${authorization.supportsDemae})
         )
         and (
-          (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
-          or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot'))
+          (${authorization.isDesktop} and command_type in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot', 'inspect_menu_sync', 'repair_menu_sync', 'reset_platform_connection', 'bridge_read_probe'))
+          or (${authorization.isDesktop} = false and command_type not in ('set_inventory_availability', 'audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot', 'inspect_menu_sync', 'repair_menu_sync', 'reset_platform_connection', 'bridge_read_probe'))
         )
+        and (not ${authorization.isVps} or command_type = 'bridge_read_probe')
+        and (command_type <> 'bridge_read_probe' or (
+          payload->>'deviceId' = ${authorization.deviceId} and created_at >= now() - interval '5 minutes'
+        ))
+        and (not ${authorization.isDesktop} or coalesce((
+          select route.device_id::text = ${authorization.deviceId}
+          from local_bridge_execution_routes route
+          where route.store_id = local_bridge_commands.store_id and route.platform = local_bridge_commands.platform
+        ), not ${authorization.isVps}))
         and status = 'pending'
+        and (command_type <> 'reset_platform_connection' or (
+        ${authorization.isDesktop} and ${authorization.deviceId || ''} <> ''
+        and payload->>'deviceId'=${authorization.deviceId || ''}
+        and exists(select 1 from local_bridge_devices recovery_device
+          where recovery_device.id::text=${authorization.deviceId || ''}
+            and recovery_device.store_id=local_bridge_commands.store_id
+            and recovery_device.platform='desktop' and recovery_device.is_enabled=true
+            and recovery_device.health_status->>'connectionRecoveryVersion'='1')
+        and (select count(*) from local_bridge_devices sole_device where sole_device.store_id=local_bridge_commands.store_id
+          and sole_device.platform='desktop' and sole_device.is_enabled=true)=1
+        and not exists(select 1 from local_bridge_commands busy where busy.store_id=local_bridge_commands.store_id
+          and busy.id<>local_bridge_commands.id and busy.status='processing')
+      ))
+        and (command_type not in ('inspect_menu_sync','repair_menu_sync') or (
+          payload->'recovery'->>'deviceId'=${authorization.deviceId}
+          and exists(select 1 from local_bridge_devices recovery_device where recovery_device.id::text=${authorization.deviceId}
+            and recovery_device.is_enabled=true and recovery_device.health_status->>'menuSyncRecoveryVersion'='1')
+          and not exists(select 1 from local_bridge_commands busy where busy.store_id=local_bridge_commands.store_id
+            and busy.id<>local_bridge_commands.id and busy.status='processing')
+        ))
         and available_at <= now()
         and attempts < 5
+        and (platform <> 'rocket_now' or command_type not in ('publish_menu_changes','set_inventory_availability','reset_platform_connection')
+          or not exists (
+            select 1 from menu_uber_option_migrations migration
+            join menu_uber_sources source on source.id=migration.source_id
+            where source.store_id=local_bridge_commands.store_id and migration.platform='rocket_now'
+              and migration.state->>'phase'<>'complete' and coalesce(migration.state->>'androidDeviceId','')<>''
+          ))
       order by
+        case when command_type='bridge_read_probe' then 0 else 1 end,
+        case when command_type='reset_platform_connection' then -1 else 0 end,
         case when payload->>'syncSource' = 'scheduled' then 1 else 0 end,
         case platform
           when 'uber_eats' then 0
@@ -472,7 +567,13 @@ export async function GET(request: Request) {
       command_type as type,
       payload,
       attempts
-  `;
+  `]);
+  if (rows[0]?.type === "publish_menu_changes") {
+    const commandId = String(rows[0].id);
+    const storeId = authorization.storeId;
+    after(() => notifyBridgeMenuSync(storeId, commandId, authorization.isVps ? "VPS" : "Mac")
+      .catch(() => console.error("bridge_menu_sync_start_notification_failed", commandId)));
+  }
   return Response.json({ command: rows[0] ?? null }, {
     headers: { "Cache-Control": "no-store" }
   });
@@ -516,16 +617,77 @@ export async function POST(request: Request) {
       and store_id::text = ${authorization.storeId}
       and status = 'processing'
       and claimed_at is not null
+      and (command_type <> 'reset_platform_connection' or (
+        ${authorization.isDesktop} and ${authorization.deviceId || ''} <> ''
+        and payload->>'deviceId'=${authorization.deviceId || ''}
+        and exists(select 1 from local_bridge_devices recovery_device
+          where recovery_device.id::text=${authorization.deviceId || ''}
+            and recovery_device.store_id=local_bridge_commands.store_id
+            and recovery_device.platform='desktop' and recovery_device.is_enabled=true
+            and recovery_device.health_status->>'connectionRecoveryVersion'='1')
+        and (select count(*) from local_bridge_devices sole_device where sole_device.store_id=local_bridge_commands.store_id
+          and sole_device.platform='desktop' and sole_device.is_enabled=true)=1
+        and not exists(select 1 from local_bridge_commands busy where busy.store_id=local_bridge_commands.store_id
+          and busy.id<>local_bridge_commands.id and busy.status='processing')
+      ))
+      and (command_type<>'reset_platform_connection' or (claim_expires_at>=now() and claimed_at>now()-interval '5 minutes'))
       and greatest(created_at,case when payload->>'authoritativePublication'='true'
         then (payload->'manualRetryHistory'->-1->>'at')::timestamptz
+        else null end,case when command_type='set_inventory_availability'
+          and jsonb_typeof(payload->'manualRetryAt')='string'
+          and payload->>'manualRetryAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,6})?(Z|[+-][0-9]{2}:[0-9]{2})$'
+          and pg_input_is_valid(payload->>'manualRetryAt','timestamp with time zone')
+        then case when (payload->>'manualRetryAt')::timestamptz between created_at and now()
+          then (payload->>'manualRetryAt')::timestamptz else null end
         else null end) + interval '2 hours' > now()
       and (
         ${authorization.deviceId} = ''
         or claimed_by_device_id::text = ${authorization.deviceId}
       )
+      and (command_type <> 'bridge_read_probe' or (
+        claimed_by_device_id::text = ${authorization.deviceId} and claim_expires_at >= now()
+      ))
+      and (not ${authorization.isVps} or command_type = 'bridge_read_probe')
     limit 1
   `;
   if (!commandRows[0]) return Response.json({ error: "Command is no longer claimable." }, { status: 409 });
+  if (commandRows[0].commandType === 'bridge_read_probe' && status === 'succeeded'
+    && (!Number.isSafeInteger(result.itemCount) || Number(result.itemCount) < 1
+      || !Number.isSafeInteger(result.optionCount) || Number(result.optionCount) < 0)) {
+    return Response.json({ error: "Invalid bridge probe result." }, { status: 400 });
+  }
+
+  if (String(commandRows[0].commandType)==='reset_platform_connection') {
+    if(!authorization.isDesktop||!authorization.deviceId)return Response.json({error:'Desktop recovery required.'},{status:403});
+    const recovered=result.connectionRecovered===true&&result.inventoryChanged===false;
+    const verifiedAt=typeof result.verifiedAt==='string'?result.verifiedAt:'';
+    const verifiedTime=Date.parse(verifiedAt),claimedTime=Date.parse(String(commandRows[0].claimedAt??'')),now=Date.now();
+    if(status==='succeeded'&&(!recovered||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[.]\d{3}Z$/.test(verifiedAt)
+      ||!Number.isFinite(verifiedTime)||new Date(verifiedTime).toISOString()!==verifiedAt
+      ||!Number.isFinite(claimedTime)||verifiedTime<claimedTime||verifiedTime>now+30000||verifiedTime<now-300000)) {
+      return Response.json({error:'connection_recovery_verification_missing'},{status:409});
+    }
+    // A connection check cannot persist arbitrary native payloads or imply an
+    // inventory write. Only independently reported connection proof is saved.
+    for(const key of Object.keys(result))delete result[key];
+    if(status==='succeeded')Object.assign(result,{connectionRecovered:true,inventoryChanged:false,verifiedAt});
+    else if(status==='processing')result.progress={phase:'recovering_connection'};
+  }
+
+  if (['inspect_menu_sync','repair_menu_sync'].includes(String(commandRows[0].commandType))) {
+    if(!authorization.isDesktop)return Response.json({error:'Desktop recovery required.'},{status:403});
+    const {guardMenuRecoveryCommand,acknowledgeMenuRecovery}=await import('../../../../../lib/menu-sync-recovery-store');
+    try {
+      if(status==='processing') {
+        await guardMenuRecoveryCommand({commandId,storeId:authorization.storeId,deviceId:authorization.deviceId},
+          (result.progress as Record<string,unknown>|undefined)?.recoveryGuard===true);
+        await sql`update local_bridge_commands set result=result||${JSON.stringify(result)}::jsonb,updated_at=now()
+          where id::text=${commandId} and status='processing' and claimed_by_device_id::text=${authorization.deviceId}`;
+        return Response.json({ok:true});
+      }
+      return Response.json(await acknowledgeMenuRecovery({commandId,storeId:authorization.storeId,deviceId:authorization.deviceId,status,result,error}));
+    }catch(failure){return Response.json({error:failure instanceof Error?failure.message:'menu_sync_recovery_failed'},{status:409});}
+  }
 
   if (status === "processing") {
     if ((commandRows[0].payload as Record<string,unknown>)?.authoritativePublication===true) {
@@ -543,7 +705,7 @@ export async function POST(request: Request) {
         -- one. An expired lease can still be renewed while its ownership has
         -- not changed; this keeps already-running legacy workers compatible.
         -- Heartbeats cannot move the absolute execution-window deadline.
-        claim_expires_at = least(
+        claim_expires_at = case when command_type='reset_platform_connection' then claim_expires_at else least(
           now() + case
             when command_type in ('audit_inventory', 'publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') then interval '30 minutes'
             when command_type = 'set_inventory_availability'
@@ -551,9 +713,15 @@ export async function POST(request: Request) {
             else interval '2 minutes'
           end,
           greatest(created_at,case when payload->>'authoritativePublication'='true'
-            then (payload->'manualRetryHistory'->-1->>'at')::timestamptz
-            else null end) + interval '2 hours'
-        ),
+        then (payload->'manualRetryHistory'->-1->>'at')::timestamptz
+        else null end,case when command_type='set_inventory_availability'
+          and jsonb_typeof(payload->'manualRetryAt')='string'
+          and payload->>'manualRetryAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,6})?(Z|[+-][0-9]{2}:[0-9]{2})$'
+          and pg_input_is_valid(payload->>'manualRetryAt','timestamp with time zone')
+        then case when (payload->>'manualRetryAt')::timestamptz between created_at and now()
+          then (payload->>'manualRetryAt')::timestamptz else null end
+        else null end) + interval '2 hours'
+        ) end,
         updated_at = now()
       where id::text = ${commandId}
         and store_id::text = ${authorization.storeId}
@@ -561,8 +729,14 @@ export async function POST(request: Request) {
         and claimed_at = ${String(commandRows[0].claimedAt ?? '')}::timestamptz
         and attempts = ${Number(commandRows[0].attempts)}
         and greatest(created_at,case when payload->>'authoritativePublication'='true'
-          then (payload->'manualRetryHistory'->-1->>'at')::timestamptz
-          else null end) + interval '2 hours' > now()
+        then (payload->'manualRetryHistory'->-1->>'at')::timestamptz
+        else null end,case when command_type='set_inventory_availability'
+          and jsonb_typeof(payload->'manualRetryAt')='string'
+          and payload->>'manualRetryAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,6})?(Z|[+-][0-9]{2}:[0-9]{2})$'
+          and pg_input_is_valid(payload->>'manualRetryAt','timestamp with time zone')
+        then case when (payload->>'manualRetryAt')::timestamptz between created_at and now()
+          then (payload->>'manualRetryAt')::timestamptz else null end
+        else null end) + interval '2 hours' > now()
         and (
           ${authorization.deviceId} = ''
           or claimed_by_device_id::text = ${authorization.deviceId}
@@ -679,7 +853,7 @@ export async function POST(request: Request) {
     update local_bridge_commands
     set
       status = case
-        when ${stopAuthorityRetry} or command_type in ('mark_order_ready', 'set_inventory_availability')
+        when ${stopAuthorityRetry} or command_type in ('mark_order_ready', 'set_inventory_availability', 'reset_platform_connection', 'bridge_read_probe')
           or (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3)
           or attempts >= 5 then 'failed'
         else 'pending'
@@ -692,7 +866,7 @@ export async function POST(request: Request) {
       claimed_at = null,
       claim_expires_at = null,
       completed_at = case
-        when ${stopAuthorityRetry} or command_type in ('mark_order_ready', 'set_inventory_availability')
+        when ${stopAuthorityRetry} or command_type in ('mark_order_ready', 'set_inventory_availability', 'reset_platform_connection', 'bridge_read_probe')
           or (command_type in ('publish_menu_changes', 'capture_menu_snapshot', 'capture_competitor_menu_snapshot') and attempts >= 3)
           or attempts >= 5 then now()
         else null
@@ -787,5 +961,17 @@ export async function POST(request: Request) {
     error,
     result: auditSummary ? { ...result, ...auditSummary } : result
   }).catch(() => undefined);
+  if (String(rows[0].commandType) === "publish_menu_changes" && rows[0].status !== "pending") {
+    const storeId = authorization.storeId;
+    after(() => notifyBridgeMenuSync(storeId, commandId)
+      .catch(() => console.error("bridge_menu_sync_result_notification_failed", commandId)));
+  }
+  if (String(rows[0].commandType) === "set_inventory_availability" && String(rows[0].status) === "failed") {
+    // The command result is already durable. Notification outages cannot turn
+    // its ACK into a failed request; the independent monitor also retries them.
+    after(async () => {
+      await notifyInventorySyncAttention(authorization.storeId).catch(() => undefined);
+    });
+  }
   return Response.json({ ok: true });
 }

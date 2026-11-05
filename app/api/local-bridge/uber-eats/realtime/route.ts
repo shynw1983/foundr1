@@ -22,6 +22,9 @@ async function authorize(request: Request) {
   if (!authorization.authorized) {
     authorization = await authorizeLocalBridge(request, storeId, "demae_can");
   }
+  if (!authorization.authorized) {
+    authorization = await authorizeLocalBridge(request, storeId, "desktop");
+  }
   return { storeId, deviceName, ...authorization };
 }
 
@@ -62,7 +65,7 @@ export async function POST(request: Request) {
     user_id: `bridge:${authorization.deviceId || fallbackId}`,
     user_info: {
       role: "bridge",
-      platform: "uber_eats",
+      platform: authorization.devicePlatform === "desktop" ? "desktop" : "uber_eats",
       deviceName: authorization.deviceName
     }
   }));

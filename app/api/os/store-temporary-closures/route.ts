@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server";
 import { canAccessStore, requireOsSession } from "../../../../lib/api-auth";
+import { getPermissionsForRole } from "../../../../lib/role-permissions";
 import { cancelTemporaryClosure, createTemporaryClosure, getAffectedOrdersForTemporaryClosures, getUpcomingTemporaryClosures } from "../../../../lib/store-temporary-closures";
 
 export const dynamic = "force-dynamic";
 
 const temporaryClosureRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 
-async function authorizeStore(storeId: string) {
+async function authorizeStore(storeId: string, write = false) {
   const session = await requireOsSession();
   if (!session) return { error: NextResponse.json({ error: "権限がありません。" }, { status: 403 }) };
   if (!temporaryClosureRoles.has(session.role)) {
+    return { error: NextResponse.json({ error: "権限がありません。" }, { status: 403 }) };
+  }
+  const permissions = await getPermissionsForRole(session.role, { fresh: true });
+  if (!permissions.has("module.storeSettings") || (write && !permissions.has("stores.manageSettings"))) {
     return { error: NextResponse.json({ error: "権限がありません。" }, { status: 403 }) };
   }
   if (!(await canAccessStore(session, storeId))) {
@@ -43,7 +48,7 @@ export async function PATCH(request: Request) {
     closurePublicMessage?: string;
   };
   const storeId = String(body.storeId ?? "").trim();
-  const auth = await authorizeStore(storeId);
+  const auth = await authorizeStore(storeId, true);
   if (auth.error) return auth.error;
 
   if (body.action === "create_temporary_closure") {

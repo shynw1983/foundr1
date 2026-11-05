@@ -1,3 +1,5 @@
+import { drawSnsText, type SnsTextLayer } from "./sns-typography.ts";
+
 export const SNS_WIDTH = 1080;
 export const SNS_HEIGHT = 1920;
 export const snsPresets = [
@@ -19,7 +21,7 @@ export function cropGeometry(width: number, height: number, crop: SnsCrop) {
 export function drawSns(canvas: HTMLCanvasElement, photo: CanvasImageSource | null, size: {
     width: number;
     height: number;
-}, logo: CanvasImageSource, preset: typeof snsPresets[number], crop: SnsCrop) {
+}, logo: CanvasImageSource, preset: typeof snsPresets[number], crop: SnsCrop, textLayers: readonly SnsTextLayer[] = []) {
     canvas.width = SNS_WIDTH;
     canvas.height = SNS_HEIGHT;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -31,5 +33,6 @@ export function drawSns(canvas: HTMLCanvasElement, photo: CanvasImageSource | nu
         const g = cropGeometry(size.width, size.height, crop);
         ctx.drawImage(photo, g.x, g.y, g.width, g.height);
     }
+    drawSnsText(ctx, textLayers);
     ctx.drawImage(logo, preset.x, preset.y, preset.width, preset.height);
 }

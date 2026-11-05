@@ -39,7 +39,7 @@ function parseSortOrder(value: unknown) {
 
 async function requireProcedureEditor() {
   const session = await requireOsSession();
-  return session && (await roleHasPermission(session.role, "procedures.edit")) ? session : null;
+  return session && ["owner", "manager"].includes(session.role) && (await roleHasPermission(session.role, "procedures.edit", { fresh: true })) ? session : null;
 }
 
 export async function POST(request: Request) {

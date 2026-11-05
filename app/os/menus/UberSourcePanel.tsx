@@ -5,13 +5,17 @@ import {useOsTranslation} from '../components/OsTranslationProvider';
 import styles from './UberSourcePanel.module.css';
 import {canRetryMenuJob,menuSyncIssue} from '../../../lib/menu-sync-status';
 import type {MenuChange} from '../../../lib/uber-menu-diff';
+import type {UberRemovalReview} from '../../../lib/uber-menu-authority';
 import {meaningfulMenuChanges,menuChangeValue} from '../../../lib/menu-change-display';
+import {BridgeExecutionSwitch} from '../components/BridgeExecutionSwitch';
 import {MenuJobProgress,type MenuProgress} from './MenuJobProgress';
+import {MenuSyncRecovery} from './MenuSyncRecovery';
+import {PlatformConnectionRecovery} from '../components/PlatformConnectionRecovery';
 
 type Job={id:string;platform:string;status:string;updated_at:string;last_error:string;revision:string|null;phase:string|null;attempts:number;available_at:string;progress?:MenuProgress;issues?:Array<{sourceKey?:string;code?:string;name?:string}>;retries?:Array<{at:string;error:string;attempts:number}>};
 
 type SourceData={
-  source:null|{enabled:boolean;auto_publish:boolean;revision:number;last_checked_at:string|null;last_error:string};
+  source:null|{store_id:string;enabled:boolean;auto_publish:boolean;revision:number;last_checked_at:string|null;last_error:string;removalReview?:UberRemovalReview|null};
   runs:Array<{id:string;revision:number;created_at:string;trigger:string;summary:{added:number;observed:number;archived:number;pendingRemoval:number;moved?:number;renamed?:number;repriced?:number;noChanges?:boolean;changes?:MenuChange[];reconciliation?:{queued:number;blocked:Array<{platform?:string;code:string}>}}}>;
   jobs:Job[];jobHistory:Job[];
   successes:Array<{platform:string;revision:string|null;completed_at:string}>;
@@ -52,22 +56,28 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
     void refresh();
     return()=>{controller.abort();clearTimeout(timer);};
   },[brandId,load]);
-  const submit=async(action:'scan'|'retry',jobId?:string)=>{
+  const submit=async(action:'scan'|'retry'|'approve-removal',jobId?:string)=>{
     setBusy(true);setNotice('');setError('');
     try {
-      const response=await fetch('/api/menus/uber-source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brandId,action,jobId,language})});
+      const response=await fetch('/api/menus/uber-source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brandId,action,jobId,language,reviewToken:action==='approve-removal'?jobId:undefined})});
       const value=await response.json();
       if(!response.ok)throw new Error(value.error??'保存できませんでした。');
-      setNotice(action==='retry'?'このプラットフォームだけ再試行を予約しました。':(value.queued?'Uber の読み取りを予約しました。':'読み取りはすでに待機・処理中です。'));
+      setNotice(action==='approve-removal'?label('承認しました。次回の読み取りで同じ変更を確認して反映します。','已批准。下次读取确认变更仍一致后才会应用。','已批准。下次讀取確認變更仍一致後才會套用。'):action==='retry'?'このプラットフォームだけ再試行を予約しました。':(value.queued?'Uber の読み取りを予約しました。':'読み取りはすでに待機・処理中です。'));
       await load();
     }catch(failure){setError(failure instanceof Error?failure.message:'保存できませんでした。');}
     finally{setBusy(false);}
   };
   if(!data?.source && !error)return null;
   const source=data?.source;
+  const review=source?.removalReview;
   const active=data?.jobs.some(job=>['pending','processing'].includes(job.status));
   const failed=data?.jobs.filter(job=>job.status==='failed')??[];
-  const jobLabel=(job:Job)=>job.status==='processing'&&job.phase==='ordering'?label('並び順を同期中','正在同步顺序','正在同步順序'):t(job.status==='processing'&&job.phase?phaseNames[job.phase]??statusNames.processing:job.status==='pending'&&job.attempts>0?'自動再試行を待機中':statusNames[job.status]??job.status);
+  const jobLabel=(job:Job)=>{
+    if(job.status==='processing'&&job.phase==='content')return job.progress?.telemetryVersion===2
+      ?label('内容の差分を処理中','正在处理内容差异','正在處理內容差異')
+      :label('内容を確認・処理中','正在核对并处理内容','正在核對並處理內容');
+    return job.status==='processing'&&job.phase==='ordering'?label('並び順を同期中','正在同步顺序','正在同步順序'):t(job.status==='processing'&&job.phase?phaseNames[job.phase]??statusNames.processing:job.status==='pending'&&job.attempts>0?'自動再試行を待機中':statusNames[job.status]??job.status);
+  };
   const problem=menuSyncIssue(failed[0]?.last_error||source?.last_error,language,{issues:failed[0]?.issues});
   const retryButton=(job:Job)=>canRetryMenuJob(job,data?.jobs.find(row=>row.platform===job.platform)?.id,source?.revision??0)?<button type="button" className="secondary-button compact-button" disabled={busy||active||!source?.enabled} onClick={()=>void submit('retry',job.id)}>{t('接続・保存結果を確認して再試行')}</button>:null;
   return <section id="uber-menu-sync" className={`menu-publish-preview ${styles.panel}`} data-i18n-ignore aria-label={t('メニュー同期センター')}>
@@ -77,6 +87,17 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
     </div>
     <p>{language==='ja'?'メニュー更新で既存商品の売切を解除することはありません。販売状態は Store で操作します。':language==='zh-Hant'?'更新菜單不會恢復現有缺貨商品的銷售。銷售狀態請在 Store 操作。':'更新菜单不会恢复现有缺货商品的销售。销售状态请在 Store 操作。'} <a href="/store/menu">{language==='ja'?'Store の販売状態へ':language==='zh-Hant'?'前往 Store 銷售狀態':'前往 Store 销售状态'}</a></p>
     {source&&<>
+      {review&&<div className={styles.overview} data-tone="warning">
+        <strong>{label('削除・関連解除の確認','删除或移出分组待确认','刪除或移出分組待確認')}</strong>
+        <p>{label('この変更はまだ反映していません。承認すると、共通メニューを参照する他店舗の POS・Web 予約や、連携先にも影響します。','该变更尚未应用。批准后可能影响使用品牌共享菜单的其他门店 POS、网站预约及外送平台。','該變更尚未套用。批准後可能影響使用品牌共用菜單的其他門市 POS、網站預約及外送平台。')}</p>
+        <details><summary>{label('対象を確認','查看受影响的项目','查看受影響的項目')}（{review.targets.length}）</summary>
+          <ul>{review.targets.map((target,index)=><li key={`${target.key}-${index}`}>{target.name}</li>)}</ul>
+        </details>
+        {review.approvedAt?<p>{label('承認済み・再読み取り待ち','已批准，等待读取核对','已批准，等候讀取核對')}</p>:
+          <button type="button" className="secondary-button compact-button" disabled={busy||active||!source.enabled} onClick={()=>{
+            if(window.confirm(label('表示された対象の削除・関連解除を他店舗と連携先にも反映しますか？','确认允许这些删除或分组移除同步到其他门店和渠道？','確認允許這些刪除或分組移除同步到其他門市和渠道？'))) void submit('approve-removal',review.token);
+          }}>{label('他店舗・連携先への反映を承認','批准跨店同步移除','批准跨店同步移除')}</button>}
+      </div>}
       <div className={styles.overview} data-tone={problem?'warning':active?'working':'success'} role="status">
         <strong>{failed.length?label(`${failed.length} プラットフォームへの反映が未完了です`,`${failed.length} 个平台的菜单尚未同步完成`,`${failed.length} 個平台的菜單尚未同步完成`):problem?t(problem.title):active?t('メニュー同期を実行中です'):source.revision?t('最新の同期結果を確認できます'):t('まだ同期していません')}</strong>
         <p>{failed.length?label('Uber の読み取り成功と他社への反映成功は別です。下の各平台に原因と次の操作を表示しています。','Uber 读取成功不代表其他平台已同步。请看下方每个平台的失败原因和处理方式。','Uber 讀取成功不代表其他平台已同步。請看下方每個平台的失敗原因和處理方式。'):problem?t(problem.action):t('各プラットフォームの結果は下に表示します。成功済みの同期を再実行する必要はありません。')}</p>
@@ -98,11 +119,14 @@ export function UberSourcePanel({brandId}:{brandId:string}) {
             {job.status==='processing'&&<MenuJobProgress progress={job.progress} updatedAt={job.updated_at} language={language}/>}
             {job.status==='pending'&&job.attempts>0&&<small>{t('次の再試行')}：{dateLabel(job.available_at)} · {job.attempts} / 3</small>}
             {issue&&<><div className={styles.failure}><strong>{job.status==='pending'?label('現在の状況','当前情况','目前情況'):label('失敗理由','失败原因','失敗原因')}</strong><p>{t(issue.title)}</p><strong>{label('次の対応','下一步','下一步')}</strong><p>{t(issue.action)}</p></div><details><summary>{label('技術情報（調査用）','技术信息（排查用）','技術資訊（排查用）')}</summary><code>{job.last_error}</code></details></>}
-            {job.status==='failed'&&platform!=='uber_eats'&&issue?.retry!==false&&retryButton(job)}
+            {job.status==='failed'&&platform!=='uber_eats'&&<MenuSyncRecovery key={`${brandId}:${job.id}`} brandId={brandId} jobId={job.id} language={language}/>}
+            {job.status==='failed'&&platform!=='uber_eats'&&issue?.retry!==false&&<details><summary>{label('接続確認後の再試行','连接检查后重试','連線檢查後重試')}</summary>{retryButton(job)}</details>}
           </>}
           <small>{t('最終成功')}：{success?`${success.revision?`${t('取込版')} ${success.revision} · `:''}${dateLabel(success.completed_at)}`:t('未実行')}</small>
           {offline&&<small>{t('Bridge の接続を確認してください')} · {device?.last_seen_at?dateLabel(device.last_seen_at):t('接続記録なし')}</small>}
+          <PlatformConnectionRecovery key={`${source.store_id}:${platform}`} storeId={source.store_id} platform={platform}/>
           <a href={platformUrls[platform]} target="_blank" rel="noreferrer">{t('管理画面を開く')} ↗</a>
+          {platform==='rocket_now'&&<BridgeExecutionSwitch storeId={source.store_id}/>}
           {platform==='demae_can'&&<small>{t('普通のブラウザと Bridge のログインは別です。Bridge の専用画面を確認してください。')}</small>}
         </li>;
       })}</ul>

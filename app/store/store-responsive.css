@@ -1,4 +1,14 @@
 /* Store workspace layouts. Keep these scoped to store surfaces; OS shares globals. */
+.store-pos-page { align-content: start; }
+.store-pos-cash-dialog-head > div { min-width: 0; }
+.store-pos-cash-dialog-head > button { flex: 0 0 auto; white-space: nowrap; }
+.store-pos-cash-close .store-pos-denomination-grid { grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr)); }
+.store-pos-cash-close .store-pos-denomination-grid select { min-height: 40px; font-weight: 500; }
+.store-pos-cash-close .store-pos-zero-cash-confirmation { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 44px; margin: 0; }
+.store-pos-cash-close .store-pos-zero-cash-confirmation input { flex: 0 0 18px; width: 18px; height: 18px; min-height: 18px; margin: 0; padding: 0; accent-color: var(--store-primary, var(--green)); }
+.store-pos-cash-close .store-pos-zero-cash-confirmation > span { font-size: 13px; font-weight: 500; line-height: 1.5; }
+.store-pos-cash-blocked-reason { flex: 1 0 100%; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.store-pos-cash-close > .primary-button:disabled { border-color: var(--line); background: var(--surface-muted, #f1f5f9); color: var(--muted); cursor: not-allowed; opacity: 1; }
 .store-workbench-topbar,
 .procedure-reader-topbar {
   grid-template-columns: minmax(160px, 1fr) auto minmax(340px, auto);
@@ -66,12 +76,12 @@
 .store-menu-controls :is(select, input, label > span) { font-weight: 500; }
 .store-menu-kind-switch { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: var(--color-surface-subtle); }
 .store-menu-kind-switch button { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 44px; padding: 8px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; }
-.store-menu-kind-switch button[aria-pressed="true"] { border-color: var(--green); background: var(--panel); color: var(--green); }
+.store-menu-kind-switch button[aria-pressed="true"] { border-color: var(--green); background: var(--panel); color: var(--store-primary-text, var(--green)); }
 .store-menu-kind-switch button span { color: inherit; font-size: 14px; font-weight: 600; }
 .store-menu-kind-switch button small { font-size: 12px; font-weight: 500; }
 .store-menu-kind-switch button:disabled { cursor: wait; opacity: .6; }
 .store-menu-kind-switch button:focus-visible,
-.store-menu-category-panel button:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.store-menu-category-panel button:focus-visible { outline: 2px solid var(--store-focus-ring, var(--green)); outline-offset: 2px; }
 .store-menu-layout.is-options { grid-template-columns: minmax(0, 1fr); }
 .store-menu-list-tools { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .store-menu-page.is-selecting { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
@@ -84,11 +94,11 @@
 .store-inventory-selection-copy { display: grid; flex: 1; min-width: 0; gap: 3px; }
 .store-inventory-selection-copy strong { font-size: 14px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
 .store-inventory-selection-copy small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
-.store-inventory-selection-status { flex-shrink: 0; font-size: 12px; font-weight: 500; color: var(--green); }
+.store-inventory-selection-status { flex-shrink: 0; font-size: 12px; font-weight: 500; color: var(--store-primary-text, var(--green)); }
 .store-inventory-selection-status.is-unavailable { color: var(--red); }
 .store-inventory-selection-status.is-low_stock { color: var(--amber); }
 .store-inventory-bulk-bar { position: fixed; z-index: 90; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: minmax(120px, 1fr) auto auto; align-items: center; gap: 10px 16px; padding: 14px max(16px, calc((100vw - 1160px) / 2)) calc(14px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -4px 20px rgba(0, 0, 0, .05); }
-.store-inventory-bulk-summary { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--green); }
+.store-inventory-bulk-summary { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--store-primary-text, var(--green)); }
 .store-inventory-bulk-summary > svg { flex-shrink: 0; }
 .store-inventory-bulk-summary > div { display: grid; gap: 3px; }
 .store-inventory-bulk-summary strong { font-size: 14px; font-weight: 600; }
@@ -131,6 +141,25 @@ body:has(.store-menu-page.is-selecting) .store-menu-sync-feedback { bottom: calc
 .store-inventory-history-list { scroll-margin-top: 16px; }
 .store-inventory-history-day { margin: 8px 0 0; font-size: 14px; font-weight: 600; }
 
+/* The workbench already supplies the page gutter. History should not inset
+   its cards again, or inherit the generic panel padding around every row. */
+.store-inventory-history-page { min-width: 0; padding-inline: 0; }
+.store-inventory-history-list.panel { padding: 0; }
+.store-inventory-history-list > .store-inventory-history-day { margin: 0; padding: 14px 16px 6px; }
+.store-inventory-history-page :is(button, input, select) { min-height: 44px; }
+
+@media (max-width: 760px) {
+  .store-inventory-history-head.panel { padding: 14px; }
+  .store-inventory-history-list > .store-inventory-history-day { padding-inline: 14px; }
+  .store-inventory-history-row { padding: 12px 14px; }
+}
+
+@media (max-width: 640px) {
+  .store-inventory-history-operation strong { overflow: visible; white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
+  .store-inventory-history-platforms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .store-inventory-history-platforms > span { min-width: 0; flex-wrap: wrap; row-gap: 2px; }
+}
+
 /* POS options: four rows, with only the options body scrolling. */
 .store-pos-option-panel { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 12px; max-height: min(92dvh, 900px); overflow: hidden; }
 .store-pos-option-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
@@ -154,6 +183,8 @@ body:has(.store-menu-page.is-selecting) .store-menu-sync-feedback { bottom: calc
 .store-pos-option-summary strong { font-size: 20px; }
 .store-pos-option-summary span { font-size: 12px; max-height: 3em; overflow-y: auto; color: var(--muted); line-height: 1.5; }
 .store-pos-option-add { width: auto; }
+.store-pos-option-add:disabled,
+.store-pos-option-add:disabled:hover { opacity: .5; cursor: not-allowed; box-shadow: none; transform: none; }
 .store-pos-cart-back { display: none; }
 .store-pos-filter-panel .store-pos-category-select { display: none; }
 .store-pos-floating-checkout { display: none; }
@@ -402,28 +433,28 @@ body:has(.store-pos-page) .floating-feedback { bottom: calc(94px + env(safe-area
 /* Store visual system: quiet surfaces, one clear action, consistent type hierarchy.
    Scoped to staff workbenches; customer displays and the OS keep their own theme. */
 body:has(.store-workbench-shell, .procedure-reader-shell, .store-inventory-history-page) {
-  --color-bg: #f3f5f3;
-  --color-surface-muted: #eef2ee;
-  --color-surface-subtle: #f8faf8;
-  --color-border: #dfe6df;
-  --color-border-strong: #c7d4ca;
-  --color-text: #23352e;
-  --color-text-muted: #6c7c73;
-  --color-brand: #245d49;
-  --color-brand-hover: #173f35;
-  --color-brand-soft: #e8f0ea;
-  --color-brand-border: #bbd0c1;
+  --color-bg: var(--store-bg, #f3f5f3);
+  --color-surface-muted: var(--store-surface-muted, #eef2ee);
+  --color-surface-subtle: var(--store-surface-subtle, #f8faf8);
+  --color-border: var(--store-line, #dfe6df);
+  --color-border-strong: var(--store-line-strong, #c7d4ca);
+  --color-text: var(--store-ink, #23352e);
+  --color-text-muted: var(--store-muted, #6c7c73);
+  --color-brand: var(--store-primary-text, #245d49);
+  --color-brand-hover: var(--store-primary-hover, #173f35);
+  --color-brand-soft: var(--store-primary-soft, #e8f0ea);
+  --color-brand-border: var(--store-primary-border, #bbd0c1);
   --bg: var(--color-bg);
-  --panel: #fff;
+  --panel: var(--store-panel, #fff);
   --ink: var(--color-text);
   --muted: var(--color-text-muted);
   --line: var(--color-border);
   --green: var(--color-brand);
   --green-soft: var(--color-brand-soft);
   --soft: var(--color-surface-muted);
-  --shadow: 0 2px 8px #173f3504;
-  --shadow-soft: 0 4px 16px #173f3508;
-  --shadow-focus: 0 0 0 3px #245d4924;
+  --shadow: var(--store-shadow, 0 2px 8px #173f3504);
+  --shadow-soft: var(--store-shadow, 0 4px 16px #173f3508);
+  --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--store-focus-ring, #245d49) 14%, transparent);
   background: var(--bg);
 }
 .store-workbench-shell,
@@ -442,7 +473,7 @@ body:has(.store-workbench-shell, .procedure-reader-shell, .store-inventory-histo
   text-decoration: none;
 }
 :is(.store-workbench-shell, .procedure-reader-shell, .store-inventory-history-page) :is(button, a, select, input):focus-visible {
-  outline: 2px solid var(--green);
+  outline: 2px solid var(--store-focus-ring, var(--green));
   outline-offset: 3px;
 }
 :is(.store-workbench-topbar, .procedure-reader-topbar) .brand-block h1 { font-weight: 600; letter-spacing: -.025em; }
@@ -455,14 +486,14 @@ body:has(.store-workbench-shell, .procedure-reader-shell, .store-inventory-histo
 .store-nav-tabs .store-display-nav-menu button,
 .store-nav-store-switch :is(span, select) { font-weight: 500; }
 .store-nav-tabs a.is-active,
-.store-nav-tabs .store-display-nav-menu button.is-active { color: var(--green); background: var(--green-soft); font-weight: 600; }
+.store-nav-tabs .store-display-nav-menu button.is-active { color: var(--store-primary-text, var(--green)); background: var(--green-soft); font-weight: 600; }
 .store-nav-store-switch { background: transparent; }
 .store-user-tools :is(.user-badge, .notification-menu > summary, .os-language-picker select) { border-color: var(--line); border-radius: 10px; }
 .store-workbench-grid { gap: 14px; }
 .store-workbench-grid .os-module-card { padding: 20px; }
 .store-workbench-grid .os-module-heading h2 { font-size: 18px; font-weight: 600; }
 .store-workbench-grid .os-module-card p { font-size: 13px; font-weight: 400; line-height: 1.65; color: var(--muted); }
-.store-workbench-grid .os-module-icon { color: var(--green); background: var(--green-soft); border-color: transparent; border-radius: 12px; box-shadow: none; }
+.store-workbench-grid .os-module-icon { color: var(--store-primary-text, var(--green)); background: var(--green-soft); border-color: transparent; border-radius: 12px; box-shadow: none; }
 
 /* Availability is one product list, not a pile of nested cards. */
 .store-menu-page { gap: 12px; }
@@ -482,7 +513,7 @@ body:has(.store-workbench-shell, .procedure-reader-shell, .store-inventory-histo
 @media (max-width: 900px) {
   .store-menu-category-panel { padding: 0; }
   .store-menu-category-panel .menu-category-button { background: var(--panel); }
-  .store-menu-category-panel .menu-category-button.is-active { background: var(--green-soft); color: var(--green); }
+  .store-menu-category-panel .menu-category-button.is-active { background: var(--green-soft); color: var(--store-primary-text, var(--green)); }
 }
 .store-menu-item-list { gap: 0; }
 .store-menu-item-row { padding: 16px 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
@@ -497,7 +528,7 @@ body:has(.store-workbench-shell, .procedure-reader-shell, .store-inventory-histo
 .store-menu-option-group-title :is(strong, span) { font-weight: 500; }
 .store-timecard-punch .timecard-employee-card { border-color: transparent; border-radius: 10px; background: var(--color-surface-subtle); }
 .store-timecard-punch .timecard-employee-card.is-selected { border-color: var(--color-brand-border); background: var(--green-soft); box-shadow: none; }
-.store-timecard-punch .timecard-employee-avatar { background: var(--green-soft); color: var(--green); font-weight: 500; }
+.store-timecard-punch .timecard-employee-avatar { background: var(--green-soft); color: var(--store-primary-text, var(--green)); font-weight: 500; }
 .store-timecard-punch .timecard-status { border-color: transparent; border-radius: 10px; background: var(--color-surface-subtle); }
 .store-timecard-punch .panel-title h2 { font-size: 18px; font-weight: 600; }
 
@@ -523,5 +554,99 @@ body:has(.store-workbench-shell, .procedure-reader-shell, .store-inventory-histo
 .inventory-reference-conflicts > label { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; font-weight: 400; }
 .inventory-reference-conflicts input[type="checkbox"] { width: 16px; height: 16px; min-width: 16px; margin-top: 3px; padding: 0; accent-color: var(--green); }
 .inventory-reference-conflicts span { min-width: 0; overflow-wrap: anywhere; }
-.inventory-reference-control select:focus-visible, .inventory-reference-conflicts input:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.inventory-reference-control select:focus-visible, .inventory-reference-conflicts input:focus-visible { outline: 2px solid var(--store-focus-ring, var(--green)); outline-offset: 2px; }
 @media (max-width: 600px) { .inventory-reference-control { align-items: flex-start; flex-direction: column; } }
+
+/* Per-bowl instructions and local document recovery stay usable in the POS cart. */
+.store-pos-bowl-note { display: grid; gap: 4px; margin-top: 6px; min-width: 0; }
+.store-pos-bowl-note input { box-sizing: border-box; width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
+.store-pos-print-documents { max-height: 260px; overflow-y: auto; overflow-wrap: anywhere; }
+.store-pos-print-documents .store-pos-cart-row { gap: 8px; }
+.store-pos-print-documents .store-pos-cart-row > span { min-width: 0; }
+
+.procedure-reader-step.is-text-only { grid-template-columns: minmax(0, 1fr); }
+
+/* Shared Store function groups and compact home shortcuts. */
+.store-group-menu { position: relative; flex: 0 0 auto; }
+.store-group-menu > summary { display: flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; color: var(--muted); font-size: 14px; font-weight: 500; cursor: pointer; list-style: none; }
+.store-group-menu > summary::-webkit-details-marker { display: none; }
+.store-group-menu > summary.is-active,
+.store-group-menu[open] > summary { background: var(--green-soft); color: var(--store-primary-text, var(--green)); font-weight: 600; }
+.store-group-menu > summary svg:last-of-type { margin-left: auto; transition: transform .15s; }
+.store-group-menu[open] > summary svg:last-of-type { transform: rotate(180deg); }
+.store-group-list { position: absolute; top: calc(100% + 6px); left: 0; z-index: 70; display: grid; gap: 4px; min-width: 190px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: white; box-shadow: var(--shadow); }
+.store-group-list a { position: relative; width: 100%; font-weight: 500; }
+.store-group-menu > summary.has-order-alert { position: relative; border-color: #d43f21; color: #b72f18; background: #fff1ed; animation: storeOrderTabPulse 1s ease-in-out infinite; }
+.store-group-menu > summary:focus-visible,
+.store-home-shortcuts a:focus-visible { outline: 2px solid var(--store-focus-ring, var(--green)); outline-offset: 2px; }
+.store-user-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.store-user-tools > .store-nav-store-switch { margin-left: 0; }
+.store-home-sections { display: grid; gap: 24px; }
+.store-home-section > h2,
+.store-home-shortcuts > h2 { margin: 0 0 10px; color: var(--muted); font-size: 14px; font-weight: 500; }
+.store-home-page .os-module-card { padding: 16px; min-height: 0; }
+.store-home-page .os-module-heading h3 { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.4; }
+.store-home-page .os-module-card p { margin: 5px 0 0; font-size: 13px; }
+.store-home-shortcuts { padding-top: 16px; border-top: 1px solid var(--line); }
+.store-home-shortcuts nav { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.store-home-shortcuts a { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; color: var(--ink); font-size: 14px; text-decoration: none; }
+.store-home-shortcuts a:hover { color: var(--store-primary-text, var(--green)); }
+.store-home-notice { color: var(--muted); font-size: 14px; }
+@media (max-width: 1100px) {
+  .store-nav-list .store-group-menu { width: 100%; }
+  .store-nav-list .store-group-menu > summary { width: 100%; color: var(--ink); }
+  .store-nav-list .store-group-menu > summary.is-active { color: var(--store-primary-text, var(--green)); }
+  .store-nav-list .store-group-list { position: static; min-width: 0; margin: 4px 0 8px; padding: 4px 0 4px 12px; border: 0; border-left: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+  .store-nav-menu > summary { position: relative; }
+  .store-user-tools > .store-nav-store-switch { max-width: 100%; }
+}
+@media (min-width: 681px) and (max-width: 1100px) {
+  .store-home-page .store-workbench-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .store-home-sections { gap: 20px; }
+  .store-home-page .os-module-card { padding: 14px; }
+  .store-user-tools .store-nav-store-switch select { min-width: 0; max-width: 120px; }
+}
+
+@media (max-width: 1100px) {
+  .store-nav-menu .store-group-menu > summary { height: auto; min-height: 38px; padding: 0 12px; }
+  .store-nav-menu .store-group-menu > summary > span { display: inline; }
+  .store-nav-menu.mobile-nav-menu > summary > .store-order-alert-dot { display: block; position: absolute; top: 5px; right: 4px; }
+}
+/* Tablet workbenches keep the primary navigation visible in either orientation. */
+@media (min-width: 768px) and (max-width: 1100px) {
+  .store-workbench-topbar,
+  .procedure-reader-topbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .store-nav-menu { display: none; }
+  .store-nav-tabs { display: flex; grid-column: 1 / -1; grid-row: 3; gap: 4px; }
+  .store-nav-tabs > a,
+  .store-nav-tabs > .store-group-menu > summary,
+  .store-nav-tabs .store-group-list a { min-height: 44px; }
+  .store-nav-tabs > a,
+  .store-nav-tabs > .store-group-menu > summary { padding-inline: 10px; }
+  .store-nav-tabs > .store-group-menu:nth-of-type(n + 2):last-of-type .store-group-list { left: auto; right: 0; }
+  .store-user-tools .user-panel { flex: 1 1 320px; width: auto; }
+  .store-user-tools .user-badge { max-width: 180px; }
+  .store-user-tools .user-badge-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .store-user-tools .user-badge-role { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .store-group-menu > summary.has-order-alert { animation: none; }
+}
+
+.store-nav-list a.is-active { background: var(--green-soft); color: var(--store-primary-text, var(--green)); font-weight: 600; }
+
+/* Keep the two plate choices compact in the weighing dialog. */
+.store-relay-tare-presets { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; max-width: 100%; margin: 0; padding: 0; border: 0; }
+.store-relay-tare-presets legend { margin-bottom: 8px; font-weight: 500; }
+.store-relay-tare-presets button { min-height: 40px; white-space: normal; }
+.store-relay-tare-summary { max-width: 100%; line-height: 1.6; overflow-wrap: anywhere; }
+
+/* Keep occasional POS testing inside the existing operations menu. */
+.store-group-list > .store-group-action { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 44px; margin: 0; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 500; text-align: left; cursor: pointer; box-shadow: none; }
+.store-group-list > .store-group-action:hover { background: var(--green-soft); color: var(--store-primary-text, var(--green)); }
+.store-group-list > .store-group-action:focus-visible { outline: 2px solid var(--store-focus-ring, var(--green)); outline-offset: -2px; }
+
+.store-relay-tare-presets legend { max-width: 100%; }
+.store-relay-tare-hint { margin-inline-start: 8px; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.4; }

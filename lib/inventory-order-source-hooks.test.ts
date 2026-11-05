@@ -37,6 +37,8 @@ function dependencies(sql: unknown, events: string[], options: { readyOptions?: 
     "store-order-access": { getStoreOrderAccess: async () => ({stores: [{id: storeId}]}), getScopedStoreFilter: () => storeId },
     "pos-catalog-policy": { isPosSellableItem: () => true },
     "pos-printer": { normalizePosPrinterSettings: () => ({}) },
+    "pos-scale-tare": load("./pos-scale-tare.ts", {}),
+    "pos-scale-filter": load("./pos-scale-filter.ts", {}),
     "store-dining-sessions": { markDiningOrdersPaid: async () => undefined },
     "loyalty": {
       resolveMemberForOrder: async () => null, awardLoyaltyForPaidOrder: async () => null,
@@ -160,7 +162,7 @@ test("item and option replacements explicitly block unresolved identity rather t
 
 function refundHarness(failItemWrite = false) {
   const events: string[] = [];
-  const sql = async (parts: TemplateStringsArray) => {
+  const execute = async (parts: TemplateStringsArray) => {
     const text = parts.join("?");
     if (text.includes('as "cashSessionStatus"') && text.includes("limit 1")) return [{id: orderId, storeId, status: "preparing", paymentStatus: "paid", paymentMethod: "cash", amount: 200, cashSessionStatus: "open"}];
     if (text.includes('as "paidAmount"') && text.includes("from store_customer_order_items")) return [{id: uuid(11), quantity: 1, amount: 200, paidAmount: 200, couponDiscountAmount: 0, couponId: "", refundStatus: ""}];
@@ -170,10 +172,23 @@ function refundHarness(failItemWrite = false) {
       events.push("refund-item"); return [{id: uuid(11)}];
     }
     if (text.includes("select count(*)::int as count")) return [{count: 1}];
-    if (text.includes("update store_customer_orders") && !text.includes("inventory_items_ready_at")) events.push("refund-order");
+    if (text.includes("update store_customer_orders") && text.includes("payment_refund_status")) events.push("refund-order");
     return [];
   };
-  const module = load("../app/api/store/pos/transactions/route.ts", dependencies(sql, events));
+  // Keep tagged queries lazy, as Neon does, so transaction statements execute in
+  // order instead of running financial mutations while the array is assembled.
+  type Deferred = { then: (resolve: (rows: unknown[]) => unknown, reject: (cause: unknown) => unknown) => Promise<unknown> };
+  const sql = Object.assign((parts: TemplateStringsArray): Deferred => ({
+    then: (resolve, reject) => execute(parts).then(resolve, reject)
+  }), { unsafe: (raw: string) => ({ raw }), transaction: async (queries: Deferred[]) => {
+    const results: unknown[] = [];
+    for (const query of queries) results.push(await query);
+    return results;
+  } });
+  const deps = { ...dependencies(sql, events),
+    "pos-bowl-data": load("./pos-bowl-data.ts", { db: { sql } }),
+    "store-relay-print-policy": load("./store-relay-print-policy.ts", { db: { sql } }) };
+  const module = load("../app/api/store/pos/transactions/route.ts", deps);
   return { events, post: () => module.POST(new Request("https://example.test/refund", {method: "POST", body: JSON.stringify({storeId, orderId, itemIds: [uuid(11)], reason: "Shortage"})})) };
 }
 test("POS partial-item refund refreshes its source only after item and order writes complete", async () => {

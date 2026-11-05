@@ -24,6 +24,18 @@ Supported device types:
 - `ESC/POS USB`: raw ESC/POS over Android USB bulk output. The first print may ask for USB permission.
 - `Star プリンター`: Star printers through the official StarXpand SDK.
 
+## Store 0.2.30 / code 42: SNS image downloads
+
+`Foundr1Downloads.supportsImages()` exposes PNG/JPEG saving to the SNS editor. The existing `saveBase64(fileName, mimeType, data)` bridge now validates PDF/PNG/JPEG data, keeps the correct extension and MIME type, and reports storage failures without claiming success. PDF downloads remain supported. Android 10+ keeps `Downloads/Foundr1`; older Android retains the existing Downloads directory and storage-permission flow. No new Android permission is added.
+
+Older Store apps must update before saving SNS images. A web refresh alone cannot add the missing native method. The Store release manifest and APK checksum identify the published package; publishing a package does not install it on a device or prove real-device saving.
+
+Focused native regression checks:
+
+```bash
+./gradlew :app:testStoreDebugUnitTest --tests jp.foundr1.store.DownloadFilePolicyTest --tests jp.foundr1.store.Foundr1DownloadsBridgeTest
+```
+
 ## Build With Android Studio
 
 1. Install Android Studio.

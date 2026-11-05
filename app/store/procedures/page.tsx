@@ -6,7 +6,6 @@ import {
   ArrowRight,
   BookOpen,
   ChefHat,
-  CheckCircle2,
   Clock3,
   Package,
   Minus,
@@ -225,7 +224,7 @@ export default function ProcedureReaderPage() {
               </div>
 
               {selectedStep ? (
-                <article className="procedure-reader-step">
+                <article className={`procedure-reader-step${selectedStep.mediaUrl ? "" : " is-text-only"}`}>
                   <div className="procedure-reader-step-copy">
                     <div className="procedure-reader-step-title">
                       <BookOpen size={24} />
@@ -249,16 +248,7 @@ export default function ProcedureReaderPage() {
                     ) : null}
                   </div>
 
-                  <div className="procedure-reader-media">
-                    {selectedStep.mediaUrl ? (
-                      <img src={selectedStep.mediaUrl} alt="" />
-                    ) : (
-                      <div>
-                        <CheckCircle2 size={42} />
-                        <span>作業内容を確認</span>
-                      </div>
-                    )}
-                  </div>
+                  {selectedStep.mediaUrl ? <div className="procedure-reader-media"><img src={selectedStep.mediaUrl} alt="" /></div> : null}
                 </article>
               ) : null}
 

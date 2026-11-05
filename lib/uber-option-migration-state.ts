@@ -11,17 +11,21 @@ export function validateUberOptionMigration(payload:Record<string,unknown>,state
   const hash=createHash('sha256').update([payload.sourceId,state.sourceKey,state.fromId,state.toParentId].join(':')).digest('hex');
   if(state.key!==hash||state.marker!==`FS${hash.slice(0,14)}`||state.name!==target.name||state.price!==target.price
     ||!['ON_SALE','NOT_EXPOSE'].includes(String(state.displayStatus)))throw Error('uber_migration_intent_invalid');
+  if(state.releaseDraft===true&&(payload.androidDraftRelease!==true||!state.androidDeviceId
+    ||state.displayStatus!=='ON_SALE'||state.fromExternalId!==state.fromId))throw Error('uber_migration_draft_release_invalid');
   const phases=['reserved','received','prepared','complete'];
   const index=phases.indexOf(String(state.phase));
   if(index<0||index>0&&!/^[1-9]\d*$/.test(String(state.newId))||state.newId===state.fromId)throw Error('uber_migration_phase_invalid');
   if(previous) {
+    if((previous.releaseDraft===true)!==(state.releaseDraft===true))throw Error('uber_migration_intent_changed');
     for(const key of ['key','sourceKey','targetId','fromExternalId','fromId','fromParentId','toParentId','marker','name','price','displayStatus'])
       if(previous[key]!==state[key])throw Error('uber_migration_intent_changed');
     const prior=phases.indexOf(String(previous.phase));
     if(index<prior||index>prior+1||previous.newId&&previous.newId!==state.newId)throw Error('uber_migration_transition_invalid');
   }else {
     if(index!==0||state.newId!=='')throw Error('uber_migration_reservation_required');
-    if(!(target.mappings as Array<Record<string,unknown>>).some(row=>row.externalId===state.fromExternalId))throw Error('uber_migration_unowned_predecessor');
+    const mappings=target.mappings as Array<Record<string,unknown>>;
+    if(state.releaseDraft===true ? mappings.length!==0 : !mappings.some(row=>row.externalId===state.fromExternalId))throw Error('uber_migration_unowned_predecessor');
   }
   return target;
 }

@@ -1,3 +1,4 @@
+import { canUseFullStoreWorkbench } from "../../../../lib/store-inventory-policy";
 import { requireOsSession } from "../../../../lib/api-auth";
 import { getStoreOrderAccess } from "../../../../lib/store-order-access";
 import { getStoreDevices, requestStoreDeviceCommand, saveStoreDeviceConfirmation, saveStoreDeviceOrder, StoreDeviceError } from "../../../../lib/store-devices";
@@ -7,12 +8,11 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const roles = new Set(["owner", "manager", "store_terminal"]);
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 async function authorize(storeId: unknown) {
   const session = await requireOsSession();
   if (!session) return { error: json({ error: "ログインしてください。" }, 401) };
-  if (!roles.has(session.role)) return { error: json({ error: "権限がありません。" }, 403) };
+  if (!canUseFullStoreWorkbench(session.role)) return { error: json({ error: "権限がありません。" }, 403) };
   if (typeof storeId !== "string" || !uuid.test(storeId)) return { error: json({ error: "店舗を選択してください。" }, 400) };
   const access = await getStoreOrderAccess(session);
   if (!access.stores.some(store => store.id === storeId)) return { error: json({ error: "権限がありません。" }, 403) };

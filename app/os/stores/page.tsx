@@ -1,11 +1,16 @@
 "use client";
 
 import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, MonitorSmartphone, PackageCheck, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
+import { loadCurrentEmployee } from "../components/currentEmployeeStore";
+import { canSendHqAlert } from "../../../lib/store-hq-alert-policy";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
+import { useOsTranslation } from "../components/OsTranslationProvider";
 import { ModalHistoryScope } from "../components/useModalHistory";
+import { BusinessHoursEditor } from "./BusinessHoursEditor";
+import { ScopedStoreSettings } from "./ScopedStoreSettings";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
@@ -45,6 +50,8 @@ type StoreItem = {
   defaultProcurementStaffId?: string;
   brands: string[];
   businessHours?: unknown;
+  shiftRequestStartOffsetMinutes?: number;
+  shiftRequestEndOffsetMinutes?: number;
   reservationNote?: string;
   payrollCycleType?: "month_end" | "specified_day";
   payrollClosingDay?: number;
@@ -204,7 +211,32 @@ function formatMonthlyWorkHours(value?: number | string | null) {
 }
 
 export default function StoresPage() {
+  const [access, setAccess] = useState<"loading" | "headquarters" | "scoped" | "denied">("loading");
+  const { t } = useOsTranslation();
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/auth/me", { cache: "no-store", signal: controller.signal })
+      .then(async response => response.ok ? response.json() : null)
+      .then(body => {
+        if (controller.signal.aborted) return;
+        const employee = body?.employee;
+        if (!employee?.permissions?.includes("module.storeSettings")) setAccess("denied");
+        else setAccess(["owner", "manager"].includes(employee.role) && employee.permissions.includes("module.masterData") && employee.permissions.includes("stores.manageMasterData") ? "headquarters" : "scoped");
+      }).catch(() => { if (!controller.signal.aborted) setAccess("denied"); });
+    return () => controller.abort();
+  }, []);
+  if (access === "headquarters") return <HeadquartersStoresPage />;
+  if (access === "scoped") return <ScopedStoreSettings />;
+  return <main className="shell"><section className="workspace"><section className="panel" role="status">
+    <p>{t(access === "loading" ? "読み込み中" : "権限を確認できません。時間をおいて再読み込みしてください。")}</p>
+    <a href="/os">{t("OS ホームへ戻る")}</a>
+  </section></section></main>;
+}
+
+function HeadquartersStoresPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
+  const [canSendAlert, setCanSendAlert] = useState(false);
+  useEffect(() => { let active = true; void loadCurrentEmployee().then(employee => { if (active) setCanSendAlert(canSendHqAlert(employee?.role ?? "")); }).catch(() => {}); return () => { active = false; }; }, []);
   const [storesData, setStoresData] = useState<StoreItem[]>([]);
   const [brandsData, setBrandsData] = useState<BrandItem[]>([]);
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
@@ -215,6 +247,8 @@ export default function StoresPage() {
   const [editingStoreBrands, setEditingStoreBrands] = useState<string[]>([]);
   const [newBusinessHours, setNewBusinessHours] = useState<StoreBusinessHours>(defaultBusinessHours);
   const [editingBusinessHours, setEditingBusinessHours] = useState<StoreBusinessHours>(defaultBusinessHours);
+  const [editingShiftStartOffset, setEditingShiftStartOffset] = useState(0);
+  const [editingShiftEndOffset, setEditingShiftEndOffset] = useState(0);
   const [editingStoreName, setEditingStoreName] = useState("");
   const [editingCompanyName, setEditingCompanyName] = useState("");
   const [editingCompanyLegalName, setEditingCompanyLegalName] = useState("");
@@ -653,6 +687,8 @@ export default function StoresPage() {
     formData.set("currentName", editingStore.name);
     formData.set("customerDisplayNames", JSON.stringify(editingCustomerDisplayNames));
     formData.set("businessHours", serializeBusinessHours(editingBusinessHours));
+    formData.set("shiftRequestStartOffsetMinutes", String(editingShiftStartOffset));
+    formData.set("shiftRequestEndOffsetMinutes", String(editingShiftEndOffset));
     formData.set("weatherLocationName", weatherLocationName);
     formData.set("weatherLatitude", weatherLatitude === null ? "" : String(weatherLatitude));
     formData.set("weatherLongitude", weatherLongitude === null ? "" : String(weatherLongitude));
@@ -698,6 +734,8 @@ export default function StoresPage() {
         defaultProcurementStaffId,
         brands: editingStoreBrands,
         businessHours: editingBusinessHours,
+        shiftRequestStartOffsetMinutes: editingShiftStartOffset,
+        shiftRequestEndOffsetMinutes: editingShiftEndOffset,
         reservationNote,
         payrollCycleType,
         payrollClosingDay,
@@ -754,6 +792,8 @@ export default function StoresPage() {
     setEditingStore(store);
     setEditingStoreBrands(store.brands);
     setEditingBusinessHours(normalizeBusinessHours(store.businessHours));
+    setEditingShiftStartOffset(store.shiftRequestStartOffsetMinutes ?? 0);
+    setEditingShiftEndOffset(store.shiftRequestEndOffsetMinutes ?? 0);
     setEditingStoreName(store.name);
     setEditingCompanyName(store.companyName ?? "");
     setEditingCompanyLegalName(store.companyLegalName ?? "");
@@ -880,6 +920,7 @@ export default function StoresPage() {
           <div>
             <p className="eyebrow">店舗とブランドの基本情報</p>
             <h2>店舗・ブランド</h2>
+            {canSendAlert ? <a className="secondary-button" href="/os/stores/alerts">本部からの即時連絡</a> : null}
             <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
           </div>
         </header>
@@ -1191,7 +1232,15 @@ export default function StoresPage() {
                 </>
               )}
               {editingStoreTab === "hours" ? (
-                <BusinessHoursEditor value={editingBusinessHours} onChange={setEditingBusinessHours} />
+                <>
+                  <BusinessHoursEditor value={editingBusinessHours} onChange={setEditingBusinessHours} />
+                  <ShiftRequestDefaultsEditor
+                    startOffset={editingShiftStartOffset}
+                    endOffset={editingShiftEndOffset}
+                    onStartChange={setEditingShiftStartOffset}
+                    onEndChange={setEditingShiftEndOffset}
+                  />
+                </>
               ) : null}
               {editingStoreTab === "operations" ? (
                 <div className="store-payroll-settings">
@@ -1699,54 +1748,57 @@ function CustomerDisplayNameEditor({
   );
 }
 
-function BusinessHoursEditor({
-  value,
-  onChange
-}: {
-  value: StoreBusinessHours;
-  onChange: (value: StoreBusinessHours) => void;
-}) {
-  function updateDay(day: WeekdayKey, patch: Partial<StoreBusinessHours[WeekdayKey]>) {
-    onChange({
-      ...value,
-      [day]: {
-        ...value[day],
-        ...patch
-      }
-    });
-  }
 
+function ShiftRequestDefaultsEditor({ startOffset, endOffset, onStartChange, onEndChange }: {
+  startOffset: number;
+  endOffset: number;
+  onStartChange: (value: number) => void;
+  onEndChange: (value: number) => void;
+}) {
+  const { t } = useOsTranslation();
+  const [adjust, setAdjust] = useState(startOffset !== 0 || endOffset !== 0);
   return (
-    <div className="business-hours-editor">
-      <span>営業時間</span>
-      <div className="business-hours-grid">
-        {weekdayKeys.map((day) => (
-          <div className="business-hours-row" key={day}>
-            <label className="business-hours-closed">
-              <input
-                type="checkbox"
-                checked={value[day].closed}
-                onChange={(event) => updateDay(day, { closed: event.target.checked })}
-              />
-              {weekdayLabels[day]} 休業
+    <div className="store-payroll-settings" data-i18n-ignore>
+      <div className="store-payroll-summary">
+        <strong>{t("希望シフトの初期時間")}</strong>
+        <p>{t("曜日ごとの営業時間を初期値にします。提出済みの希望は変更しません。休業日は時間を手入力してください。")}</p>
+      </div>
+      <label>
+        <span>{t("営業時間との連動")}</span>
+        <select value={adjust ? "adjust" : "follow"} onChange={(event) => {
+          const enabled = event.target.value === "adjust";
+          setAdjust(enabled);
+          if (!enabled) { onStartChange(0); onEndChange(0); }
+        }}>
+          <option value="follow">{t("営業時間に合わせる")}</option>
+          <option value="adjust">{t("営業時間を基準に調整する")}</option>
+        </select>
+      </label>
+      {adjust ? <>
+        <p>{t("マイナスは早める、プラスは遅らせる設定です。30分・60分のほか、前後720分以内で指定できます。")}</p>
+        {([
+          ["開始時刻の調整（分）", startOffset, onStartChange],
+          ["終了時刻の調整（分）", endOffset, onEndChange]
+        ] as const).map(([label, value, onChange]) => (
+          <div key={label}>
+            <label>
+              <span>{t(label)}</span>
+              <input type="number" min={-720} max={720} step={1} value={value} onChange={(event) => onChange(Number(event.target.value))} />
             </label>
-            <input
-              type="time"
-              value={value[day].open}
-              disabled={value[day].closed}
-              onChange={(event) => updateDay(day, { open: event.target.value })}
-              aria-label={`${weekdayLabels[day]} 開店時間`}
-            />
-            <input
-              type="time"
-              value={value[day].close}
-              disabled={value[day].closed}
-              onChange={(event) => updateDay(day, { close: event.target.value })}
-              aria-label={`${weekdayLabels[day]} 閉店時間`}
-            />
+            <select aria-label={t(label)} value={[-60, -30, 0, 30, 60].includes(value) ? String(value) : "custom"} onChange={(event) => {
+              if (event.target.value !== "custom") onChange(Number(event.target.value));
+            }}>
+              <option value="-60">{t("60分早める")}</option>
+              <option value="-30">{t("30分早める")}</option>
+              <option value="0">{t("調整なし")}</option>
+              <option value="30">{t("30分遅らせる")}</option>
+              <option value="60">{t("60分遅らせる")}</option>
+              <option value="custom" disabled>{t("カスタム（分）")}</option>
+            </select>
           </div>
         ))}
-      </div>
+        <p>{t("例：11:00〜22:00の営業で、開始を-30分・終了を+60分にすると10:30〜23:00になります。時間が逆転する場合や24時間を超える場合は、スタッフが手入力します。")}</p>
+      </> : null}
     </div>
   );
 }

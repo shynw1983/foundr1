@@ -1,5 +1,6 @@
 import { canAccessStore, requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { posOrderHasPreparationOrLegacySql, posPreparationTaskSql } from "../../../../lib/pos-production-task-filter";
 import { findCustomerOrderById } from "../../../../lib/customer-orders";
 import {
   ensureOrderProductionEstimate,
@@ -10,6 +11,7 @@ import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
 import { canChangeOrderStatus, getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 import { acknowledgePreparationDueAlert, cancelPendingStoreOrderAlerts } from "../../../../lib/store-order-alert-events";
 import { parseStoreOrderCursor, encodeStoreOrderCursor } from "../../../../lib/store-order-pagination";
+import { posBowlOrderStatusMessage } from "../../../../lib/pos-fulfillment-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +101,9 @@ export async function GET(request: Request) {
           'productionArea', order_production_tasks.production_area,
           'productionAreaLabel', order_production_tasks.production_area_label,
           'status', order_production_tasks.status,
+          'orderItemId', coalesce(order_production_tasks.order_item_id::text, ''),
+          'pickupCode', coalesce(order_production_tasks.pickup_code, ''),
+          'handedOffAt', coalesce(order_production_tasks.handed_off_at::text, ''),
           'printStatus', order_production_tasks.print_status,
           'itemSummary', order_production_tasks.item_summary
         )
@@ -154,14 +159,20 @@ export async function PATCH(request: Request) {
     select
       store_id::text as "storeId",
       coalesce(store_table_id::text, '') as "storeTableId",
-      coalesce(customer_summary ->> 'tableSessionKey', table_session_key, '') as "tableSessionKey"
+      coalesce(customer_summary ->> 'tableSessionKey', table_session_key, '') as "tableSessionKey",
+      (order_source='store_pos' and exists (
+        select 1 from store_customer_order_items items where items.order_id=store_customer_orders.id and items.pickup_code<>''
+      )) as "isPosBowlOrder"
     from store_customer_orders
     where id = ${orderId}
     limit 1
   `;
-  const target = targetRows[0] as { storeId: string; storeTableId: string; tableSessionKey: string } | undefined;
+  const target = targetRows[0] as { storeId: string; storeTableId: string; tableSessionKey: string; isPosBowlOrder: boolean } | undefined;
   if (!target || !(await canAccessStore(session, target.storeId))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
+  if (!checkoutAction && target.isPosBowlOrder && status !== "cancelled") {
+    return Response.json({ error: posBowlOrderStatusMessage, code: "per_bowl_fulfillment_required" }, { status: 409 });
   }
 
   if (checkoutAction === "mark_checkout_handled") {
@@ -236,6 +247,10 @@ export async function PATCH(request: Request) {
       cancelled_at = case when ${status} = 'cancelled' and cancelled_at is null then now() else cancelled_at end,
       updated_at = now()
     where id = ${orderId} and (${status}='cancelled' or status not in ('cancelled','refund_pending','payment_failed','checkout_failed'))
+      and (${status}='cancelled' or ${sql.unsafe(posOrderHasPreparationOrLegacySql('store_customer_orders'))})
+      and (${status}='cancelled' or order_source<>'store_pos' or not exists (
+        select 1 from store_customer_order_items items where items.order_id=store_customer_orders.id and items.pickup_code<>''
+      ))
     returning id::text
   `;
   if (rows[0]?.id) {
@@ -254,6 +269,8 @@ export async function PATCH(request: Request) {
           updated_at = now()
         where order_id::text = ${rows[0].id as string}
           and status <> 'ready'
+          and exists(select 1 from store_customer_orders orders where orders.id=order_production_tasks.order_id
+            and ${sql.unsafe(posPreparationTaskSql('orders', 'order_production_tasks'))})
       `;
       if (status === "preparing") await ensureOrderProductionEstimate(rows[0].id as string);
     }

@@ -135,6 +135,8 @@ export async function getProcurementDashboardData(
           coalesce(stores.customer_display_names, '{}'::jsonb) as "customerDisplayNames",
           coalesce(stores.default_procurement_staff_id::text, '') as "defaultProcurementStaffId",
           stores.business_hours as "businessHours",
+          stores.shift_request_start_offset_minutes as "shiftRequestStartOffsetMinutes",
+          stores.shift_request_end_offset_minutes as "shiftRequestEndOffsetMinutes",
           coalesce(stores.reservation_note, '') as "reservationNote",
           coalesce(stores.payroll_cycle_type, 'month_end') as "payrollCycleType",
           coalesce(stores.payroll_closing_day, 31)::int as "payrollClosingDay",

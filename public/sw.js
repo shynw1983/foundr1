@@ -105,10 +105,14 @@ self.addEventListener("push", (event) => {
   })() : fallback;
 
   const title = payload.title || fallback.title;
+  const inventorySync = payload.type === "inventory_sync_attention";
   const options = {
     body: payload.body || payload.message || fallback.body,
-    tag: `${payload.type || "foundr1_notification"}:${payload.sentAt || Date.now()}`,
-    renotify: true,
+    tag: inventorySync && payload.deliveryKey
+      ? `${payload.type}:${payload.deliveryKey}`
+      : `${payload.type || "foundr1_notification"}:${payload.sentAt || Date.now()}`,
+    renotify: !inventorySync,
+    silent: inventorySync && payload.priority === "normal",
     timestamp: payload.sentAt ? Date.parse(payload.sentAt) : Date.now(),
     data: {
       href: payload.href || fallback.href

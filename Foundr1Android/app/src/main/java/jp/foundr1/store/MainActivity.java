@@ -14,6 +14,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -21,7 +22,6 @@ import android.os.Environment;
 import android.provider.CalendarContract;
 import android.provider.MediaStore;
 import android.provider.Settings;
-import android.util.Base64;
 import android.view.DisplayCutout;
 import android.view.View;
 import android.view.Window;
@@ -102,6 +102,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        StoreNavigationBar.acceptLaunchIntent(this, getIntent());
         rootView = new FrameLayout(this);
         webView = new WebView(this);
         webView.setLayoutParams(new FrameLayout.LayoutParams(
@@ -130,6 +131,14 @@ public class MainActivity extends Activity {
         registerAppUpdateDownloadReceiver();
         requestStartupPermissionsIfNeeded();
         addStorePrinterBridgeIfAvailable();
+        try {
+            Object relay = Class.forName("jp.foundr1.store.StoreDeviceRelayBridge")
+                .getConstructor(android.app.Activity.class, android.webkit.WebView.class).newInstance(this, webView);
+            webView.addJavascriptInterface(relay, "Foundr1DeviceRelay");
+        } catch (ClassNotFoundException ignored) {
+            // Store-only native capability.
+        } catch (Exception error) { android.util.Log.e("Foundr1Relay", "bridge initialization", error); }
+
         webView.addJavascriptInterface(new Foundr1NotificationBridge(), "Foundr1NativeNotifications");
         webView.addJavascriptInterface(new Foundr1CalendarBridge(), "Foundr1Calendar");
         webView.addJavascriptInterface(new Foundr1DownloadsBridge(), "Foundr1Downloads");
@@ -207,8 +216,17 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        getWindow().getDecorView().post(() -> StoreNavigationBar.apply(this));
         if (webView != null) webView.onResume();
         invokeStoreOrderPush("refresh", new Class<?>[] { android.content.Context.class }, this);
+        if ("jp.foundr1.store".equals(getPackageName())) {
+            try {
+                Class.forName("jp.foundr1.store.StoreDeviceRelayLifecycle")
+                    .getMethod("resumeIfRequested", android.content.Context.class).invoke(null, this);
+            } catch (ReflectiveOperationException error) {
+                android.util.Log.e("Foundr1Relay", "automatic resume", error);
+            }
+        }
         if (pendingApkDownloadId >= 0 && canInstallUnknownApps()) {
             installDownloadedApk(pendingApkDownloadId);
         }
@@ -258,6 +276,8 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        StoreNavigationBar.acceptLaunchIntent(this, intent);
+        StoreNavigationBar.apply(this);
         handleLaunchIntent(intent);
     }
 
@@ -282,6 +302,18 @@ public class MainActivity extends Activity {
         if (requestCode == INSTALL_PERMISSION_REQUEST && pendingApkDownloadId >= 0 && canInstallUnknownApps()) {
             installDownloadedApk(pendingApkDownloadId);
         }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        getWindow().getDecorView().post(() -> StoreNavigationBar.apply(this));
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) StoreNavigationBar.apply(this);
     }
 
     private void applySystemBarInsets() {
@@ -693,6 +725,14 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 7341) {
+            try {
+                Class.forName("jp.foundr1.store.StoreAndBleScale")
+                    .getMethod("onPermissionResult", Context.class, int.class).invoke(null, this, requestCode);
+            } catch (ClassNotFoundException ignored) {
+                // Store-only peripheral permission callback.
+            } catch (Exception error) { android.util.Log.e("Foundr1Scale", "Bluetooth permission callback", error); }
+        }
         if (requestCode == CAMERA_PERMISSION_REQUEST && pendingPermissionRequest != null) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 pendingPermissionRequest.grant(pendingPermissionRequest.getResources());
@@ -709,9 +749,17 @@ public class MainActivity extends Activity {
         }
         if (requestCode == DOWNLOAD_PERMISSION_REQUEST) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && pendingDownloadBase64 != null) {
-                saveBase64Download(pendingDownloadFileName, pendingDownloadMimeType, pendingDownloadBase64);
+                String result = saveBase64Download(pendingDownloadFileName, pendingDownloadMimeType, pendingDownloadBase64);
+                try {
+                    JSONObject saved = new JSONObject(result);
+                    if (!saved.optBoolean("ok")) {
+                        Toast.makeText(this, saved.optString("error", "ファイルを保存できませんでした。"), Toast.LENGTH_LONG).show();
+                    }
+                } catch (Exception error) {
+                    Toast.makeText(this, "ファイルを保存できませんでした。", Toast.LENGTH_LONG).show();
+                }
             } else {
-                Toast.makeText(this, "PDFを保存する権限が許可されませんでした。", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "ファイルを保存する権限が許可されませんでした。", Toast.LENGTH_LONG).show();
             }
             clearPendingDownload();
         }
@@ -791,69 +839,99 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean supportsImages() {
+            return true;
+        }
+
+        @JavascriptInterface
         public String saveBase64(String fileName, String mimeType, String base64Data) {
-            if (base64Data == null || base64Data.isEmpty() || base64Data.length() > 20_000_000) {
-                return "{\"ok\":false,\"error\":\"保存するPDFデータが大きすぎるか空です。\"}";
+            try {
+                DownloadFilePolicy.Download download = DownloadFilePolicy.prepare(fileName, mimeType, base64Data);
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                    && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                    if (pendingDownloadBase64 != null) {
+                        return "{\"ok\":false,\"error\":\"前の保存の権限確認を完了してから、もう一度保存してください。\"}";
+                    }
+                    pendingDownloadFileName = download.fileName;
+                    pendingDownloadMimeType = download.mimeType;
+                    pendingDownloadBase64 = base64Data;
+                    runOnUiThread(() -> requestPermissions(
+                        new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE },
+                        DOWNLOAD_PERMISSION_REQUEST
+                    ));
+                    return "{\"ok\":true,\"pending\":true}";
+                }
+                return saveDownload(download);
+            } catch (Exception error) {
+                return downloadError(error);
             }
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
-                && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                pendingDownloadFileName = fileName;
-                pendingDownloadMimeType = mimeType;
-                pendingDownloadBase64 = base64Data;
-                runOnUiThread(() -> requestPermissions(
-                    new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE },
-                    DOWNLOAD_PERMISSION_REQUEST
-                ));
-                return "{\"ok\":true,\"pending\":true}";
-            }
-            return saveBase64Download(fileName, mimeType, base64Data);
         }
     }
 
     private String saveBase64Download(String requestedFileName, String requestedMimeType, String base64Data) {
-        String fileName = sanitizeDownloadFileName(requestedFileName);
-        String mimeType = requestedMimeType == null || requestedMimeType.trim().isEmpty()
-            ? "application/octet-stream"
-            : requestedMimeType.trim();
-        Uri mediaUri = null;
         try {
-            byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
+            return saveDownload(DownloadFilePolicy.prepare(requestedFileName, requestedMimeType, base64Data));
+        } catch (Exception error) {
+            return downloadError(error);
+        }
+    }
+
+    private String saveDownload(DownloadFilePolicy.Download download) {
+        Uri mediaUri = null;
+        File outputFile = null;
+        try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ContentValues values = new ContentValues();
-                values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
-                values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
+                values.put(MediaStore.MediaColumns.DISPLAY_NAME, download.fileName);
+                values.put(MediaStore.MediaColumns.MIME_TYPE, download.mimeType);
                 values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Foundr1");
                 values.put(MediaStore.MediaColumns.IS_PENDING, 1);
                 mediaUri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
                 if (mediaUri == null) throw new IllegalStateException("保存先を作成できませんでした。");
                 try (OutputStream output = getContentResolver().openOutputStream(mediaUri)) {
                     if (output == null) throw new IllegalStateException("保存先を開けませんでした。");
-                    output.write(bytes);
+                    output.write(download.bytes);
                 }
                 values.clear();
                 values.put(MediaStore.MediaColumns.IS_PENDING, 0);
-                getContentResolver().update(mediaUri, values, null, null);
+                if (getContentResolver().update(mediaUri, values, null, null) < 1) {
+                    throw new IllegalStateException("保存を完了できませんでした。もう一度保存してください。");
+                }
             } else {
                 File downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
                 if (!downloads.exists() && !downloads.mkdirs()) throw new IllegalStateException("Downloadsフォルダを作成できませんでした。");
-                File outputFile = new File(downloads, fileName);
+                outputFile = uniqueDownloadFile(downloads, download.fileName);
                 try (OutputStream output = new FileOutputStream(outputFile)) {
-                    output.write(bytes);
+                    output.write(download.bytes);
                 }
             }
-            runOnUiThread(() -> Toast.makeText(MainActivity.this, "PDFをDownloadsに保存しました。", Toast.LENGTH_LONG).show());
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, "Downloadsに保存しました。", Toast.LENGTH_LONG).show());
             return "{\"ok\":true}";
         } catch (Exception error) {
-            if (mediaUri != null) getContentResolver().delete(mediaUri, null, null);
-            String message = error.getMessage() == null ? "PDFを保存できませんでした。" : error.getMessage();
-            return "{\"ok\":false,\"error\":\"" + jsonEscape(message) + "\"}";
+            try {
+                if (mediaUri != null) getContentResolver().delete(mediaUri, null, null);
+                if (outputFile != null) outputFile.delete();
+            } catch (Exception cleanupError) {
+                android.util.Log.w("Foundr1Downloads", "incomplete download cleanup", cleanupError);
+            }
+            return downloadError(error);
         }
     }
 
-    private String sanitizeDownloadFileName(String value) {
-        String safe = value == null ? "foundr1-document.pdf" : value.trim().replaceAll("[\\\\/:*?\"<>|]+", "_");
-        if (safe.isEmpty()) safe = "foundr1-document.pdf";
-        return safe.toLowerCase(Locale.ROOT).endsWith(".pdf") ? safe : safe + ".pdf";
+    private File uniqueDownloadFile(File directory, String fileName) throws java.io.IOException {
+        int dot = fileName.lastIndexOf('.');
+        String stem = dot > 0 ? fileName.substring(0, dot) : fileName;
+        String extension = dot > 0 ? fileName.substring(dot) : "";
+        for (int index = 0; index < 1000; index++) {
+            File candidate = new File(directory, index == 0 ? fileName : stem + " (" + index + ")" + extension);
+            if (candidate.createNewFile()) return candidate;
+        }
+        throw new java.io.IOException("同じ名前の保存ファイルが多すぎます。ファイル名を変更してください。");
+    }
+
+    private String downloadError(Exception error) {
+        String message = error.getMessage() == null ? "ファイルを保存できませんでした。" : error.getMessage();
+        return "{\"ok\":false,\"error\":\"" + jsonEscape(message) + "\"}";
     }
 
     private void clearPendingDownload() {

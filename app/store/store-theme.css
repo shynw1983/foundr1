@@ -1,0 +1,328 @@
+/* Store themes are attached to body so fixed dialogs and native <dialog> share
+   the same palette. The provider removes the attribute and variables on exit. */
+body[data-store-theme] {
+  --color-bg: var(--store-bg);
+  --color-surface: var(--store-panel);
+  --color-surface-muted: var(--store-surface-muted);
+  --color-surface-subtle: var(--store-surface-subtle);
+  --color-border: var(--store-line);
+  --color-border-strong: var(--store-line-strong);
+  --color-text: var(--store-ink);
+  --color-text-muted: var(--store-muted);
+  --color-brand: var(--store-primary-text);
+  --color-brand-hover: var(--store-primary-hover);
+  --color-brand-soft: var(--store-primary-soft);
+  --color-brand-border: var(--store-primary-border);
+  --color-brand-ink: var(--store-primary-text);
+  --color-info: var(--store-info);
+  --color-info-soft: var(--store-info-soft);
+  --color-warning: var(--store-warning);
+  --color-warning-soft: var(--store-warning-soft);
+  --color-danger: var(--store-danger);
+  --color-danger-soft: var(--store-danger-soft);
+  --bg: var(--store-bg);
+  --panel: var(--store-panel);
+  --paper: var(--store-panel);
+  --ink: var(--store-ink);
+  --text: var(--store-ink);
+  --muted: var(--store-muted);
+  --line: var(--store-line);
+  --border: var(--store-line);
+  --green: var(--store-primary-text);
+  --green-soft: var(--store-primary-soft);
+  --green-700: var(--store-primary-text);
+  --soft: var(--store-surface-muted);
+  --surface: var(--store-panel);
+  --surface-muted: var(--store-surface-muted);
+  --surface-subtle: var(--store-surface-subtle);
+  --surface-soft: var(--store-surface-muted);
+  --success: var(--store-success);
+  --success-soft: var(--store-success-soft);
+  --blue: var(--store-info);
+  --blue-soft: var(--store-info-soft);
+  --amber: var(--store-warning);
+  --amber-soft: var(--store-warning-soft);
+  --red: var(--store-danger);
+  --red-soft: var(--store-danger-soft);
+  --shadow: var(--store-shadow);
+  --shadow-soft: var(--store-shadow);
+  --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--store-focus-ring) 20%, transparent);
+  color: var(--store-ink);
+  background: var(--store-bg);
+}
+
+/* A text accent and a filled action need different contrast-safe colors. */
+body[data-store-theme] .user-avatar {
+  color: var(--store-on-primary);
+  background: var(--store-primary);
+}
+body[data-store-theme] :is(.primary-button:not(.danger-button):not(.danger-text-button), .receipt-upload-button,
+  .delivery-complete-button, .fulfillment-mark-button,
+  .store-pos-filter-list button.is-active,
+  .store-pos-category-row button.is-active,
+  .store-pos-segmented button.is-active,
+  .store-pos-payment-grid button.is-active,
+  .timecard-view-tabs button.is-active, .timecard-view-tabs a.is-active,
+  .timecard-subtabs button.is-active, .procedure-step-tabs button.is-active,
+  .store-menu-sync-dock-head) {
+  color: var(--store-on-primary);
+  background: var(--store-primary);
+}
+body[data-store-theme] :is(.primary-button:not(.danger-button):not(.danger-text-button), .receipt-upload-button,
+  .delivery-complete-button, .fulfillment-mark-button):hover:not(:disabled) {
+  background: var(--store-primary-hover);
+}
+body[data-store-theme] :is(.primary-button:not(.danger-button):not(.danger-text-button), .receipt-upload-button,
+  .delivery-complete-button, .fulfillment-mark-button):active:not(:disabled) {
+  background: var(--store-primary-active);
+}
+body[data-store-theme] :is(.text-button:not(.danger-button):not(.danger-text-button),
+  .icon-button:not(.danger-button):not(.danger-text-button), .source-indicator,
+  .store-nav-tabs a.is-active, .store-nav-list a.is-active,
+  .store-group-menu[open] > summary, .menu-category-button.is-active,
+  .menu-item-button.is-active, .notification-push-button) {
+  color: var(--store-primary-text);
+}
+body[data-store-theme] :is(input, select, textarea) { accent-color: var(--store-primary); }
+body[data-store-theme] :is(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline-color: var(--store-focus-ring);
+}
+body[data-store-theme] :is(.primary-button:not(.danger-button):not(.danger-text-button), .receipt-upload-button,
+  .delivery-complete-button, .fulfillment-mark-button):disabled {
+  color: var(--store-disabled-ink);
+  background: var(--store-disabled-bg);
+}
+
+/* Operational meaning stays stable when the selected brand color changes. */
+body[data-store-theme] :is(.status-pill.is-payment-paid,
+  .timecard-status.is-working, .timecard-status.is-ready,
+  .mobile-timecard-location.is-ready, .store-reception-state.is-active,
+  .store-pos-business-state.is-active, .store-pos-member-panel.is-linked,
+  .store-light-notice.is-success, .store-kitchen-inventory-audit-result) {
+  color: var(--store-success);
+  border-color: var(--store-success-border);
+  background: var(--store-success-soft);
+}
+body[data-store-theme] :is(.store-status-button.is-on, .store-reception-button.is-on) {
+  color: #fff;
+  border-color: var(--store-success-border);
+  background: var(--store-success);
+}
+body[data-store-theme] :is(.store-reception-state.is-active strong,
+  .store-pos-business-state.is-active strong, .store-light-main.is-on .store-light-state) {
+  color: var(--store-success);
+}
+body[data-store-theme] :is(.store-kitchen-queue-item.is-preparing,
+  .store-kitchen-task.is-preparing) {
+  border-left-color: var(--store-success);
+}
+body[data-store-theme] :is(.store-kitchen-status.is-preparing, .store-kitchen-timing) {
+  color: var(--store-success);
+  background: var(--store-success-soft);
+}
+body[data-store-theme] .store-kitchen-timing.is-ready {
+  color: var(--store-success);
+  background: var(--store-success-soft);
+}
+body[data-store-theme] .store-kitchen-timing.is-warning {
+  color: var(--store-warning);
+  background: var(--store-warning-soft);
+}
+body[data-store-theme] .store-kitchen-timing.is-overdue {
+  color: var(--store-danger);
+  background: var(--store-danger-soft);
+}
+body[data-store-theme] :is(.store-kitchen-order-action.is-checked,
+  .store-kitchen-item-line.is-checked) {
+  outline-color: var(--store-success-border);
+  color: var(--store-success);
+  background: var(--store-success-soft);
+}
+body[data-store-theme] .store-kitchen-queue-item.is-selected {
+  border-left-color: var(--store-primary);
+}
+body[data-store-theme] .store-kitchen-new-order-alert {
+  color: var(--store-on-primary);
+}
+body[data-store-theme] .store-kitchen-new-order-alert > span {
+  color: var(--store-primary-text);
+  background: var(--store-panel);
+}
+body[data-store-theme] .store-kitchen-status-tabs button.is-active b {
+  color: var(--store-on-primary);
+}
+
+/* Fullscreen displays use the same neutral system. Platform labels and media
+   assets retain their original identity colors. */
+body[data-store-theme] :is(.store-kitchen-display, .store-pickup-display-shell,
+  .customer-display-page, .seat-management-page) {
+  color: var(--store-ink);
+  background-color: var(--store-bg);
+}
+body[data-store-theme] .store-courier-display {
+  --courier-paper: var(--store-bg);
+  --courier-ink: var(--store-ink);
+  --courier-ready: var(--store-display-accent);
+  --courier-ready-ink: var(--store-ink);
+  --courier-blue: var(--store-info);
+}
+body[data-store-theme] .store-courier-status-panel {
+  color: var(--store-ink);
+  background: var(--store-panel);
+}
+body[data-store-theme] .store-courier-status-panel.is-ready {
+  --status-color: var(--store-display-on-accent);
+  --status-soft: color-mix(in srgb, var(--store-display-on-accent) 12%, transparent);
+  color: var(--store-display-on-accent);
+  background: var(--store-display-accent);
+}
+body[data-store-theme] .store-courier-status-panel.is-ready .store-courier-section-copy p {
+  color: color-mix(in srgb, var(--store-display-on-accent) 78%, transparent);
+}
+body[data-store-theme] .store-courier-status-panel.is-preparing {
+  --status-color: var(--store-info);
+  --status-soft: var(--store-info-soft);
+  background: var(--store-info-soft);
+}
+body[data-store-theme] .store-courier-status-panel.is-waiting {
+  --status-color: var(--store-muted);
+  --status-soft: var(--store-surface-muted);
+  background: var(--store-surface-subtle);
+}
+body[data-store-theme] .store-courier-order:not(.is-ready) {
+  background: var(--store-surface-muted);
+}
+body[data-store-theme] .store-courier-live i { background: var(--store-success); }
+body[data-store-theme] :is(.customer-display-topbar, .customer-display-items,
+  .customer-display-payment, .customer-display-item, .customer-display-discount,
+  .customer-display-member, .customer-display-cash-card, .customer-display-terminal) {
+  border-color: var(--store-line);
+  background: var(--store-panel);
+}
+body[data-store-theme] .customer-display-advertising:not(.has-media) {
+  color: var(--store-ink);
+  background: var(--store-bg);
+}
+body[data-store-theme] .customer-display-total {
+  border-color: var(--store-primary-border);
+  color: var(--store-primary-text);
+  background: var(--store-primary-soft);
+}
+body[data-store-theme] .customer-display-complete {
+  color: var(--store-success);
+  background: var(--store-success-soft);
+}
+body[data-store-theme] .customer-display-cash-card.is-short {
+  color: var(--store-danger);
+  background: var(--store-danger-soft);
+}
+body[data-store-theme] :is(.procedure-reader-book,
+  .procedure-reader-step-copy, .store-kitchen-inventory-manager-button) {
+  background: var(--store-surface-subtle);
+}
+body[data-store-theme] .procedure-reader-book.is-active {
+  background: var(--store-primary-soft);
+}
+body[data-store-theme] .procedure-reader-progress div { background: var(--store-line); }
+body[data-store-theme] .seat-management-page {
+  --seat-green: var(--store-primary);
+  --seat-green-soft: var(--store-primary-soft);
+  --seat-ink: var(--store-ink);
+  --seat-muted: var(--store-muted);
+}
+body[data-store-theme] :is(.seat-action-primary, .seat-party-size button.is-active) {
+  color: var(--store-on-primary);
+}
+body[data-store-theme] :is(.timecard-farewell-backdrop, .seat-action-backdrop) {
+  background: color-mix(in srgb, var(--store-ink) 38%, transparent);
+}
+
+/* Filled legacy controls opt in to the raw accent; the legacy green alias is
+   deliberately contrast-safe text for older shared components. */
+body[data-store-theme] :is(.floating-feedback-button, .feedback-confirm-button,
+  .online-receipt-actions a, .online-receipt-actions button,
+  .online-receipt-recipient-custom button, .store-version-notice button,
+  .store-reception-button.is-manual,
+  .queue-filter.is-active strong, .shift-period-switcher button.is-active,
+  .shift-period-switcher button[aria-current="page"],
+  .history-calendar-days button.is-start, .history-calendar-days button.is-end,
+  .order-product-card em, .additional-purchase-mode button.is-active) {
+  color: var(--store-on-primary);
+  background: var(--store-primary);
+}
+body[data-store-theme] ::selection {
+  color: var(--store-on-primary);
+  background: var(--store-primary);
+}
+body[data-store-theme] :is(.store-menu-sync-platform.is-succeeded,
+  .store-inventory-history-platforms > span.is-succeeded,
+  .timecard-employee-status.is-working, .store-device-notice.is-success) {
+  color: var(--store-success);
+  background: var(--store-success-soft);
+}
+body[data-store-theme] .action-notice:not(.is-error):not(.is-info) {
+  color: #fff;
+  background: var(--store-success);
+}
+
+body[data-store-theme] .store-menu-sync-dock-dot:not(.is-pending):not(.is-failed) {
+  background: color-mix(in srgb, var(--store-on-primary) 65%, transparent);
+}
+body[data-store-theme] .store-kitchen-task.is-preparing {
+  border-color: var(--store-success-border);
+  background: var(--store-success-soft);
+}
+body[data-store-theme] .store-kitchen-timing.is-new {
+  color: var(--store-muted);
+  background: var(--store-surface-muted);
+}
+body[data-store-theme] .store-kitchen-timing > strong { color: inherit; }
+body[data-store-theme] .danger-button {
+  color: #fff;
+  background: var(--store-danger);
+}
+body[data-store-theme] .danger-text-button { color: var(--store-danger); }
+body[data-store-theme] .action-notice-icon { color: var(--store-success); }
+
+body[data-store-theme] .customer-display-message {
+  color: var(--store-warning);
+  border-color: var(--store-warning-border);
+  background: var(--store-warning-soft);
+}
+/* Text fallbacks for platform/brand marks keep the same identity as the logos. */
+body[data-store-theme] .store-kitchen-platform-logo.is-foundr1 { color: #1f6f5b; }
+body[data-store-theme] .store-courier-brand-mark { color: #fff; background: #1f6f5b; }
+
+body[data-store-theme] button[data-quick-status="enough"][aria-pressed="true"] {
+  color: var(--store-success);
+  border-color: var(--store-success-border);
+  background: var(--store-success-soft);
+}
+body[data-store-theme] .store-light-scale i[data-zone="on"] {
+  background: var(--store-success-soft);
+}
+
+/* These areas previously had dark surfaces and explicit white descendants. */
+body[data-store-theme] .customer-display-topbar,
+body[data-store-theme] .customer-display-topbar :is(h1, .customer-display-clock) {
+  color: var(--store-ink);
+}
+body[data-store-theme] .customer-display-topbar .customer-display-clock small {
+  color: var(--store-muted);
+}
+body[data-store-theme] .customer-display-status-title > span {
+  background: var(--store-muted);
+}
+body[data-store-theme] .customer-display-status-title:is(.is-cash_change, .is-external_wait) > span {
+  background: var(--store-primary-text);
+}
+body[data-store-theme] .customer-display-total small { color: var(--store-primary-text); }
+body[data-store-theme] .customer-display-total small b { color: inherit; }
+body[data-store-theme] .seat-floor-heading div { color: var(--store-primary-text); }
+body[data-store-theme] :is(.store-menu-sync-dock-title small,
+  .store-menu-sync-dock-toggle, .store-kitchen-new-order-alert small) {
+  color: inherit;
+}
+body[data-store-theme] .store-courier-status-panel.is-ready .store-courier-empty {
+  color: inherit;
+}

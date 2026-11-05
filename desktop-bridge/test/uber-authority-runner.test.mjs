@@ -66,7 +66,7 @@ test('a failed retirement does not advance its completed count or enter relation
  p.targets.push({...structuredClone(target),kind:'option',sourceKey:'option:old',targetId:'old',archived:true,price:null});
  driver.retire=async()=>{throw Error('native_guard_failed');};
  await assert.rejects(()=>runUberAuthorityPublication(p,driver,async row=>rows.push(row)),/native_guard_failed/);
- assert.deepEqual(rows.at(-1),{phase:'retiring',sourceKey:'option:old',targetName:'new',completed:0,total:1});
+ assert.deepEqual(rows.at(-1),{phase:'retiring',sourceKey:'option:old',targetName:'new',targetKind:'option',parentName:undefined,completed:0,total:1});
  assert.ok(!rows.some(r=>r.phase==='relationships'));
 });
 test('a successful merchant response without actual changed values is rejected',async()=>{

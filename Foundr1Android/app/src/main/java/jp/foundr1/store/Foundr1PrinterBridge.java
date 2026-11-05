@@ -95,6 +95,26 @@ public class Foundr1PrinterBridge {
         requestBluetoothPermissionIfNeeded();
     }
 
+    // Service path reuses the exact bitmap/ESC-POS renderer without retaining an Activity.
+    private Foundr1PrinterBridge() { this.activity = null; }
+
+    public static void sendRelayNetworkJob(String payloadJson) throws Exception {
+        JSONObject payload = new JSONObject(payloadJson);
+        JSONObject printer = payload.getJSONObject("printer");
+        if (!"escpos_network".equals(printer.optString("deviceType")))
+            throw new IllegalArgumentException("中継印刷は ESC/POS Wi-Fi / LAN のみ対応しています。");
+        String host = printer.optString("host", "").trim();
+        int port = printer.optInt("port", 9100);
+        if (host.isEmpty() || port < 1 || port > 65535) throw new IllegalArgumentException("プリンター設定が不正です。");
+        byte[] bytes = new Foundr1PrinterBridge().buildEscPos(payload);
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(host, port), 5000);
+            socket.setSoTimeout(5000);
+            OutputStream output = socket.getOutputStream();
+            output.write(bytes); output.flush();
+        }
+    }
+
     @JavascriptInterface
     public boolean isAvailable() {
         return true;
@@ -536,12 +556,9 @@ public class Foundr1PrinterBridge {
                     } else if ("orderType".equals(block)) {
                         addKitchenText(
                             lines,
-                            joinReceiptMeta(
-                                chineseKitchen
-                                    ? formatChineseKitchenOrderTypeLabel(order.optString("orderType", ""))
-                                    : formatOrderTypeLabel(order.optString("orderType", "")),
-                                chineseKitchen ? "厨房" : formatPaymentLabel(order)
-                            ),
+                            chineseKitchen
+                                ? formatChineseKitchenOrderTypeLabel(order.optString("orderType", ""))
+                                : formatOrderTypeLabel(order.optString("orderType", "")),
                             blockPaint,
                             style,
                             contentWidth

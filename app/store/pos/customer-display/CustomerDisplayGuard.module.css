@@ -1,0 +1,9 @@
+.surface {
+  overscroll-behavior-x: none;
+  touch-action: pan-y pinch-zoom;
+}
+
+.surface :global(.customer-display-item-list) {
+  overscroll-behavior-x: none;
+  touch-action: pan-y pinch-zoom;
+}

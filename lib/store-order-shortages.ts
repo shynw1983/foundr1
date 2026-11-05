@@ -15,6 +15,8 @@ type StoredCustomization = {
   optionKeys?: string[];
   optionLabels?: string[];
   optionPrices?: number[];
+  linkedItems?: unknown[];
+  localOptions?: unknown[];
   price?: number;
 };
 
@@ -50,6 +52,9 @@ export function buildShortageCandidates(item: {
     price: Math.max(0, Number(item.amount) || 0)
   }];
   customizations(item.customizations).forEach((group, groupIndex) => {
+    // Product-backed selections share the parent's paid/refund unit. Ordinary
+    // option-index mutation cannot rewrite their independent product identities.
+    if (Object.hasOwn(group, 'linkedItems') || Object.hasOwn(group, 'localOptions')) return;
     const labels = Array.isArray(group.optionLabels) ? group.optionLabels : [];
     const prices = Array.isArray(group.optionPrices) ? group.optionPrices : [];
     labels.forEach((label, optionIndex) => {
@@ -104,7 +109,7 @@ function mutateOption(
 ) {
   const next = source.map((group) => ({ ...group }));
   const group = next[groupIndex];
-  if (!group) return null;
+  if (!group || Object.hasOwn(group, 'linkedItems') || Object.hasOwn(group, 'localOptions')) return null;
   const labels = Array.isArray(group.optionLabels) ? [...group.optionLabels] : [];
   if (!labels[optionIndex]) return null;
   const originalName = text(labels[optionIndex]);
@@ -183,6 +188,12 @@ export async function handleStoreOrderShortage(input: {
     if (!match) return { ok: false as const, status: 400, error: "欠品対象が不正です。" };
     const groupIndex = Number(match[1]);
     const optionIndex = Number(match[2]);
+    if (sourceCustomizations[groupIndex] && Object.hasOwn(sourceCustomizations[groupIndex], 'linkedItems')) {
+      return { ok: false as const, status: 400, error: '関連する商品の変更は商品全体で対応してください。' };
+    }
+    if (sourceCustomizations[groupIndex] && Object.hasOwn(sourceCustomizations[groupIndex], 'localOptions')) {
+      return { ok: false as const, status: 400, error: '店内で作成した選択肢の変更は商品全体で対応してください。' };
+    }
     const mutation = mutateOption(sourceCustomizations, groupIndex, optionIndex, input.actionType === "replace" ? replacementName : "");
     if (!mutation) return { ok: false as const, status: 404, error: "欠品オプションが見つかりません。" };
     targetType = "option";

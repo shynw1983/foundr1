@@ -1,5 +1,6 @@
 "use client";
 
+
 import { BriefcaseBusiness, CalendarCheck2, CalendarDays, ClipboardList, Clock3, FileText, Lightbulb, LogOut, MessageSquare, PackageCheck, RefreshCw, Search, Send, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -7,13 +8,14 @@ import { MobileNavMenu } from "../../components/MobileNavMenu";
 import { OsNavList } from "../../components/OsNavList";
 import { UserBadge } from "../../components/UserBadge";
 import { getJstMonthLabel } from "../../../../lib/timecard";
-import { normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from "../../../../lib/store-business-hours";
+import { getStoreBusinessDayTimeRange, normalizeBusinessHours, type StoreBusinessDay, type StoreBusinessHours, type WeekdayKey } from "../../../../lib/store-business-hours";
 import { formatTimelineMinute, getBusinessInterval, getShiftInterval, getTimelineBarStyle, getTimelineInterval } from "../../../../lib/shift-timeline";
 
 type StoreOption = { id: string; name: string; businessHours?: unknown };
 type EmployeeOption = { id: string; name: string; role: string };
 type ShiftRequestItem = {
   id: string;
+  requestVersion: string;
   requestType: "availability" | "day_off" | "swap";
   status: "open" | "approved" | "rejected";
   targetShiftId: string | null;
@@ -163,11 +165,12 @@ function getShiftWindow(request: ShiftRequestItem) {
 function getCoverageSummary(
   requests: ShiftRequestItem[],
   shifts: Array<{ scheduledStart: string | null; scheduledEnd: string | null }>,
-  day: { open: string; close: string; closed: boolean },
+  day: StoreBusinessDay,
   drafts: Record<string, ApprovalDraft>
 ) {
   if (day.closed) return "休業日";
-  const business = getBusinessInterval(day.open, day.close);
+  const range = getStoreBusinessDayTimeRange(day);
+  const business = getBusinessInterval(range.open, range.close);
   const requestIntervals = requests
     .filter((request) => request.status !== "rejected")
     .map((request) => {
@@ -222,7 +225,6 @@ export default function TimecardShiftRequestsPage() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ShiftRequestItem["status"]>("open");
   const [message, setMessage] = useState("");
-  const [publishNote, setPublishNote] = useState("");
   const [approvalDrafts, setApprovalDrafts] = useState<Record<string, ApprovalDraft>>({});
   const [shiftDrafts, setShiftDrafts] = useState<Record<string, ApprovalDraft>>({});
   const [editingShiftId, setEditingShiftId] = useState("");
@@ -271,7 +273,7 @@ export default function TimecardShiftRequestsPage() {
           return next;
         });
       } else {
-        const body = await response.json().catch(() => ({})) as { error?: string };
+        const body = await response.json().catch(() => ({})) as { error?: string; scheduleSync?: { warning?: string | null } };
         setMessage(body.error ?? "シフト連絡を読み込めませんでした。");
       }
     } catch {
@@ -331,6 +333,7 @@ export default function TimecardShiftRequestsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "review_request",
+        requestVersion: request.requestVersion,
         storeId: selectedStoreId,
         requestId: request.id,
         candidateId,
@@ -339,13 +342,13 @@ export default function TimecardShiftRequestsPage() {
         reviewNote: approved ? "" : "reject:"
       })
     });
-    const body = await response.json().catch(() => ({})) as { error?: string };
+    const body = await response.json().catch(() => ({})) as { error?: string; scheduleSync?: { warning?: string | null } };
     if (!response.ok) {
       setMessage(body.error ?? "申請を更新できませんでした。");
       return;
     }
-    setMessage(approved ? "申請を承認しました。" : "申請を却下しました。");
     await loadRequests(selectedStoreId, selectedPeriodKey);
+    setMessage(body.scheduleSync?.warning ?? (approved ? "申請を承認しました。" : "申請を却下しました。"));
   }
 
   async function updateConfirmedShift(shiftId: string, draft: ApprovalDraft) {
@@ -360,33 +363,16 @@ export default function TimecardShiftRequestsPage() {
         approvedEnd: draft.approvedEnd
       })
     });
-    const body = await response.json().catch(() => ({})) as { error?: string };
+    const body = await response.json().catch(() => ({})) as { error?: string; scheduleSync?: { warning?: string | null } };
     if (!response.ok) {
       setMessage(body.error ?? "確定シフトを変更できませんでした。");
       return;
     }
-    setMessage("確定シフトを変更しました。");
     setEditingShiftId("");
     await loadRequests(selectedStoreId, selectedPeriodKey);
+    setMessage(body.scheduleSync?.warning ?? "確定シフトを変更しました。");
   }
 
-  async function publishSchedule() {
-    const response = await fetch("/api/timecard/shift-requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "publish_schedule", storeId: selectedStoreId, month, note: publishNote })
-    });
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    if (!response.ok) {
-      setMessage(body.error ?? "シフトを公開できませんでした。");
-      return;
-    }
-    setPublishNote("");
-    setMessage("シフトを公開しました。");
-    await loadRequests(selectedStoreId, selectedPeriodKey);
-  }
-
-  const latestPublication = data?.publications[0] ?? null;
   const openCount = (data?.requests ?? []).filter((request) => request.status === "open").length;
   const periodOptions = data?.schedulingPeriod
     ? [-1, 0, 1].map((offset) => addSchedulingPeriods(data.schedulingPeriod as SchedulingPeriodOption, offset))
@@ -450,22 +436,7 @@ export default function TimecardShiftRequestsPage() {
           ))}
         </nav>
 
-        <section className="panel shift-request-publish-panel">
-          <div className="panel-title">
-            <CalendarCheck2 />
-            <div>
-              <h3>シフト公開</h3>
-              <p>{latestPublication ? `${formatDateTime(latestPublication.publishedAt)} に ${latestPublication.publishedByName ?? "管理者"} が公開` : "まだこの月のシフトは公開されていません。"}</p>
-            </div>
-          </div>
-          <div className="shift-request-publish-actions">
-            <input value={publishNote} placeholder="公開メモ（任意）" onChange={(event) => setPublishNote(event.target.value)} />
-            <button className="primary-button" type="button" onClick={publishSchedule}>
-              <Send size={16} />
-              シフト公開
-            </button>
-          </div>
-        </section>
+
 
         <section className="timecard-subtabs" aria-label="状態">
           <button className={statusFilter === "open" ? "is-active" : ""} type="button" onClick={() => setStatusFilter("open")}>未確認</button>
@@ -489,7 +460,8 @@ export default function TimecardShiftRequestsPage() {
             const shifts = shiftsByDate.get(workDate) ?? [];
             const day = getBusinessDay(businessHours, workDate);
             const coverageSummary = getCoverageSummary(requests, shifts, day, approvalDrafts);
-            const businessInterval = getBusinessInterval(day.open, day.close);
+            const range = getStoreBusinessDayTimeRange(day);
+            const businessInterval = getBusinessInterval(range.open, range.close);
             const shiftIntervals = shifts.map((shift) => {
               const draft = shiftDrafts[shift.id] ?? { approvedStart: shift.scheduledStart ?? "", approvedEnd: shift.scheduledEnd ?? "" };
               return getShiftInterval(draft.approvedStart, draft.approvedEnd, businessInterval);
@@ -505,7 +477,7 @@ export default function TimecardShiftRequestsPage() {
                 <div className="shift-coverage-head">
                   <div>
                     <h3>{formatWorkDate(workDate)}</h3>
-                    <p>営業時間 {day.closed ? "休業" : `${day.open}-${day.close}`} / 希望 {requests.length} 件 / 確定 {shifts.length} 件</p>
+                    <p>営業時間 {day.closed ? "休業" : day.open24Hours ? "24時間営業" : `${day.open}-${day.close}`} / 希望 {requests.length} 件 / 確定 {shifts.length} 件</p>
                   </div>
                   <strong>{coverageSummary}</strong>
                 </div>
@@ -547,7 +519,7 @@ export default function TimecardShiftRequestsPage() {
                                 value={draft.approvedEnd}
                                 onChange={(event) => setShiftDrafts((current) => ({ ...current, [shift.id]: { ...draft, approvedEnd: event.target.value } }))}
                               />
-                              <button className="primary-button" type="button" onClick={() => updateConfirmedShift(shift.id, draft)}>変更を保存</button>
+                              <button className="primary-button" type="button" onClick={() => updateConfirmedShift(shift.id, draft)}>保存して同期</button>
                               <button
                                 className="secondary-button"
                                 type="button"

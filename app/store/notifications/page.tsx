@@ -6,6 +6,9 @@ import { StoreNavTabs } from "../components/StoreNavTabs";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import { nativeOrderPush, type NativeOrderPushStatus } from "../../../lib/store-order-push-client";
 
+import { createStoreRefreshCoordinator } from "../../../lib/store-polling-client";
+import { createReadError } from "../../../components/useReadRequest";
+
 type Rule = { storeId: string; storeName: string; key: string; enterRadius: number; exitRadius: number };
 type Preference = { employeeId: string; employeeName: string; storeId: string; storeName: string; enabled: boolean; enterRadius: number; exitRadius: number; updatedAt: string };
 type Data = {
@@ -27,27 +30,40 @@ export default function StoreNotificationsPage() {
   const [exitRadius, setExitRadius] = useState(500), [enterRadius, setEnterRadius] = useState(300), [enabled, setEnabled] = useState(false);
   const [savingRule, setSavingRule] = useState(false);
   const [ruleFeedback, setRuleFeedback] = useState<{ error: boolean; message: string } | null>(null);
+  const refreshRef = useRef<ReturnType<typeof createStoreRefreshCoordinator> | null>(null);
   const savingRuleRef = useRef(false), loadVersion = useRef(0), deviceIdRef = useRef("");
   const ruleFormRef = useRef<HTMLFormElement>(null);
-  const load = useCallback(async (refreshNative = true) => {
+  const loadSnapshot = useCallback(async (signal: AbortSignal) => {
+    const refreshNative = true;
     if (savingRuleRef.current) return;
     const version = ++loadVersion.current;
     if (refreshNative && window.Foundr1OrderPush) {
-      try { const state = await nativeOrderPush("status"); setNative(state); deviceIdRef.current = state.deviceId; }
+      try { const state = await nativeOrderPush("status"); if (signal.aborted) return; setNative(state); deviceIdRef.current = state.deviceId; }
       catch { /* Account settings remain usable when the native bridge is unavailable. */ }
     }
+    if (signal.aborted) return;
     const deviceId = deviceIdRef.current;
-    const response = await fetch(`/api/store/order-notifications?deviceId=${encodeURIComponent(deviceId)}`, { cache: "no-store" });
+    const response = await fetch(`/api/store/order-notifications?deviceId=${encodeURIComponent(deviceId)}`, { cache: "no-store", signal });
+    if (!response.ok) throw createReadError(response);
     const body = await response.json();
-    if (!response.ok) throw new Error(body.error || "通知を取得できませんでした。");
-    if (version === loadVersion.current && !savingRuleRef.current) setData(body);
+    if (!signal.aborted && version === loadVersion.current && !savingRuleRef.current) setData(body);
   }, []);
+  const load = (_refreshNative = true) => refreshRef.current?.refresh() ?? Promise.resolve();
   useEffect(() => {
-    void load().catch((error: Error) => setError(error.message));
-    const refresh = () => { if (!document.hidden) void load().catch((error: Error) => setError(error.message)); };
-    const timer = setInterval(refresh, 15_000); document.addEventListener("visibilitychange", refresh); window.addEventListener("focus", refresh);
-    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); window.removeEventListener("focus", refresh); };
-  }, [load]);
+    // Rule/device/delivery changes have no complete Pusher stream. Retain bounded
+    // unavailable-subscription reconciliation; never borrow the bell's health.
+    const coordinator = createStoreRefreshCoordinator(loadSnapshot, {
+      healthyIntervalMs: 5 * 60_000, fallbackIntervalMs: 60_000,
+      onUnauthorized: () => { loadVersion.current++; setData(null); setNative(null); deviceIdRef.current = ""; },
+      onError: error => setError(error.message || "通知を取得できませんでした。")
+    });
+    refreshRef.current = coordinator;
+    coordinator.start({ immediate: true });
+    return () => {
+      loadVersion.current++; coordinator.stop();
+      if (refreshRef.current === coordinator) refreshRef.current = null;
+    };
+  }, [loadSnapshot]);
   useEffect(() => {
     if (!native?.alarmVersion) return;
     const timer = setInterval(() => {

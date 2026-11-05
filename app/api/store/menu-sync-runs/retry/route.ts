@@ -1,6 +1,6 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
-import { inventoryTargetOverlapSql, newerInventoryOperationSql } from "../../../../../lib/inventory-command-supersession";
+import { retryInventorySyncCommandSql } from "../../../../../lib/inventory-sync-attention";
 import { withInventoryOperationLock } from "../../../../../lib/inventory-operation-lock";
 import {
   publishBridgeCommandAvailable,
@@ -14,6 +14,9 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
+  if (request.headers.get("origin") !== new URL(request.url).origin || request.headers.get("sec-fetch-site") === "cross-site") {
+    return Response.json({ error: "不正なリクエスト元です。" }, { status: 403 });
+  }
 
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const requestedStoreId = String(body.storeId ?? "").trim();
@@ -61,45 +64,14 @@ export async function POST(request: Request) {
       maxAttempts: 3
     }
   };
-  const rows = await sql.query(`
-    update local_bridge_commands as target
-    set
-      status = 'pending',
-      attempts = 0,
-      available_at = now(),
-      claimed_by_device_id = null,
-      claimed_at = null,
-      claim_expires_at = null,
-      completed_at = null,
-      payload = target.payload || jsonb_build_object('manualRetryAt', now()),
-      result = $3::jsonb,
-      last_error = '',
-      updated_at = now()
-    where target.id::text = $1
-      and target.store_id::text = $2
-      and target.command_type = 'set_inventory_availability'
-      and target.status = 'failed'
-      and coalesce(target.payload->>'mappingBlocked','false') <> 'true'
-      and not exists (
-        select 1 from local_bridge_commands reading
-        where reading.store_id=target.store_id and reading.command_type='audit_inventory'
-          and reading.payload->>'availabilityAuthority'='uber_eats' and reading.status in ('pending','processing')
-      )
-      and not exists (
-        select 1
-        from local_bridge_commands as newer
-        where ${newerInventoryOperationSql("target")}
-          and exists (
-              select 1
-              from jsonb_array_elements(coalesce(newer.payload->'targets', '[]'::jsonb)) newer_target
-              join jsonb_array_elements(coalesce(target.payload->'targets', '[]'::jsonb)) old_target
-                on ${inventoryTargetOverlapSql}
-            )
-      )
-    returning target.id::text, target.platform
-  `, [commandId, storeId, JSON.stringify(progress)]);
+  let rows;
+  try {
+    rows = await withInventoryOperationLock(storeId, () => sql.query(retryInventorySyncCommandSql, [commandId, storeId, JSON.stringify(progress)]));
+  } catch {
+    return Response.json({ error: "販売状態を更新中です。完了後に再実行してください。" }, { status: 409 });
+  }
   if (!rows[0]) {
-    return Response.json({ error: "This task cannot be retried because it is no longer failed or a newer task exists." }, { status: 409 });
+    return Response.json({ error: "この処理は再試行できません。最新の販売状態と商品の対応IDを確認してください。" }, { status: 409 });
   }
 
   const platform = String(rows[0].platform ?? "");

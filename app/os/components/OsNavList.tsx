@@ -45,6 +45,7 @@ export type OsNavItem = {
 };
 
 const orderModulePaths = new Set([
+  "/os/replenishment",
   "/os/orders",
   "/os/procurement",
   "/os/history",
@@ -61,6 +62,7 @@ const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/set
 const systemUsageNavItem: OsNavItem = { label: "外部サービス利用量", href: "/os/system-usage", icon: Gauge };
 export const canonicalNavItems: OsNavItem[] = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
+  { label: "補充依頼", href: "/os/replenishment", icon: PackageSearch },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
   { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
@@ -126,6 +128,7 @@ export const navModules: OsNavModule[] = [
     label: "発注・購入",
     icon: PackageCheck,
     paths: [
+      { href: "/os/replenishment" },
       { href: "/os/orders" },
       { href: "/os/procurement" },
       { href: "/os/history" },

@@ -1,0 +1,12 @@
+.summary { cursor: pointer; font-weight: 600; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-block: 16px; }
+.filters label,.editor label { display: grid; gap: 6px; min-width: 0; font-weight: 500; }
+.filters select,.filters input,.editor select,.editor input { width: 100%; min-width: 0; max-width: 100%; min-height: 40px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); font: inherit; }
+.body { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 20px; }
+.list { max-height: 480px; overflow-y: auto; min-width: 0; }
+.list button { display: grid; gap: 4px; width: 100%; text-align: left; padding: 10px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; overflow-wrap: anywhere; cursor: pointer; }
+.list button[aria-pressed="true"] { background: var(--green-soft,#eef5f1); }
+.list small { color: var(--muted); font-weight: 400; }
+.editor { display: grid; gap: 10px; align-content: start; min-width: 0; overflow-wrap: anywhere; }
+.editor h4,.editor p { margin: 0; }
+@media(max-width:800px) { .body { grid-template-columns: minmax(0,1fr); } .filters>* { flex: 1 1 180px; min-width: 0; } .list { max-height: 260px; } }

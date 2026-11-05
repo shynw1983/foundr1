@@ -159,7 +159,7 @@ export class RocketMenuClient {
     if(Array.isArray(detail.options))detail.options=nativeMenuOrder(detail.options,'exposeOrder');
     return detail;
   }
-  async updateDish(id, patch) {
+  async updateDish(id, patch, beforeWrite) {
     // Fetch immediately before the write so a prior sold-out state is retained.
     const detail=await this.detail(id);
     if (String(detail.dishId)!==rocketPhysicalId(id)) throw new Error('rocket_menu_identity_mismatch');
@@ -169,6 +169,7 @@ export class RocketMenuClient {
     const stock=optionStockCatalog(await this.transport.request(`${this.readBase}/all-options?fetchDish=true`));
     const statuses=retainedOptionStatuses(detail,patch.groups??detail.options??[],stock);
     const body=rocketDishUpdate(detail,patch,this.storeId,statuses);
+    if(beforeWrite)await beforeWrite({detail,body});
     await this.transport.request(`${this.writeBase}/dishes/${rocketPhysicalId(id)}/update`,'POST',body);
     const [actual,afterStock]=await Promise.all([this.detail(id),
       this.transport.request(`${this.readBase}/all-options?fetchDish=true`).then(optionStockCatalog)]);
@@ -195,7 +196,7 @@ export class RocketMenuClient {
       unitPriceBasis:null,baseUnit:null,weightValue:null
     },{receiptKey:`rocket:${this.storeId}:item:${marker}`});
   }
-  async updateOption(id,{name,price,retire=false}) {
+  async updateOption(id,{name,price,retire=false},beforeWrite) {
     const physicalId=rocketPhysicalId(id);
     const before=await this.catalog();
     const matches=before.groups.flatMap(group=>(group.optionItems??[]).filter(item=>String(item.optionItemId)===physicalId).map(item=>({group,item})));
@@ -204,6 +205,7 @@ export class RocketMenuClient {
     const displayStatus=retire?'NOT_EXPOSE':item.displayStatus;
     if(!['ON_SALE','NOT_EXPOSE','SOLD_OUT_TODAY'].includes(displayStatus))throw new Error('rocket_menu_unknown_availability');
     const salePrice=yen(price??Number(item.salePrice));
+    if(beforeWrite)await beforeWrite({group,item});
     await this.transport.request(`${this.writeBase}/option-items/${physicalId}/update`,'POST',{
       optionId:Number(group.optionId),optionItemName:name??item.optionItemName,displayStatus,
       salePrice,salePriceMoney:{currencyCode:'JPY',units:salePrice,nanos:0}

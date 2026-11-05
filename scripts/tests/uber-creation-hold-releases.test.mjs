@@ -16,7 +16,7 @@ const json=value=>JSON.parse(JSON.stringify(value));
 async function fixture(platform='rocket_now') {
   const db=new PGlite();
   await db.exec(`
-    create table menu_uber_sources(id uuid,store_id uuid,brand_id uuid,enabled bool,auto_publish bool,publish_config jsonb);
+    create table menu_uber_sources(id uuid,store_id uuid,brand_id uuid,enabled bool,auto_publish bool,publish_config jsonb,revision integer default 52);
     create table menu_uber_objects(source_id uuid,source_key text,kind text,target_id uuid,archived bool);
     create table menu_external_platforms(id uuid,brand_id uuid,store_id uuid,platform_key text);
     create table menu_platform_object_mappings(external_platform_id uuid,store_id uuid,target_type text,target_id uuid,external_id text,external_parent_id text);
@@ -46,7 +46,7 @@ async function fixture(platform='rocket_now') {
   const proof={sourceId:ids.source,storeId:ids.store,platform,merchantId,sourceKey,kind:'option',targetId:ids.target,externalId,externalParentId:parent,
     inventoryCommandId:ids.inventory,auditCommandId:ids.audit,completedAt:times.completed,capturedAt:times.captured,verified:true,isAvailable:true};
   const scope={sourceId:ids.source,storeId:ids.store,platform,merchantId,nodes,mappings,releases:[proof]};
-  await db.query('insert into menu_uber_sources values($1,$2,$3,true,true,$4)',[ids.source,ids.store,ids.brand,JSON.stringify({[platform]:{merchantId}})]);
+  await db.query('insert into menu_uber_sources(id,store_id,brand_id,enabled,auto_publish,publish_config) values($1,$2,$3,true,true,$4)',[ids.source,ids.store,ids.brand,JSON.stringify({[platform]:{merchantId}})]);
   await db.query('insert into menu_uber_objects values($1,$2,\'option\',$3,false)',[ids.source,sourceKey,ids.target]);
   await db.query('insert into menu_external_platforms values($1,$2,null,$3)',[ids.platform,ids.brand,platform]);
   await db.query('insert into menu_platform_object_mappings values($1,null,\'option\',$2,$3,$4)',[ids.platform,ids.target,externalId,parent]);
@@ -81,7 +81,7 @@ async function fixture(platform='rocket_now') {
   const command=async id=>(await db.query('select * from local_bridge_commands where id=$1',[id])).rows[0];
   const change=async(role,field,value)=>{
     assert.ok(['payload','result','status','platform','command_type','created_at','completed_at','store_id'].includes(field));
-    await db.query(`update local_bridge_commands set ${field}=$1 where id=$2`,[typeof value==='object'?JSON.stringify(value):value,ids[role]]);
+    await db.query(`update local_bridge_commands set ${field}=$1 where id=$2`,[value!==null&&typeof value==='object'?JSON.stringify(value):value,ids[role]]);
   };
   return {db,ids,times,scope,proof,mappings,nodes,service,inventoryPayload,inventoryResult,auditPayload,auditResult,reset,command,change,
     recognize:patch=>service.loadVerifiedCreationHoldReleases({...scope,...patch}),
@@ -112,7 +112,8 @@ for(const platform of ['rocket_now','demae_can'])test(`${platform}: only real ex
 test('failed/partial/non-Store/unverified and pre-creation inventory operations do not release',async()=>{
   const h=await fixture();try {
     for(const [field,value] of [['status','failed'],['command_type','audit_inventory'],['payload',{...h.inventoryPayload,isAvailable:false}],['payload',{...h.inventoryPayload,syncSource:'menu'}],
-      ['payload',{...h.inventoryPayload,verifyAvailability:false}],['payload',{...h.inventoryPayload,targets:[{...h.inventoryPayload.targets[0],knownExternalIds:['other']}]}],
+      ['payload',{...h.inventoryPayload,verifyAvailability:false}],['payload',{...h.inventoryPayload,verifyAvailability:undefined}],
+      ['payload',{...h.inventoryPayload,targets:[{...h.inventoryPayload.targets[0],knownExternalIds:['other']}]}],
       ['result',{...h.inventoryResult,missingTargetCount:1}],['result',{...h.inventoryResult,matchedTargetCount:0}],['result',{...h.inventoryResult,desiredHidden:true}],
       ['result',{...h.inventoryResult,outcome:'not_applicable'}],['created_at',new Date(Date.parse(h.times.identified)-1000).toISOString()]]) {
       await h.reset();await h.change('inventory',field,value);assert.equal((await h.recognize()).length,0,field);
@@ -179,4 +180,147 @@ test('dedicated audit never bypasses existing authentication, device claim or ta
       assert.notEqual((await h.command(h.ids.audit)).status,'succeeded');
     }finally {await h.db.close();}
   }
+});
+
+
+async function recoveryFixture(platform='rocket_now') {
+  const h=await fixture(platform),parentTarget=randomUUID(),parentSource=`option_group:${randomUUID()}`;
+  const parentId=platform==='rocket_now'?h.proof.externalParentId:'0080';
+  const parent={kind:'option_group',targetId:parentTarget,sourceKey:parentSource,archived:false};
+  const parentMapping={kind:'option_group',targetId:parentTarget,externalId:parentId,externalParentId:''};
+  h.scope.nodes.push(parent);h.scope.mappings.push(parentMapping);
+  await h.db.query("insert into menu_uber_objects values($1,$2,'option_group',$3,false)",[h.ids.source,parentSource,parentTarget]);
+  await h.db.query("insert into menu_platform_object_mappings values($1,null,'option_group',$2,$3,'')",[h.ids.platform,parentTarget,parentId]);
+  const recovery={version:1,mode:'verify_release',failedJobId:randomUUID(),failedJobError:`uber_authority_draft_exposed:${h.proof.sourceKey}`,
+    sourceKey:h.proof.sourceKey,externalId:h.proof.externalId,externalParentId:h.proof.externalParentId,
+    guard:{revision:52,checkedAt:Date.parse(h.times.auditCreated)-500,expectedAvailable:true,releaseCommandId:h.ids.inventory},
+    inventoryTargets:json(h.inventoryPayload.targets)};
+  const target={...h.nodes[0],parentId:parentTarget,name:'Exact native choice',price:316,marker:'FS1234567890abcd',mappings:[{...h.mappings[0],created:true}]};
+  const repairPayload={authoritativePublication:true,sourceId:h.ids.source,brandId:h.ids.brand,storeId:h.ids.store,platformKey:platform,merchantId:h.scope.merchantId,
+    revision:52,newItemsHidden:true,imagePolicy:'read_only',targets:[{...parent,name:'Group',marker:'FS2234567890abcd',mappings:[parentMapping]},target],recovery};
+  const inspection={found:true,identityVerified:true,sourceKey:h.proof.sourceKey,targetId:h.proof.targetId,kind:h.proof.kind,
+    externalId:h.proof.externalId,externalParentId:h.proof.externalParentId,name:target.name,price:target.price,hidden:false,isAvailable:true,
+    nativeStatus:platform==='rocket_now'?'ON_SALE':'AVAILABLE',parentIds:[parentId],parentNames:['Group'],staged:false};
+  const repairResult={recoveryVersion:1,sourceId:h.ids.source,brandId:h.ids.brand,storeId:h.ids.store,revision:52,platformKey:platform,merchantId:h.scope.merchantId,
+    failedJobId:recovery.failedJobId,mode:'verify_release',sourceKey:h.proof.sourceKey,targetId:h.proof.targetId,kind:h.proof.kind,
+    externalId:h.proof.externalId,externalParentId:h.proof.externalParentId,inspection,observations:[inspection],outcome:'verified_release',changed:0,blockers:[],
+    inspectedAt:Date.parse(h.times.captured),capturedAt:h.times.captured};
+  const oldReset=h.reset;
+  h.reset=async()=>{await oldReset();await h.change('audit','command_type','repair_menu_sync');await h.change('audit','payload',repairPayload);await h.change('audit','result',repairResult);};
+  await h.reset();
+  return {...h,repairPayload,repairResult,parentId,async validate(result=repairResult,payload=repairPayload,patch={}) {
+    await h.change('audit','status','processing');await h.change('audit','completed_at',null);
+    return h.service.validateMenuRecoveryHoldReleaseAcknowledgement({commandId:h.ids.audit,storeId:h.ids.store,platform,payload,result,...patch});
+  }};
+}
+
+for(const platform of ['rocket_now','demae_can'])test(`${platform}: persisted exact native recovery read recognizes only the selected explicit release`,async()=>{
+  const h=await recoveryFixture(platform);try {
+    assert.equal((await h.recognize()).length,1);
+    const proof=await h.validate();assert.equal(proof.auditCommandId,h.ids.audit);assert.equal(proof.inventoryCommandId,h.ids.inventory);
+    assert.equal(proof.validation,'persisted-native-audit-v1');
+    await h.change('audit','status','succeeded');await h.change('audit','completed_at',h.times.auditCompleted);
+    assert.equal((await h.recognize()).length,1);
+    await h.db.query('update menu_uber_creation_attempts set updated_at=$1',[h.times.auditCreated]);
+    assert.equal((await h.recognize()).length,0,'receipt changed since explicit inventory release');
+    await assert.rejects(h.validate(),/menu_recovery_hold_release_unverified/);
+  }finally {await h.db.close();}
+});
+
+test('legacy Rocket intent requires a new exact read-only recovery proof; the historical command remains immutable',async()=>{
+  const h=await recoveryFixture();try {
+    const legacy={...h.inventoryPayload};delete legacy.verifyAvailability;
+    const reset=async()=>{await h.reset();await h.change('inventory','payload',legacy);};
+    await reset();const original=json(await h.command(h.ids.inventory));
+    assert.equal((await h.recognize()).length,1,'the fresh recovery read supplies verification, not the historical intent');
+    const proof=await h.validate();assert.equal(proof.inventoryCommandId,h.ids.inventory);assert.equal(proof.auditCommandId,h.ids.audit);
+    assert.deepEqual(json(await h.command(h.ids.inventory)),original);
+    await h.change('audit','status','succeeded');await h.change('audit','completed_at',h.times.auditCompleted);
+    assert.equal((await h.recognize()).length,1,'the exact evidence remains recognizable after persistence');
+    for(const flag of [false,null,'true']) {
+      await reset();await h.change('inventory','payload',{...legacy,verifyAvailability:flag});
+      assert.equal((await h.recognize()).length,0);await assert.rejects(h.validate(),/menu_recovery_hold_release_unverified/);
+    }
+    for(const patch of [{changed:1},{outcome:'inspected'},{observations:[]},{inspectedAt:Date.parse(h.times.auditCreated)-1000},
+      {inspection:{...h.repairResult.inspection,isAvailable:false}},{inspection:{...h.repairResult.inspection,hidden:true}},
+      {inspection:{...h.repairResult.inspection,forceNotExpose:true}},{inspection:{...h.repairResult.inspection,parentIds:['other']}}]) {
+      await reset();const result={...h.repairResult,...patch};
+      if(patch.inspection)result.observations=[patch.inspection];
+      await h.change('audit','result',result);assert.equal((await h.recognize()).length,0,JSON.stringify(patch));
+      await assert.rejects(h.validate(result),/menu_recovery_hold_release_unverified/);
+    }
+    await reset();await h.change('audit','status','pending');assert.equal((await h.recognize()).length,0,'historical intent alone never supplies proof');
+    await reset();await h.change('audit','command_type','audit_inventory');assert.equal((await h.recognize()).length,0,'legacy omission cannot use the ordinary audit path');
+  }finally {await h.db.close();}
+});
+
+test('missing verification flag remains unsupported outside the confirmed legacy Rocket recovery path',async()=>{
+  const h=await recoveryFixture('demae_can');try {
+    const legacy={...h.inventoryPayload};delete legacy.verifyAvailability;await h.change('inventory','payload',legacy);
+    assert.equal((await h.recognize()).length,0);await assert.rejects(h.validate(),/menu_recovery_hold_release_unverified/);
+  }finally {await h.db.close();}
+});
+
+test('recovery native proof rejects partial, ambiguous, mismatched and stale evidence',async()=>{
+  const h=await recoveryFixture();try {
+    const row=h.repairResult.inspection;
+    const mutations=[{inspection:{...row,found:false}},{inspection:{...row,identityVerified:false}},{inspection:{...row,isAvailable:false}},
+      {inspection:{...row,hidden:true}},{inspection:{...row,externalId:'other'}},{inspection:{...row,externalParentId:'other'}},
+      {inspection:{...row,sourceKey:'option:other:other'}},{inspection:{...row,targetId:randomUUID()}},{inspection:{...row,parentIds:[]}},
+      {inspection:{...row,parentIds:[h.parentId,h.parentId]}},{inspection:{...row,name:'different'}},{inspection:{...row,price:317}},
+      {inspection:{...row,nativeStatus:'UNKNOWN'}},{inspection:{...row,forceNotExpose:true}},
+      {observations:[]},{observations:[row,row]},{observations:[{...row,name:'other'}]},{changed:1},{blockers:['identity_unverified']},
+      {outcome:'inspected'},{mode:'inspect'},{sourceId:randomUUID()},{storeId:randomUUID()},{brandId:randomUUID()},{revision:53},
+      {failedJobId:randomUUID()},{platformKey:'demae_can'},{merchantId:'other'},{capturedAt:h.times.auditCreated},
+      {inspectedAt:Date.parse(h.times.auditCreated)-1000},{inspectedAt:String(Date.parse(h.times.captured))}];
+    for(const patch of mutations) {
+      await h.reset();const result={...h.repairResult,...patch};
+      if(patch.inspection)result.observations=[patch.inspection];
+      await h.change('audit','result',result);assert.equal((await h.recognize()).length,0,JSON.stringify(patch));
+      await assert.rejects(h.validate(result),/menu_recovery_hold_release_unverified/,JSON.stringify(patch));
+    }
+    for(const [role,field,value] of [['inventory','completed_at',h.times.auditCreated],['inventory','created_at',new Date(Date.parse(h.times.identified)-1000).toISOString()],
+      ['inventory','status','failed'],['inventory','store_id',randomUUID()],['inventory','platform','demae_can'],
+      ['audit','created_at',h.times.created],['audit','completed_at',h.times.auditCreated]]) {
+      await h.reset();await h.change(role,field,value);assert.equal((await h.recognize()).length,0,`${role}.${field}`);
+    }
+    for(const recovery of [{...h.repairPayload.recovery,inventoryTargets:[]},{...h.repairPayload.recovery,inventoryTargets:[...h.repairPayload.recovery.inventoryTargets,...h.repairPayload.recovery.inventoryTargets]},
+      {...h.repairPayload.recovery,guard:{...h.repairPayload.recovery.guard,releaseCommandId:randomUUID()}},
+      {...h.repairPayload.recovery,guard:{...h.repairPayload.recovery.guard,checkedAt:Date.parse(h.times.captured)-121000}}]) {
+      await h.reset();const payload={...h.repairPayload,recovery};await h.change('audit','payload',payload);
+      assert.equal((await h.recognize()).length,0);await assert.rejects(h.validate(h.repairResult,payload),/menu_recovery_hold_release_unverified/);
+    }
+    await h.reset();await assert.rejects(h.validate(h.repairResult,h.repairPayload,{storeId:randomUUID()}),/menu_recovery_hold_release_unverified/);
+    await h.reset();await h.db.query('update menu_uber_sources set revision=53');await assert.rejects(h.validate(),/menu_recovery_hold_release_unverified/);
+  }finally {await h.db.close();}
+});
+
+test('recovery can use one exact subset of a successful whole inventory operation, with no target borrowing',async()=>{
+  const h=await recoveryFixture();try {
+    const other={...h.inventoryPayload.targets[0],targetId:randomUUID(),label:'Other',knownExternalIds:['sub_checkbox_999_888']};
+    const inventoryPayload={...h.inventoryPayload,targets:[h.inventoryPayload.targets[0],other]};
+    await h.change('inventory','payload',inventoryPayload);await h.change('inventory','result',{...h.inventoryResult,matchedTargetCount:2});
+    assert.equal((await h.recognize()).length,1);assert.ok(await h.validate());
+    await h.change('audit','status','succeeded');await h.change('audit','completed_at',h.times.auditCompleted);
+    const wrong={...h.repairPayload,recovery:{...h.repairPayload.recovery,inventoryTargets:[other]}};
+    await h.change('audit','payload',wrong);assert.equal((await h.recognize()).length,0);await assert.rejects(h.validate(h.repairResult,wrong),/menu_recovery_hold_release_unverified/);
+    await h.reset();await h.change('inventory','payload',inventoryPayload);assert.equal((await h.recognize()).length,0,'a partial original whole-operation result is rejected');
+  }finally {await h.db.close();}
+});
+
+test('recovery mapping/parent ambiguity cannot grant a persisted release',async()=>{
+  const h=await recoveryFixture();try {
+    const selected=h.repairPayload.targets[1];
+    for(const targets of [[...h.repairPayload.targets,selected],
+      [h.repairPayload.targets[0],{...selected,mappings:[...selected.mappings,...selected.mappings]}],
+      [h.repairPayload.targets[0],{...selected,parentId:randomUUID()}],
+      [{...h.repairPayload.targets[0],mappings:[{...h.repairPayload.targets[0].mappings[0],externalId:'999'}]},selected],
+      [h.repairPayload.targets[0],{...selected,mappings:[{...selected.mappings[0],created:false}]}]]) {
+      await h.reset();const payload={...h.repairPayload,targets};await h.change('audit','payload',payload);
+      assert.equal((await h.recognize()).length,0);await assert.rejects(h.validate(h.repairResult,payload),/menu_recovery_hold_release_unverified/);
+    }
+    await h.reset();const duplicate={...h.mappings[0],targetId:randomUUID()};
+    await h.db.query("insert into menu_platform_object_mappings values($1,null,'option',$2,$3,$4)",[h.ids.platform,duplicate.targetId,h.proof.externalId,h.proof.externalParentId]);
+    assert.equal((await h.recognize({mappings:[...h.mappings,duplicate]})).length,0);await assert.rejects(h.validate(),/menu_recovery_hold_release_unverified/);
+  }finally {await h.db.close();}
 });

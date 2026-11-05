@@ -21,7 +21,7 @@ export async function getOrderPushRules(employeeId: string) {
     join stores s on s.id = p.store_id and s.status = 'active'
     join employees e on e.id = p.employee_id and e.status = 'active'
     where p.employee_id::text = ${employeeId} and p.enabled
-      and e.role in ('owner', 'manager', 'store_terminal')
+      and e.role in ('owner', 'manager', 'store_owner', 'store_terminal')
       and (e.role in ('owner', 'manager') or exists (
         select 1 from employee_scopes sc where sc.employee_id = e.id and sc.scope_type = 'store' and sc.store_id = s.id
       ))
@@ -88,7 +88,7 @@ async function getOutsideDevices(storeId: string) {
     join store_order_push_preferences p on p.employee_id = e.id and p.store_id::text = ${storeId} and p.enabled
     join stores s on s.id = p.store_id and s.status = 'active'
     join store_order_push_presence pr on pr.device_id = d.id and pr.store_id = p.store_id and pr.state = 'outside'
-    where d.revoked_at is null and e.role in ('owner', 'manager', 'store_terminal') and (e.role in ('owner', 'manager') or exists (
+    where d.revoked_at is null and e.role in ('owner', 'manager', 'store_owner', 'store_terminal') and (e.role in ('owner', 'manager') or exists (
       select 1 from employee_scopes sc where sc.employee_id = e.id and sc.scope_type = 'store' and sc.store_id = s.id
     ))
   ` as Array<OrderPushDevice & OrderPushRule & { presenceRuleKey: string }>;

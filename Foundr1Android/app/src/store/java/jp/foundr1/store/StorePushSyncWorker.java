@@ -21,6 +21,7 @@ public class StorePushSyncWorker extends Worker {
             if (!StoreOrderPush.hasLocationPermission(context) || !StoreOrderPush.locationEnabled(context) || manager == null || !manager.areNotificationsEnabled()) StoreOrderPush.markUnknown(context);
             JSONObject body = new JSONObject();
             body.put("token", StoreOrderPush.prefs(context).getString("fcmToken", ""));
+            body.put("inventorySyncVersion", 1);
             body.put("presence", StoreOrderPush.presenceArray(context));
             connection = (HttpURLConnection) new URL("https://www.foundr1.jp/api/store/order-notifications/presence").openConnection();
             connection.setConnectTimeout(8000); connection.setReadTimeout(8000);

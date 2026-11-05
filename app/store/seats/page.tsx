@@ -3,8 +3,11 @@
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 
 import { ArrowLeft, Check, Clock3, RotateCcw, Sparkles, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../lib/store-polling-client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createStoreRefreshCoordinator, rememberStoreBusinessHours } from "../../../lib/store-polling-client";
+
+import { bindStoreRealtimeChannels } from "../../../lib/store-realtime-refresh";
+import { createReadError } from "../../../components/useReadRequest";
 
 type SeatStatus = "available" | "selecting" | "cooking" | "dining" | "cleaning";
 
@@ -70,6 +73,8 @@ const statusMeta: Record<SeatStatus, { label: string; action?: string; source: "
 
 export default function StoreSeatsPage() {
   const { t } = useOsTranslation();
+  const refreshRef = useRef<ReturnType<typeof createStoreRefreshCoordinator> | null>(null);
+  const writeVersionRef = useRef(0);
   const [seats, setSeats] = useState<Seat[]>(initialSeats);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [showMap, setShowMap] = useState(false);
@@ -113,62 +118,53 @@ export default function StoreSeatsPage() {
 
   useEffect(() => {
     let active = true;
-    let pusher: any;
-    let channels: any[] = [];
-    async function load(showLoading = false) {
-      if (showLoading) setLoading(true);
-      try {
-        const response = await fetch("/api/store/seats", { cache: "no-store" });
-        const data = await response.json() as SeatBoardResponse;
-        if (!response.ok) throw new Error(data.error || "座席情報を取得できませんでした。");
-        if (active) {
-          applyBoard(data);
-          setError("");
-        }
-      } catch (loadError) {
-        if (active) setError(loadError instanceof Error ? loadError.message : "通信できません。");
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    const poller = createStoreFallbackPoller(() => load(), { baseIntervalMs: 60_000 });
-    const stopPolling = () => poller.stop();
-    const startPolling = () => poller.start();
-
-    void load(true);
-    startPolling();
-    fetch("/api/store/realtime-config", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then(async (config) => {
+    let pusher: ReturnType<(typeof import("../../../lib/shared-pusher-client"))["acquireSharedPusher"]> | undefined;
+    let unbindRealtime: (() => void) | undefined;
+    const configController = new AbortController();
+    const deny = () => {
+      if (!active) return;
+      active = false; configController.abort();
+      setSeats([]); setSelection(null); setStoreId(""); setStoreName("");
+      setSharedTables([]); unbindRealtime?.(); pusher?.disconnect();
+      coordinator.stop();
+    };
+    const coordinator = createStoreRefreshCoordinator(async signal => {
+      const writeVersion = writeVersionRef.current;
+      const response = await fetch("/api/store/seats", { cache: "no-store", signal });
+      if (!response.ok) throw createReadError(response);
+      const data = await response.json() as SeatBoardResponse;
+      if (!active || signal.aborted) return;
+      if (writeVersion !== writeVersionRef.current) { void coordinator.refresh(); return; }
+      applyBoard(data); setError(""); setLoading(false);
+    }, {
+      healthyIntervalMs: 60_000, fallbackIntervalMs: 30_000,
+      onUnauthorized: deny,
+      onError: loadError => { if (active) { setLoading(false); setError(loadError.message || "通信できません。"); } }
+    });
+    refreshRef.current = coordinator;
+    coordinator.start({ immediate: true });
+    void fetch("/api/store/realtime-config", { cache: "no-store", signal: configController.signal })
+      .then(response => response.ok ? response.json() : null)
+      .then(async config => {
         if (!active || !config?.key || !config?.cluster || !config?.channels?.length) return;
         const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
         if (!active) return;
         pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
-        const refreshBoard = () => void load();
-        pusher.connection.bind("unavailable", () => startPolling());
-        pusher.connection.bind("failed", () => startPolling());
-        pusher.connection.bind("disconnected", () => startPolling());
-        channels = config.channels.map((channelName: string) => {
-          const channel = pusher.subscribe(channelName);
-          channel.bind("pusher:subscription_succeeded", stopPolling);
-          channel.bind("pusher:subscription_error", () => startPolling());
-          channel.bind("store.seats.updated", refreshBoard);
-          channel.bind("order.created", refreshBoard);
-          channel.bind("order.updated", refreshBoard);
-          return channel;
+        unbindRealtime = bindStoreRealtimeChannels(pusher, {
+          onUnauthorized: deny,
+          channels: config.channels, events: ["store.seats.updated", "order.created", "order.updated"],
+          onEvent: () => { void coordinator.refresh(); },
+          onHealthChange: healthy => {
+            if (!active) return;
+            coordinator.setRealtimeHealthy(healthy);
+            if (healthy) void coordinator.refresh({ force: true });
+          }
         });
-      })
-      .catch(() => startPolling());
+      }).catch(() => undefined);
     return () => {
-      active = false;
-      stopPolling();
-      channels.forEach((channel) => {
-        channel.unbind("store.seats.updated");
-        channel.unbind("order.created");
-        channel.unbind("order.updated");
-        pusher?.unsubscribe(channel.name);
-      });
-      pusher?.disconnect();
+      active = false; configController.abort(); coordinator.stop();
+      if (refreshRef.current === coordinator) refreshRef.current = null;
+      unbindRealtime?.(); pusher?.disconnect();
     };
   }, []);
 
@@ -213,7 +209,9 @@ export default function StoreSeatsPage() {
       });
       const data = await response.json() as SeatBoardResponse;
       if (!response.ok) throw new Error(data.error || "座席を更新できませんでした。");
+      writeVersionRef.current += 1;
       applyBoard(data);
+      void refreshRef.current?.refresh();
       setSelection(null);
       setMoving(false);
     } catch (saveError) {
@@ -236,7 +234,9 @@ export default function StoreSeatsPage() {
       });
       const data = await response.json() as SeatBoardResponse;
       if (!response.ok) throw new Error(data.error || "座席を変更できませんでした。");
+      writeVersionRef.current += 1;
       applyBoard(data);
+      void refreshRef.current?.refresh();
       setSelection(null);
       setMoving(false);
     } catch (moveError) {
@@ -259,7 +259,9 @@ export default function StoreSeatsPage() {
       });
       const data = await response.json() as SeatBoardResponse;
       if (!response.ok) throw new Error(data.error || "相席モードを変更できませんでした。");
+      writeVersionRef.current += 1;
       applyBoard(data);
+      void refreshRef.current?.refresh();
       setSelection(null);
     } catch (toggleError) {
       setError(toggleError instanceof Error ? toggleError.message : "通信できません。");
@@ -270,17 +272,8 @@ export default function StoreSeatsPage() {
 
   async function refreshBoard() {
     setLoading(true);
-    try {
-      const response = await fetch("/api/store/seats", { cache: "no-store" });
-      const data = await response.json() as SeatBoardResponse;
-      if (!response.ok) throw new Error(data.error || "座席情報を取得できませんでした。");
-      applyBoard(data);
-      setError("");
-    } catch (refreshError) {
-      setError(refreshError instanceof Error ? refreshError.message : "通信できません。");
-    } finally {
-      setLoading(false);
-    }
+    await refreshRef.current?.refresh();
+    setLoading(false);
   }
 
   function renderSeat(seat: Seat) {

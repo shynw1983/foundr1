@@ -185,7 +185,7 @@ export async function mapInventoryOrderSource(storeId:string,orderId:string,expe
   const results=await sql.transaction(queries);
   if(!results.at(-1)?.[0])return invalid("原注文またはメニューが更新済みです。記録済みの耗用は変更できません。",409);
   try { await sql`update inventory_order_usage_issues set resolved_at=now(),updated_at=now() where order_id::text=${orderId} and resolved_at is null
-    and code in ('unsupported_bridge_identity','missing_menu_identity','missing_option_identity','missing_structured_options','invalid_option_identity','unresolved_replacement','prepared_source_missing','source_incomplete','source_changed_not_ready','preparation_time_unconfirmed')`; } catch { /* confirmation was committed; explicit retry remains safe */ }
+    and code in ('unsupported_bridge_identity','missing_menu_identity','missing_option_identity','missing_structured_options','invalid_option_identity','local_option_unmapped','invalid_local_option_identity','unresolved_replacement','prepared_source_missing','source_incomplete','source_changed_not_ready','preparation_time_unconfirmed')`; } catch { /* confirmation was committed; explicit retry remains safe */ }
   return {ok:true as const,result:await safeSyncInventoryOrderUsage(orderId)};
 }
 export async function readInventoryUsageSettings(storeId: string): Promise<InventoryUsageSettings> {
@@ -246,7 +246,7 @@ export async function markInventoryOrderReady(orderId: string, options: Inventor
 }
 
 async function loadPlanContext(order: OrderRow) {
-  const targetIds = [...new Set(order.sourceSnapshot!.items.flatMap(item=>[item.menuCatalogItemId,...item.options.map(option=>option.id)]).filter((id):id is string=>Boolean(id)))];
+  const targetIds = [...new Set(order.sourceSnapshot!.items.flatMap(item=>[item.menuCatalogItemId,...item.options.map(option=>option.id),...(item.linkedItems||[]).map(linked=>linked.id)]).filter((id):id is string=>Boolean(id)))];
   const recipeRows = targetIds.length ? await sql`
     select recipes.id::text,recipes.brand_id::text as "brandId",recipes.target_type as "targetType",recipes.target_id::text as "targetId",
       versions.id::text as "versionId",versions.snapshot

@@ -1,4 +1,4 @@
-import { requireStaffAdminSession, canAssignStaffRole, canManageTargetRole, filterStoreIdsForStaffAdmin, hasValidScopedStoreSelection } from "../../../../lib/staff-admin-access";
+import { requireStaffAdminSession, canAssignStaffRole, canManageTargetRole, filterStoreIdsForStaffAdmin, hasValidScopedStoreSelection, getManageableStaffIds } from "../../../../lib/staff-admin-access";
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { hashPassword, shouldRequirePasswordChangeForRole, validatePasswordStrength } from "../../../../lib/auth";
 import { sql } from "../../../../lib/db";
@@ -280,7 +280,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   `;
   const targetRole = String(targetRows[0]?.role ?? "");
   const currentPasswordMustChange = targetRows[0]?.passwordMustChange === true;
-  if (!targetRole || !canManageTargetRole(access, targetRole)) {
+  if (!targetRole || !canManageTargetRole(access, targetRole) || !(await getManageableStaffIds(access, [id])).has(id)) {
     return Response.json({ error: "このスタッフを編集する権限がありません。" }, { status: 403 });
   }
 
@@ -349,7 +349,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!name || !loginId) {
     return Response.json({ error: "氏名とログインIDを入力してください。" }, { status: 400 });
   }
-  if (!canAssignStaffRole(access, role)) {
+  if (role !== targetRole && !canAssignStaffRole(access, role)) {
     return Response.json({ error: "この権限に変更できません。" }, { status: 403 });
   }
   if (!hasValidScopedStoreSelection(access, requestedVisibleStoreIds, requestedWorkStoreIds)) {
@@ -807,7 +807,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     limit 1
   `;
   const targetRole = String(targetRows[0]?.role ?? "");
-  if (!targetRole || !canManageTargetRole(access, targetRole)) {
+  if (!targetRole || !canManageTargetRole(access, targetRole) || !(await getManageableStaffIds(access, [id])).has(id)) {
     return Response.json({ error: "このスタッフを削除する権限がありません。" }, { status: 403 });
   }
 

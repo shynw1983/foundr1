@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, UserRound } from "lucide-react";
+import { LogOut, Settings, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { NotificationMenu } from "./NotificationMenu";
 import { OsLanguagePicker } from "./OsTranslationProvider";
@@ -27,12 +27,14 @@ export function UserBadge({
   showNotifications = true,
   showLanguagePicker = true,
   showQuickActions = true,
+  showOsLink = false,
   showStorePicker = true,
   logoutHref = "/os/logout"
 }: {
   showNotifications?: boolean;
   showLanguagePicker?: boolean;
   showQuickActions?: boolean;
+  showOsLink?: boolean;
   showStorePicker?: boolean;
   logoutHref?: string;
 }) {
@@ -98,6 +100,7 @@ export function UserBadge({
               <span>{employee.loginId}</span>
             </div>
           </div>
+          {showOsLink ? <a href="/os"><Settings size={16} />OS 管理画面</a> : null}
           <a href={logoutHref}>
             <LogOut size={16} />
             ログアウト

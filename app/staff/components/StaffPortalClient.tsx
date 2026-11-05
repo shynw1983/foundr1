@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { createAvailabilityDrafts } from "../../../lib/staff-shift-availability";
 import { formatDuration, formatJstDateTime, formatJstTime, getJstMonthLabel } from "../../../lib/timecard";
 import { UserBadge } from "../../os/components/UserBadge";
 import { FarewellDialog, type TimecardFarewell } from "../../../components/timecard/FarewellDialog";
@@ -93,6 +94,7 @@ type ShiftRequestItem = {
 };
 
 type ShiftRequestPayload = {
+  selectedStoreId?: string;
   requests?: ShiftRequestItem[];
   myShifts?: ShiftEntry[];
   nextShift?: ShiftEntry | null;
@@ -113,15 +115,10 @@ type ShiftRequestPayload = {
     deadlineAt: string;
   };
   submissionDates?: string[];
+  submissionDefaults?: Array<{ workDate: string; availableStart: string; availableEnd: string }>;
 };
 
-type AvailabilityDayDraft = {
-  workDate: string;
-  wantsWork: boolean;
-  availableStart: string;
-  availableEnd: string;
-  note: string;
-};
+type AvailabilityDayDraft = ReturnType<typeof createAvailabilityDrafts>[number];
 
 type PayrollItem = {
   id: string;
@@ -279,22 +276,6 @@ function formatDateTime(value: string | null | undefined) {
   }).format(date);
 }
 
-function createAvailabilityDrafts(dates: string[], requests: ShiftRequestItem[]) {
-  return dates.map((workDate) => {
-    const existing = requests.find((request) => (
-      request.requestType === "availability"
-      && (request.workDate === workDate || request.windows?.some((window) => window.workDate === workDate))
-    ));
-    const window = existing?.windows?.find((entry) => entry.workDate === workDate);
-    return {
-      workDate,
-      wantsWork: Boolean(existing),
-      availableStart: window?.availableStart ?? "10:00",
-      availableEnd: window?.availableEnd ?? "16:00",
-      note: window?.note ?? existing?.note ?? ""
-    };
-  });
-}
 
 function getRequestTypeLabel(type: string) {
   if (type === "availability") return "希望シフト";
@@ -387,7 +368,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
       if (!response.ok) return;
       const body = await response.json().catch(() => ({})) as ShiftRequestPayload;
       setShiftPayload(body);
-      setAvailabilityDrafts(createAvailabilityDrafts(body.submissionDates ?? [], body.requests ?? []));
+      setAvailabilityDrafts(createAvailabilityDrafts(body.submissionDates ?? [], body.requests ?? [], body.submissionDefaults));
       setSwapTargetShiftId((current) => current || body.myShifts?.[0]?.id || "");
     } finally {
       setIsShiftLoading(false);
@@ -502,13 +483,14 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
   }
 
   async function submitAvailability() {
-    if (!selectedStoreId) return;
+    if (!selectedStoreId || shiftPayload?.selectedStoreId !== selectedStoreId || !shiftPayload.submissionPeriod) return;
     setShiftMessage("");
     const response = await fetch("/api/timecard/shift-requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "create_availability_period",
+        submissionStart: shiftPayload.submissionPeriod.startDate,
         storeId: selectedStoreId,
         entries: availabilityDrafts
           .filter((draft) => draft.wantsWork)
@@ -521,8 +503,8 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
           }))
       })
     });
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    setShiftMessage(response.ok ? "希望シフトを送信しました。" : body.error ?? "希望シフトを送信できませんでした。");
+    const body = await response.json().catch(() => ({})) as { error?: string; cancellationCount?: number };
+    setShiftMessage(response.ok ? (body.cancellationCount ? "取り下げ希望を送信しました。承認までは確定シフトが維持されます。" : "希望シフトを送信しました。") : body.error ?? "希望シフトを送信できませんでした。");
     if (response.ok) await loadShiftRequests(selectedStoreId);
   }
 

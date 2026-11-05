@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
 import { reverseLoyaltyForRefundedOrder } from "../../../../../lib/loyalty";
@@ -6,6 +7,7 @@ import { getCashBreakdownTotal, normalizeCashBreakdown, type CashBreakdown } fro
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import { getStoreCashBusinessDayState } from "../../../../../lib/store-business-hours";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
+import { PosCashSessionChangedError, posCashSessionGuards, posCashStoreLock, posCashFinancialGuard } from "../../../../../lib/pos-bowl-data";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +101,7 @@ async function getSessionFinancials(sessionId: string) {
       from store_customer_orders
       where pos_cash_session_id::text = ${sessionId}
         and order_source in ('store_pos', 'table_qr')
-        and payment_status = 'paid'
+        and payment_status in ('paid', 'partial_refunded')
         and payment_provider = 'cash'
         and status <> 'cancelled'
     `,
@@ -255,9 +257,10 @@ async function getPreviousClosedSession(storeId: string, businessDate: string) {
     left join employees closed_by on closed_by.id = pos_cash_sessions.closed_by
     where pos_cash_sessions.store_id::text = ${storeId}
       and pos_cash_sessions.status = 'closed'
-      and pos_cash_sessions.business_date < ${businessDate}
+      and pos_cash_sessions.business_date <= ${businessDate}
+      and pos_cash_sessions.closed_at is not null
       and pos_cash_sessions.counted_cash_amount is not null
-    order by pos_cash_sessions.business_date desc, pos_cash_sessions.closed_at desc
+    order by pos_cash_sessions.closed_at desc, pos_cash_sessions.id desc
     limit 1
   `;
   return rows[0] as PreviousClosedCashSession | undefined ?? null;
@@ -438,7 +441,7 @@ export async function GET(request: Request) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { access, selectedStoreId, forbidden } = await getSelectedStoreId(request, session);
-  if (forbidden) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  if (forbidden || !selectedStoreId) return Response.json({ error: "権限がありません。" }, { status: 403 });
   const businessState = await getCashBusinessState(selectedStoreId);
   const businessDate = normalizeText(new URL(request.url).searchParams.get("date")) || businessState.businessDate;
 
@@ -452,7 +455,7 @@ export async function GET(request: Request) {
     getOrders(selectedStoreId, businessDate),
     getOrderCorrections(selectedStoreId, businessDate),
     getPaymentTotals(selectedStoreId, businessDate),
-    getActiveCashResponsibleEmployees(selectedStoreId, businessDate)
+    getActiveCashResponsibleEmployees(selectedStoreId, activeSession?.businessDate ?? businessDate)
   ]);
   const totals = sessions.reduce((sum, item) => ({
     openingAmount: sum.openingAmount + item.openingAmount,
@@ -490,6 +493,7 @@ export async function POST(request: Request) {
     storeId?: string;
     openingAmount?: number;
     openingBreakdown?: CashBreakdown;
+    openingPickupNumber?: unknown;
     countedCashAmount?: number;
     countedBreakdown?: CashBreakdown;
     amount?: number;
@@ -515,6 +519,13 @@ export async function POST(request: Request) {
   const businessState = await getCashBusinessState(storeFilter);
 
   if (action === "open") {
+    const submittedPickupNumber = body.openingPickupNumber;
+    const openingPickupNumber = !Object.prototype.hasOwnProperty.call(body, "openingPickupNumber") ? 1
+      : typeof submittedPickupNumber === "number" ? submittedPickupNumber
+      : typeof submittedPickupNumber === "string" && /^\d{1,3}$/.test(submittedPickupNumber) ? Number(submittedPickupNumber) : NaN;
+    if (!Number.isInteger(openingPickupNumber) || openingPickupNumber < 1 || openingPickupNumber > 999) {
+      return Response.json({ error: "開始する呼び出し番号を001〜999の整数で入力してください。" }, { status: 400 });
+    }
     const existing = await getOpenSession(storeFilter);
     if (existing) return Response.json({ error: "すでに開いているレジ締めがあります。" }, { status: 400 });
     const openingBreakdown = normalizeCashBreakdown(body.openingBreakdown);
@@ -522,11 +533,17 @@ export async function POST(request: Request) {
     const note = normalizeText(body.note);
     const previousClosedSession = await getPreviousClosedSession(storeFilter, businessState.businessDate);
     if (previousClosedSession && openingAmount !== Number(previousClosedSession.countedCashAmount ?? 0) && !note) {
-      return Response.json({ error: "前回閉店金額と開始金額が違うため理由を入力してください。" }, { status: 400 });
+      return Response.json({ error: "前回レジ締め金額と開始金額が違うため理由を入力してください。" }, { status: 400 });
     }
     const registerName = normalizeText(body.registerName) || "POS";
-    await sql`
+    const openingSessionId = randomUUID();
+    let opened;
+    try {
+      [, opened] = await sql.transaction([
+        posCashStoreLock(storeFilter),
+        sql`
       insert into pos_cash_sessions (
+        id,
         store_id,
         business_date,
         register_name,
@@ -537,7 +554,8 @@ export async function POST(request: Request) {
         source,
         opened_by
       )
-      values (
+      select
+        ${openingSessionId}::uuid,
         ${storeFilter},
         ${businessState.businessDate},
         ${registerName},
@@ -547,8 +565,23 @@ export async function POST(request: Request) {
         ${openingAmount},
         'manual',
         ${session.id}
-      )
-    `;
+      where not exists(select 1 from pos_cash_sessions where store_id::text=${storeFilter} and status='open')
+      returning id::text
+    `,
+        // A retry which did not create this exact opening must not reset codes.
+        sql`insert into pos_pickup_counters(store_id,last_number)
+          select ${storeFilter}::uuid,${openingPickupNumber - 1} where exists(select 1 from pos_cash_sessions
+            where id=${openingSessionId}::uuid and store_id::text=${storeFilter} and status='open')
+          on conflict(store_id) do update set last_number=excluded.last_number`
+      ]);
+    } catch (error) {
+      if ((error as { code?: string; constraint?: string }).code === "23505"
+        && (error as { constraint?: string }).constraint === "idx_pos_cash_sessions_one_open_per_store") {
+        return Response.json({ error: "すでに開いているレジ締めがあります。" }, { status: 400 });
+      }
+      throw error;
+    }
+    if (!opened.length) return Response.json({ error: "すでに開いているレジ締めがあります。" }, { status: 400 });
   } else if (action === "movement") {
     const activeSession = await getOpenSession(storeFilter);
     if (!activeSession) return Response.json({ error: "先に日次レジ締めを開始してください。" }, { status: 400 });
@@ -600,7 +633,11 @@ export async function POST(request: Request) {
     if (!activeEmployees.some((employee) => employee.id === closingResponsibleEmployeeId)) {
       return Response.json({ error: "出勤中・本日シフト・責任者の候補から締め責任者を選択してください。" }, { status: 400 });
     }
-    await sql`
+    try {
+      await sql.transaction([
+        ...posCashSessionGuards(storeFilter, activeSession.id),
+        posCashFinancialGuard(storeFilter, activeSession.id, expectedCashAmount),
+        sql`
       update pos_cash_sessions
       set
         status = 'closed',
@@ -613,8 +650,19 @@ export async function POST(request: Request) {
         closed_at = now(),
         updated_at = now()
       where id::text = ${activeSession.id}
+        and store_id::text = ${storeFilter}
         and status = 'open'
-    `;
+    `, sql`update store_relay_stations set scale_session=null,scale_tare_context='{}'::jsonb,
+      scale_filter_state='{}'::jsonb,scale_sequence=-1,scale_reading=null,scale_received_at=null
+      where store_id::text=${storeFilter} and not exists(select 1 from pos_cash_sessions c
+        where c.store_id=store_relay_stations.store_id and c.status='open')`]);
+    } catch (error) {
+      if ((error as { code?: string }).code === "22012") {
+        const failure = new PosCashSessionChangedError();
+        return Response.json({ error: failure.message, code: failure.code }, { status: failure.status });
+      }
+      throw error;
+    }
   } else if (action === "delete_movement") {
     if (!canManageCashReconciliation) return Response.json({ error: "レジ締めを修正する権限がありません。" }, { status: 403 });
     const movementId = normalizeText(body.movementId);
@@ -754,7 +802,7 @@ export async function POST(request: Request) {
     getOrders(storeFilter, businessDate),
     getOrderCorrections(storeFilter, businessDate),
     getPaymentTotals(storeFilter, businessDate),
-    getActiveCashResponsibleEmployees(storeFilter, businessDate)
+    getActiveCashResponsibleEmployees(storeFilter, activeSession?.businessDate ?? businessDate)
   ]);
   const totals = sessions.reduce((sum, item) => ({
     openingAmount: sum.openingAmount + item.openingAmount,

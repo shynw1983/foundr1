@@ -1,0 +1,15 @@
+.panel { min-width: 0; display: grid; gap: 12px; }
+.panel p { margin: 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fields { display: grid; grid-template-columns: minmax(0,2fr) repeat(2,minmax(0,1fr)); gap: 12px; }
+.fields label { display: grid; gap: 6px; min-width: 0; font-size: 13px; }
+.fields select,.fields input { min-width: 0; width: 100%; box-sizing: border-box; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.check input { width: 16px; height: 16px; flex: 0 0 16px; accent-color: var(--primary, #164e3d); }
+.history { display: grid; gap: 8px; }
+.job { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 8px; border-top: 1px solid var(--border); font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 850px) { .fields { grid-template-columns: repeat(2,minmax(0,1fr)); } .fields label:first-child { grid-column: 1/-1; } }
+@media (max-width: 480px) { .fields { grid-template-columns: minmax(0,1fr); } .actions button { max-width:100%; white-space:normal; } }
+.fields select,.fields input { min-height: 38px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface, #fff); color: inherit; font: inherit; }
+.fields select:focus,.fields input:focus { outline: 2px solid var(--primary, #164e3d); outline-offset: 1px; }
+.panel button:disabled { opacity: .5; cursor: not-allowed; }

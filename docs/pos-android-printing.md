@@ -71,3 +71,10 @@ Templates can be overridden per brand through `kitchenTicketTemplateVariants`. B
 - `/os/pos`: save receipt template and POS settings.
 - `/store/pos`: after checkout, send receipt print jobs and brand-grouped kitchen print jobs when enabled.
 - Kitchen ticket copies are configured per store (1-5). The web app sends one bridge print call per copy for both POS and Web reservation kitchen tickets.
+
+
+## POS Home Print Queue Visibility
+
+`/os/pos` provides **POS の「印刷待ち・再印刷」欄を表示**, saved per store as `printer_settings.showPrintQueue`. It defaults to `true`, including existing settings without the field. Turning it off hides only the POS home print queue panel; explicit access from checkout results and checkout history remains available.
+
+This display setting does not stop printing, delete pending-document records or print-ledger history, or change automatic printing and retry behavior. Staff can continue reviewing pending documents and explicitly reprinting from checkout history.

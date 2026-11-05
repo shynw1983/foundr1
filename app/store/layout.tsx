@@ -3,11 +3,10 @@ import { cookies } from "next/headers";
 import { authCookieName,readSessionToken } from "../../lib/auth";
 import { canUseFullStoreWorkbench } from "../../lib/store-inventory-policy";
 import { getAppVersion, getShortAppVersion } from "../../lib/app-version";
-import { StoreNativeOrderNotifier } from "./components/StoreNativeOrderNotifier";
-import { StoreInventorySyncStatus } from "./components/StoreInventorySyncStatus";
-import { StorePrintStation } from "./components/StorePrintStation";
-import { StoreVersionNotice } from "./components/StoreVersionNotice";
+import { StoreOperationalServices } from "./components/StoreOperationalServices";
+import { StoreThemeProvider } from "./components/StoreThemeProvider";
 import "./store-responsive.css";
+import "./store-theme.css";
 
 export const metadata: Metadata = {
   title: "Foundr1 STORE",
@@ -40,16 +39,16 @@ export default async function StoreLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const version = getAppVersion();
+  const version = getAppVersion("store");
   // Rendering only: API routes still check the active DB session and scope.
   // Restricted personal Store users do not start unrelated order/print feeds.
   const cookieStore=await cookies();
-  const fullWorkbench=canUseFullStoreWorkbench(readSessionToken(cookieStore.get(authCookieName)?.value)?.role??"");
+  const session=readSessionToken(cookieStore.get(authCookieName)?.value);
+  const fullWorkbench=canUseFullStoreWorkbench(session?.role??"");
   return (
-    <>
-      <StoreVersionNotice initialVersion={version} initialShortVersion={getShortAppVersion(version)} />
-      {fullWorkbench ? <><StoreNativeOrderNotifier /><StorePrintStation /><StoreInventorySyncStatus /></> : null}
+    <StoreThemeProvider employeeId={session?.id ?? ""}>
+      <StoreOperationalServices fullWorkbench={fullWorkbench} initialVersion={version} initialShortVersion={getShortAppVersion(version)} />
       {children}
-    </>
+    </StoreThemeProvider>
   );
 }

@@ -157,6 +157,13 @@ final class StorePushNotifications {
             .setContentIntent(pending).setCategory(Notification.CATEGORY_EVENT).setAutoCancel(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE).setOnlyAlertOnce(false).setTimeoutAfter(5 * 60_000).addExtras(extras).build();
     }
+    static Notification buildOperational(Context context, String title, String body, PendingIntent pending, android.os.Bundle extras, boolean silent) {
+        return new androidx.core.app.NotificationCompat.Builder(context, channel(context).getId()).setSmallIcon(R.drawable.ic_launcher)
+            .setContentTitle(title).setContentText(body).setStyle(new androidx.core.app.NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(pending).setCategory(Notification.CATEGORY_STATUS).setAutoCancel(true)
+            .setVisibility(Notification.VISIBILITY_PRIVATE).setOnlyAlertOnce(true).setSilent(silent)
+            .setTimeoutAfter(10 * 60_000).addExtras(extras).build();
+    }
     static void preview(Context context) {
         if (StoreOrderAlarmService.enabled(context)) { StoreOrderAlarmService.preview(context); return; }
         Intent open = new Intent(context, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP)

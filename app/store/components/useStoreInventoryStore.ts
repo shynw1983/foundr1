@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "./store-selection";
+import { loadStoreInventoryStore } from "./store-inventory-store";
 
 export function useStoreInventoryStore() {
   const [storeId, setStoreId] = useState(""), [error, setError] = useState(""), [loading, setLoading] = useState(true);
@@ -10,15 +11,12 @@ export function useStoreInventoryStore() {
   useEffect(() => {
     mounted.current = true;
     const controller = new AbortController();
-    const requested = new URLSearchParams(window.location.search).get("storeId")?.trim() || getStoredStoreSelection();
+    const explicitStoreId = new URLSearchParams(window.location.search).get("storeId")?.trim() ?? null;
     void (async () => {
       try {
-        const response = await fetch(`/api/store/context${requested ? `?storeId=${encodeURIComponent(requested)}` : ""}`, { cache: "no-store", signal: controller.signal });
-        const body = await response.json(); if (!mounted.current || controller.signal.aborted) return;
-        if (!response.ok) throw new Error(body.error || "この店舗の在庫を確認する権限がありません。");
-        const selected = String(body.selectedStoreId ?? "");
-        if (!selected || (requested && selected !== requested)) throw new Error("指定した店舗を確認できません。担当者に確認してください。");
-        setStores(body.access?.stores ?? []); setStoreId(selected); setStoredStoreSelection(selected);
+        const result = await loadStoreInventoryStore({ explicitStoreId, storedStoreId: explicitStoreId !== null ? "" : getStoredStoreSelection(), signal: controller.signal });
+        if (!mounted.current || controller.signal.aborted) return;
+        setStores(result.stores); setStoreId(result.storeId); setStoredStoreSelection(result.storeId);
       } catch (failure) { if (!controller.signal.aborted && mounted.current) setError(failure instanceof Error ? failure.message : "店舗を確認できませんでした。"); }
       finally { if (!controller.signal.aborted && mounted.current) setLoading(false); }
     })();

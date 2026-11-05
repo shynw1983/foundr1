@@ -7,6 +7,7 @@ import { getStoredStoreSelection, setStoredStoreSelection } from "../components/
 import { useVisibleRefresh } from "../components/useVisibleRefresh";
 import { formatJstDateTime, getJstMonthLabel } from "../../../lib/timecard";
 import { FarewellDialog, type TimecardFarewell } from "../../../components/timecard/FarewellDialog";
+import { canUseFullStoreWorkbench } from "../../../lib/store-inventory-policy";
 
 type StoreOption = {
   id: string;
@@ -43,8 +44,6 @@ const punchActions = [
   { type: "break_end", label: "休憩終了", icon: Coffee },
   { type: "clock_out", label: "退勤", icon: LogOut }
 ];
-
-const storeTimecardRoles = new Set(["owner", "manager", "store_terminal"]);
 
 function getPunchState(latestPunch: LatestPunch) {
   if (!latestPunch || latestPunch.punchType === "clock_out") return "off";
@@ -102,7 +101,7 @@ export default function StoreTimecardPage() {
   }, []);
 
   useEffect(() => {
-    if (!data?.currentEmployeeRole || storeTimecardRoles.has(data.currentEmployeeRole)) return;
+    if (!data?.currentEmployeeRole || canUseFullStoreWorkbench(data.currentEmployeeRole)) return;
     if (data.currentEmployeeRole === "staff") {
       window.location.replace("/staff/timecard");
     } else {
@@ -116,7 +115,7 @@ export default function StoreTimecardPage() {
 
   const employeesForStore = useMemo(() => getEmployeesForStore(data?.employees ?? [], selectedStoreId), [data, selectedStoreId]);
   const isStoreTerminal = data?.currentEmployeeRole === "store_terminal";
-  const isStoreTimecardRole = data?.currentEmployeeRole ? storeTimecardRoles.has(data.currentEmployeeRole) : false;
+  const isStoreTimecardRole = canUseFullStoreWorkbench(data?.currentEmployeeRole ?? "");
   const selectedEmployee = employeesForStore.find((employee) => employee.id === selectedEmployeeId) ?? employeesForStore[0] ?? null;
   const selectedLatestPunch = data?.latestPunches.find((punch) => punch?.employeeId === selectedEmployee?.id) ?? null;
 

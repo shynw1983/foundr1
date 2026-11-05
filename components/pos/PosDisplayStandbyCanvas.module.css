@@ -1,0 +1,19 @@
+.canvas { position: relative; width: 100%; height: 100%; overflow: hidden; container-type: size; isolation: isolate; }
+.block { position: absolute; display: flex; align-items: center; min-width: 0; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; font-family: inherit; font-weight: 500; line-height: 1.24; overflow: hidden; box-sizing: border-box; }
+.block img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.text { display: block; width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+.clock { width: 100%; font-variant-numeric: tabular-nums; }
+.clock span { display: block; white-space: nowrap; }
+.clock small { display: block; font-size: .34em; margin-top: .4em; font-weight: 400; }
+.date { display: block; width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 400; }
+.placeholder { font-size: 3cqmin; color: #66756e; border: 1px dashed #81958a; display: grid; place-items: center; width: 100%; height: 100%; box-sizing: border-box; }
+.editing { background-image: linear-gradient(#66756e0d 1px, transparent 1px), linear-gradient(90deg, #66756e0d 1px, transparent 1px); background-size: 5% 5%; }
+.editable { cursor: move; touch-action: none; user-select: none; outline-offset: -2px; }
+.editable:hover { outline: 1px dashed #226d5e; }
+.selected, .editable:focus-visible { outline: 2px solid #226d5e; z-index: 1; }
+.guide { position: absolute; z-index: 2; pointer-events: none; opacity: .6; }
+.verticalGuide { left: 50%; top: 0; bottom: 0; border-left: 1px dashed #4c7d8a; }
+.horizontalGuide { top: 50%; left: 0; right: 0; border-top: 1px dashed #4c7d8a; }
+.alignedGuide { border-color: #087d5c; opacity: 1; filter: drop-shadow(0 0 1px white); }
+.verticalGuide.alignedGuide { border-left-style: solid; }
+.horizontalGuide.alignedGuide { border-top-style: solid; }

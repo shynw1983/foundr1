@@ -48,3 +48,26 @@ test("uses the Tokyo calendar day when the store is closed", () => {
     }
   );
 });
+
+test("24-hour kitchen windows exclude the next midnight while timed windows retain inclusive closing", () => {
+  const hours = {
+    weekly: {
+      ...weekly,
+      fri: { ...weekly.fri, open24Hours: true },
+      sat: { ...weekly.sat, open24Hours: true }
+    }
+  };
+  assert.deepEqual(getKitchenBusinessDayWindow(hours, new Date("2026-08-07T23:59:59+09:00")), {
+    businessDate: "2026-08-07",
+    startAt: "2026-08-07T00:00",
+    endAt: "2026-08-08T00:00",
+    endExclusive: true
+  });
+  assert.deepEqual(getKitchenBusinessDayWindow(hours, new Date("2026-08-08T00:00:00+09:00")), {
+    businessDate: "2026-08-08",
+    startAt: "2026-08-08T00:00",
+    endAt: "2026-08-09T00:00",
+    endExclusive: true
+  });
+  assert.equal(getKitchenBusinessDayWindow({ weekly }, new Date("2026-08-08T01:00:00+09:00")).endExclusive, undefined);
+});

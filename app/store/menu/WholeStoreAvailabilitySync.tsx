@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createStoreRefreshCoordinator } from "../../../lib/store-polling-client";
+import { createReadError } from "../../../components/useReadRequest";
 import { inventoryPreviewExpired } from "../../../lib/inventory-preview";
 import {InventoryComparisonPreview,type InventoryComparison} from './InventoryComparisonPreview';
 import {InventoryReadProgress,type InventoryRead} from './InventoryReadProgress';
@@ -112,47 +114,53 @@ export function WholeStoreAvailabilitySync({storeId,language,disabled,onApplied}
   useEffect(()=>setAcknowledgedPreview(null),[previewKey]);
   useEffect(()=>{
     let cancelled=false;
-    let pending=false;
-    let controller:AbortController|null=null;
-    const refresh=async()=>{
-      if(!storeId||pending||mutationBusy.current)return;
-      const epoch=requestEpoch.current;
-      pending=true;
+    let observedRunId = '';
+    let observedAt = 0;
+    const activeProgress = () => {
+      const current = reportRef.current;
+      if (!current || !['queued','processing','retrying'].includes(current.status)) return false;
+      if (observedRunId !== current.id) { observedRunId = current.id; observedAt = Date.now(); }
+      return Date.now() - observedAt < 15 * 60_000;
+    };
+    const coordinator = createStoreRefreshCoordinator(async signal => {
+      if (!storeId || mutationBusy.current) return;
+      const epoch = requestEpoch.current;
       setRefreshing(true);
-      controller=new AbortController();
-      const timeout=setTimeout(()=>controller?.abort(),15000);
       try {
-        const response=await fetch(`/api/store/inventory-history?storeId=${encodeURIComponent(storeId)}&days=30&scope=latest_full_sync`,{cache:'no-store',signal:controller.signal});
-        if(!response.ok){
-          const body=await response.json().catch(()=>null);
-          throw new Error(body?.error||(response.status===401?'Unauthorized':response.status===403?'権限がありません。':'progress_unavailable'));
-        }
-        const body=await response.json();
-        if(!Array.isArray(body.reports))throw new Error('invalid_progress');
-        if(!cancelled&&requestCurrent(epoch)){
-          const accepted=acceptReport(body.reports.find((r:Report)=>r.details.authority==='uber_eats')??null);
+        const response = await fetch(`/api/store/inventory-history?storeId=${encodeURIComponent(storeId)}&days=30&scope=latest_full_sync`, { cache:'no-store', signal });
+        if (!response.ok) throw createReadError(response);
+        const body = await response.json();
+        if (!Array.isArray(body.reports)) throw new Error('invalid_progress');
+        if (!cancelled && !signal.aborted && requestCurrent(epoch)) {
+          const accepted = acceptReport(body.reports.find((r:Report)=>r.details.authority==='uber_eats')??null);
           setRefreshFailed(!accepted);
-          if(!accepted){
+          if (!accepted) {
             setAwaitingPreview(false);
             setError(inventorySyncErrorMessage(new Error('基準またはプレビューが変更されました。最新の内容を確認してください。'),language));
           }
         }
-      } catch(e) {
-        // Preserve verified progress and show that it is stale. Retrying this
-        // request only reads status; it never starts another synchronization.
-        if(!cancelled&&requestCurrent(epoch)){
+      } catch (e) {
+        if (!cancelled && !signal.aborted && requestCurrent(epoch)) {
           setRefreshFailed(true);
-          if(e instanceof Error&&e.message!=='progress_unavailable')setError(inventorySyncErrorMessage(e,language));
+          setError(inventorySyncErrorMessage(e,language));
         }
+        throw e;
       } finally {
-        clearTimeout(timeout);
-        pending=false;
-        if(!cancelled&&requestCurrent(epoch))setRefreshing(false);
+        if (!cancelled && requestCurrent(epoch)) setRefreshing(false);
       }
-    };
-    void refresh();
-    const timer=setInterval(()=>void refresh(),5000);
-    return()=>{cancelled=true;clearInterval(timer);controller?.abort();};
+    }, {
+      // This history projection has no complete progress-event stream. Confirm
+      // only the current unfinished run at 10s; idle/terminal history reads at 60s.
+      healthyIntervalMs: () => activeProgress() ? 10_000 : 60_000,
+      fallbackIntervalMs: () => activeProgress() ? 10_000 : 60_000,
+      onUnauthorized: () => { if (!cancelled) { reportRef.current = null; setReport(null); setAcknowledgedPreview(null); } },
+      onError: failure => {
+        if (!cancelled && (failure.status === 401 || failure.status === 403))
+          setError(inventorySyncErrorMessage(new Error(failure.status === 401 ? 'Unauthorized' : '権限がありません。'), language));
+      }
+    });
+    coordinator.start({ immediate: true });
+    return () => { cancelled=true; coordinator.stop(); };
   },[storeId,refreshKey]);
   async function start() {
     if(mutationBusy.current)return;

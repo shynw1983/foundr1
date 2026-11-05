@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { loginState, normalizeText, pageSummary, platformUiChanged, targetNameTiers } from "./common.mjs";
 import { withPlatformTargetAliases } from "./platform-target-aliases.mjs";
 import {publishNativeAuthority} from '../uber-authority-publisher.mjs';
+import {recoverNativeMenuSync} from '../menu-sync-recovery.mjs';
 import {auditDestination} from '../inventory-destination-audit.mjs';
 
 const OOS_URL = "https://store.rocketnow.co.jp/merchant/management/oos";
@@ -584,6 +585,10 @@ export class RocketNowAdapter {
       matchedCount: entries.filter((entry) => entry.targetId).length,
       missingTargets
     };
+  }
+
+  async recoverMenuSync(payload, reportProgress) {
+    return recoverNativeMenuSync(this.session,'rocket_now',payload,reportProgress,this.config.storeId);
   }
 
   async publishMenuChanges(payload, reportProgress = async () => undefined) {

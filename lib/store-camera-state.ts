@@ -6,7 +6,7 @@ export type CameraTicket = {
 export const cameraMaxBytes = 3_500_000;
 export const cameraCaptureDeadlineMs = 90_000;
 export const cameraTicketLifetimeMs = 5 * 60_000;
-export const cameraRoles = new Set(["owner", "manager", "store_terminal"]);
+export const cameraRoles = new Set(["owner", "manager", "store_owner", "store_terminal"]);
 export const cameraUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const cameraErrors: Record<string, string> = {
   unavailable: "カメラに接続できません。店舗のMacとカメラの接続を確認してください。",

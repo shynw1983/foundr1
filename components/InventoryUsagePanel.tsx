@@ -15,7 +15,8 @@ export const inventoryUsageReasonLabels: Record<string, string> = {
   unit_changed: "単位が変わったため数量を比較できません。", movement_unknown: "数量未確認の入出庫があります。", prediction_basis_missing: "予測の根拠となる配合や棚卸の比較がありません。", prediction_partial: "未対応の注文があるため予測は一部のみです。",
   recipe_missing: "メニューの配合が未設定です。", measured_basis_unknown: "注文の実測数量・単位を確認してください。", recipe_product_scope_changed: "配合の商品と店舗の適用範囲を確認してください。",
   usage_location_ambiguous: "使用する保管場所を選択してください。", usage_location_missing: "使用する商品の保管場所がありません。", stock_conversion_changed: "棚卸と現在の単位対応が異なります。", conversion_unknown: "商品の単位対応を確認してください。",
-  source_identity_unresolved: "注文の商品識別を確認してください。", source_not_ready: "注文の商品明細を確認中です。", processing_failed: "使用量の記録に失敗しました。内容を確認して再確認してください。"
+  source_identity_unresolved: "注文の商品識別を確認してください。", source_not_ready: "注文の商品明細を確認中です。", processing_failed: "使用量の記録に失敗しました。内容を確認して再確認してください。",
+  local_option_unmapped: "店内で新規作成した選択肢の在庫対応を確認してください。自動では在庫を減らしません。", invalid_local_option_identity: "店内選択肢の識別情報を確認してください。"
 };
 export type InventoryUsagePanelProps = { storeId: string; refreshKey?: unknown; onChanged?: () => void };
 type SettingsDraft = Pick<InventoryOrderUsageResponse["settings"], "storeId" | "enabled" | "revision">;

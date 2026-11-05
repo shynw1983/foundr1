@@ -43,6 +43,7 @@ import org.json.JSONObject;
 
 public final class StoreOrderPush {
     private static volatile boolean installing = false;
+    private static java.lang.ref.WeakReference<Activity> attachedActivity = new java.lang.ref.WeakReference<>(null);
     private StoreOrderPush() {}
     static SharedPreferences prefs(Context context) { return context.getSharedPreferences("foundr1_order_push", Context.MODE_PRIVATE); }
     private static JSONArray rules(Context context) {
@@ -61,6 +62,7 @@ public final class StoreOrderPush {
         } catch (Exception error) { prefs(context).edit().putString("error", "FIREBASE_CONFIG_INVALID").apply(); }
     }
     public static void attach(Activity activity, WebView webView) {
+        attachedActivity = new java.lang.ref.WeakReference<>(activity);
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
         WebViewCompat.addWebMessageListener(webView, "Foundr1OrderPush", new HashSet<>(Arrays.asList("https://www.foundr1.jp", "https://foundr1.jp")),
             (view, message, origin, mainFrame, reply) -> {
@@ -294,6 +296,9 @@ public final class StoreOrderPush {
         if (saved.getString("presenceToken", "").isEmpty() || !saved.getString("sessionId", "").equals(data.optString("sessionId"))) return;
         if (data.optLong("expiresAt", 0) < System.currentTimeMillis()) return;
         boolean test = "store_push_test".equals(data.optString("type"));
+        boolean inventorySync = "store_inventory_sync".equals(data.optString("type"));
+        boolean bridgeMenuSync = "bridge_menu_sync".equals(data.optString("type"));
+        boolean operational = inventorySync || bridgeMenuSync;
         String ruleKey = data.optString("ruleKey");
         boolean currentRule = false;
         JSONArray regions = rules(context);
@@ -301,10 +306,10 @@ public final class StoreOrderPush {
             JSONObject rule = regions.optJSONObject(i);
             if (rule != null && ruleKey.equals(rule.optString("key")) && data.optString("storeId").equals(rule.optString("storeId"))) currentRule = true;
         }
-        if (!test && !currentRule) return;
-        if (!test && (!hasLocationPermission(context) || !locationEnabled(context))) { markUnknown(context); enqueueSync(context); return; }
-        if (!test && !"outside".equals(saved.getString("state:" + ruleKey, "unknown"))) { enqueueSync(context); return; }
-        if (!test && StoreOrderAlarmState.wasAcknowledged(context, data.optString("eventId"))) return;
+        if (!test && !operational && !currentRule) return;
+        if (!test && !operational && (!hasLocationPermission(context) || !locationEnabled(context))) { markUnknown(context); enqueueSync(context); return; }
+        if (!test && !operational && !"outside".equals(saved.getString("state:" + ruleKey, "unknown"))) { enqueueSync(context); return; }
+        if (!test && !operational && StoreOrderAlarmState.wasAcknowledged(context, data.optString("eventId"))) return;
         String deliveryKey = data.optString("deliveryKey");
         JSONArray seen;
         try { seen = new JSONArray(saved.getString("seen", "[]")); } catch (Exception error) { seen = new JSONArray(); }
@@ -314,19 +319,37 @@ public final class StoreOrderPush {
         StorePushNotifications.channel(context);
         if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
         String eventId = data.optString("eventId");
-        String href = !test && eventId.matches("[0-9a-fA-F-]{36}") ? "/store/notifications?eventId=" + eventId : "/store/notifications";
+        String href = inventorySync ? "/store/menu?syncAttention=1&storeId=" + Uri.encode(data.optString("storeId"))
+            : !test && eventId.matches("[0-9a-fA-F-]{36}") ? "/store/notifications?eventId=" + eventId : "/store/notifications";
         Intent open = new Intent(context, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("foundr1_href", href);
+        if (bridgeMenuSync) {
+            open.putExtra("foundr1_href", "/store/menu?storeId=" + Uri.encode(data.optString("storeId")));
+            for (String packageName : new String[] {"jp.foundr1.bridge.localinventory.preview", "jp.foundr1.bridge"}) {
+                Intent launch = context.getPackageManager().getLaunchIntentForPackage(packageName);
+                if (launch != null) {
+                    open = launch;
+                    break;
+                }
+            }
+        }
         PendingIntent pending = PendingIntent.getActivity(context, eventId.hashCode(), open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        android.os.Bundle extras = new android.os.Bundle(); extras.putString("foundr1_store_id", data.optString("storeId"));
+        android.os.Bundle extras = new android.os.Bundle(); extras.putString(inventorySync ? "foundr1_inventory_sync_store_id" : "foundr1_store_id", data.optString("storeId"));
         boolean alarmStarted = false;
-        if (StoreOrderAlarmService.enabled(context)) {
+        if (!operational && StoreOrderAlarmService.enabled(context)) {
             if (test && highPriority && StoreOrderAlarmService.allowed(context)) {
                 alarmStarted = StoreOrderAlarmService.preview(context);
             } else if (!test) alarmStarted = StoreOrderAlarmService.receive(context, data, highPriority);
         }
         if (!alarmStarted) {
-            Notification notification = StorePushNotifications.build(context, data.optString("title", "Foundr1 STORE"), data.optString("body"), pending, extras);
-            manager.notify("store-order:" + eventId, 73, notification);
+            Activity activity = attachedActivity.get();
+            // The visible Store page plays its own single short cue. Background
+            // operational alerts use the system channel, never the order alarm.
+            boolean silentInventory = inventorySync && (activity != null && activity.hasWindowFocus()
+                || !"high".equals(data.optString("priority")));
+            Notification notification = operational
+                ? StorePushNotifications.buildOperational(context, data.optString("title", "Foundr1 STORE"), data.optString("body"), pending, extras, silentInventory)
+                : StorePushNotifications.build(context, data.optString("title", "Foundr1 STORE"), data.optString("body"), pending, extras);
+            manager.notify((bridgeMenuSync ? "bridge-menu-sync:" : inventorySync ? "store-inventory-sync:" : "store-order:") + eventId, 73, notification);
         }
         StorePushNotifications.pruneUnusedChannels(context);
         JSONArray nextSeen = new JSONArray(); for (int i = Math.max(0, seen.length() - 63); i < seen.length(); i++) nextSeen.put(seen.optString(i)); nextSeen.put(deliveryKey);

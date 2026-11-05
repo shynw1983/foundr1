@@ -1,3 +1,4 @@
+import { getProductCatalogAccessSnapshot } from "../../../lib/product-catalog-access";
 import { getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
@@ -102,6 +103,11 @@ async function readProcedures(session: EmployeeSession, mode: string) {
   const books = await sql`
     select
       procedure_books.id::text,
+      (${scope.allStores} or (
+        exists (select 1 from procedure_book_stores a where a.procedure_book_id = procedure_books.id)
+        and not exists (select 1 from procedure_book_stores a where a.procedure_book_id = procedure_books.id
+          and not (a.store_id::text = any(${scope.storeIds})))
+      )) as "canEdit",
       procedure_books.title,
       procedure_books.category,
       coalesce(procedure_books.procedure_type, 'product') as "procedureType",
@@ -120,11 +126,18 @@ async function readProcedures(session: EmployeeSession, mode: string) {
         from procedure_book_stores
         join stores on stores.id = procedure_book_stores.store_id
         where procedure_book_stores.procedure_book_id = procedure_books.id
+          and (${scope.allStores} or stores.id::text = any(${scope.storeIds}))
       ), '[]'::json) as stores
     from procedure_books
     left join brands on brands.id = procedure_books.brand_id
     left join menu_catalog_items on menu_catalog_items.id = procedure_books.menu_catalog_item_id
-    where (${includeDraft} or procedure_books.status = 'published')
+    where (procedure_books.status = 'published' or (${includeDraft} and (
+      ${scope.allStores} or (
+        exists (select 1 from procedure_book_stores a where a.procedure_book_id = procedure_books.id)
+        and not exists (select 1 from procedure_book_stores a where a.procedure_book_id = procedure_books.id
+          and not (a.store_id::text = any(${scope.storeIds})))
+      )
+    )))
       and (
         ${scope.allStores}
         or not exists (
@@ -320,7 +333,9 @@ async function readProcedures(session: EmployeeSession, mode: string) {
   }));
 }
 
-async function readAdminOptions() {
+async function readAdminOptions(session: EmployeeSession) {
+  const scope = await getSessionStoreScope(session);
+  const catalog = await getProductCatalogAccessSnapshot(session);
   const [stores, brands, menuCatalogItems, menuOptionGroups, menuOptions, products, materials, actionTypes, locations, equipment, containers] = await Promise.all([
     sql`
       select
@@ -332,13 +347,16 @@ async function readAdminOptions() {
           where store_brands.store_id = stores.id
         ), '{}') as "brandIds"
       from stores
-      where status = 'active'
+      where status = 'active' and (${scope.allStores} or stores.id::text = any(${scope.storeIds}))
       order by name
     `,
     sql`
       select id::text, name
       from brands
-      where status = 'active'
+      where status = 'active' and (${scope.allStores} or exists (
+        select 1 from store_brands where store_brands.brand_id = brands.id
+          and store_brands.store_id::text = any(${scope.storeIds})
+      ))
       order by name
     `,
     sql`
@@ -406,6 +424,7 @@ async function readAdminOptions() {
         coalesce(japanese_note, '') as "japaneseNote",
         coalesce(photo_url, '') as "photoUrl"
       from products
+      where products.id::text = any(${catalog.visibleProductIds})
       order by category, subcategory, name
     `,
     sql`
@@ -450,7 +469,18 @@ async function readAdminOptions() {
     `
   ]);
 
-  return { stores, brands, menuCatalogItems, menuOptionGroups, menuOptions, products, materials, actionTypes, locations, equipment, containers };
+  const brandIds = new Set(brands.map(brand => String(brand.id)));
+  const visibleItems = menuCatalogItems.filter(item => scope.allStores || (
+    brandIds.has(String(item.brandId)) && (!item.storeId || scope.storeIds.includes(String(item.storeId)))
+  ));
+  const itemIds = new Set(visibleItems.map(item => String(item.id)));
+  const visibleGroups = menuOptionGroups.filter(group => scope.allStores || (
+    brandIds.has(String(group.brandId)) && (!group.menuCatalogItemId || itemIds.has(String(group.menuCatalogItemId)))
+  ));
+  const groupIds = new Set(visibleGroups.map(group => String(group.id)));
+  return { stores, brands, menuCatalogItems: visibleItems, menuOptionGroups: visibleGroups,
+    menuOptions: menuOptions.filter(option => groupIds.has(String(option.optionGroupId))),
+    products, materials, actionTypes, locations, equipment, containers };
 }
 
 export async function GET(request: Request) {
@@ -461,12 +491,13 @@ export async function GET(request: Request) {
   const procedures = await readProcedures(session, mode);
   const canEdit = await canEditProcedures(session);
   const options = mode === "admin" && canEdit
-    ? await readAdminOptions()
+    ? await readAdminOptions(session)
     : { stores: [], brands: [], products: [], materials: [] };
 
   return Response.json({
     procedures,
     canEdit,
+    canManageShared: ["owner", "manager"].includes(session.role) && canEdit,
     ...options
   });
 }
@@ -522,6 +553,9 @@ export async function DELETE(request: Request) {
         from procedure_book_stores
         where procedure_book_id = ${id}
           and store_id::text = any(${scope.storeIds})
+      ) and not exists (
+        select 1 from procedure_book_stores
+        where procedure_book_id = ${id} and not (store_id::text = any(${scope.storeIds}))
       ) as "canDelete"
     `;
     if (accessRows[0]?.canDelete !== true) {
@@ -549,6 +583,9 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
   const storeIds = scope.allStores
     ? requestedStoreIds
     : requestedStoreIds.filter((storeId) => scope.storeIds.includes(storeId));
+  if (!scope.allStores && requestedStoreIds.some(storeId => !scope.storeIds.includes(storeId))) {
+    throw new Error("担当店舗のみ選択できます。");
+  }
   const variants = Array.isArray(body.variants) && body.variants.length
     ? body.variants
     : [
@@ -573,6 +610,9 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
         from procedure_book_stores
         where procedure_book_id = ${id}
           and store_id::text = any(${scope.storeIds})
+      ) and not exists (
+        select 1 from procedure_book_stores
+        where procedure_book_id = ${id} and not (store_id::text = any(${scope.storeIds}))
       ) as "canEdit"
     `;
     if (accessRows[0]?.canEdit !== true) {

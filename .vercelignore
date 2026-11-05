@@ -11,3 +11,5 @@ outputs
 Foundr1Android/app/build
 Foundr1Android/.gradle
 Foundr1iOS
+.swc
+*.debug.json

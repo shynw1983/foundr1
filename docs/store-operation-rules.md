@@ -2,6 +2,12 @@
 
 Read the relevant sections when changing store workbenches, procedure/menu relationships, kitchen production data, or native device behavior. These are domain requirements; task scope, authorization, and verification follow [AGENTS.md](../AGENTS.md).
 
+## Realtime Refresh and Recovery
+
+All new or changed operational refresh, push, polling, reconnect and device cadence must follow [Realtime Refresh Policy](realtime-refresh-policy.md). Push-first does not mean disconnected-only reads: retain bounded integrity reconciliation and required heartbeat, lease, weighing and task-result protocols. The [2026-11-03 audit](realtime-refresh-audit-20261103.md) separates current implementation gaps from target defaults. Existing module interval descriptions remain observed implementation facts until their runtime changes are validated and released; adding this rule does not itself change any live interval.
+
+Current Web migration scope and retained device/task exceptions are recorded in the [2026-11-03 rollout](realtime-refresh-rollout-20261103.md); its release evidence, not the older audit frequencies, establishes deployment status.
+
 ## Native Shell Requirements
 
 Keep native-shell business logic in the Next.js web app and shared APIs whenever possible. Android WebView and future iOS WKWebView shells should provide device capabilities through stable JavaScript bridges.
@@ -11,6 +17,16 @@ Keep native-shell business logic in the Next.js web app and shared APIs whenever
 - Android WebView shells should keep media playback enabled without user gesture for trusted Foundr1 pages and expose native bridges such as `window.Foundr1Printer` and `window.Foundr1NativeNotifications`.
 - Future iOS WKWebView shells must account for the same requirement: configure WebView media playback appropriately and/or expose a native sound bridge so foreground order alerts can play reliably.
 - Background, lock-screen, or app-not-running alerts should use native notification mechanisms with sound rather than relying on webpage audio.
+
+### Peripheral idle duty (2026-10-31 local repair)
+
+- An enabled scale is a saved capability, not permission to reconnect all night. The authenticated agent uses the store's actual open `pos_cash_sessions` record to enable BLE. A closed register disables the live scale context while preserving pairing, selected address, configuration and immutable captures. Closing the last register retires live scale sessions in the same closing transaction. Starts, readings and adoption remain server guarded; another store's open register cannot wake this device.
+- Closed agents heartbeat every 15 seconds; open agents without an active scale owner use 10 seconds. An active scale owner retains 1-second new-bowl discovery and 3-second active-session heartbeats. Network errors back off to at most 60 seconds, and repeated BLE connection failures back off from 5 to 60 seconds. Manual disconnect and callback/session/epoch/tare/freshness fences remain in force.
+- Printing remains available after closing. Idle queue checks use 15 seconds, pending/sending work uses 3 seconds, and persisted acknowledgements precede the idle gate. Never infer successful paper output from transport status or automatically replay an uncertain send.
+- POS relay status checks use 60 seconds while closed, 15 seconds while open and idle, and 1 second while weighing. Hidden pages pause polling and owner renewal; explicit opening/closing refreshes duty immediately. Reopening validates the remembered owner instead of taking over another terminal.
+- Inventory sync status uses 10 seconds for queued/processing/retrying commands and 60 seconds when idle. Hidden pages pause reads; focus, visible-state changes and realtime/local operation events refresh immediately. Failed reads use bounded backoff to five minutes while retaining unresolved warnings and safe manual retries.
+
+Validation and rollout are separate: these contracts describe prepared source. Web deployment, installed Mac runtime, installed Store APK, and real BLE/printing must each have their own verification evidence. No schema migration is needed.
 
 ## Store Operations and Kitchen Data
 
@@ -26,9 +42,51 @@ Store operations is a top-level Foundr1 OS module. Electronic procedures are its
 - Procedure books can link to menu catalog data. Fixed products such as nanacha drinks and buildable products such as maamaa malatang must both support variant conditions through JSON, for example size/temperature for drinks and heat/numb/toppings for malatang.
 - Keep procedures, checklists, training, audits, and store execution records under `店舗運営`; keep inventory, recipes/BOM, franchise operations, and analytics aligned with [Operations Platform Roadmap](operations-platform-roadmap.md).
 
+## Physical-store menu and topping prices
+
+The 2026-10-16 decision retains existing 50g topping specifications. [POS menu configuration](pos-menu-settings.md) adds store-specific POS visibility and inherited/independent prices for shared brand records. These settings are independent from stock and do not change Web予約 or external delivery menus. Assortment, actual prices and live activation require their own approved values.
+
+## POS bowl tickets and franchise training (2026-10-15)
+
+The approved dine-in process is documented in [Maamaa dine-in service and training](maamaa-dine-in-service-workflow.md). One payment remains one customer order; each malatang bowl has its own item pickup code and production task. The default prints one kitchen ticket, one finishing ticket, and one customer pickup ticket per bowl, in that order with the same code, followed by one receipt per payment, at the counter printer. The store's POS **印刷・伝票** settings can independently enable each document, choose 1–5 copies and configure its template. Disabling a document does not disable another; disabling all printing does not require a printer to save the checkout. Pickup numbers, items and selected options remain on enabled bowl tickets; kitchen/finishing notes remain visible, while customer tickets hide internal notes and amounts. Identical weight and options must not merge distinct bowls. Per-bowl preparation notes must not become whole-order notes.
+
+The kitchen's physical positions 1/2/3 are separate from customer pickup numbers; use two normally and the third as reserve. The kitchen ticket moves from the selected-food bowl to the corresponding fridge position; the same-code finishing ticket goes to the matching tray. Cooking and finishing staff compare both codes before plating and seasoning. The finishing ticket stays on the tray; remove the kitchen ticket after the handoff. A bowl is ready before handoff; mark it handed off only after matching the customer's ticket and actually delivering it. An order completes after all non-refunded portions/tasks have been handed off. History and web/delivery production grouping are retained.
+
+The additive migration `db/migrations/20261015_pos_bowl_tickets.sql` must precede the new runtime. New POS clients send `bowlTicketVersion: 1`; older online malatang clients must reload before checkout. Identified older offline bowl-number requests retain their printed legacy codes during synchronization. Remove that compatibility only after all terminal queues are confirmed drained and old clients have been retired. Current offline bowl tickets retain their stable O-prefixed codes. Never create an offline replacement sale when an online payment-recording request has an unknown result.
+
+Training templates create editable drafts in `/os/procedures` and require an explicit store assignment. They do not automatically publish, certify staff, or record training completion. Store readers use the existing published procedure flow. Actual rollout, printing, adhesive reattachment and in-store audio require separate evidence.
+
+### POS fulfillment workspace (2026-10-19 implementation)
+
+This implementation is prepared and validated separately from production activation. Each store can enable the workspace through `/os/pos`; `printer_settings.fulfillmentWorkspace` defaults to `{ enabled: false, overdueMinutes: 15 }` and requires no new database column. Other printer, scale, display and operator settings retain their own save boundaries.
+
+- Staff see only **提供待ち** and **お渡し** in the POS workspace. Existing `new` and `preparing` tasks share the waiting column; staff do not need to record a preparation-start action. A paid POS checkout already creates the existing production tasks. Payment does not claim that cooking actually started.
+- Once the food and finishing checks are complete, **呼び出す** marks that task ready and updates the existing pickup display. Only after matching the customer's ticket and physically handing over the food does **お渡し済み** archive that task. Multiple bowls on one payment remain independent; all active, non-refunded tasks must be handed off before the order ends. The ordinary order API cannot bypass this requirement with an order-wide status change.
+- The compact strip starts collapsed. Opening or closing it never unmounts the POS or clears an in-progress weight, option selection or cart. New orders update the queue without opening it or moving input focus. Wide screens can remember a pinned sidebar per store and device.
+- Waiting time is elapsed queue time from the POS order, not a measured cooking duration. The configured threshold changes the visual waiting indicator. No timer automatically calls, hands off, refunds or cancels food.
+- **もう一度呼ぶ** persists a monotonically increasing call version. Unchanged refreshes stay silent; the pickup display must be refreshed after deployment to support this new field. Existing voice activation and playback settings still apply.
+- A successful call or handoff offers a 15-second undo for that operator's latest unchanged action. A later task/refund update rejects the undo. Undo preserves existing preparation/inventory evidence and never reverses a payment. Once a number has been spoken, undo cannot undo that sound.
+- Offline or uncertain requests retain their visible context. An explicit retry reuses the original mutation identity. A remotely disabled store setting prevents writes and clearly identifies the stale queue instead of claiming there are no outstanding meals.
+
+The runtime reuses the production task ledger, sales/dining synchronization and realtime order events. Small bounded per-task action receipts live under the private `customer_summary.posFulfillment` and `posFulfillmentTasks` keys. Public/member order responses exclude these internal snapshots. Web予約 and delivery acceptance policies are unchanged. The optional operator-policy reader tolerates the identified pre-PIN schema through a JSON projection; this is needed until all supported deployments have the operator settings column.
+
+### POS counter handoff
+
+Store-only menu categories can set `fulfillmentMode: immediate` for products handed over at payment. Individual products can inherit the category or explicitly use `prepare`/`immediate`. Missing settings retain preparation and calling; numbered bowls always require preparation. Store settings apply to physical POS dine-in and the corresponding canonical takeout products, without changing website, delivery or table-QR policies. Conflicting independent variants conservatively retain preparation.
+
+The server validates the trusted catalog, protocol version and menu revision before checkout. Each sale stores an immutable, versioned per-item handoff snapshot in the private `customer_summary.posItemFulfillment` field. Later menu edits cannot reinterpret that sale. Unknown/legacy snapshots retain their previous workflow. Offline queues retain their original version, revision and per-line mode; a mismatch requires review rather than silently changing an already-paid order.
+
+Immediate items retain their order lines, payments, tax, sales, receipt and refund history. They create no preparation task, call number, kitchen/finishing ticket or pickup ticket. Immediate-only sales complete in the checkout transaction and retain their accounting identity; mixed sales complete when their remaining preparation items are handed over. Bowl options, including linked drinks and gifts, remain attached to their bowl and visible on its production documents. Refunding the final preparation item can complete the remaining counter-delivered sale without creating a task.
+
+All-immediate completion uses the existing inventory completion path. Mixed orders retain the existing order-level inventory timing; handing over a drink must not fabricate a preparation-start timestamp for its bowl. This feature does not introduce per-line inventory deduction or change the inventory policy described below. Public/member summaries exclude the private handoff snapshot.
+
+Menu changes still require the normal manual POS menu update. Open old pages that cannot understand immediate handoff are rejected before a sale is written and must be reloaded. Saved/uncertain print results retain the existing guarded reprint flow; receipts keep every sold item while preparation documents exclude standalone immediate lines.
+
 ## Store Inventory Execution (2026-10-11)
 
 Store inventory execution shares the existing SKU, location, physical-count, receipt and order-usage facts with OS. This change adds employee execution surfaces; it does not create a second inventory ledger or require new database DDL. The release evidence determines which deployment is active; this section describes the implementation contract.
+
+The complete operator guide and review are in [Inventory and Procurement Operating Guide](inventory-procurement-operating-guide.md). The user's 2026-10-12 decision is to deduct shared sellable stock as soon as a valid order is received, without another deduction at preparation. Unprepared cancellation releases the original allocation; physical counts must preserve outstanding allocations. This supersedes preparation-only as the target policy. The current implementation below still uses preparation timing; deductions when a valid order is received and automatic platform availability are pending implementation.
 
 | Work | Store execution | OS management |
 | --- | --- | --- |
@@ -36,12 +94,26 @@ Store inventory execution shares the existing SKU, location, physical-count, rec
 | Receiving | `/store/receiving`: actual arrival quantity, existing storage destination and receipt mode; arrival-only confirmation where purchase information or SKU identity is incomplete | Purchase records and corrections, supplier/price maintenance, SKU and storage setup |
 | Product definitions | Read the operational units and explicit conversions needed for an existing local inventory item or purchase | SKU creation/maintenance, menu links, quantitative recipes, unit conversions, packaging templates and franchise catalog visibility |
 
-Store replenishment requests, assigned buying and manufacturing/transfer execution screens are future work for this phase. Existing OS procurement and manufacturing functionality is not a newly implemented Store flow. Do not show unavailable Store actions or claim that these screens have been released.
+The 2026-10-18 implementation adds Store replenishment reporting and OS demand review, described below. Assigned buying and manufacturing/transfer execution screens remain future work. Existing OS procurement and manufacturing functionality is not a newly implemented Store buying flow. Local implementation and tests do not establish production release.
+
+### Shared replenishment demand pool (2026-10-18 implementation)
+
+- `/store/replenishment` uses the same personal employee and verified terminal-operator rules as inventory execution. `store.inventory` includes reporting a shortage and viewing that store's progress; it does not grant procurement management or reveal supplier costs. A reported quantity is an optional request in the displayed purchase unit, not a stock count or an instruction to buy immediately.
+- `/os/replenishment` is available to scoped `owner`, `manager`, `store_owner` and `store_manager` accounts with `module.orders`. Responsible employees review sources, adjust quantities, add requirements, defer, dismiss or resolve, then explicitly confirm a formal purchase order with a buyer. Existing `/os/procurement` performs buying; Store receiving records actual arrivals using the same purchase items.
+- A demand is one durable store/SKU record with a review version and immutable event history. Concurrent employee reports and saved inventory/menu signals merge without summing repeated reports or replacing the responsible employee's decision. An unchanged automatic signal does not reopen a dismissed or resolved requirement.
+- Automatic signals are reconciled when reading the pool and by the authenticated `/api/cron/replenishment-demands` job every five minutes. These signals describe saved observations and configured inventory risks; this feature does not introduce a new order-deduction time, automatically change sales availability, or calculate a precise purchase amount from incomplete stock facts.
+- Report and order request IDs are immutable replay identities. Formal order creation checks the current SKU, purchase unit, store visibility, open orders and review versions in the transaction. Existing open requests require explicit acknowledgement before an additional order. A purchase task finishing does not resolve the original shortage; partial arrivals, purchase failures and actual stock still require review.
+- Existing procurement splits or later quantity corrections mark a linked requirement as needing review. Remaining ordinary order items and receipts remain visible for manual reconciliation; no lineage is inferred from a procurement note. Changed purchase units are also reviewed rather than comparing unconverted quantities.
+- Apply `db/migrations/20261018_replenishment_demands.sql` to the approved target before deploying the new routes and scheduled job. It adds only demand/history/order-link tables and preserves existing requests, purchases, receipts and stock. No supplier order is sent automatically.
 
 ### Employee and terminal identity
 
+- Store QR login opens `/os/store-terminal-login`. `owner`, `manager`, `store_owner` and `store_manager` can reach this account action independently of navigation-module permissions. The approval API validates the live session and role. `owner` and `manager` can choose all active stores regardless of the currently selected OS store context; `store_owner` and `store_manager` can choose only their assigned active stores. Both listing and approval use this account authority. Each store lists only active, pre-existing `store_terminal` accounts. Stores without an eligible account remain visible with setup guidance, but cannot be approved until an account exists.
+- The approver selects the store and explicitly selects the device account; changing stores clears the device selection. A single available store may be preselected. Accounts are created beforehand under `/os/stores/devices` → `店舗端末`. Approval does not create accounts, grant the scanning administrator's identity to the device, or change account assignments. The approved QR can be consumed once before its five-minute expiry and creates the selected device account's Store session.
+- Current concurrent-login policy: `store_terminal` has no session-count limit, so the same device account can stay logged in on two or more machines. A new login does not revoke its previous sessions. Only personal `store_manager` and `staff` accounts have the existing two-session limit. Device-account selection does not establish a one-account/one-physical-device binding.
 - `store.inventory` grants Store inventory execution independently from `module.inventory` and other OS/master permissions. Both the active account and the actual operator must have the applicable role, permission and store scope. Active-store and active-employee checks are enforced by the APIs.
-- Personal `staff`, `store_owner` and `store_manager` accounts can use the inventory and receiving Store routes. This does not grant access to the full Store workbench or new OS management sections. Existing owner/manager/terminal workbench access remains governed by its existing rules.
+- Personal `staff` and `store_manager` accounts can use the inventory, replenishment and receiving Store routes. This does not grant access to the full Store workbench or new OS management sections.
+- Following the 2026-10-23 franchise-owner correction, `store_owner` can use the full Store workbench, including its order/print feeds, equipment controls and scoped notifications. Every API still validates the active employee/session, assigned stores and applicable action permissions; this does not grant all-store visibility or additional OS/headquarters management permissions. Existing owner/manager/terminal workbench access remains governed by its existing rules.
 - Personal operations record the signed-in employee. A shared `store_terminal` can read local inventory, but a write requires the actual employee's password verification. Selecting or submitting an employee UUID is not an identity credential.
 - Terminal operator verification lasts 15 minutes and is bound to the terminal account/session, store, employee identity and employee session version. Each write rechecks employee activity, permission, scope and version. The separate operator cookie does not replace the terminal login or create a personal Staff login session. Expired, revoked or changed identities require verification again.
 - Store writes assert the operator ID originally shown with the input and require same-origin requests. Changing the store/operator cannot silently apply the preceding operator's draft. Pending stock receipts retain their stable request ID and original body when authentication expires or the response is unknown; verify the original operator before retrying. Passwords and verification tokens are not saved in local drafts or receipt payloads.

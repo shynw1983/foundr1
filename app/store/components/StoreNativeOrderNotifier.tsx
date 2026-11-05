@@ -4,10 +4,13 @@ import { useEffect, useRef } from "react";
 import { showNativeNotification } from "../../../lib/native-notifications";
 import { getStoreOrderAlertPhase, isStoreOrderAlertAcknowledged } from "../../../lib/store-order-alert-timing";
 import {
-  createStoreFallbackPoller,
+  createStoreRefreshCoordinator,
   rememberStoreBusinessHours,
   storeOrderAlertEventName
 } from "../../../lib/store-polling-client";
+
+import { bindStoreRealtimeChannels } from "../../../lib/store-realtime-refresh";
+import { createReadError } from "../../../components/useReadRequest";
 
 type StoreOrderRealtimePayload = {
   order?: {
@@ -78,7 +81,8 @@ export function StoreNativeOrderNotifier() {
   useEffect(() => {
     let active = true;
     let pusher: any;
-    let channels: any[] = [];
+    let unbindRealtime: (() => void) | undefined;
+    const configController = new AbortController();
 
     const notifyOrder = (order?: StoreOrderRealtimePayload["order"]) => {
       if (!active || isOrdersPage()) return;
@@ -101,11 +105,13 @@ export function StoreNativeOrderNotifier() {
       notifyOrder(order);
     };
 
-    const checkOrdersByPolling = async () => {
+    const checkOrdersByPolling = async (signal: AbortSignal) => {
       try {
-        const response = await fetch("/api/store/orders/watch", { cache: "no-store" });
-        if (!response.ok || !active) return;
+        const response = await fetch("/api/store/orders/watch", { cache: "no-store", signal });
+        if (!response.ok) throw createReadError(response);
+        if (!active || signal.aborted) return;
         const body = await response.json() as StoreOrdersResponse;
+        if (!active || signal.aborted) return;
         rememberStoreBusinessHours(body.stores);
         const alertableOrders = (body.orders ?? []).filter((order) => shouldNotifyOrder(order));
         const activeOrderKeys = new Set(alertableOrders.map(getOrderKey));
@@ -114,8 +120,8 @@ export function StoreNativeOrderNotifier() {
           initializedRef.current = true;
           return;
         }
-        const incomingOrder = alertableOrders.find((order) => !knownOrderKeysRef.current.has(getOrderKey(order)));
-        if (incomingOrder) announceOrder(incomingOrder);
+        const incomingOrders = alertableOrders.filter(order => !knownOrderKeysRef.current.has(getOrderKey(order)));
+        incomingOrders.forEach(announceOrder);
         knownOrderKeysRef.current = activeOrderKeys;
       } catch (error) {
         // The Store app should stay usable even if notification polling fails.
@@ -123,9 +129,16 @@ export function StoreNativeOrderNotifier() {
       }
     };
 
-    const poller = createStoreFallbackPoller(checkOrdersByPolling, { baseIntervalMs: 60_000 });
-    const startPolling = () => poller.start({ immediate: true });
-    const stopPolling = () => poller.stop();
+    const deny = () => {
+      active = false; configController.abort();
+      knownOrderKeysRef.current.clear(); lastNotifiedOrderKeysRef.current.clear();
+      initializedRef.current = false; unbindRealtime?.(); pusher?.disconnect();
+      coordinator.stop();
+    };
+    const coordinator = createStoreRefreshCoordinator(checkOrdersByPolling, {
+      healthyIntervalMs: 60_000, fallbackIntervalMs: 30_000,
+      onUnauthorized: deny
+    });
 
     const handleOrderEvent = ({ order }: StoreOrderRealtimePayload) => {
       if (!shouldNotifyOrder(order) || !order?.id || !order.status || !order.paymentStatus) return;
@@ -134,36 +147,35 @@ export function StoreNativeOrderNotifier() {
       announceOrder(order);
     };
 
-    startPolling();
-    fetch("/api/store/realtime-config", { cache: "no-store" })
+    coordinator.start({ immediate: true });
+    fetch("/api/store/realtime-config", { cache: "no-store", signal: configController.signal })
       .then((response) => (response.ok ? response.json() : null))
       .then(async (config) => {
         if (!active || !config?.key || !config?.cluster || !config?.channels?.length) return;
         const { acquireSharedPusher } = await import("../../../lib/shared-pusher-client");
         if (!active) return;
         pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
-        pusher.connection.bind("unavailable", startPolling);
-        pusher.connection.bind("failed", startPolling);
-        pusher.connection.bind("disconnected", startPolling);
-        channels = config.channels.map((channelName: string) => {
-          const channel = pusher.subscribe(channelName);
-          channel.bind("pusher:subscription_succeeded", stopPolling);
-          channel.bind("pusher:subscription_error", startPolling);
-          channel.bind("order.created", handleOrderEvent);
-          channel.bind("order.updated", handleOrderEvent);
-          return channel;
+        unbindRealtime = bindStoreRealtimeChannels(pusher, {
+          onUnauthorized: deny,
+          channels: config.channels, events: ["order.created", "order.updated"],
+          onEvent: (event: StoreOrderRealtimePayload) => {
+            handleOrderEvent(event);
+            void coordinator.refresh();
+          },
+          onHealthChange: healthy => {
+            if (!active) return;
+            coordinator.setRealtimeHealthy(healthy);
+            if (healthy) void coordinator.refresh({ force: true });
+          }
         });
       })
-      .catch(startPolling);
+      .catch(() => undefined);
 
     return () => {
       active = false;
-      stopPolling();
-      channels.forEach((channel) => {
-        channel.unbind("order.created", handleOrderEvent);
-        channel.unbind("order.updated", handleOrderEvent);
-        pusher?.unsubscribe(channel.name);
-      });
+      configController.abort();
+      coordinator.stop();
+      unbindRealtime?.();
       pusher?.disconnect();
     };
   }, []);

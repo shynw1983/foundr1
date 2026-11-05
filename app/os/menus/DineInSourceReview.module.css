@@ -1,0 +1,46 @@
+.review { display: grid; gap: 16px; min-width: 0; }
+.intro { display: grid; gap: 7px; }
+.intro h4 { font-size: 16px; font-weight: 600; }
+.intro p,.note { color: var(--muted); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.initial { display: grid; gap: 10px; padding: 10px 12px; border-inline-start: 3px solid var(--green); background: var(--green-soft); color: var(--ink); font-size: 13px; line-height: 1.65; }
+.filters { display: grid; grid-template-columns: minmax(0,1fr) minmax(160px,.55fr); gap: 10px 16px; min-width: 0; }
+.summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; color: var(--muted); font-size: 12px; }
+.layout { display: grid; grid-template-columns: minmax(215px,.7fr) minmax(0,1.3fr); gap: 22px; align-items: start; min-width: 0; }
+.list { display: grid; max-height: 700px; overflow-y: auto; min-width: 0; border-top: 1px solid var(--line); }
+.row { display: grid; gap: 5px; width: 100%; min-width: 0; border: 0; border-bottom: 1px solid var(--line); padding: 11px 10px; color: var(--ink); background: transparent; text-align: left; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.row[aria-pressed="true"] { background: var(--green-soft); }
+.rowTitle { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 500; }
+.rowPrices { display: grid; gap: 3px; font-variant-numeric: tabular-nums; }
+.row small { color: var(--muted); font-size: 11px; line-height: 1.55; }
+.badge { color: var(--green); font-size: 11px; font-weight: 400; flex-shrink: 0; }
+.detail { display: grid; gap: 14px; min-width: 0; overflow-wrap: anywhere; }
+.detailHeader { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 16px; align-items: start; }
+.detailHeader > div { display: grid; gap: 5px; min-width: 0; flex: 1 1 170px; }
+.detailHeader h4 { font-size: 16px; font-weight: 600; }
+.detailHeader small { color: var(--muted); font-size: 12px; line-height: 1.55; }
+.identity { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; padding-block: 4px 14px; border-bottom: 1px solid var(--line); }
+.identity > div { display: grid; align-content: start; gap: 5px; min-width: 0; }
+.identity span,.identity small { color: var(--muted); font-size: 12px; line-height: 1.55; }
+.identity strong { font-size: 14px; font-weight: 500; }
+.sourceStatus { color: var(--muted); font-size: 13px; line-height: 1.65; }
+.fields { display: grid; min-width: 0; }
+.field { display: grid; gap: 9px; padding-block: 13px; border-bottom: 1px solid var(--line); min-width: 0; }
+.fieldHeader { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; align-items: center; }
+.fieldHeader h5 { margin: 0; font-size: 13px; font-weight: 500; }
+.comparison { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px 14px; min-width: 0; }
+.value { display: grid; align-content: start; gap: 4px; min-width: 0; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.value > span { color: var(--muted); font-size: 11px; }
+.value strong { font-weight: 400; font-variant-numeric: tabular-nums; }
+.previous { color: var(--muted); font-size: 11px; line-height: 1.6; white-space: pre-wrap; }
+.decision { display: grid; grid-template-columns: minmax(0,1fr) minmax(145px,.75fr); align-items: center; gap: 6px 12px; min-width: 0; }
+.decision label { font-size: 12px; }
+.decision p { grid-column: 1/-1; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.actions > p { width: 100%; }
+.empty { padding: 18px 2px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.importPrice { display: flex; flex-wrap: wrap; gap: 5px 12px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.importPrice strong { color: var(--ink); font-weight: 500; }
+@media(max-width:1050px) { .layout { grid-template-columns: minmax(0,1fr); gap: 18px; } .list { max-height: 280px; } }
+@media(max-width:480px) { .filters { grid-template-columns: minmax(0,1fr); } .identity,.comparison { gap: 10px; } .identity strong { font-size: 13px; } .decision { grid-template-columns: minmax(0,1fr); } .actions > button { flex: 1 1 170px; } }
+
+.initial > button { justify-self: start; white-space: normal; text-align: left; }

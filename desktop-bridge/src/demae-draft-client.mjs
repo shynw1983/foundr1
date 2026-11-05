@@ -18,17 +18,29 @@ export class DemaeDraftClient {
   this.base=`/merchant-admin/api/v1/product/chain/${this.chainId}`;
   this.today=today??new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Tokyo'});
  }
- async patterns() {
+ async patterns({completeProof=false}={}) {
   const result=await this.transport.request('/merchant-admin/api/v1/product/search/menu-pattern','POST',{
    chainId:Number(this.chainId),keyword:'',offset:0,limit:100
   });
   if(!Array.isArray(result?.menuPatternList)||result.isContinueNextPage!==false||result.totalCount!==result.menuPatternList.length)throw Error('demae_draft_patterns_incomplete');
+  if(completeProof) {
+   const complete=value=>value!==null&&typeof value==='object'
+    &&['hasMore','isContinueNextPage','truncated','isTruncated'].every(key=>!Object.hasOwn(value,key)||value[key]===false);
+   const ids=new Set();
+   if(!complete(result)||!complete(result.menuPatternList)||!Number.isSafeInteger(result.totalCount)
+    ||!result.menuPatternList.every(row=>{
+     if(!complete(row)||Array.isArray(row)||!['string','number'].includes(typeof row.chainId)||String(row.chainId)!==this.chainId
+      ||typeof row.menuPatternCode!=='string'||!/^[A-Za-z0-9_-]+$/.test(row.menuPatternCode)||ids.has(row.menuPatternCode))return false;
+     ids.add(row.menuPatternCode);return true;
+    }))throw Error('demae_draft_patterns_incomplete');
+  }
   if(result.menuPatternList.some(row=>String(row.chainId)!==this.chainId))throw Error('demae_draft_scope_mismatch');
   return result.menuPatternList;
  }
- async assertHiddenPattern(patternId) {
+ async assertHiddenPattern(patternId,{completeProof=false}={}) {
   if(String(patternId)===this.livePattern)throw Error('demae_draft_is_live_pattern');
-  const rows=await this.patterns();
+  const rows=await this.patterns({completeProof});
+  if(completeProof&&rows.filter(row=>row.menuPatternCode===this.livePattern).length!==1)throw Error('demae_draft_live_scope_missing');
   const selected=rows.filter(row=>String(row.menuPatternCode)===String(patternId));
   if(selected.length!==1)throw Error('demae_draft_pattern_missing');
   const pattern=selected[0];

@@ -1,0 +1,26 @@
+.navigation { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:6px; margin:12px 0 16px; }
+.navigation button { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:4px; min-height:44px; min-width:0; padding:8px 6px; background:var(--surface,#fff); color:var(--ink); border:1px solid var(--line); border-radius:7px; font-size:12px; font-weight:400; cursor:pointer; overflow-wrap:anywhere; }
+.navigation button[aria-selected=true] { border-color:var(--primary,#206b57); color:var(--primary,#206b57); background:color-mix(in srgb,var(--primary,#206b57) 7%,var(--surface,#fff)); font-weight:600; }
+.navigation small { font-size:9px; font-weight:400; color:var(--primary,#206b57); }
+.navigation button:disabled { opacity:.5; cursor:default; }
+.pane { min-width:0; padding-bottom:16px; }
+.saveBar { display:flex; justify-content:space-between; align-items:center; gap:12px; position:sticky; bottom:12px; z-index:12; background:var(--surface,#fff); border:1px solid var(--line); box-shadow:0 3px 14px rgb(0 0 0 / .08); border-radius:9px; padding:10px 14px; margin-top:12px; }
+.saveBar > div { min-width:0; display:grid; gap:3px; }
+.saveBar strong { font-size:13px; font-weight:600; }
+.saveBar small { color:var(--muted); font-size:11px; }
+.saveBar button { flex-shrink:0; min-height:40px; }
+@media(max-width:1000px) { .navigation { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media(max-width:540px) { .navigation { grid-template-columns:repeat(2,minmax(0,1fr)); } .saveBar { padding:10px; gap:8px; bottom:8px; } .saveBar button { max-width:60%; font-size:12px; white-space:normal; } }
+
+.message.message { position:static; inset:auto; display:block; width:auto; max-width:none; min-height:0; padding:10px 12px; margin:8px 0; color:var(--ink); background:var(--surface,#fff); border:1px solid var(--line); box-shadow:none; font-size:13px; font-weight:400; }
+.globalHint { margin:8px 0; color:var(--muted); font-size:12px; }
+
+.subsection { min-width:0; padding:12px 0; border-bottom:1px solid var(--line); }
+.subsection:last-child { border-bottom:0; }
+.sectionFields { margin:0; padding:0; border:0; min-width:0; }
+.subsection > summary,.overview > summary { cursor:pointer; font-size:14px; font-weight:600; padding:10px 0; }
+.connectionHint { margin:0 0 8px; font-size:12px; color:var(--muted); }
+.connectionHint a { color:var(--primary,#206b57); text-decoration:underline; }
+.overview { border:1px solid var(--line); border-radius:9px; padding:10px 16px; background:var(--surface,#fff); }
+.overview > summary { padding:4px 0; }
+.overview[open] > summary { margin-bottom:12px; }

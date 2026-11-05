@@ -45,7 +45,7 @@ export async function GET(request: Request) {
     order by a.due_at desc limit 50
   `;
   const employees = canManage ? await sql`
-    select e.id::text, e.name from employees e where e.status = 'active' and e.role in ('owner', 'manager', 'store_terminal')
+    select e.id::text, e.name from employees e where e.status = 'active' and e.role in ('owner', 'manager', 'store_owner', 'store_terminal')
       and (${session.role === "owner"} or e.role <> 'owner')
       and (e.role in ('owner', 'manager') or exists (
         select 1 from employee_scopes sc where sc.employee_id = e.id and sc.scope_type = 'store'
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
       select e.id, e.name as "employeeName", s.name as "storeName",
         s.attendance_latitude is not null and s.attendance_longitude is not null as "locationReady"
       from employees e join stores s on s.id::text = ${storeId} and s.status = 'active'
-      where e.id::text = ${employeeId} and e.status = 'active' and e.role in ('owner', 'manager', 'store_terminal') and (${session.role === "owner"} or e.role <> 'owner')
+      where e.id::text = ${employeeId} and e.status = 'active' and e.role in ('owner', 'manager', 'store_owner', 'store_terminal') and (${session.role === "owner"} or e.role <> 'owner')
         and (e.role in ('owner', 'manager') or exists (select 1 from employee_scopes sc where sc.employee_id = e.id and sc.scope_type = 'store' and sc.store_id = s.id))
     `;
     if (!target.length) return fail("対象ユーザーの店舗権限を確認してください。");

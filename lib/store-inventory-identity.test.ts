@@ -45,9 +45,9 @@ test("Store execution roles separate real employees, restricted personal surface
   }
 });
 
-test("restricted routes use exact inventory/receiving path boundaries and only the exact logout page", () => {
-  for (const path of ["/store/inventory", "/store/inventory/history", "/store/receiving", "/store/receiving/123", "/store/logout"]) assert.equal(policy.isRestrictedStoreExecutionPath(path), true, path);
-  for (const path of ["/store", "/store/orders", "/store/timecard", "/store/inventory-other", "/store/receiving-extra", "/store/logout/other", "/os/inventory"]) assert.equal(policy.isRestrictedStoreExecutionPath(path), false, path);
+test("restricted routes use exact inventory/replenishment/receiving boundaries and only the exact logout page", () => {
+  for (const path of ["/store/inventory", "/store/inventory/history", "/store/replenishment", "/store/replenishment/history", "/store/receiving", "/store/receiving/123", "/store/logout"]) assert.equal(policy.isRestrictedStoreExecutionPath(path), true, path);
+  for (const path of ["/store", "/store/orders", "/store/timecard", "/store/inventory-other", "/store/replenishment-other", "/store/receiving-extra", "/store/logout/other", "/os/inventory"]) assert.equal(policy.isRestrictedStoreExecutionPath(path), false, path);
 });
 
 test("Store permission does not grant staff any OS module even with persisted forbidden grants", async () => {
@@ -59,7 +59,7 @@ test("Store permission does not grant staff any OS module even with persisted fo
   const definition = permissions.rolePermissionDefinitions.find(entry => entry.key === "store.inventory");
   assert.ok(definition);
   assert.equal(definition.defaultRoles.includes("staff"), true);
-  assert.deepEqual(Array.from(permissions.getNavPathsForPermissions(["store.inventory"])), ["/store/inventory", "/store/receiving"]);
+  assert.deepEqual(Array.from(permissions.getNavPathsForPermissions(["store.inventory"])), ["/store/inventory", "/store/replenishment", "/store/receiving"]);
   assert.equal(permissions.rolePermissionDefinitions.find(entry => entry.key === "module.inventory")?.defaultRoles.includes("staff"), false);
 });
 
@@ -119,8 +119,8 @@ function proxyRequest(path: string, proof?: string) {
 }
 
 for (const role of ["staff", "store_owner", "store_manager"]) {
-  test(`${role} signed personal Store session reaches only inventory/receiving/logout`, async () => {
-    for (const path of ["/store/inventory", "/store/inventory/history", "/store/receiving", "/store/receiving/item", "/store/logout"]) assert.equal((await proxy(proxyRequest(path, sessionToken(role)))).kind, "next", path);
+  test(`${role} signed personal Store session reaches only inventory/replenishment/receiving/logout`, async () => {
+    for (const path of ["/store/inventory", "/store/inventory/history", "/store/replenishment", "/store/receiving", "/store/receiving/item", "/store/logout"]) assert.equal((await proxy(proxyRequest(path, sessionToken(role)))).kind, "next", path);
     for (const path of ["/store", "/store/orders?pending=1", "/store/pos", "/store/kitchen", "/store/procedures", "/store/timecard", "/store/inventory-other"]) {
       const result = await proxy(proxyRequest(path, sessionToken(role)));
       assert.equal(result.kind, "redirect", path);
@@ -131,7 +131,7 @@ for (const role of ["staff", "store_owner", "store_manager"]) {
 }
 
 test("full Store roles retain operational routes and unsigned or forged sessions go to Store login", async () => {
-  for (const role of ["owner", "manager", "store_terminal"]) for (const path of ["/store", "/store/orders", "/store/kitchen", "/store/pos", "/store/inventory", "/store/receiving"]) assert.equal((await proxy(proxyRequest(path, sessionToken(role)))).kind, "next", `${role}:${path}`);
+  for (const role of ["owner", "manager", "store_terminal"]) for (const path of ["/store", "/store/orders", "/store/kitchen", "/store/pos", "/store/inventory", "/store/replenishment", "/store/receiving"]) assert.equal((await proxy(proxyRequest(path, sessionToken(role)))).kind, "next", `${role}:${path}`);
   assert.equal((await proxy(proxyRequest("/os/inventory", sessionToken("store_terminal")))).pathname, "/store");
   for (const proof of [undefined, `${sessionToken("staff").split(".")[0]}.tampered`, "invalid"]) {
     assert.equal((await proxy(proxyRequest("/store/inventory", proof))).pathname, "/store/login");
@@ -151,7 +151,9 @@ test("Store layout restricts notifier/printing/sync using a signed cookie withou
     "./components/StoreNativeOrderNotifier": {StoreNativeOrderNotifier: backgroundTypes[0]},
     "./components/StorePrintStation": {StorePrintStation: backgroundTypes[1]},
     "./components/StoreInventorySyncStatus": {StoreInventorySyncStatus: backgroundTypes[2]},
-    "./store-responsive.css": {}
+    "./components/StoreThemeProvider": {StoreThemeProvider: "StoreThemeProvider"},
+    "./store-responsive.css": {},
+    "./store-theme.css": {}
   }).default as (input: {children: unknown}) => Promise<unknown>;
   function types(value: unknown): string[] {
     if (!value || typeof value !== "object") return [];

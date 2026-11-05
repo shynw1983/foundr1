@@ -1832,7 +1832,7 @@ export async function getMemberOnlineOrderHistory(memberId: string, options: Mem
       coalesce(store_customer_orders.payment_refund_status, '') as "paymentRefundStatus",
       store_customer_orders.amount::int,
       coalesce(sum(store_customer_order_items.refunded_amount), 0)::int as "refundAmount",
-      coalesce(store_customer_orders.customer_summary, '{}'::jsonb) as "customerSummary",
+      (coalesce(store_customer_orders.customer_summary, '{}'::jsonb) - 'posFulfillment' - 'posFulfillmentTasks' - 'posItemFulfillment') as "customerSummary",
       store_customer_orders.pickup_date::text as "pickupDate",
       store_customer_orders.pickup_time as "pickupTime",
       store_customer_orders.created_at::text as "createdAt",
@@ -2368,6 +2368,9 @@ export async function reverseLoyaltyForRefundedOrder(orderId: string, note = "è¿
     return order?.memberId ? getMemberProfile(order.memberId) : null;
   }
 
+  const priorRows = await sql`select coalesce(-sum(points),0)::int as points,coalesce(sum(eligible_amount),0)::int as amount from loyalty_point_ledger where order_id::text=${orderId} and movement_type='item_refund_reversal'`;
+  const remainingPoints = Math.max(0, earn.points - Number(priorRows[0]?.points || 0));
+  const remainingAmount = Math.max(0, earn.eligibleAmount - Number(priorRows[0]?.amount || 0));
   const reverseRows = await sql`
     insert into loyalty_point_ledger (
       member_id,
@@ -2389,8 +2392,8 @@ export async function reverseLoyaltyForRefundedOrder(orderId: string, note = "è¿
       nullif(${earn.storeId}, '')::uuid,
       nullif(${earn.companyId}, '')::uuid,
       'refund_reversal',
-      ${-earn.points},
-      ${earn.eligibleAmount},
+      ${-remainingPoints},
+      ${remainingAmount},
       ${basePointRateBasis},
       'refund',
       ${note}
@@ -2402,9 +2405,9 @@ export async function reverseLoyaltyForRefundedOrder(orderId: string, note = "è¿
     await sql`
       update member_accounts
       set
-        point_balance = greatest(0, point_balance - ${earn.points}),
-        lifetime_points_earned = greatest(0, lifetime_points_earned - ${earn.points}),
-        lifetime_spend_amount = greatest(0, lifetime_spend_amount - ${earn.eligibleAmount}),
+        point_balance = greatest(0, point_balance - ${remainingPoints}),
+        lifetime_points_earned = greatest(0, lifetime_points_earned - ${remainingPoints}),
+        lifetime_spend_amount = greatest(0, lifetime_spend_amount - ${remainingAmount}),
         lifetime_visit_count = greatest(0, lifetime_visit_count - 1),
         updated_at = now()
       where member_id::text = ${earn.memberId}
@@ -2796,4 +2799,11 @@ export async function getLoyaltyDashboard() {
     stampCampaigns,
     appAnnouncements: normalizeAnnouncementRows(appAnnouncements)
   };
+}
+
+export async function reconcilePosRefundLoyalty(orderId: string) {
+  const campaigns = await sql`select member_id::text as "memberId",campaign_id::text as "campaignId" from loyalty_stamp_ledger where order_id::text=${orderId}`;
+  for (const campaign of campaigns as Array<{memberId:string;campaignId:string}>) await removeSurplusAvailableStampRewards(campaign);
+  const rows = await sql`select member_id::text as "memberId" from store_customer_orders where id::text=${orderId} and member_id is not null`;
+  if (rows[0]?.memberId) await refreshMemberTier(String(rows[0].memberId));
 }

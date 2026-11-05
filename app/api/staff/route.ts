@@ -1,4 +1,4 @@
-import { requireStaffAdminSession, requireStaffViewSession, canAssignStaffRole, canManageTargetRole, filterStoreIdsForStaffAdmin, hasValidScopedStoreSelection } from "../../../lib/staff-admin-access";
+import { requireStaffAdminSession, requireStaffViewSession, canAssignStaffRole, canManageTargetRole, filterStoreIdsForStaffAdmin, hasValidScopedStoreSelection, getManageableStaffIds } from "../../../lib/staff-admin-access";
 import { writeAuditLog } from "../../../lib/audit-log";
 import { hashPassword, shouldRequirePasswordChangeForRole, validatePasswordStrength } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
@@ -434,9 +434,10 @@ export async function GET() {
     order by companies.name nulls last, stores.name
   `;
 
+  const manageableStaffIds = await getManageableStaffIds(access, employees.map(employee => String(employee.id)));
   return Response.json({
     employees: employees.map((employee) => {
-      const canManage = canManageTargetRole(access, String(employee.role ?? ""));
+      const canManage = canManageTargetRole(access, String(employee.role ?? "")) && manageableStaffIds.has(String(employee.id));
       const myNumberDigits = String(employee.myNumber ?? "").replace(/\D/g, "");
       return {
         ...employee,
@@ -450,6 +451,7 @@ export async function GET() {
     stores,
     currentUserId: session.id,
     currentUserRole: session.role,
+    assignableRoles: ["owner", "manager", "store_owner", "store_manager", "staff", "store_terminal"].filter(role => canAssignStaffRole(access, role)),
     canManageStaff: access.permissions.has("staff.manage")
   });
 }

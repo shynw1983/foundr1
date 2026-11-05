@@ -8,6 +8,8 @@ export type InventoryOrderSourceOption = { id: string; quantity: number };
 export type InventoryOrderSourceItem = {
   sourceItemId: string; menuCatalogItemId: string | null; quantity: number;
   measuredQuantity: number | null; measuredUnit: string; options: InventoryOrderSourceOption[];
+  /** Actual products selected inside this POS line; quantities are per parent serving. */
+  linkedItems?: InventoryOrderSourceOption[];
   refundStatus: string; identityIssues: string[];
 };
 export type InventoryOrderSourceSnapshot = {
@@ -121,6 +123,43 @@ export function normalizeInventoryOrderSource(rawItems: Array<Record<string, unk
     if (!isInventoryUsageUuid(menuId)) identityIssues.push("missing_menu_identity");
     if (quantity === null || quantity <= 0 || !Number.isInteger(quantity)) identityIssues.push("invalid_serving_quantity");
     const counts = new Map<string, number>();
+    const linkedCounts = new Map<string, number>();
+    const rawCustomizations = Array.isArray(row.customizations) ? row.customizations as Array<Record<string, unknown>> : [];
+    for (const customization of rawCustomizations) {
+      if (!Object.hasOwn(customization, 'localOptions') || explicit) continue;
+      const localOptions = customization.localOptions;
+      // Store-native choices have no canonical SKU. Keep a visible unresolved
+      // issue instead of guessing a recipe or treating omitted usage as zero.
+      if (orderSource !== 'store_pos' || !Array.isArray(localOptions) || !localOptions.length) {
+        identityIssues.push('invalid_local_option_identity'); continue;
+      }
+      let valid = true;
+      for (const value of localOptions) {
+        const local = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+        const grams = local.portionGrams;
+        if (!isInventoryUsageUuid(local.storeMenuOptionId) || !isInventoryUsageUuid(local.localOriginId)
+          || typeof local.quantity !== 'number' || !Number.isSafeInteger(local.quantity) || local.quantity <= 0 || local.quantity > 1_000_000
+          || typeof local.unitPrice !== 'number' || !Number.isSafeInteger(local.unitPrice) || local.unitPrice < 0 || local.unitPrice > 9_999_999
+          || !(grams === null || typeof grams === 'number' && Number.isFinite(grams) && grams > 0 && grams <= 99_999)) valid = false;
+      }
+      identityIssues.push(valid ? 'local_option_unmapped' : 'invalid_local_option_identity');
+    }
+    for (const customization of rawCustomizations) {
+      if (customization.linkedItems === undefined) continue;
+      if (orderSource !== 'store_pos' || !Array.isArray(customization.linkedItems)) {
+        identityIssues.push('invalid_linked_product_identity'); continue;
+      }
+      for (const value of customization.linkedItems) {
+        const linked = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+        const id = linked.menuCatalogItemId, amount = linked.quantity;
+        if (!isInventoryUsageUuid(id) || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount <= 0 || amount > 1_000_000) {
+          identityIssues.push('invalid_linked_product_identity'); continue;
+        }
+        const total = (linkedCounts.get(id) || 0) + amount;
+        if (!Number.isSafeInteger(total) || total > 1_000_000) identityIssues.push('invalid_linked_product_quantity');
+        else linkedCounts.set(id, total);
+      }
+    }
     if (explicit) {
       for (const option of explicit.options) {
         if (!isInventoryUsageUuid(option.id) || !Number.isInteger(option.quantity) || option.quantity <= 0) identityIssues.push("invalid_option_identity");
@@ -143,7 +182,8 @@ export function normalizeInventoryOrderSource(rawItems: Array<Record<string, unk
       sourceItemId, menuCatalogItemId: isInventoryUsageUuid(menuId) ? menuId : null,
       quantity: quantity ?? 0, measuredQuantity: nullableInventoryUsageNumber(explicit&&Object.prototype.hasOwnProperty.call(explicit,"measuredQuantity") ? explicit.measuredQuantity : row.measuredQuantity),
       measuredUnit: String(explicit?.measuredUnit ?? row.measuredUnit ?? ""), refundStatus: String(row.refundStatus ?? ""),
-      options: [...counts].map(([id, quantity]) => ({ id, quantity })), identityIssues: [...new Set(identityIssues)]
+      options: [...counts].map(([id, quantity]) => ({ id, quantity })),
+      ...(linkedCounts.size ? { linkedItems: [...linkedCounts].map(([id, quantity]) => ({ id, quantity })) } : {}), identityIssues: [...new Set(identityIssues)]
     };
   });
   for (const item of items) for (const code of item.identityIssues) issueCodes.add(code);
@@ -205,13 +245,16 @@ export function planInventoryOrderUsage(input: {
     if (item.refundStatus === "refunded") continue;
     let matched = false;
     for (const target of [
-      { type: "item", id: item.menuCatalogItemId, multiplier: 1 },
-      ...item.options.map(option => ({ type: "option", id: option.id, multiplier: option.quantity }))
+      { type: "item", id: item.menuCatalogItemId, multiplier: 1, linked: false },
+      ...item.options.map(option => ({ type: "option", id: option.id, multiplier: option.quantity, linked: false })),
+      ...(item.linkedItems || []).map(linked => ({ type: 'item', id: linked.id, multiplier: linked.quantity, linked: true }))
     ]) {
       const recipe = recipes.get(`${target.type}:${target.id}`);
       if (!recipe) { issue("recipe_missing", { sourceItemId: item.sourceItemId, targetType: target.type, targetId: target.id }); continue; }
       let exposure = item.quantity * target.multiplier;
       if (recipe.snapshot.basis === "measured") {
+        // A fixed-price linked drink never inherits the parent bowl's grams.
+        if (target.linked) { issue('measured_basis_unknown', { sourceItemId: item.sourceItemId, recipeVersionId: recipe.versionId, linkedProduct: true }); continue; }
         if (item.measuredQuantity === null || item.measuredQuantity <= 0 || item.measuredUnit !== recipe.snapshot.measuredUnit) {
           issue("measured_basis_unknown", { sourceItemId: item.sourceItemId, recipeVersionId: recipe.versionId }); continue;
         }

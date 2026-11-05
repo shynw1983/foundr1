@@ -1,5 +1,8 @@
 "use client";
 
+import { scheduleConfirmationTranslations } from "../../../lib/os-schedule-confirmation-translations";
+import { googleBusinessTranslations } from "../../../lib/os-google-business-translations";
+import { shiftRequestTranslations } from "../../../lib/os-shift-request-translations";
 import { Globe2 } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
@@ -13,7 +16,7 @@ type OsTranslationContextValue = {
 
 const languageStorageKey = "foundr1-os-language";
 const languagePreferenceStorageKey = "foundr1-os-language-preference";
-const localeCacheVersion = "20261011-store-inventory-v74";
+const localeCacheVersion = "20261103-pos-fulfillment-v98";
 const languageMeta: Record<OsLanguage, { htmlLang: string }> = {
   ja: { htmlLang: "ja" },
   "zh-Hans": { htmlLang: "zh-Hans" },
@@ -139,7 +142,8 @@ function translateNode(root: Node, dictionary: OsDictionary, language: OsLanguag
 
 export function OsTranslationProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<OsLanguage>("ja");
-  const [dictionary, setDictionary] = useState<OsDictionary>({});
+  const [loadedDictionary, setDictionary] = useState<OsDictionary>({});
+  const dictionary = useMemo(() => ({ ...loadedDictionary, ...shiftRequestTranslations[language], ...googleBusinessTranslations[language], ...scheduleConfirmationTranslations[language] }), [loadedDictionary, language]);
 
   useEffect(() => {
     try {

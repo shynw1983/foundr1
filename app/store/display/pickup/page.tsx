@@ -8,16 +8,18 @@ import styles from "./pickup-display.module.css";
 import { PickupBoard } from "./PickupBoard";
 import { Menu } from "lucide-react";
 import { PickupVoicePlayer, type PickupVoiceStatus } from "../../../../lib/pickup-voice-client";
+import { updatePickupCalls } from "../../../../lib/pickup-call-tracker";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
-import { useVisibleRefresh } from "../../components/useVisibleRefresh";
-import { createStoreFallbackPoller, rememberStoreBusinessHours } from "../../../../lib/store-polling-client";
+import { createStoreRefreshCoordinator, rememberStoreBusinessHours } from "../../../../lib/store-polling-client";
+import { bindStoreRealtimeChannels } from "../../../../lib/store-realtime-refresh";
 
 export type PickupOrder = {
   pickupCode: string;
   status: string;
   orderType: string;
   createdTime: string;
+  callVersion?: number;
 };
 
 type StoreOption = {
@@ -32,13 +34,20 @@ function getStoredVoiceEnabled() {
   return window.localStorage.getItem(voiceSettingKey) === "1";
 }
 
+function getDisplayStoreSelection() {
+  if (typeof window === "undefined") return "";
+  const explicit = new URLSearchParams(window.location.search).get("storeId");
+  return explicit === null ? getStoredStoreSelection() : explicit.trim();
+}
+
 export default function StorePickupDisplayPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
-  const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
+  const [selectedStoreId, setSelectedStoreId] = useState(getDisplayStoreSelection);
   const [preparing, setPreparing] = useState<PickupOrder[]>([]);
   const [ready, setReady] = useState<PickupOrder[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
-  const readState = useReadRequest();
+  const readState = useReadRequest(15000, 0, true);
+  const refreshRef = useRef<ReturnType<typeof createStoreRefreshCoordinator> | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [menuOpen, setMenuOpen] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
@@ -48,20 +57,28 @@ export default function StorePickupDisplayPage() {
   const speechSupported = voiceStatus !== "unsupported";
   const selectedStoreIdRef = useRef(selectedStoreId);
   const voiceEnabledRef = useRef(false);
-  const knownReadyCodesRef = useRef<Set<string>>(new Set());
-  const hasInitializedReadyCodesRef = useRef(false);
+  const knownReadyCallsRef = useRef<Map<string, number> | null>(null);
+  const knownReadyStoreRef = useRef("");
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   useEffect(() => {
     selectedStoreIdRef.current = selectedStoreId;
   }, [selectedStoreId]);
 
-  async function load(storeId = selectedStoreIdRef.current) {
+  async function loadSnapshot(storeId: string, externalSignal: AbortSignal) {
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
     params.set("ts", String(Date.now()));
-    return readState.run(storeId, (signal) => readJson(`/api/store/display/pickup?${params.toString()}`, signal), (body) => {
+    return readState.run(storeId, (signal) => {
+      if (!storeId && new URLSearchParams(window.location.search).has("storeId")) throw new Error("店舗を確認してください。");
+      return readJson(`/api/store/display/pickup?${params.toString()}`, signal);
+    }, (body) => {
       const nextStoreId = String(body.selectedStoreId || storeId || "");
+      if (knownReadyStoreRef.current !== nextStoreId) {
+        voicePlayerRef.current?.stop();
+        knownReadyCallsRef.current = null;
+        knownReadyStoreRef.current = nextStoreId;
+      }
       setStores(body.access?.stores ?? []);
       rememberStoreBusinessHours(body.access?.stores);
       setSelectedStoreId(nextStoreId);
@@ -69,21 +86,18 @@ export default function StorePickupDisplayPage() {
       if (nextStoreId) setStoredStoreSelection(nextStoreId);
       setPreparing(body.preparing ?? []);
       const nextReady = (body.ready ?? []) as PickupOrder[];
-      const nextReadyCodes = new Set(nextReady.map((order) => order.pickupCode));
-      if (hasInitializedReadyCodesRef.current && voiceEnabledRef.current) {
-        const newCodes = Array.from(nextReadyCodes).filter((code) => !knownReadyCodesRef.current.has(code));
-        for (const code of newCodes) voicePlayerRef.current?.announce(code);
+      const nextCalls = updatePickupCalls(knownReadyCallsRef.current, nextReady);
+      if (voiceEnabledRef.current) {
+        for (const code of nextCalls.calls) voicePlayerRef.current?.announce(code);
       }
-      knownReadyCodesRef.current = nextReadyCodes;
-      hasInitializedReadyCodesRef.current = true;
+      knownReadyCallsRef.current = nextCalls.versions;
       setReady(nextReady);
       setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit" }).format(new Date()));
-    });
+    }, externalSignal);
   }
-
-  useVisibleRefresh(() => {
-    void load();
-  });
+  function load() {
+    return refreshRef.current?.refresh() ?? Promise.resolve();
+  }
 
   function enableVoice() {
     window.localStorage.setItem(voiceSettingKey, "1");
@@ -118,78 +132,68 @@ export default function StorePickupDisplayPage() {
   }, []);
 
   useEffect(() => {
-    void load();
-    if (realtimeStatus === "connected") return;
-    const poller = createStoreFallbackPoller(
-      () => load(selectedStoreIdRef.current),
-      { baseIntervalMs: 60_000, storeIds: () => [selectedStoreIdRef.current].filter(Boolean) }
-    );
-    poller.start();
-    return () => poller.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [realtimeStatus]);
-
-  useEffect(() => {
-    let pusher: any;
-    let channels: any[] = [];
     let active = true;
-    const storeId = selectedStoreIdRef.current;
-    if (!storeId) {
-      setRealtimeStatus("polling");
-      return () => {
-        active = false;
-      };
-    }
-    const refreshFromEvent = () => {
-      void load(selectedStoreIdRef.current);
+    let pusher: ReturnType<(typeof import("../../../../lib/shared-pusher-client"))["acquireSharedPusher"]> | undefined;
+    let unbindRealtime: (() => void) | undefined;
+    const configController = new AbortController();
+    const storeId = selectedStoreId;
+    const deny = (status?: number) => {
+      if (!active) return;
+      if (status) readState.reportFailure(status);
+      active = false; configController.abort();
+      setPreparing([]); setReady([]); voicePlayerRef.current?.stop(); knownReadyCallsRef.current = null;
+      setStores([]); setLastUpdatedAt(""); setRealtimeStatus("polling");
+      unbindRealtime?.(); pusher?.disconnect();
+      coordinator.stop();
     };
+    const coordinator = createStoreRefreshCoordinator(
+      signal => loadSnapshot(storeId, signal),
+      {
+        healthyIntervalMs: 60_000,
+        fallbackIntervalMs: 30_000,
+        maxFailureIntervalMs: 5 * 60_000,
+        onUnauthorized: deny
+      }
+    );
+    refreshRef.current = coordinator;
     setRealtimeStatus("connecting");
-    fetch(`/api/store/realtime-config?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then(async (config) => {
-        if (!active) return;
-        if (!config?.key || !config?.cluster || !config?.channels?.length) {
-          setRealtimeStatus("polling");
-          return;
-        }
-        const { acquireSharedPusher } = await import("../../../../lib/shared-pusher-client");
-        if (!active) return;
-        pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
-        pusher.connection.bind("unavailable", () => {
-          if (active) setRealtimeStatus("polling");
-        });
-        pusher.connection.bind("failed", () => {
-          if (active) setRealtimeStatus("polling");
-        });
-        pusher.connection.bind("disconnected", () => {
-          if (active) setRealtimeStatus("polling");
-        });
-        channels = config.channels.map((channelName: string) => {
-          const channel = pusher.subscribe(channelName);
-          channel.bind("pusher:subscription_succeeded", () => {
-            if (active) setRealtimeStatus("connected");
+    coordinator.start({ immediate: true });
+    if (storeId) {
+      void fetch(`/api/store/realtime-config?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store", signal: configController.signal })
+        .then(response => response.ok ? response.json() : null)
+        .then(async config => {
+          if (!active) return;
+          if (!config?.key || !config?.cluster || !config?.channels?.length) {
+            setRealtimeStatus("polling");
+            return;
+          }
+          const { acquireSharedPusher } = await import("../../../../lib/shared-pusher-client");
+          if (!active) return;
+          pusher = acquireSharedPusher({ key: config.key, cluster: config.cluster });
+          unbindRealtime = bindStoreRealtimeChannels(pusher, {
+            onUnauthorized: deny,
+            channels: config.channels,
+            events: ["order.created", "order.updated"],
+            onEvent: () => { void coordinator.refresh(); },
+            onHealthChange: healthy => {
+              if (!active) return;
+              coordinator.setRealtimeHealthy(healthy);
+              setRealtimeStatus(healthy ? "connected" : "polling");
+              if (healthy) void coordinator.refresh({ force: true });
+            }
           });
-          channel.bind("pusher:subscription_error", () => {
-            if (active) setRealtimeStatus("polling");
-          });
-          channel.bind("order.created", refreshFromEvent);
-          channel.bind("order.updated", refreshFromEvent);
-          return channel;
-        });
-      })
-      .catch(() => {
-        if (active) setRealtimeStatus("polling");
-      });
-
+        }).catch(() => { if (active) setRealtimeStatus("polling"); });
+    } else setRealtimeStatus("polling");
     return () => {
       active = false;
-      channels.forEach((channel) => {
-        channel.unbind("order.created", refreshFromEvent);
-        channel.unbind("order.updated", refreshFromEvent);
-        pusher?.unsubscribe(channel.name);
-      });
+      configController.abort();
+      coordinator.stop();
+      readState.cancel();
+      if (refreshRef.current === coordinator) refreshRef.current = null;
+      unbindRealtime?.();
       pusher?.disconnect();
     };
+    // The coordinator owns lifecycle wakes and the current scoped read; no second refresh timer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStoreId]);
 
@@ -214,14 +218,16 @@ export default function StorePickupDisplayPage() {
               <select value={selectedStoreId} onChange={(event) => {
                 const storeId = event.target.value;
                 voicePlayerRef.current?.stop();
-                knownReadyCodesRef.current = new Set();
-                hasInitializedReadyCodesRef.current = false;
+                knownReadyCallsRef.current = null;
+                knownReadyStoreRef.current = storeId;
                 setPreparing([]); setReady([]);
                 setLastUpdatedAt("");
                 setSelectedStoreId(storeId);
                 selectedStoreIdRef.current = storeId;
+                const nextUrl = new URL(window.location.href);
+                nextUrl.searchParams.set("storeId", storeId);
+                window.history.replaceState(window.history.state, "", nextUrl.toString());
                 setStoredStoreSelection(storeId);
-                void load(storeId);
               }}>
                 {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
               </select>

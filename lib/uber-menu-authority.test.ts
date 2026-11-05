@@ -1,10 +1,40 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { authoritativeDeliveryPrice, confirmedUberRemovals, resolveUberBasePrice, splitUberName, uberContextPrice, uberSourceContentHash, validateUberSourceCatalog, type UberSourceCatalog } from './uber-menu-authority.ts';
+import { authoritativeDeliveryPrice, confirmedUberRemovals, resolveUberBasePrice, splitUberName, uberContextPrice, uberSourceContentHash, validateUberSourceCatalog, uberStructuralRemovals, matchesUberRemovalReview, canApplyUberRemovalReview, type UberSourceCatalog } from './uber-menu-authority.ts';
 
 function catalog(time='2026-09-07T01:00:00Z'): UberSourceCatalog {
  return {version:1,storeUuid:'store',menuId:'delivery',capturedAt:time,sections:[{id:'s',name:'All day',categoryIds:['c'],hours:[],hidden:false}],categories:[{id:'c',name:'Soup',itemIds:['a'],hidden:false}],groups:[{id:'g',name:'Toppings',optionIds:['b'],min:0,max:10}],entities:[{id:'a',name:'Soup｜汤｜수프｜Soup',description:'',imageUrl:'',price:415,groupIds:['g'],contextPrices:[]},{id:'b',name:'Tofu',description:'',imageUrl:'',price:216,groupIds:[],contextPrices:[{contextType:'CUSTOMIZATION_UUID',contextId:'g',price:222}]}]};
 }
+test('unlinked option still in library and moved option both require review',()=>{
+ const before=catalog(), after=catalog();
+ after.groups[0].optionIds=[];
+ assert.deepEqual(uberStructuralRemovals(before,after),[{key:'["group","g","b"]',name:'Toppings → Tofu'}]);
+ after.groups.push({...before.groups[0],id:'new'});
+ assert.deepEqual(uberStructuralRemovals(before,after).map(row=>row.key),['["group","g","b"]']);
+ after.entities.pop(); after.groups.pop();
+ assert.ok(uberStructuralRemovals(before,after).some(row=>row.key==='["entity","b"]'));
+});
+test('sale visibility and price changes do not count as structural removal',()=>{
+ const before=catalog(), after=catalog();
+ after.entities[1].suspensionInfo={suspended:true};
+ after.entities[1].visibility='hidden';
+ after.categories[0].hidden=true;
+ after.entities[1].price=999;
+ assert.deepEqual(uberStructuralRemovals(before,after),[]);
+});
+test('approval is scoped to exact revision, menu hash and targets, then requires a fresh independent capture',()=>{
+ const targets=[{key:'option:old',name:'Old option'}];
+ const review={token:'token',revision:5,hash:'current',observedAt:'2026-09-07T01:00:00Z',targets};
+ assert.equal(matchesUberRemovalReview(review,5,'current',targets),true);
+ assert.equal(matchesUberRemovalReview(review,6,'current',targets),false);
+ assert.equal(matchesUberRemovalReview(review,5,'new',targets),false);
+ assert.equal(matchesUberRemovalReview(review,5,'current',[{key:'option:other',name:'Old option'}]),false);
+ assert.equal(canApplyUberRemovalReview(review,'2026-09-07T01:01:00Z'),false);
+ const approved={...review,approvedBy:'manager',approvedAt:'2026-09-07T01:00:30Z'};
+ assert.equal(canApplyUberRemovalReview(approved,'2026-09-07T01:00:59Z'),false);
+ assert.equal(canApplyUberRemovalReview(approved,'2026-09-07T01:01:00Z'),true);
+ assert.equal(canApplyUberRemovalReview({...approved,approvedAt:'2026-09-07T01:03:00Z'},'2026-09-07T01:02:00Z'),false);
+});
 test('source graph rejects missing objects and wrong stores',()=>{
  assert.equal(validateUberSourceCatalog(catalog(),'store').entities.length,2);
  assert.throws(()=>validateUberSourceCatalog(catalog(),'other'),/invalid/);

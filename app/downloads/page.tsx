@@ -6,6 +6,7 @@ import { join } from "node:path";
 type ApkVersion = {
   app: string;
   title: string;
+  description?: string;
   packageName: string;
   versionName: string;
   versionCode: number;
@@ -20,7 +21,7 @@ type ApkVersion = {
   gitSubject?: string;
 };
 
-const appOrder = ["store", "bridge", "os", "member", "staff"];
+const appOrder = ["studio", "store", "bridge", "os", "member", "staff"];
 
 export const metadata: Metadata = {
   title: "Foundr1 APK Downloads",
@@ -68,6 +69,7 @@ export default function DownloadsPage() {
             <div>
               <h2>{apk.title}</h2>
               <p>{apk.packageName}</p>
+              {apk.description ? <p data-i18n-ignore>{apk.description}</p> : null}
             </div>
             <dl>
               <div>

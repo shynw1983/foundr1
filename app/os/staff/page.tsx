@@ -215,11 +215,6 @@ function canForcePasswordChange(role: string) {
   return passwordChangeEligibleRoles.has(role);
 }
 
-function getAssignableRoleOptions(currentUserRole: string) {
-  if (currentUserRole === "owner") return roleOptions;
-  if (currentUserRole === "manager") return roleOptions.filter((option) => option.value !== "owner");
-  return roleOptions.filter((option) => option.value === "staff");
-}
 
 const staffCategoryLabels: Record<string, string> = {
   executive: "経営層",
@@ -406,6 +401,7 @@ export default function StaffPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState("");
+  const [assignableRoles, setAssignableRoles] = useState<string[]>([]);
   const [canManageStaff, setCanManageStaff] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [editingInitialTab, setEditingInitialTab] = useState<"basic" | "payroll">("basic");
@@ -461,12 +457,14 @@ export default function StaffPage() {
       stores?: StoreOption[];
       currentUserId?: string;
       currentUserRole?: string;
+      assignableRoles?: string[];
       canManageStaff?: boolean;
     };
     setStaff((body.employees ?? []).filter((employee) => employee.role !== "store_terminal"));
     setStores(body.stores ?? []);
     setCurrentUserId(body.currentUserId ?? "");
     setCurrentUserRole(body.currentUserRole ?? "");
+    setAssignableRoles(body.assignableRoles ?? []);
     setCanManageStaff(body.canManageStaff === true);
     setDataSource("neon");
     return body.employees ?? [];
@@ -791,7 +789,7 @@ export default function StaffPage() {
                 <PanelTitle title="スタッフ追加" subtitle="ログインID、初期パスワード、勤務店舗を設定" />
                 {error ? <div className="login-error">{error}</div> : null}
                 <form className="management-form staff-form" onSubmit={createStaff}>
-                  <StaffFormFields stores={stores} currentUserRole={currentUserRole} onNotice={showNotice} onError={setError} />
+                  <StaffFormFields stores={stores} currentUserRole={currentUserRole} assignableRoles={assignableRoles} onNotice={showNotice} onError={setError} />
                   <button className="primary-button" type="submit">追加</button>
                 </form>
               </section>
@@ -825,7 +823,7 @@ export default function StaffPage() {
                   member={editingStaff}
                   stores={stores}
                   currentUserId={currentUserId}
-                  currentUserRole={currentUserRole}
+                  currentUserRole={currentUserRole} assignableRoles={assignableRoles}
                   readOnly={editingStaff.canManage === false}
                   initialTab={editingInitialTab}
                   onHistoryChanged={reloadStaffKeepingEdit}
@@ -1018,6 +1016,7 @@ function StaffFormFields({
   stores,
   currentUserId,
   currentUserRole,
+  assignableRoles = [],
   readOnly = false,
   initialTab = "basic",
   onHistoryChanged,
@@ -1029,6 +1028,7 @@ function StaffFormFields({
   stores: StoreOption[];
   currentUserId?: string;
   currentUserRole?: string;
+  assignableRoles?: string[];
   readOnly?: boolean;
   initialTab?: "basic" | "payroll";
   onHistoryChanged?: (employeeId: string) => Promise<void> | void;
@@ -1044,7 +1044,7 @@ function StaffFormFields({
   const [payrollEditStoreIds, setPayrollEditStoreIds] = useState<string[]>([]);
   const [lifecycleCases, setLifecycleCases] = useState<LifecycleCase[]>([]);
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
-  const assignableRoleOptions = getAssignableRoleOptions(currentUserRole ?? "");
+  const assignableRoleOptions = roleOptions.filter(option => assignableRoles.includes(option.value));
   const shownRoleOptions = member && !assignableRoleOptions.some((option) => option.value === member.role)
     ? [{ value: member.role, label: roleLabels[member.role] ?? member.role }, ...assignableRoleOptions]
     : assignableRoleOptions;
