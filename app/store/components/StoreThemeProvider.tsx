@@ -301,11 +301,12 @@ export function StoreThemeProvider({ children, employeeId, target, applyToDocume
   useLayoutEffect(() => {
     if (!applyToDocument) return;
     // Drafts are rendered inside the editor only. Each live route reads its own saved target.
+    document.body.setAttribute("data-store-theme", themeTarget);
     const palette = createStoreThemePalette(isLogin ? defaultColor : committedColor);
     for (const [key, value] of Object.entries(palette)) document.body.style.setProperty(key, value);
     const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (meta) meta.content = palette["--store-primary"];
-  }, [committedColor, isLogin, defaultColor, applyToDocument]);
+  }, [committedColor, isLogin, defaultColor, applyToDocument, themeTarget]);
 
   const value = useMemo(() => ({ employeeId, context, loading, error, refresh, previewColor, setPreviewColor, saveTheme }),
     [employeeId, context, loading, error, refresh, previewColor, setPreviewColor, saveTheme]);

@@ -12,3 +12,10 @@
 .sns-font-status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; }
 .sns-text-group-guide { border-style: solid; border-width: 2px; outline-color: #18563e; }
 .sns-text-member-guide { opacity: .7; }
+
+body[data-store-theme] .sns-editor .sns-template-confirm {
+  background: var(--store-surface-subtle, #f5f7f5);
+}
+body[data-store-theme] .sns-editor .sns-text-group-guide {
+  outline-color: var(--store-focus-ring, #18563e);
+}

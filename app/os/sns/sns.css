@@ -121,3 +121,38 @@
 .sns-snap-guide.is-y .sns-snap-guide-label { left: 5px; top: 4px; }
 
 .sns-canvas-wrap { overflow: clip; }
+
+/* The shared editor keeps its OS appearance; Store controls use readable accents. */
+body[data-store-theme] .sns-editor button.primary {
+  border-color: var(--store-primary-border, var(--sns-primary));
+  background: var(--store-primary, var(--sns-primary));
+  color: var(--store-on-primary, white);
+}
+body[data-store-theme] .sns-editor button.primary:hover:not(:disabled) {
+  background: var(--store-primary-hover, var(--sns-primary));
+}
+body[data-store-theme] .sns-editor button.primary:active:not(:disabled) {
+  background: var(--store-primary-active, var(--sns-primary));
+}
+body[data-store-theme] .sns-editor button[aria-pressed=true] {
+  outline-color: var(--store-primary-text, var(--sns-primary));
+}
+body[data-store-theme] .sns-editor :is(button, input, select, textarea, canvas):focus-visible {
+  outline-color: var(--store-focus-ring, var(--sns-primary));
+}
+body[data-store-theme] .sns-editor .sns-controls [role=status] {
+  color: var(--store-primary-text, var(--sns-primary));
+}
+body[data-store-theme] .sns-editor .sns-text-layout-preview {
+  background: var(--store-surface-muted, #edf0ee);
+  color: var(--store-ink, #25352e);
+}
+/* Disable controls without fading the whole fieldset, its labels or previews. */
+body[data-store-theme] .sns-editor fieldset:disabled { opacity: 1; }
+body[data-store-theme] .sns-editor :is(button, input, select, textarea):disabled {
+  border-color: var(--store-line, var(--sns-line));
+  outline-color: var(--store-line, var(--sns-line));
+  background: var(--store-disabled-bg, #eef0f1);
+  color: var(--store-disabled-ink, var(--sns-muted));
+  opacity: 1;
+}
