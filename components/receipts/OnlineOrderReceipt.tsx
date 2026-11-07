@@ -170,6 +170,7 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
             <dt>小計</dt>
             <dd>{formatCurrency(receipt.subtotalAmount)}</dd>
           </div>
+          {receipt.posDiscountAmount ? <div><dt>割引</dt><dd>-{formatCurrency(receipt.posDiscountAmount)}</dd></div> : null}
           {receipt.couponDiscountAmount > 0 ? (
             <div>
               <dt>クーポン値引き</dt>
@@ -186,10 +187,16 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
             <dt>合計</dt>
             <dd>{formatCurrency(receipt.totalAmount)}</dd>
           </div>
-          <div>
+          {receipt.taxBreakdown ? <>
+            {receipt.taxBreakdown.map(bucket => <div key={bucket.rate}>
+              <dt>会計時 {bucket.rate}%対象（税込）</dt>
+              <dd>{formatCurrency(bucket.grossAmount)}（内税 {formatCurrency(bucket.taxAmount)}）</dd>
+            </div>)}
+            {receipt.taxBreakdown.some(bucket => bucket.rate === 8) ? <div><dt>※</dt><dd>軽減税率対象</dd></div> : null}
+          </> : <div>
             <dt>内消費税等 {receipt.taxRate}%対象</dt>
             <dd>{formatCurrency(receipt.taxIncludedAmount)}</dd>
-          </div>
+          </div>}
         </dl>
       </section>
 

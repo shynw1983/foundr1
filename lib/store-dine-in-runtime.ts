@@ -3,12 +3,13 @@ import { readDineInMenus } from './store-dine-in-menu';
 import { normalizeDineInCatalogPricing, resolveDineInItemFulfillmentMode, getDineInLinkedItemDisabledReason, dineInGroupAppliesToItem, dineInOptionAppliesToItem, isLocalDineInOption, type StoreDineInItem, type StoreDineInOption } from './store-dine-in-menu-policy';
 import { getPosOptionSelectionRules } from './dine-in-option-selection';
 import type { PosItemFulfillmentMode } from './pos-item-fulfillment';
+import { defaultPosCounterMenuPolicy, getPosCounterItemFlags, type PosCounterMenuPolicy } from './pos-counter-menu-policy';
 
 export type DineInMenuState = Awaited<ReturnType<typeof readDineInMenus>>;
 
 /** Imported choices retain source sellability. Native choices belong only to
  * this trusted store snapshot and never acquire a canonical stock identity. */
-export async function resolveDineInCatalog(storeId: string, state: DineInMenuState) {
+export async function resolveDineInCatalog(storeId: string, state: DineInMenuState, counterPolicy: PosCounterMenuPolicy = defaultPosCounterMenuPolicy) {
   const enabled = state.menus.filter(menu => menu.enabled).map(menu => ({ ...menu, catalog: normalizeDineInCatalogPricing(menu.catalog) }));
   const itemIds = [...new Set(enabled.flatMap(menu => menu.catalog.items.map(item => item.sourceItemId)))];
   const optionIds = [...new Set(enabled.flatMap(menu => menu.catalog.optionGroups.flatMap(group => group.options.filter(option => !option.linkedItemId && !isLocalDineInOption(option)).map(option => option.sourceOptionId))))];
@@ -28,26 +29,30 @@ export async function resolveDineInCatalog(storeId: string, state: DineInMenuSta
   ]);
   const availableItems = new Map(sourceItems.map(item => [String(item.id), item]));
   const availableOptions = new Map(sourceOptions.map(option => [String(option.id), option]));
+  const categories = enabled.flatMap(menu => menu.catalog.categories).sort((a, b) => a.sortOrder - b.sortOrder);
+  const counterFlags = getPosCounterItemFlags(counterPolicy, categories);
   const eligibleItems = enabled.flatMap(menu => menu.catalog.items.filter(item => {
     const source = availableItems.get(item.sourceItemId);
     return source?.active && source.available && source.brandId === menu.brandId;
-  }).map(item => ({ ...item, fulfillmentMode: resolveDineInItemFulfillmentMode(menu.catalog, item), isAvailable: true, dineInMenuRevision: menu.revision })));
+  }).map(item => ({ ...item, ...counterFlags(item), fulfillmentMode: resolveDineInItemFulfillmentMode(menu.catalog, item), isAvailable: true, dineInMenuRevision: menu.revision })));
   const items = eligibleItems.filter(item => item.visible).sort((a, b) => a.sortOrder - b.sortOrder);
   const linkedItems = new Map(eligibleItems.map(item => [item.id, item]));
   const itemSet = new Set(items.map(item => item.id));
   const optionGroups = enabled.flatMap(menu => menu.catalog.optionGroups
     .filter(group => group.visible && (!group.menuCatalogItemId || itemSet.has(group.menuCatalogItemId)))
-    .map(group => ({ ...group, options: group.options.flatMap<StoreDineInOption & { linkedSourceItemId?: string; fulfillmentMode?: PosItemFulfillmentMode }>(option => {
+    .map(group => ({ ...group, options: group.options.flatMap<StoreDineInOption & { linkedSourceItemId?: string; fulfillmentMode?: PosItemFulfillmentMode; counterStandardTax?: boolean; counterTakeoutRestricted?: boolean }>(option => {
       if (!option.visible) return [];
       if (option.linkedItemId) {
         const linked = linkedItems.get(option.linkedItemId);
         if (!linked || linked.brandId !== group.brandId || getDineInLinkedItemDisabledReason(menu.catalog, linked)) return [];
         return [{ ...option, name: linked.name, displayNames: linked.displayNames, priceDelta: linked.price,
-          linkedSourceItemId: linked.sourceItemId, fulfillmentMode: linked.fulfillmentMode }];
+          linkedSourceItemId: linked.sourceItemId, fulfillmentMode: linked.fulfillmentMode,
+          counterStandardTax: linked.counterStandardTax, counterTakeoutRestricted: linked.counterTakeoutRestricted }];
       }
-      if (isLocalDineInOption(option)) return group.brandId === menu.brandId ? [option] : [];
+      const inheritedTax = { ...option, counterStandardTax: undefined, counterTakeoutRestricted: undefined };
+      if (isLocalDineInOption(option)) return group.brandId === menu.brandId ? [inheritedTax] : [];
       const source = availableOptions.get(option.sourceOptionId);
-      return source?.active && source.available && source.brandId === menu.brandId && source.groupId === (option.sourceGroupId || group.sourceGroupId) ? [option] : [];
+      return source?.active && source.available && source.brandId === menu.brandId && source.groupId === (option.sourceGroupId || group.sourceGroupId) ? [inheritedTax] : [];
     }).sort((a, b) => a.sortOrder - b.sortOrder) })));
   const snapshotGroupsById = new Map(enabled.flatMap(menu => menu.catalog.optionGroups.map(group => [group.id, group] as const)));
   const groupsById = new Map(optionGroups.map(group => [group.id, group]));
@@ -67,7 +72,7 @@ export async function resolveDineInCatalog(storeId: string, state: DineInMenuSta
   });
   return {
     items: items.filter(canSell), optionGroups,
-    categories: enabled.flatMap(menu => menu.catalog.categories).sort((a, b) => a.sortOrder - b.sortOrder),
+    categories,
     brandIds: enabled.map(menu => menu.brandId)
   };
 }

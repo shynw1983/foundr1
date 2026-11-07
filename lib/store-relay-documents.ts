@@ -1,21 +1,24 @@
-import { getReceiptPrinter, getKitchenPrinterForBrand, hasPosPrinterDestination, resolvePosKitchenTicketTemplate, resolvePosReceiptTemplate, type PosPrinterSettings, type PosPrintPayload } from './pos-printer';
+import { applyPosReceiptTaxBreakdown, getReceiptPrinter, getKitchenPrinterForBrand, hasPosPrinterDestination, prefixPosReducedTaxMarker, resolvePosKitchenTicketTemplate, resolvePosReceiptTemplate, type PosPrinterSettings, type PosPrintPayload } from './pos-printer';
 import { posPickupTicketCopy } from './pos-pickup-ticket-copy';
 import type { PosServingTicket } from './pos-serving-policy';
-import { isPosImmediateItem, type PosItemFulfillmentMode } from './pos-item-fulfillment';
-type Item={fulfillmentMode?:PosItemFulfillmentMode;productionType?:string;itemKind?:string;brandId:string;brandName:string;name:string;displayNames?:Record<string,string>;quantity:number;amount:number;measuredQuantity:number|null;measuredUnit:string;preparationNote:string;selectedOptions:Array<{name:string;displayNames?:Record<string,string>}>};
-type Sale={pickupCode:string;orderType:string;paymentMethod:string;amount:number;subtotalAmount:number;discountAmount:number;couponDiscountAmount:number;taxAmount:number;taxRate:number;cashTenderedAmount:number|null;cashChangeAmount:number|null;receiptRequested:boolean;note:string;memberLanguage:string};
+import { isPosImmediateItem } from './pos-item-fulfillment';
+import type { PosPrintSnapshotItem, PosPrintSnapshotSale } from './pos-print-document-builder';
 export type RelayDocument={kind:'kitchen'|'pickup'|'receipt';payload:PosPrintPayload};
 const localized=(name:string,names:Record<string,string>|undefined,lang:string)=>lang==='ja'?name:names?.[lang]||names?.en||name;
-export function buildRelayDocuments(settings:PosPrinterSettings,storeName:string,sale:Sale,items:Item[],tickets:PosServingTicket[]):RelayDocument[]{
+export function buildRelayDocuments(settings:PosPrinterSettings,storeName:string,sale:PosPrintSnapshotSale,items:PosPrintSnapshotItem[],tickets:PosServingTicket[]):RelayDocument[]{
   const receiptPrinter=getReceiptPrinter(settings);
   if(items.length>0&&items.every(isPosImmediateItem)&&(!settings.enabled||!settings.receiptEnabled))return [];
   if(!settings.enabled||!settings.receiptEnabled||!hasPosPrinterDestination(receiptPrinter))throw new Error('レシートプリンターを設定してください。');
   const printedAt=new Date().toISOString();
-  const line=(item:Item,lang='ja')=>({name:localized(item.name,item.displayNames,lang),quantity:item.quantity,amount:item.amount,
-    unitPrice:item.amount/item.quantity,options:[item.measuredQuantity?`${item.measuredQuantity}${item.measuredUnit}`:'',...item.selectedOptions.map(o=>localized(o.name,o.displayNames,lang))].filter(Boolean)});
+  const line=(item:PosPrintSnapshotItem,lang='ja',markReducedRate=false)=>({
+    name:prefixPosReducedTaxMarker(localized(item.name,item.displayNames,lang),markReducedRate&&!item.counterStandardTax),
+    quantity:item.quantity,amount:item.amount,unitPrice:item.amount/item.quantity,
+    options:[item.measuredQuantity?`${item.measuredQuantity}${item.measuredUnit}`:'',...item.selectedOptions.map(option=>
+      prefixPosReducedTaxMarker(localized(option.name,option.displayNames,lang),
+        markReducedRate&&!(option.counterStandardTax??item.counterStandardTax)&&!option.complimentary&&Number(option.priceDelta)>0))].filter(Boolean)});
   const base={pickupCode:sale.pickupCode,orderType:sale.orderType,paymentMethod:sale.paymentMethod,paymentLabel:({cash:'現金',card:'カード',other:'その他'} as Record<string,string>)[sale.paymentMethod] || sale.paymentMethod,
     note:sale.note,subtotalAmount:sale.subtotalAmount,discountAmount:sale.discountAmount,couponDiscountAmount:sale.couponDiscountAmount,
-    taxAmount:sale.taxAmount,taxRate:sale.taxRate,totalAmount:sale.amount,cashTenderedAmount:sale.cashTenderedAmount,cashChangeAmount:sale.cashChangeAmount,items:items.map(i=>line(i))};
+    taxAmount:sale.taxAmount,taxRate:sale.taxRate,totalAmount:sale.amount,cashTenderedAmount:sale.cashTenderedAmount,cashChangeAmount:sale.cashChangeAmount};
   const jobs:RelayDocument[]=[];
   for(const ticket of tickets){
     const item=items[ticket.itemIndex];if(!item)throw new Error('料理と伝票の対応を確認してください。');
@@ -43,11 +46,18 @@ export function buildRelayDocuments(settings:PosPrinterSettings,storeName:string
     }
   }
   const brandIds=[...new Set(items.map(i=>i.brandId))];
-  const receipt=resolvePosReceiptTemplate(settings,brandIds.length===1?brandIds[0]:null,sale.receiptRequested?'invoice':'receipt');
-  jobs.push({kind:'receipt',payload:{version:1,jobType:'receipt',printer:receiptPrinter,storeName,printedAt,receiptTemplate:receipt,
-    order:{...base,receiptRequested:sale.receiptRequested,receiptTitle:sale.receiptRequested?receipt.invoiceTitle:receipt.receiptTitle,
-      receiptRecipientName:sale.receiptRequested?receipt.invoiceRecipientName:'',receiptPurposeText:sale.receiptRequested?receipt.invoicePurposeText:'',
-      items:items.map((item,i)=>({...line(item),name:[!isPosImmediateItem(item)?tickets.find(t=>t.itemIndex===i)?.pickupCode:undefined,line(item).name].filter(Boolean).join(' ')}))}}});
+  const template=structuredClone(resolvePosReceiptTemplate(settings,brandIds.length===1?brandIds[0]:null,sale.receiptRequested?'invoice':'receipt'));
+  const markReducedRate=sale.taxBreakdown?.some(bucket=>bucket.rate===8)??false;
+  const receipt=applyPosReceiptTaxBreakdown(template,{
+    ...base,receiptRequested:sale.receiptRequested,receiptTitle:sale.receiptRequested?template.invoiceTitle:template.receiptTitle,
+    receiptRecipientName:sale.receiptRequested?template.invoiceRecipientName:'',receiptPurposeText:sale.receiptRequested?template.invoicePurposeText:'',
+    items:items.map((item,index)=>{
+      const printedLine=line(item,'ja',markReducedRate);
+      const pickupCode=!isPosImmediateItem(item)?tickets.find(ticket=>ticket.itemIndex===index)?.pickupCode:undefined;
+      return {...printedLine,name:[pickupCode,printedLine.name].filter(Boolean).join(' ')};
+    })
+  },sale.taxBreakdown);
+  jobs.push({kind:'receipt',payload:{version:1,jobType:'receipt',printer:receiptPrinter,storeName,printedAt,...receipt}});
   for (const job of jobs) {
     if (job.payload.printer.deviceType !== 'escpos_network') throw new Error('中継印刷は ESC/POS Wi-Fi / LAN のみ対応しています。');
     if (job.payload.receiptTemplate) {

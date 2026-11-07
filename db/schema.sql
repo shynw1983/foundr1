@@ -2297,6 +2297,7 @@ create table if not exists pos_store_settings (
   takeout_tax_rate numeric(5, 2) not null default 8,
   external_payment_terminal_brand text not null default 'PayCAS',
   price_tax_mode text not null default 'tax_included',
+  counter_menu_policy jsonb not null default '{}'::jsonb,
   discount_presets jsonb not null default '[]'::jsonb,
   customer_display_media_settings jsonb not null default '{}'::jsonb,
   printer_settings jsonb not null default '{}'::jsonb,
@@ -2310,6 +2311,7 @@ create table if not exists pos_store_settings (
 alter table pos_store_settings add column if not exists dine_in_enabled boolean not null default true;
 alter table pos_store_settings add column if not exists takeout_enabled boolean not null default true;
 alter table pos_store_settings add column if not exists external_payment_terminal_brand text not null default 'PayCAS';
+alter table pos_store_settings add column if not exists counter_menu_policy jsonb not null default '{}'::jsonb;
 alter table pos_store_settings add column if not exists discount_presets jsonb not null default '[]'::jsonb;
 alter table pos_store_settings add column if not exists customer_display_media_settings jsonb not null default '{}'::jsonb;
 alter table pos_store_settings add column if not exists printer_settings jsonb not null default '{}'::jsonb;

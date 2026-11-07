@@ -1,5 +1,5 @@
 import { sql } from "../../../../../lib/db";
-import { getOnlineReceiptTaxRate, recordOnlineReceiptDownload } from "../../../../../lib/receipt-data";
+import { getOnlineReceiptTaxRate, getSavedPosReceiptTaxBreakdown, recordOnlineReceiptDownload } from "../../../../../lib/receipt-data";
 import { createReceiptPdf } from "../../../../../lib/receipt-pdf";
 
 export const dynamic = "force-dynamic";
@@ -77,6 +77,9 @@ export async function GET(request: Request) {
       store_customer_orders.pickup_date::text as "pickupDate",
       store_customer_orders.pickup_time as "pickupTime",
       store_customer_orders.amount,
+      case when store_customer_orders.order_source = 'store_pos' and store_customer_orders.customer_summary ? 'taxBreakdown'
+        then (select coalesce(sum(refunded_amount), 0)::int from store_customer_order_items where order_id = store_customer_orders.id)
+      end as "counterRefundAmount",
       store_customer_orders.currency,
       store_customer_orders.drink,
       store_customer_orders.size,
@@ -105,6 +108,18 @@ export async function GET(request: Request) {
   }
 
   const totalAmount = Number(order.amount ?? 0);
+  const customerSummary = (order.customerSummary && typeof order.customerSummary === "object" ? order.customerSummary : {}) as Record<string, unknown>;
+  const taxBreakdown = getSavedPosReceiptTaxBreakdown({
+    orderSource: order.orderSource, customerSummary, originalAmount: totalAmount + Number(order.counterRefundAmount ?? 0)
+  });
+  if (taxBreakdown === null) return Response.json({ error: "Receipt tax details could not be verified." }, { status: 409 });
+  if (taxBreakdown) {
+    const downloadUrl = new URL("/api/public/orders/receipt/preview-pdf", url);
+    downloadUrl.searchParams.set("orderId", orderId);
+    downloadUrl.searchParams.set("pickupCode", pickupCode);
+    downloadUrl.searchParams.set("recipientMode", "registered");
+    return new Response(null, { status: 307, headers: { Location: `${downloadUrl.pathname}${downloadUrl.search}`, "Cache-Control": "private, no-store" } });
+  }
   const refundRows = await sql`
     select coalesce(sum(refunded_amount), 0)::int as "refundAmount"
     from store_customer_order_items
@@ -119,7 +134,6 @@ export async function GET(request: Request) {
     refundAmount: Number(refundRows[0]?.refundAmount ?? 0),
     totalAmount
   });
-  const customerSummary = (order.customerSummary && typeof order.customerSummary === "object" ? order.customerSummary : {}) as Record<string, unknown>;
   const customer = (customerSummary.customer && typeof customerSummary.customer === "object" ? customerSummary.customer : {}) as Record<string, unknown>;
   const customerName = clean(customer.name) || clean(customerSummary.name) || "お客様";
   const itemSummary = [clean(order.drink), clean(order.size), clean(order.toppings)].filter(Boolean).join("\n");

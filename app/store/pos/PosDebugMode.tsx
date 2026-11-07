@@ -1,6 +1,8 @@
 "use client";
 
+import { Fragment } from "react";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
+import type { PosCounterTaxBucket } from "../../../lib/pos-counter-tax";
 import styles from "./PosDebugMode.module.css";
 
 export type PosDebugResult = {
@@ -12,6 +14,7 @@ export type PosDebugResult = {
   discount: number;
   tax: number;
   taxRate: number;
+  taxBreakdown?: PosCounterTaxBucket[];
   taxIncluded: boolean;
   total: number;
   tendered: number | null;
@@ -49,7 +52,9 @@ export function PosDebugResultPreview({ result, onClear }: { result: PosDebugRes
     <dl className={styles.totals}>
       <dt>{t("小計")}</dt><dd>{yen(result.subtotal)}</dd>
       {result.discount > 0 ? <><dt>{t("割引")}</dt><dd>−{yen(result.discount)}</dd></> : null}
-      <dt>{t(result.taxIncluded ? "内消費税" : "消費税")} {result.taxRate}%</dt><dd>{yen(result.tax)}</dd>
+      {result.taxBreakdown?.length ? result.taxBreakdown.map(bucket => <Fragment key={bucket.rate}>
+        <dt>{t("内消費税")} {bucket.rate}%</dt><dd>{yen(bucket.taxAmount)}</dd>
+      </Fragment>) : <><dt>{t(result.taxIncluded ? "内消費税" : "消費税")} {result.taxRate}%</dt><dd>{yen(result.tax)}</dd></>}
       <dt>{t("テスト合計")}</dt><dd><strong>{yen(result.total)}</strong></dd>
       {result.tendered !== null ? <><dt>{t("お預かり")}</dt><dd>{yen(result.tendered)}</dd><dt>{t("お釣り")}</dt><dd>{yen(result.change ?? 0)}</dd></> : null}
     </dl>

@@ -10,6 +10,8 @@ import { normalizePosFulfillmentWorkspaceSettings, validatePosFulfillmentWorkspa
 import { normalizePosDisplayStandbySettings, validatePosDisplayStandbySettings, type PosDisplayStandbySettings } from "../../../../../lib/pos-display-standby";
 import { roleHasPermission } from "../../../../../lib/role-permissions";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
+import { posMenuLock } from "../../../../../lib/pos-menu-settings";
+import { getPosCounterMenuSettings, posCounterMenuTaxIncludedGuard, PosCounterMenuSettingsError, savePosCounterMenuSettings, sharedMenuBlocksTaxExcluded } from "../../../../../lib/pos-counter-menu-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -291,6 +293,12 @@ export async function GET(request: Request) {
   if (forbidden || !selectedStoreId) return Response.json({ error: "権限がありません。" }, { status: 403 });
   const canManagePosSettings = await roleHasPermission(session.role, "pos.manageSettings");
 
+  if (new URL(request.url).searchParams.get("section") === "counterMenuPolicy") {
+    const counterMenu = await getPosCounterMenuSettings(selectedStoreId);
+    if (!counterMenu) return Response.json({ error: "権限がありません。" }, { status: 403 });
+    return Response.json({ access: { ...access, canManagePosSettings }, selectedStoreId, counterMenu }, { headers: { "Cache-Control": "no-store" } });
+  }
+
   return Response.json({
     access: { ...access, canManagePosSettings },
     selectedStoreId,
@@ -316,6 +324,9 @@ export async function POST(request: Request) {
     takeoutTaxRate?: number | string;
     externalPaymentTerminalBrand?: string;
     priceTaxMode?: string;
+    counterMenuPolicy?: unknown;
+    counterMenuPolicyRevision?: unknown;
+    counterMenuRevision?: unknown;
     discountPresets?: unknown[];
     discountCampaignVersion?: number;
     customerDisplayMediaSettings?: unknown;
@@ -325,8 +336,22 @@ export async function POST(request: Request) {
   };
   const access = await getStoreOrderAccess(session);
   const storeId = getScopedStoreFilter(access, body.storeId);
-  if (storeId === "__forbidden__" && ["general", "customerDisplayMedia", "fulfillment", "customerDisplayStandby", "printing", "receiptConnection", "discount"].includes(body.section || "")) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  if (storeId === "__forbidden__" && ["general", "counterMenuPolicy", "customerDisplayMedia", "fulfillment", "customerDisplayStandby", "printing", "receiptConnection", "discount"].includes(body.section || "")) return Response.json({ error: "権限がありません。" }, { status: 403 });
   if (storeId === "__forbidden__" || !storeId) return Response.json({ error: "店舗を選択してください。" }, { status: 400 });
+
+  if (body.section === "counterMenuPolicy") {
+    if (body.storeId !== storeId || !access.stores.some(store => store.id === storeId)) return Response.json({ error: "権限がありません。" }, { status: 403 });
+    if (request.headers.get("origin") !== new URL(request.url).origin || request.headers.get("sec-fetch-site") === "cross-site") {
+      return Response.json({ error: "不正なリクエスト元です。" }, { status: 403 });
+    }
+    try {
+      const counterMenu = await savePosCounterMenuSettings(storeId, session.id, body.counterMenuPolicy, body.counterMenuPolicyRevision, body.counterMenuRevision);
+      return Response.json({ ok: true, selectedStoreId: storeId, counterMenu }, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      if (error instanceof PosCounterMenuSettingsError) return Response.json({ error: error.message }, { status: error.status, headers: { "Cache-Control": "no-store" } });
+      throw error;
+    }
+  }
 
   if (body.section === "general") {
     if (!access.stores.some(store=>store.id===storeId)) return Response.json({error:"権限がありません。"},{status:403});
@@ -336,10 +361,16 @@ export async function POST(request: Request) {
     if (brandSettings.length!==body.posBrandSettings.length) return Response.json({error:"ブランドの販売設定を確認してください。"},{status:400});
     const linked=await sql`select brand_id::text as id from store_brands where store_id::text=${storeId}`;
     if (brandSettings.some(setting=>!linked.some(brand=>brand.id===setting.brandId))) return Response.json({error:"権限がありません。"},{status:403});
-    await sql.transaction([sql`insert into pos_store_settings(store_id,dine_in_enabled,takeout_enabled,dine_in_tax_rate,takeout_tax_rate,external_payment_terminal_brand,price_tax_mode,updated_by)
-      values(${storeId}::uuid,${body.dineInEnabled},${body.takeoutEnabled},${normalizeRate(body.dineInTaxRate,10)},${normalizeRate(body.takeoutTaxRate,8)},${normalizeText(body.externalPaymentTerminalBrand)||"PayCAS"},${String(body.priceTaxMode)},${session.id}::uuid)
-      on conflict(store_id) do update set dine_in_enabled=excluded.dine_in_enabled,takeout_enabled=excluded.takeout_enabled,dine_in_tax_rate=excluded.dine_in_tax_rate,takeout_tax_rate=excluded.takeout_tax_rate,external_payment_terminal_brand=excluded.external_payment_terminal_brand,price_tax_mode=excluded.price_tax_mode,updated_by=excluded.updated_by,updated_at=now()`,
-      ...brandSettings.map(setting=>sql`update store_brands set pos_pricing_mode=${setting.posPricingMode},pos_weight_unit=${setting.posWeightUnit},pos_weight_unit_price=${setting.posPricingMode==="weight"?setting.posWeightUnitPrice:null} where store_id::text=${storeId} and brand_id::text=${setting.brandId}`)]);
+    try {
+      await sql.transaction([posMenuLock(storeId), ...(body.priceTaxMode === "tax_excluded" ? [posCounterMenuTaxIncludedGuard(storeId)] : []),
+        sql`insert into pos_store_settings(store_id,dine_in_enabled,takeout_enabled,dine_in_tax_rate,takeout_tax_rate,external_payment_terminal_brand,price_tax_mode,updated_by)
+        values(${storeId}::uuid,${body.dineInEnabled},${body.takeoutEnabled},${normalizeRate(body.dineInTaxRate,10)},${normalizeRate(body.takeoutTaxRate,8)},${normalizeText(body.externalPaymentTerminalBrand)||"PayCAS"},${String(body.priceTaxMode)},${session.id}::uuid)
+        on conflict(store_id) do update set dine_in_enabled=excluded.dine_in_enabled,takeout_enabled=excluded.takeout_enabled,dine_in_tax_rate=excluded.dine_in_tax_rate,takeout_tax_rate=excluded.takeout_tax_rate,external_payment_terminal_brand=excluded.external_payment_terminal_brand,price_tax_mode=excluded.price_tax_mode,updated_by=excluded.updated_by,updated_at=now()`,
+        ...brandSettings.map(setting=>sql`update store_brands set pos_pricing_mode=${setting.posPricingMode},pos_weight_unit=${setting.posWeightUnit},pos_weight_unit_price=${setting.posPricingMode==="weight"?setting.posWeightUnitPrice:null} where store_id::text=${storeId} and brand_id::text=${setting.brandId}`)]);
+    } catch (error) {
+      if (body.priceTaxMode === "tax_excluded" && (error as { code?: string }).code === "22012") return Response.json({ error: sharedMenuBlocksTaxExcluded }, { status: 409 });
+      throw error;
+    }
     return Response.json({ok:true,selectedStoreId:storeId,settings:await getSettings(storeId)},{headers:{"Cache-Control":"no-store"}});
   }
   if (body.section === "customerDisplayMedia") {
@@ -530,7 +561,9 @@ export async function POST(request: Request) {
   const hasBowlTickets = Object.prototype.hasOwnProperty.call(printerSettingsSource, "bowlTickets");
   const hasReceiptCopies = Object.prototype.hasOwnProperty.call(printerSettingsSource, "receiptCopies");
   const brandSettings = normalizeBrandSettings(body.posBrandSettings);
-  await sql.transaction([...(hasFilterSettings?[stationLocks]:[]),tareLock,filterLock, sql`
+  try {
+    await sql.transaction([posMenuLock(storeId), ...(priceTaxMode === "tax_excluded" ? [posCounterMenuTaxIncludedGuard(storeId)] : []),
+      ...(hasFilterSettings?[stationLocks]:[]),tareLock,filterLock, sql`
     insert into pos_store_settings (
       store_id,
       dine_in_enabled,
@@ -601,7 +634,11 @@ export async function POST(request: Request) {
         then pos_store_settings.scale_filter_settings else excluded.scale_filter_settings end,
       updated_by = excluded.updated_by,
       updated_at = now()
-  `, ...(hasFilterSettings?[resetFilterSessions]:[])]);
+    `, ...(hasFilterSettings?[resetFilterSessions]:[])]);
+  } catch (error) {
+    if (priceTaxMode === "tax_excluded" && (error as { code?: string }).code === "22012") return Response.json({ error: sharedMenuBlocksTaxExcluded }, { status: 409 });
+    throw error;
+  }
 
   for (const setting of brandSettings) {
     await sql`

@@ -1,3 +1,6 @@
+import { normalizePosCounterMenuPolicy, usesLocalPosMenu, type PosCounterMenuPolicy } from '../../../../lib/pos-counter-menu-policy';
+import { posCounterMenuGuard, posCounterMenuPolicyRevision, readCounterMenuState } from '../../../../lib/pos-counter-menu-data';
+import { allocatePosAmountByWeight, calculatePosCounterTax } from '../../../../lib/pos-counter-tax';
 import { getTodaySummary } from "../../../../lib/pos-daily-summary-data";
 import { rejectDebugWrite } from '../../../../lib/pos-debug-write';
 import { validateInvoiceDetails } from '../../../../lib/pos-invoice';
@@ -79,6 +82,7 @@ type PosCheckoutBody = {
   relayOwner?: RelayOwner;
   posMenuRevision?: string;
   dineInMenuRevision?: string;
+  counterMenuPolicyRevision?: string;
   offlineQueued?: boolean;
   offlineClientOrderId?: string;
   offlineCreatedAt?: string;
@@ -332,25 +336,6 @@ function calculateTaxSummary(params: {
   return { taxableAmount, taxAmount, amount: taxableAmount };
 }
 
-function allocateAmountByWeight(totalAmount: number, weights: number[]) {
-  const total = Math.max(0, Math.round(Number(totalAmount) || 0));
-  const normalizedWeights = weights.map((weight) => Math.max(0, Math.round(Number(weight) || 0)));
-  const weightTotal = normalizedWeights.reduce((sum, weight) => sum + weight, 0);
-  if (total <= 0 || weightTotal <= 0) return weights.map(() => 0);
-  const rawShares = normalizedWeights.map((weight) => total * weight / weightTotal);
-  const shares = rawShares.map(Math.floor);
-  let remainder = total - shares.reduce((sum, share) => sum + share, 0);
-  rawShares
-    .map((share, index) => ({ index, fraction: share - Math.floor(share) }))
-    .sort((left, right) => right.fraction - left.fraction)
-    .forEach(({ index }) => {
-      if (remainder <= 0) return;
-      shares[index] += 1;
-      remainder -= 1;
-    });
-  return shares;
-}
-
 function toPositiveInt(value: unknown, fallback = 1) {
   const nextValue = Number(value);
   if (!Number.isFinite(nextValue)) return fallback;
@@ -383,8 +368,8 @@ function getNestedNumberFromSchema(schema: Record<string, unknown> | undefined, 
   return getNumberFromSchema(parent as Record<string, unknown>, keys);
 }
 
-function getWeightPricingConfig(item: PosItemPricingInput & { posPricingMode?: string; posWeightUnit?: string; posWeightUnitPrice?: number | null; variableSchema?: Record<string, unknown> }, orderType: string) {
-  if (orderType !== "eat_in" || resolvePosItemPricingMode(item) !== "weight") return null;
+function getWeightPricingConfig(item: PosItemPricingInput & { posPricingMode?: string; posWeightUnit?: string; posWeightUnitPrice?: number | null; variableSchema?: Record<string, unknown> }, useWeightPricing: boolean) {
+  if (!useWeightPricing || resolvePosItemPricingMode(item) !== "weight") return null;
   const schema = item.variableSchema ?? {};
   const unit = normalizeText(item.posWeightUnit) || String(schema.weightUnit ?? schema.measuredUnit ?? (schema.posWeightPricing as Record<string, unknown> | undefined)?.unit ?? "g").trim() || "g";
   const unitPrice = Number(item.posWeightUnitPrice ?? 0) > 0
@@ -778,9 +763,10 @@ async function refreshTableQrOrderAfterAdjustment(input: {
 
 async function getPosSettings(selectedStoreId: string) {
   const defaults = { dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: defaultDiscountPresets, customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings, printerSettings: normalizePosPrinterSettings(null), scaleTareSettings: defaultPosScaleTareSettings(), scaleFilterSettings: defaultPosScaleFilterSettings(), fulfillmentWorkspace: defaultPosFulfillmentWorkspaceSettings() };
-  if (!selectedStoreId) return defaults;
+  if (!selectedStoreId) return { ...defaults, counterMenuPolicyState: readCounterMenuState(), counterMenuPolicy: normalizePosCounterMenuPolicy(null) };
   const rows = await sql`
     select
+      coalesce(to_jsonb(pos_store_settings)->'counter_menu_policy','{}'::jsonb) as "counterMenuPolicy",
       coalesce(dine_in_enabled, true) as "dineInEnabled",
       coalesce(takeout_enabled, true) as "takeoutEnabled",
       coalesce(dine_in_tax_rate, 10)::float as "dineInTaxRate",
@@ -796,7 +782,9 @@ async function getPosSettings(selectedStoreId: string) {
     where store_id::text = ${selectedStoreId}
     limit 1
   `;
-  const settings = rows[0] as (typeof defaults & { discountPresets?: unknown }) | undefined;
+  const settings = rows[0] as (typeof defaults & { discountPresets?: unknown; counterMenuPolicy?: unknown }) | undefined;
+  const counterMenuPolicyState = readCounterMenuState(settings);
+  const counterMenuPolicy = normalizePosCounterMenuPolicy(counterMenuPolicyState.counterMenuPolicy);
   return settings ? {
     ...settings,
     discountPresets: normalizeDiscountPresets(settings.discountPresets),
@@ -804,8 +792,15 @@ async function getPosSettings(selectedStoreId: string) {
     printerSettings: normalizePosPrinterSettings(settings.printerSettings),
     fulfillmentWorkspace: normalizePosFulfillmentWorkspaceSettings((settings.printerSettings as unknown as Record<string, unknown> | null)?.fulfillmentWorkspace),
     scaleTareSettings: normalizePosScaleTareSettings(settings.scaleTareSettings),
-    scaleFilterSettings: normalizePosScaleFilterSettings(settings.scaleFilterSettings)
-  } : defaults;
+    scaleFilterSettings: normalizePosScaleFilterSettings(settings.scaleFilterSettings),
+    counterMenuPolicy, counterMenuPolicyState
+  } : { ...defaults, counterMenuPolicy, counterMenuPolicyState };
+}
+
+function sharedCounterMenuReady(policy: PosCounterMenuPolicy, catalog: Awaited<ReturnType<typeof resolveDineInCatalog>> | null) {
+  if (!catalog?.brandIds.length) return false;
+  const availableIds = new Set(catalog.categories.map(category => category.id));
+  return policy.standardTaxCategoryIds.every(id => availableIds.has(id));
 }
 
 export async function GET(request: Request) {
@@ -818,8 +813,8 @@ export async function GET(request: Request) {
   if (new URL(request.url).searchParams.get('menuRevisionOnly') === '1') {
     const [posRevision, dineInRevision] = selectedStoreId
       ? await Promise.all([readPosMenuRevision(selectedStoreId), readDineInMenuRevision(selectedStoreId)])
-      : [{ revision: '' }, { revision: '' }];
-    return Response.json({ selectedStoreId, posMenuRevision: posRevision.revision, dineInMenuRevision: dineInRevision.revision },
+      : [{ revision: '', counterMenuPolicyRevision: '' }, { revision: '' }];
+    return Response.json({ selectedStoreId, posMenuRevision: posRevision.revision, dineInMenuRevision: dineInRevision.revision, counterMenuPolicyRevision: posRevision.counterMenuPolicyRevision },
       { headers: { 'Cache-Control': 'no-store' } });
   }
 
@@ -832,7 +827,9 @@ export async function GET(request: Request) {
   ]);
 
   const dineInState = selectedStoreId ? await readDineInMenus(selectedStoreId) : null;
-  const localMenu = dineInState ? await resolveDineInCatalog(selectedStoreId, dineInState) : null;
+  const { counterMenuPolicyState, ...publicPosSettings } = posSettings;
+  const sharedCounterMenu = posSettings.counterMenuPolicy.sharedMenuForTakeout;
+  const localMenu = dineInState ? await resolveDineInCatalog(selectedStoreId, dineInState, posSettings.counterMenuPolicy) : null;
   const independentBrands = new Set(localMenu?.brandIds ?? []);
   const fulfillmentModes = dineInState ? dineInSourceFulfillmentModes(dineInState) : new Map<string, PosItemFulfillmentMode>();
   const physicalItems = menu.items.map(item => ({ ...item, fulfillmentMode: getPosItemFulfillmentMode({
@@ -843,15 +840,17 @@ export async function GET(request: Request) {
     access,
     selectedStoreId,
     ...menu,
+    brands: sharedCounterMenu ? menu.brands.filter(brand => independentBrands.has(String(brand.id))) : menu.brands,
     items: physicalItems,
     posFulfillmentPolicyVersion: 1,
     dineInMenuRevision: dineInState?.ready ? dineInState.revision : '',
-    dineInMenu: localMenu && independentBrands.size ? {
+    counterMenuPolicyRevision: posCounterMenuPolicyRevision(counterMenuPolicyState),
+    dineInMenu: sharedCounterMenu ? (posSettings.priceTaxMode === 'tax_included' && sharedCounterMenuReady(posSettings.counterMenuPolicy, localMenu) ? localMenu : null) : localMenu && independentBrands.size ? {
       items: [...physicalItems.filter(item => !independentBrands.has(String((item as {brandId?:string}).brandId))), ...localMenu.items],
       optionGroups: [...menu.optionGroups.filter(group => !independentBrands.has(String((group as {brandId?:string}).brandId))), ...localMenu.optionGroups],
       categories: [...menu.categories.filter(category => !independentBrands.has(String(category.brandId))), ...localMenu.categories]
     } : null,
-    posSettings,
+    posSettings: publicPosSettings,
     serverTime: new Date().toISOString(),
     todaySummary,
     tableCheckoutRequests,
@@ -1043,7 +1042,18 @@ export async function POST(request: Request) {
   }
   const recordedCheckout = await findRecordedCheckout();
   if (recordedCheckout) return recordedCheckout;
+  if (!tableSessionKey && orderType !== 'eat_in' && orderType !== 'takeout') {
+    return Response.json({ error: '店内または持ち帰りを選択してください。' }, { status: 400 });
+  }
   const posSettings = await getPosSettings(storeId);
+  const counterPolicy = posSettings.counterMenuPolicy;
+  const sharedCounterMenu = counterPolicy.sharedMenuForTakeout;
+  if (!tableSessionKey && (sharedCounterMenu || body.counterMenuPolicyRevision !== undefined)
+    && body.counterMenuPolicyRevision !== posCounterMenuPolicyRevision(posSettings.counterMenuPolicyState)) {
+    return await findRecordedCheckout() ?? Response.json({ code: 'POS_COUNTER_MENU_CHANGED', error: offlineQueued
+      ? 'オフライン会計時の販売設定が変更されています。元の会計を管理者と確認してください。'
+      : '販売設定が変更されました。POS のページ全体を再読み込みしてください。' }, { status: 409 });
+  }
   const printMode: PosPrintMode = durablePrintDocuments ? body.printMode === "auto" && !posSettings.printerSettings.enabled ? "deferred" : body.printMode! : "auto";
   const relayRows = await relayStations(storeId);
   const relayRequired = relayRows.some(row => row.enabled && (row.print_enabled || row.scale_enabled));
@@ -1171,18 +1181,22 @@ export async function POST(request: Request) {
 
   const posMenuConfig = await readPosMenuConfig(storeId);
   const dineInState = await readDineInMenus(storeId);
-  if (orderType === 'eat_in' && body.dineInAssociationVersion !== 1 && dineInState.menus.some(menu => menu.enabled && menu.catalog.optionGroups.some(group => group.explicitItemLinks))) {
+  const useLocalMenu = usesLocalPosMenu(orderType, counterPolicy);
+  if (useLocalMenu && body.dineInAssociationVersion !== 1 && dineInState.menus.some(menu => menu.enabled && menu.catalog.optionGroups.some(group => group.explicitItemLinks))) {
     return Response.json({ error: '選択グループの関連設定が更新されました。メニュー更新だけでなく、POS のページ全体を再読み込みしてから会計してください。', code: 'POS_DINE_IN_ASSOCIATION_REFRESH_REQUIRED' }, { status: 409 });
   }
-  const localMenu = orderType === 'eat_in' ? await resolveDineInCatalog(storeId, dineInState) : null;
+  const localMenu = useLocalMenu ? await resolveDineInCatalog(storeId, dineInState, counterPolicy) : null;
+  if (sharedCounterMenu && (posSettings.priceTaxMode !== 'tax_included' || !sharedCounterMenuReady(counterPolicy, localMenu))) {
+    return await findRecordedCheckout() ?? Response.json({ code: 'POS_COUNTER_MENU_UNAVAILABLE', error: '共用する店舗専用メニューを確認してください。' }, { status: 409 });
+  }
   const fulfillmentModes = dineInSourceFulfillmentModes(dineInState);
   const enforcePhysicalFulfillmentRevision = body.posFulfillmentPolicyVersion === 1 && dineInState.ready;
   if (enforcePhysicalFulfillmentRevision && body.dineInMenuRevision !== dineInState.revision) {
-    return Response.json({error:'提供方法の設定が変更されました。メニューを更新して内容を確認してください。',code:'POS_FULFILLMENT_MENU_CHANGED'},{status:409});
+    return await findRecordedCheckout() ?? Response.json({error:'提供方法の設定が変更されました。メニューを更新して内容を確認してください。',code:'POS_FULFILLMENT_MENU_CHANGED'},{status:409});
   }
   const independentBrands = new Set(localMenu?.brandIds ?? []);
-  if (orderType === 'eat_in' && (independentBrands.size || body.dineInMenuRevision) && body.dineInMenuRevision !== dineInState.revision) {
-    return Response.json({error:'店内飲食メニューが変更されました。再読込して商品を選び直してください。'},{status:409});
+  if (useLocalMenu && (independentBrands.size || body.dineInMenuRevision) && body.dineInMenuRevision !== dineInState.revision) {
+    return await findRecordedCheckout() ?? Response.json({error:'店内飲食メニューが変更されました。再読込して商品を選び直してください。'},{status:409});
   }
   if (posMenuConfig.settings.length && body.posMenuRevision !== posMenuConfig.revision) return Response.json({error:'店内メニューが変更されました。再読込して内容を確認してください。'},{status:409});
   const shownItemIds = posMenuConfig.settings.filter(s=>s.kind==='item'&&s.visible===true).map(s=>s.targetId);
@@ -1191,7 +1205,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "商品を選択してください。" }, { status: 400 });
   }
 
-  const menuRows = await sql`
+  const menuRows = sharedCounterMenu ? [] : await sql`
     select
       menu_catalog_items.id::text,
       menu_catalog_items.brand_id::text as "brandId",
@@ -1240,17 +1254,19 @@ export async function POST(request: Request) {
     sourceItemId?: string;
     optionGroupIds?: string[];
     fulfillmentMode?: PosItemFulfillmentMode;
+    counterStandardTax?: boolean;
+    counterTakeoutRestricted?: boolean;
     productionType?: 'bowl' | 'drink' | 'item';
     dineInMenuRevision?: string;
   };
   const checkoutMenuItems: CheckoutMenuItem[] = [
-    ...applyPosItems((menuRows as CheckoutMenuItem[]).map(normalizePosItemPricing), posMenuConfig.settings).filter(item => !independentBrands.has(item.brandId)),
+    ...applyPosItems((menuRows as CheckoutMenuItem[]).map(normalizePosItemPricing), posMenuConfig.settings).filter(item => !sharedCounterMenu && !independentBrands.has(item.brandId)),
     ...(localMenu?.items ?? []).map(item => ({...item, price:Number(item.price ?? item.priceOverride ?? item.basePrice ?? 0)}))
   ].map(item => ({ ...item, fulfillmentMode: getPosItemFulfillmentMode({ ...item,
     fulfillmentMode: item.sourceItemId ? item.fulfillmentMode : fulfillmentModes.get(item.id)
   }) }));
   const menuById = new Map(checkoutMenuItems.filter(isPosSellableItem).map(item => [item.id, item]));
-  const optionRows = await sql`
+  const optionRows = sharedCounterMenu ? [] : await sql`
     select
       menu_options.id::text,
       menu_options.option_key as "optionKey",
@@ -1309,13 +1325,15 @@ export async function POST(request: Request) {
     itemOptionExclusions?: Record<string, string[]>;
     linkedItemId?: string;
     linkedSourceItemId?: string;
+    counterStandardTax?: boolean;
+    counterTakeoutRestricted?: boolean;
     complimentary?: true;
     campaignKey?: string;
     originalUnitPrice?: number;
     giftSourceGroupName?: string;
   };
   const checkoutOptions: CheckoutMenuOption[] = [
-    ...applyPosOptions(optionRows as CheckoutMenuOption[],posMenuConfig.settings).filter(option => !independentBrands.has(option.brandId)),
+    ...applyPosOptions(optionRows as CheckoutMenuOption[],posMenuConfig.settings).filter(option => !sharedCounterMenu && !independentBrands.has(option.brandId)),
     ...(localMenu ? flattenDineInOptions(localMenu) : []).map(option => ({...option,priceDelta:Number(option.priceDelta ?? 0)}))
   ];
   const optionsById = new Map(checkoutOptions.map(option => [option.id, option]));
@@ -1354,6 +1372,8 @@ export async function POST(request: Request) {
     bowlBenefit?: PosBowlChoice;
     sourceItemId?: string;
     fulfillmentMode?: PosItemFulfillmentMode;
+    counterStandardTax?: boolean;
+    counterTakeoutRestricted?: boolean;
     productionType?: 'bowl' | 'drink' | 'item';
     dineInMenuRevision?: string;
   }> = [];
@@ -1364,7 +1384,7 @@ export async function POST(request: Request) {
       if (offlineQueued && body.posFulfillmentPolicyVersion === 1 && item.fulfillmentMode !== getPosItemFulfillmentMode(menuItem))
         throw new Error('オフライン会計時の提供方法と現在の設定が一致しません。元の会計を確認してください。');
       if (item.bowlBenefit && (!isPosBowl(menuItem) || Number(item.quantity) !== 1 || offlineQueued)) throw new Error("特典はオンラインで1杯ずつ選択してください。");
-      const weightPricing = getWeightPricingConfig(menuItem, orderType);
+      const weightPricing = getWeightPricingConfig(menuItem, useLocalMenu);
       const quantity = toPositiveInt(item.quantity);
       const measuredQuantity = weightPricing ? toPositiveMeasuredQuantity(item.measuredQuantity) : null;
       const measuredUnit = weightPricing?.unit ?? "";
@@ -1472,12 +1492,16 @@ export async function POST(request: Request) {
   if (normalizedItems.length === 0) {
     return Response.json({ error: "POS で販売できる商品がありません。" }, { status: 400 });
   }
+  const restrictTakeout = sharedCounterMenu && orderType === 'takeout';
+  if (restrictTakeout && normalizedItems.some(item => item.counterTakeoutRestricted || item.selectedOptions.some(option => option.counterTakeoutRestricted))) {
+    return Response.json({ code: 'POS_COUNTER_TAKEOUT_RESTRICTED', error: '持ち帰りできない商品やオプションが含まれています。店内に切り替えるか、該当する内容を外してください。' }, { status: 400 });
+  }
   const hasPreparation = normalizedItems.some(item => getPosItemFulfillmentMode(item) !== 'immediate');
   if (normalizedItems.some(item => getPosItemFulfillmentMode(item) === 'immediate') && body.posFulfillmentPolicyVersion !== 1) {
     return Response.json({error:'提供方法の設定が更新されました。POS のページ全体を再読み込みしてください。',code:'POS_FULFILLMENT_REFRESH_REQUIRED'},{status:409});
   }
   const containsMalatang = await containsMalatangBrand(Array.from(new Set(normalizedItems.map((item) => item.brandId))));
-  if (orderType === "eat_in" && !containsMalatang) {
+  if (!sharedCounterMenu && orderType === "eat_in" && !containsMalatang) {
     return Response.json({
       error: "ドリンクのみのご注文はお持ち帰りです。店内利用にはマーラータンのご注文が必要です。"
     }, { status: 400 });
@@ -1494,14 +1518,14 @@ export async function POST(request: Request) {
   // Queued offline sales keep the amount recorded at sale time; do not apply today's promotion retroactively.
   const discountEvaluation = evaluatePosDiscounts(offlineQueued ? [] : posSettings.discountPresets,
     requestedDiscountPresetKey, normalizedItems, subtotalAmount, discountEvaluatedAt);
-  const giftCatalog = [...checkoutMenuItems.filter(item => !isPosBowl(item)).map(item => ({
+  const giftCatalog = [...checkoutMenuItems.filter(item => !isPosBowl(item) && !(restrictTakeout && item.counterTakeoutRestricted)).map(item => ({
     id: item.id, sourceItemId: item.sourceItemId, brandId: item.brandId, category: item.category,
     name: item.name, displayNames: item.displayNames, price: Number(item.price), available: true,
-    fixed: !getWeightPricingConfig(item, orderType),
+    fixed: !getWeightPricingConfig(item, useLocalMenu),
     requiresOptions: checkoutOptions.some(option => (!item.optionGroupIds || item.optionGroupIds.includes(option.groupId)) && getPosOptionSelectionRules(option).min > 0 && dineInOptionAppliesToItem(option, {
       ...option, id:option.groupId, name:option.groupName, applicableCategories:option.groupApplicableCategories
     }, item))
-  })), ...checkoutOptions.map(option => createPosOptionGift(option))];
+  })), ...checkoutOptions.filter(option => !(restrictTakeout && option.counterTakeoutRestricted)).map(option => createPosOptionGift(option))];
   const bowlEvaluation = evaluatePosBowlBenefits(offlineQueued ? [] : posSettings.discountPresets, requestedDiscountPresetKey,
     normalizedItems.map(item => ({ ...item, isBowl:isPosBowl(item), choice:item.bowlBenefit })), giftCatalog, discountEvaluatedAt);
   const hasBowlChoice = bowlEvaluation.applications.length > 0 || normalizedItems.some(item => item.bowlBenefit);
@@ -1616,15 +1640,23 @@ export async function POST(request: Request) {
     if (couponItemIndex >= 0) {
       itemCouponDiscountAmounts[couponItemIndex] = Math.min(couponDiscountAmount, couponBases[couponItemIndex]);
     } else {
-      const couponShares = allocateAmountByWeight(couponDiscountAmount, couponBases);
+      const couponShares = allocatePosAmountByWeight(couponDiscountAmount, couponBases);
       couponShares.forEach((share, index) => {
         itemCouponDiscountAmounts[index] = Math.min(share, couponBases[index]);
       });
     }
   }
   const itemPaidAmounts = normalizedItems.map((item, index) => Math.max(0, item.amount - itemDiscountAmounts[index] - itemCouponDiscountAmounts[index]));
-  const taxRate = getOrderTaxRate(posSettings, orderType);
-  const taxSummary = calculateTaxSummary({
+  if (sharedCounterMenu) couponDiscountAmount = itemCouponDiscountAmounts.reduce((sum, discount) => sum + discount, 0);
+  const orderRate = getOrderTaxRate(posSettings, orderType);
+  const counterTax = sharedCounterMenu ? calculatePosCounterTax({
+    orderType, dineInTaxRate: posSettings.dineInTaxRate, takeoutTaxRate: posSettings.takeoutTaxRate,
+    lines: normalizedItems.map((item, index) => ({ ...item, paidAmount: itemPaidAmounts[index],
+      discountAmount: itemDiscountAmounts[index], couponDiscountAmount: itemCouponDiscountAmounts[index], exchangeCoupon: couponItemIndex === index }))
+  }) : undefined;
+  const taxRate = counterTax?.taxRate ?? orderRate;
+  const taxBreakdown = counterTax?.taxBreakdown;
+  const taxSummary = counterTax ? { ...counterTax, taxableAmount: counterTax.amount } : calculateTaxSummary({
     subtotalAmount,
     discountAmount: posDiscountAmount,
     couponDiscountAmount,
@@ -1652,7 +1684,7 @@ export async function POST(request: Request) {
   const printSnapshots = durablePrintDocuments ? buildPosPrintDocumentSnapshots(posSettings.printerSettings,
     access.stores.find(store => store.id === storeId)?.name || 'Foundr1 STORE', {
       pickupCode, orderType, paymentMethod, amount, subtotalAmount, discountAmount: posDiscountAmount, couponDiscountAmount,
-      taxAmount: taxSummary.taxAmount, taxRate, cashTenderedAmount, cashChangeAmount, receiptRequested, ...invoiceDetails, note,
+      taxAmount: taxSummary.taxAmount, taxRate, taxBreakdown, cashTenderedAmount, cashChangeAmount, receiptRequested, ...invoiceDetails, note,
       memberLanguage: normalizeMemberLanguage(member?.preferredLanguage || memberLanguage), cashierName: session.name
     }, normalizedItems.map((item, index) => ({ ...item, orderItemId: orderItemIds[index] })),
     servingTickets.map(ticket => ({ ...ticket, itemId: orderItemIds[ticket.itemIndex] })), printMode) : [];
@@ -1720,6 +1752,7 @@ export async function POST(request: Request) {
         taxableAmount: taxSummary.taxableAmount,
         taxAmount: taxSummary.taxAmount,
         taxRate,
+        taxBreakdown,
         priceTaxMode: posSettings.priceTaxMode,
         discountPresetKey,
         discountPresetName: discountPreset?.name ?? "",
@@ -1750,6 +1783,7 @@ export async function POST(request: Request) {
           displayNames: item.displayNames,
           productionType: item.productionType,
           fulfillmentMode: getPosItemFulfillmentMode(item),
+          counterStandardTax: item.counterStandardTax,
           quantity: item.quantity,
           scaleCaptureId: item.scaleCaptureId || undefined,
           weightMeasurement: item.weightMeasurement,
@@ -1907,7 +1941,7 @@ export async function POST(request: Request) {
     let documents;
     try { documents = buildRelayDocuments(posSettings.printerSettings, access.stores.find(s=>s.id===storeId)?.name || 'Foundr1 STORE', {
       pickupCode,orderType,paymentMethod,amount,subtotalAmount,discountAmount:posDiscountAmount,couponDiscountAmount,
-      taxAmount:taxSummary.taxAmount,taxRate,cashTenderedAmount,cashChangeAmount,receiptRequested,...invoiceDetails,note,
+      taxAmount:taxSummary.taxAmount,taxRate,taxBreakdown,cashTenderedAmount,cashChangeAmount,receiptRequested,...invoiceDetails,note,
       memberLanguage:normalizeMemberLanguage(member?.preferredLanguage || memberLanguage)
     },normalizedItems,servingTickets); } catch(e) { return Response.json({error:e instanceof Error?e.message:'印刷設定を確認してください。'},{status:409}); }
     for (const [sequence,doc] of documents.entries()) writes.push(sql`insert into store_relay_print_jobs(station_id,store_id,order_id,document_key,sequence,kind,payload,created_by)
@@ -1941,17 +1975,22 @@ export async function POST(request: Request) {
     sql`select id from store_relay_stations where id::text=${body.relayOwner.stationId} for update`,
     ownerGuardSql(storeId,body.relayOwner,session)
   );
-  const dineInGuardCount = dineInState.ready && (orderType === 'eat_in' || enforcePhysicalFulfillmentRevision || normalizedItems.some(item => getPosItemFulfillmentMode(item) === 'immediate')) ? 2 : 0;
-  if (dineInGuardCount) writes.unshift(posMenuLock(storeId),dineInMenuGuard(storeId,dineInState.revision));
-  if(posMenuConfig.ready) writes.unshift(posMenuLock(storeId),posMenuGuard(storeId,posMenuConfig.revision));
+  const menuGuards = [posMenuLock(storeId), posCounterMenuGuard(storeId, posSettings.counterMenuPolicyState)];
+  if (dineInState.ready && (useLocalMenu || enforcePhysicalFulfillmentRevision || normalizedItems.some(item => getPosItemFulfillmentMode(item) === 'immediate'))) {
+    menuGuards.push(dineInMenuGuard(storeId,dineInState.revision));
+  }
+  if (posMenuConfig.ready) menuGuards.push(posMenuGuard(storeId,posMenuConfig.revision));
+  writes.unshift(...menuGuards);
   const cashGuards = posCashSessionGuards(storeId, cashSessionId);
   let writeResults;
   try { writeResults = await sql.transaction([...cashGuards, ...writes]); }
   catch (error) {
     if ((error as { code?: string }).code === "22012") {
+      // A sibling with this exact checkout ID may have paid before a later
+      // menu or settings mutation won the lock. Preserve the saved result.
+      const recorded = await findRecordedCheckout();
+      if (recorded) return recorded;
       if (!await isPosCashSessionOpen(storeId, cashSessionId)) {
-        const recorded = await findRecordedCheckout();
-        if (recorded) return recorded;
         const failure = new PosCashSessionChangedError();
         return Response.json({ error: failure.message, code: failure.code }, { status: failure.status });
       }
@@ -1959,7 +1998,7 @@ export async function POST(request: Request) {
     }
     throw error;
   }
-  if (!writeResults[cashGuards.length + insertResultIndex + (relayRequired ? 2 : 0) + (posMenuConfig.ready ? 2 : 0) + dineInGuardCount]?.length) {
+  if (!writeResults[cashGuards.length + insertResultIndex + (relayRequired ? 2 : 0) + menuGuards.length]?.length) {
     const existing = await sql`select id::text as "orderId", pickup_code as "pickupCode", amount, status, payment_status as "paymentStatus", customer_summary as summary
       from store_customer_orders where store_id::text = ${storeId} and offline_client_order_id = ${offlineClientOrderId} limit 1`;
     if (!existing[0]) return Response.json({ error: "会計を確認できませんでした。" }, { status: 409 });
@@ -1998,6 +2037,7 @@ export async function POST(request: Request) {
     taxableAmount: taxSummary.taxableAmount,
     taxAmount: taxSummary.taxAmount,
     taxRate,
+    taxBreakdown,
     priceTaxMode: posSettings.priceTaxMode,
     discountAmount: posDiscountAmount,
     discountName: discountPreset?.name ?? "",

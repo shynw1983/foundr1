@@ -1,13 +1,14 @@
 import { invoiceRecipientStem } from './pos-invoice';
 import { isPosImmediateItem, type PosItemFulfillmentMode } from './pos-item-fulfillment';
 import {
-  getKitchenPrinterForBrand, getReceiptPrinter, getPosBowlTicketSettings,
-  normalizePosDocumentCopies, posBowlTicketKinds, resolvePosBowlTicketTemplate,
+  applyPosReceiptTaxBreakdown, getKitchenPrinterForBrand, getReceiptPrinter, getPosBowlTicketSettings,
+  normalizePosDocumentCopies, posBowlTicketKinds, prefixPosReducedTaxMarker, resolvePosBowlTicketTemplate,
   resolvePosKitchenTicketTemplate, resolvePosReceiptTemplate,
   type PosPrintPayload, type PosPrinterSettings
 } from "./pos-printer";
 import type { PosServingTicket } from "./pos-serving-policy";
 import type { PosPrintDocumentKind, PosPrintMode } from "./pos-print-document-contract";
+import type { PosCounterTaxBucket } from './pos-counter-tax';
 
 export type PosPrintSnapshotItem = {
   fulfillmentMode?: PosItemFulfillmentMode;
@@ -18,6 +19,7 @@ export type PosPrintSnapshotItem = {
   brandName: string;
   name: string;
   displayNames?: Record<string, string>;
+  counterStandardTax?: boolean;
   quantity: number;
   amount: number;
   measuredQuantity: number | null;
@@ -27,7 +29,7 @@ export type PosPrintSnapshotItem = {
   selectedOptions: Array<{
     id?: string; groupId?: string; groupName?: string; complimentary?: boolean;
     groupDisplayNames?: Record<string, string>;
-    name: string; displayNames?: Record<string, string>;
+    name: string; displayNames?: Record<string, string>; priceDelta?: number | null; counterStandardTax?: boolean;
   }>;
 };
 
@@ -41,6 +43,7 @@ export type PosPrintSnapshotSale = {
   couponDiscountAmount: number;
   taxAmount: number;
   taxRate: number;
+  taxBreakdown?: PosCounterTaxBucket[];
   cashTenderedAmount: number | null;
   cashChangeAmount: number | null;
   receiptRequested: boolean;
@@ -88,12 +91,14 @@ export function buildPosPrintDocumentSnapshots(
   const language = ["en", "zh", "zh-Hans", "zh-Hant", "ko", "vi", "ne"].includes(sale.memberLanguage) ? sale.memberLanguage : "ja";
   const receiptPrinter = getReceiptPrinter(settings);
   const documents: PosPrintDocumentSnapshot[] = [];
-  const line = (item: PosPrintSnapshotItem, lang = "ja", hideAmount = false) => {
+  const line = (item: PosPrintSnapshotItem, lang = "ja", hideAmount = false, markReducedRate = false) => {
     const choices = new Map<string, { text: string; count: number }>();
     for (const option of item.selectedOptions) {
       const key = `${option.groupId || option.groupName || ""}:${option.id || option.name}:${option.complimentary ? "gift" : "paid"}`;
       const group = localized(option.groupName || "", option.groupDisplayNames, lang);
-      const text = [group, localized(option.name, option.displayNames, lang)].filter(Boolean).join(": ");
+      const optionName = prefixPosReducedTaxMarker(localized(option.name, option.displayNames, lang),
+        markReducedRate && !(option.counterStandardTax ?? item.counterStandardTax) && !option.complimentary && Number(option.priceDelta) > 0);
+      const text = [group, optionName].filter(Boolean).join(": ");
       const entry = choices.get(key);
       if (entry) entry.count += 1;
       else choices.set(key, { text, count: 1 });
@@ -102,7 +107,8 @@ export function buildPosPrintDocumentSnapshots(
       ? `${item.measuredQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${item.measuredUnit}`
       : "";
     return {
-      name: localized(item.name, item.displayNames, lang), quantity: item.quantity,
+      name: prefixPosReducedTaxMarker(localized(item.name, item.displayNames, lang), markReducedRate && !item.counterStandardTax),
+      quantity: item.quantity,
       unitPrice: hideAmount ? 0 : item.amount / item.quantity,
       amount: hideAmount ? 0 : item.amount,
       options: [weight, ...Array.from(choices.values(), option => `${option.text}${option.count > 1 ? ` x${option.count}` : ""}`)].filter(Boolean)
@@ -115,8 +121,7 @@ export function buildPosPrintDocumentSnapshots(
     subtotalAmount: sale.subtotalAmount, discountAmount: sale.discountAmount,
     couponDiscountAmount: sale.couponDiscountAmount, taxAmount: sale.taxAmount,
     taxRate: sale.taxRate, totalAmount: sale.amount,
-    cashTenderedAmount: sale.cashTenderedAmount, cashChangeAmount: sale.cashChangeAmount,
-    items: items.map(item => line(item, language))
+    cashTenderedAmount: sale.cashTenderedAmount, cashChangeAmount: sale.cashChangeAmount
   };
   function add(
     kind: PosPrintDocumentKind, copies: number, roleEnabled: boolean, key: string,
@@ -184,16 +189,22 @@ export function buildPosPrintDocumentSnapshots(
   for (const key of ["logoUrl", "promotionImageUrl"] as const) {
     if (template[key]) template[key] = new URL(template[key], "https://www.foundr1.jp").toString();
   }
+  const markReducedRate = sale.taxBreakdown?.some(bucket => bucket.rate === 8) ?? false;
+  const receipt = applyPosReceiptTaxBreakdown(template, {
+    ...base, receiptRequested: sale.receiptRequested,
+    receiptTitle: sale.receiptRequested ? template.invoiceTitle : template.receiptTitle,
+    receiptRecipientName: sale.receiptRequested ? invoiceRecipientStem(sale.receiptRecipientName ?? template.invoiceRecipientName) : "",
+    receiptPurposeText: sale.receiptRequested ? (sale.receiptPurposeText ?? template.invoicePurposeText) : "",
+    items: items.map((item, index) => {
+      const printedLine = line(item, language, false, markReducedRate);
+      const pickupCode = ticketIndexes.has(index) ? tickets.find(ticket => ticket.itemIndex === index)?.pickupCode : undefined;
+      return { ...printedLine, name: [pickupCode, printedLine.name].filter(Boolean).join(" ") };
+    })
+  }, sale.taxBreakdown);
   add("receipt", normalizePosDocumentCopies(settings.receiptCopies), settings.receiptEnabled,
     "order", sale.pickupCode, null, brands.length === 1 ? brands[0] : null, "receipt", {
       version: 1, jobType: "receipt", printer: { ...receiptPrinter, openCashDrawer: false },
-      storeName, printedAt, receiptTemplate: template,
-      order: { ...base, receiptRequested: sale.receiptRequested,
-        receiptTitle: sale.receiptRequested ? template.invoiceTitle : template.receiptTitle,
-        receiptRecipientName: sale.receiptRequested ? invoiceRecipientStem(sale.receiptRecipientName ?? template.invoiceRecipientName) : "",
-        receiptPurposeText: sale.receiptRequested ? (sale.receiptPurposeText ?? template.invoicePurposeText) : "",
-        items: items.map((item, index) => ({ ...line(item, language),
-          name: [ticketIndexes.has(index) ? tickets.find(ticket => ticket.itemIndex === index)?.pickupCode : undefined, line(item, language).name].filter(Boolean).join(" ") })) }
+      storeName, printedAt, ...receipt
     });
   return documents;
 }

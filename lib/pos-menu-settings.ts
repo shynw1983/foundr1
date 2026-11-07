@@ -1,4 +1,5 @@
 import { sql } from './db';
+import { counterMenuStateSql, posCounterMenuPolicyRevision } from './pos-counter-menu-data';
 import { applyPosItems, applyPosOptions, posSetting, type PosMenuSetting } from './pos-menu-policy';
 export type PosMenuConfig = {ready: boolean; revision: string; settings: PosMenuSetting[]};
 export async function readPosMenuConfig(storeId: string): Promise<PosMenuConfig> {
@@ -15,13 +16,14 @@ export async function readPosMenuConfig(storeId: string): Promise<PosMenuConfig>
   }
 }
 /** Same version as readPosMenuConfig, without aggregating settings JSON. */
-export async function readPosMenuRevision(storeId: string): Promise<Pick<PosMenuConfig, 'ready' | 'revision'>> {
+export async function readPosMenuRevision(storeId: string): Promise<Pick<PosMenuConfig, 'ready' | 'revision'> & { counterMenuPolicyRevision: string }> {
   try {
-    const rows = await sql`select md5(coalesce(string_agg(id::text||':'||revision::text,',' order by id),'')) as revision
-      from menu_pos_settings where store_id::text=${storeId}`;
-    return { ready: true, revision: String(rows[0].revision) };
+    const rows = await sql.query(`select
+      (select md5(coalesce(string_agg(id::text||':'||revision::text,',' order by id),'')) from menu_pos_settings where store_id::text=$1) as revision,
+      (select ${counterMenuStateSql} from pos_store_settings p where p.store_id::text=$1) as "counterMenuState"`, [storeId]);
+    return { ready: true, revision: String(rows[0].revision), counterMenuPolicyRevision: posCounterMenuPolicyRevision(rows[0].counterMenuState) };
   } catch (error) {
-    if ((error as { code?: string }).code === '42P01') return { ready: false, revision: '' };
+    if ((error as { code?: string }).code === '42P01') return { ready: false, revision: '', counterMenuPolicyRevision: '' };
     throw error;
   }
 }

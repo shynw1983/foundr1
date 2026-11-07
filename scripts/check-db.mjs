@@ -102,7 +102,7 @@ const requiredColumns = {
   replenishment_demand_issues: ["request_id", "request_fingerprint", "actor_id", "purchase_order_id", "order_no"],
   replenishment_demand_order_items: ["demand_id", "cycle", "issue_request_id", "purchase_order_item_id", "requested_quantity", "unit"],
   replenishment_demand_sync_state: ["store_id", "observed_at"],
-  pos_store_settings: ["scale_tare_settings", "scale_filter_settings"],
+  pos_store_settings: ["scale_tare_settings", "scale_filter_settings", "counter_menu_policy"],
   store_relay_stations: ["scale_tare_context", "scale_filter_state"],
   menu_inventory_sync_alert_deliveries: ["command_id", "recipient_employee_id", "channel", "destination_key", "status", "lease_token", "lease_until", "next_attempt_at", "attempt_count", "accepted_at"],
   pos_pickup_counters: ["store_id", "last_number"],
