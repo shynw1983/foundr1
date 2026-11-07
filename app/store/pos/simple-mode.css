@@ -34,6 +34,17 @@
   color: var(--ink);
 }
 
+.store-pos-page[data-pos-simple] [data-pos-debug-banner] {
+  position: static;
+  flex: 0 0 auto;
+  font-size: 14px;
+}
+
+.store-pos-page[data-pos-simple] [data-pos-debug-banner] button {
+  min-height: 44px;
+  font-size: 15px;
+}
+
 .store-pos-page[data-pos-simple] .store-pos-simple-header {
   position: relative;
   display: flex;

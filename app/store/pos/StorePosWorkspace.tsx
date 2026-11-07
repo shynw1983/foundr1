@@ -793,12 +793,14 @@ function getCategories(items: PosMenuItem[], categories: PosMenuCategory[], bran
 }
 
 const simplePosStorageKey = "foundr1-pos-simple-mode";
+const simpleDebugPosStorageKey = "foundr1-pos-debug-simple-mode";
 
 /** A route chooses the mode once. Full navigation keeps live async work out of test sessions. */
 export default function StorePosWorkspace({ debugMode: initialDebugMode = false }: {
   debugMode?: boolean;
 }) {
   const [debugMode] = useState(initialDebugMode);
+  const simpleModeStorageKey = debugMode ? simpleDebugPosStorageKey : simplePosStorageKey;
   const [simpleMode, setSimpleMode] = useState(false);
   const [simplePaymentOpen, setSimplePaymentOpen] = useState(false);
   const [simpleCartTool, setSimpleCartTool] = useState<"promotions" | "member" | null>(null);
@@ -807,13 +809,12 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   const modeToggleRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    if (debugMode) return;
     try {
-      setSimpleMode(window.localStorage.getItem(simplePosStorageKey) === "1");
+      setSimpleMode(window.localStorage.getItem(simpleModeStorageKey) === "1");
     } catch {
       // The switch also works when browser storage is unavailable.
     }
-  }, [debugMode]);
+  }, [simpleModeStorageKey]);
   const [debugSession, setDebugSession] = useState({ storeId: "", id: "" });
   const [debugResult, setDebugResult] = useState<PosDebugResult | null>(null);
   const [debugLoadError, setDebugLoadError] = useState("");
@@ -2591,11 +2592,16 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         taxIncluded: posSettings.priceTaxMode === "tax_included", total: payableAmount,
         tendered: paymentMethod === "cash" ? cashTenderedValue : null,
         change: paymentMethod === "cash" ? cashChangeAmount : null, note,
-        items: expandPosBowls(cart).map(item => ({
-          key: item.cartKey, name: item.name, quantity: item.quantity,
-          amount: getCartItemAmount(item), weight: getWeightLineLabel(item),
-          options: getOptionLabel(item.selectedOptions), note: item.preparationNote || ""
-        }))
+        items: expandPosBowls(cart).map(item => {
+          const gift = bowlEvaluation.applications.find(application => cart[application.index]?.cartKey === item.cartKey)?.gift;
+          const options = [getOptionLabel(item.selectedOptions)];
+          if (gift) options.push(`${t("サービス")} · ${gift.name} · ${formatYen(0)}`);
+          return {
+            key: item.cartKey, name: item.name, quantity: item.quantity,
+            amount: getCartItemAmount(item), weight: getWeightLineLabel(item),
+            options: options.filter(Boolean).join(" / "), note: item.preparationNote || ""
+          };
+        })
       });
       setCompletedDisplayState({
         status: "complete", storeName: stores.find(store => store.id === selectedStoreId)?.name || "",
@@ -3116,7 +3122,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     setSimpleMode(next);
     window.requestAnimationFrame(() => modeToggleRef.current?.focus({ preventScroll: true }));
     try {
-      window.localStorage.setItem(simplePosStorageKey, next ? "1" : "0");
+      window.localStorage.setItem(simpleModeStorageKey, next ? "1" : "0");
     } catch {
       // The current tab retains the selected layout.
     }
@@ -3133,6 +3139,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     if (checkoutNotice?.kind === "success") {
       setCheckoutNotice(null);
       setMessage("");
+      if (debugMode) setDebugResult(null);
     }
   }
 
@@ -3612,11 +3619,11 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     </div>
   );
   const pageNotice = message ? <div className="action-notice store-pos-notice">{message}</div> : null;
-  const modeToggle = !debugMode ? (
+  const modeToggle = (
     <button type="button" className="secondary-button" ref={modeToggleRef} data-pos-mode-toggle aria-pressed={simpleMode} onClick={toggleSimpleMode}>
       {t("簡易モード")}
     </button>
-  ) : null;
+  );
   const offlineNotice = offlineCheckoutOnly || offlinePendingCount > 0 ? (
         <div className="action-notice store-pos-offline-notice" role="status">
           <strong>{offlineCheckoutOnly ? "オフライン応急モード（現金のみ）" : "オフライン注文を同期中"}</strong>
@@ -3628,6 +3635,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
       ) : null;
 
   const simpleCheckoutComplete = simpleMode && checkoutNotice?.kind === "success";
+  const simplePaymentTitle = simpleCheckoutComplete ? t(debugMode ? "テスト結果" : "会計完了") : t("お支払い");
   const paymentActions = (
     <div className={checkoutStyles.actionButtons}>
       {simpleMode && !simpleCheckoutComplete ? <div className={checkoutStyles.simpleFooterTotal} data-pos-footer-total><span>{t("合計")}</span><strong>{formatYen(activeCheckoutAmount)}</strong></div> : null}
@@ -3664,14 +3672,14 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           <div className="store-pos-simple-header-main">
             <h1>POS</h1>
             {modeToggle}
-            {!loading && !offlineCheckoutOnly ? reconciliation.activeSession
+            {!debugMode && !loading && !offlineCheckoutOnly ? reconciliation.activeSession
               ? <span className="store-pos-simple-register-status">{t("開店済み")}</span>
               : <button className="primary-button" type="button" onClick={() => setCashDialog("open")}>{t("開店確認")}</button>
             : null}
           </div>
         ) : null}
         <details className="store-pos-simple-operations" ref={operationsRef} open={!simpleMode}>
-          <summary className="secondary-button" hidden={!simpleMode}>{t("店舗操作")}</summary>
+          <summary className="secondary-button" hidden={!simpleMode}>{t(debugMode ? "その他" : "店舗操作")}</summary>
           <div className="store-pos-simple-operations-body">
       <header className="store-workbench-topbar">
         <a className="brand-block" href={debugMode ? "/store/pos" : "/store"} onClick={debugMode ? event => { event.preventDefault(); exitDebugMode(); } : undefined} aria-label="Foundr1 店舗">
@@ -3684,7 +3692,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         {!debugMode ? <StoreNavTabs active="pos" posDebugAction={{ label: t("テストモード"), onSelect: enterDebugMode }} /> : null}
       </header>
 
-      {debugMode ? <PosDebugBanner onExit={exitDebugMode} /> : null}
+      {debugMode && !simpleMode ? <PosDebugBanner onExit={exitDebugMode} /> : null}
       {debugMode ? <PosDebugDisplayPanel storeId={selectedStoreId} sessionId={debugSessionId} status={debugDisplay.status} error={debugDisplay.error} onRetry={debugDisplay.retry} /> : null}
       <section className="store-pos-head">
         <div>
@@ -3694,7 +3702,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         <div className="store-pos-head-actions">
           {!simpleMode ? modeToggle : null}
           {!debugMode ? <button className="secondary-button" type="button" onClick={() => void openTransactionDialog()} disabled={offlineCheckoutOnly}>取引履歴</button> : null}
-          {debugMode && debugLoadError && !loading ? <button type="button" className="secondary-button" data-pos-debug-retry onClick={() => void load(selectedStoreId)}>{t("再試行")}</button> : null}
+          {debugMode && debugLoadError && !loading && !simpleMode ? <button type="button" className="secondary-button" data-pos-debug-retry onClick={() => void load(selectedStoreId)}>{t("再試行")}</button> : null}
           <button type="button" className={`secondary-button ${menuRefreshStyles.refresh}`} data-pos-menu-refresh disabled={(!selectedStoreId && !counterMenuReadBlocked) || menuRefreshBlocked || menuRefresh.checking} title={menuRefreshBlocked ? t("会計や処理が完了してから、メニューを更新してください。") : undefined} onClick={retryMenuRefresh}><RefreshCw size={15} aria-hidden="true" />{t(menuRefresh.checking ? "更新確認中…" : "メニューを更新")}</button>
           {!debugMode ? <PosDailySummary key={selectedStoreId} storeId={selectedStoreId} summary={summary} onRefresh={() => void refreshSummary()} refreshing={summaryRefreshing} refreshError={summaryError} /> : null}
         </div>
@@ -3702,7 +3710,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
 
       {!simpleMode ? menuRefreshNotice : null}
       {!simpleMode ? pageNotice : null}
-      {debugMode && debugLoadError ? <div className="inline-alert is-warning" role="alert">{t(debugLoadError)}</div> : null}
+      {debugMode && debugLoadError && !simpleMode ? <div className="inline-alert is-warning" role="alert">{t(debugLoadError)}</div> : null}
       {!debugMode ? <StoreRelayPanel relay={relay} storeId={selectedStoreId} /> : null}
       {!debugMode ? <PosPrintDocumentsPanel storeId={selectedStoreId} controller={printDocuments} requestedOrder={requestedPrintOrder} canPrint={nativePrintAvailable || relayPrintAvailable} showSummary={showPrintQueue} /> : null}
       {!debugMode ? <PosFulfillmentPanel storeId={selectedStoreId} enabled={posSettings.fulfillmentWorkspace.enabled}
@@ -3760,6 +3768,13 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         </details>
       </div>
 
+      {debugMode && simpleMode ? <PosDebugBanner compact onExit={exitDebugMode} /> : null}
+      {debugMode && simpleMode && debugLoadError ? (
+        <div className="inline-alert is-warning" role="alert">
+          {t(debugLoadError)}
+          <button type="button" className="secondary-button" data-pos-debug-retry disabled={loading} onClick={() => void load(selectedStoreId)}>{t("再試行")}</button>
+        </div>
+      ) : null}
       {simpleMode ? menuRefreshNotice : null}
       {simpleMode && (!simplePaymentOpen || !checkoutNotice) ? pageNotice : null}
       {simpleMode ? offlineNotice : null}
@@ -3862,12 +3877,12 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
 
         <aside id="store-pos-cart" ref={cartDialogRef} className={`store-pos-cart-panel${cartOpen ? " is-open" : ""}`} role={cartOpen ? "dialog" : undefined} aria-modal={cartOpen || undefined} aria-label="会計内容">
           {cartOpen ? <ModalHistoryScope historyKey="store-pos-cart" onClose={() => setCartOpen(false)}><span /></ModalHistoryScope> : null}
-          {debugMode ? <PosDebugBanner compact onExit={exitDebugMode} /> : null}
+          {debugMode && (!simpleMode || cartOpen) ? <PosDebugBanner compact onExit={exitDebugMode} /> : null}
           <button className="secondary-button store-pos-cart-back" type="button" onClick={() => setCartOpen(false)}>商品選択に戻る</button>
           <div className="store-pos-cart-head">
             <div>
               <p className="eyebrow">Cart</p>
-              <h3>{simpleMode && simplePaymentOpen ? t(simpleCheckoutComplete ? "会計完了" : "お支払い") : t("会計内容")}</h3>
+              <h3>{simpleMode && simplePaymentOpen ? simplePaymentTitle : t("会計内容")}</h3>
             </div>
             {simpleMode && simplePaymentOpen && !simpleCheckoutComplete ? (
               <button className="secondary-button" type="button" disabled={saving} onClick={returnToSimpleOrder}>{t("注文に戻る")}</button>
@@ -3886,9 +3901,9 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                 <Gift size={18} aria-hidden="true" /><span>{t("キャンペーン")}</span>
                 {campaignShortcutState ? <strong aria-live="polite">{t(campaignShortcutState === "select" ? "特典を選択" : "適用中")}</strong> : null}
               </button>
-              <button className="secondary-button" type="button" aria-expanded={simpleCartTool === "member"} aria-controls="pos-simple-member" onClick={() => toggleSimpleCartTool("member")}>
+              {!debugMode ? <button className="secondary-button" type="button" aria-expanded={simpleCartTool === "member"} aria-controls="pos-simple-member" onClick={() => toggleSimpleCartTool("member")}>
                 <UserRound size={18} aria-hidden="true" /> {t("会員・クーポン")}{couponDiscountAmount > 0 ? <strong>-{formatYen(couponDiscountAmount)}</strong> : null}
-              </button>
+              </button> : null}
             </div>
           ) : null}
           <div ref={cartScrollRef} className="store-pos-simple-cart-scroll">
@@ -4168,8 +4183,9 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
             ) : null}
             {!simpleMode ? paymentActions : null}
           </div>
-          {debugMode && debugResult ? <PosDebugResultPreview result={debugResult} onClear={() => setDebugResult(null)} /> : null}
+          {debugMode && debugResult && !simpleMode ? <PosDebugResultPreview result={debugResult} onClear={() => setDebugResult(null)} /> : null}
           </div>
+          {debugMode && simpleCheckoutComplete && debugResult ? <PosDebugResultPreview result={debugResult} onClear={() => setDebugResult(null)} /> : null}
           </div>
           {simpleMode && simplePaymentOpen ? (
             <div className={`${checkoutStyles.actions} ${checkoutStyles.simpleActions}`}>{paymentActions}</div>
