@@ -7,7 +7,7 @@ import { summarizePosProducts, type PosProductSummary } from "../../../lib/pos-d
 import PosInvoiceIssuer from './PosInvoiceIssuer';
 import { invoiceRecipientStem } from '../../../lib/pos-invoice';
 import { isPosOptionAllowed, reconcilePosOptionDependencies } from '../../../lib/pos-option-dependencies';
-import { evaluatePosDiscounts, isPosCampaignActive, posCampaignDate, type PosCampaignFields } from "../../../lib/pos-discount-campaigns";
+import { evaluatePosDiscounts, isPosCampaignActive, posCampaignDate, posDiscountEligibleAmount, type PosCampaignFields } from "../../../lib/pos-discount-campaigns";
 
 import refundStyles from "./refund-options.module.css";
 
@@ -19,6 +19,7 @@ import type { PosCustomerDisplayWeighingDraft } from "../../../lib/pos-customer-
 
 import cashFeedbackStyles from "./cash-feedback.module.css";
 import checkoutStyles from "./checkout-feedback.module.css";
+import "./simple-mode.css";
 import menuRefreshStyles from "./PosMenuRefreshNotice.module.css";
 import { PosMenuRefreshNotice } from "./PosMenuRefreshNotice";
 import { usePosMenuRefresh, type PosMenuVersions } from "./usePosMenuRefresh";
@@ -46,7 +47,7 @@ import { posPickupTicketCopy } from "../../../lib/pos-pickup-ticket-copy";
 import { isPosSellableItem } from "../../../lib/pos-catalog-policy";
 
 import { posOptionGiftCatalog } from "../../../lib/pos-option-gifts";
-import { evaluatePosBowlBenefits, posBowlQuote, type PosBowlChoice } from "../../../lib/pos-bowl-benefits";
+import { evaluatePosBowlBenefits, posBowlEligible, posBowlQuote, posGiftAllowed, type PosBowlChoice } from "../../../lib/pos-bowl-benefits";
 import { PosBowlBenefitPicker } from "./PosBowlBenefitPicker";
 import { Banknote, Camera, CreditCard, Gift, Minus, Plus, ReceiptText, RefreshCw, ScanLine, Search, ShoppingCart, Trash2, UserRound, X } from "lucide-react";
 import jsQR from "jsqr";
@@ -764,11 +765,28 @@ function getCategories(items: PosMenuItem[], categories: PosMenuCategory[], bran
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ja"));
 }
 
+const simplePosStorageKey = "foundr1-pos-simple-mode";
+
 /** A route chooses the mode once. Full navigation keeps live async work out of test sessions. */
 export default function StorePosWorkspace({ debugMode: initialDebugMode = false }: {
   debugMode?: boolean;
 }) {
   const [debugMode] = useState(initialDebugMode);
+  const [simpleMode, setSimpleMode] = useState(false);
+  const [simplePaymentOpen, setSimplePaymentOpen] = useState(false);
+  const [simpleCartTool, setSimpleCartTool] = useState<"promotions" | "member" | null>(null);
+  const cartScrollRef = useRef<HTMLDivElement | null>(null);
+  const operationsRef = useRef<HTMLDetailsElement | null>(null);
+  const modeToggleRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (debugMode) return;
+    try {
+      setSimpleMode(window.localStorage.getItem(simplePosStorageKey) === "1");
+    } catch {
+      // The switch also works when browser storage is unavailable.
+    }
+  }, [debugMode]);
   const [debugSession, setDebugSession] = useState({ storeId: "", id: "" });
   const [debugResult, setDebugResult] = useState<PosDebugResult | null>(null);
   const [debugLoadError, setDebugLoadError] = useState("");
@@ -826,7 +844,13 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   const [optionQuery, setOptionQuery] = useState("");
   const [optionGroupId, setOptionGroupId] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
-  const cartDialogRef = useStoreDialog(cartOpen, () => setCartOpen(false), "(max-width: 900px)");
+  const cartDialogMedia = simpleMode ? "(max-width: 719.98px)" : "(max-width: 900px)";
+  const cartDialogRef = useStoreDialog(cartOpen, () => setCartOpen(false), cartDialogMedia);
+
+  useEffect(() => {
+    setSimplePaymentOpen(false);
+    setSimpleCartTool(null);
+  }, [selectedStoreId]);
   const optionDialogRef = useStoreDialog(Boolean(configuringItem), () => setConfiguringItem(null));
   const [optionDraft, setOptionDraft] = useState<Record<string, string[]>>({});
   const [weightDraft, setWeightDraft] = useState("");
@@ -1320,7 +1344,8 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     cart.map(item => ({ ...item, amount: getCartItemAmount(item) })), subtotal, discountNow);
   const giftCatalog = [...items.filter(item=>!isPosBowl(item)).map(item=>({id:item.id,sourceItemId:item.sourceItemId,brandId:item.brandId,category:item.category,name:item.name,displayNames:item.displayNames,
     price:getItemPrice(item),available:item.isAvailable!==false,fixed:!getWeightPricingConfig(item,orderType),requiresOptions:getItemOptionGroups(item).some(group=>getPosOptionSelectionRules(group).min>0)})),...posOptionGiftCatalog(optionGroups)];
-  const bowlEvaluation = evaluatePosBowlBenefits(posSettings.discountPresets,discountPresetKey,cart.map(item=>({...item,amount:getCartItemAmount(item),isBowl:isPosBowl(item),choice:item.bowlBenefit})),giftCatalog,discountNow);
+  const bowlLines = cart.map(item => ({ ...item, amount: getCartItemAmount(item), isBowl: isPosBowl(item), choice: item.bowlBenefit }));
+  const bowlEvaluation = evaluatePosBowlBenefits(posSettings.discountPresets, discountPresetKey, bowlLines, giftCatalog, discountNow);
   const hasBowlChoice = bowlEvaluation.applications.length > 0 || cart.some(item=>item.bowlBenefit);
   const selectedDiscountPreset = bowlEvaluation.preset;
   const posDiscountAmount = bowlEvaluation.amount;
@@ -1914,8 +1939,8 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
 
   const hasPendingDocuments = printJobs.some((job) => job.storeId === selectedStoreId && job.state !== "sent");
   useEffect(() => {
-    if ((hasPendingCheckout || (showPrintQueue && hasPendingDocuments) || reprintOrderId) && window.matchMedia("(max-width: 900px)").matches) setCartOpen(true);
-  }, [hasPendingCheckout, hasPendingDocuments, reprintOrderId, showPrintQueue]);
+    if ((hasPendingCheckout || (showPrintQueue && hasPendingDocuments) || reprintOrderId) && window.matchMedia(cartDialogMedia).matches) setCartOpen(true);
+  }, [cartDialogMedia, hasPendingCheckout, hasPendingDocuments, reprintOrderId, showPrintQueue]);
 
   async function refreshPrintJobs() {
     if (debugMode) return;
@@ -2111,6 +2136,8 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
 
   function cancelCurrentTransaction() {
     if (!hasCurrentTransaction || saving) return;
+    setSimplePaymentOpen(false);
+    setSimpleCartTool(null);
     setCheckoutNotice(null);
     setCart([]);
     setSelectedTableCheckoutKey("");
@@ -2262,6 +2289,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     const measuredQuantityValue = weightPricing ? Math.round(Number(measuredQuantity) * 1000) / 1000 : null;
     const cartKey = isPosBowl(item) ? window.crypto.randomUUID() : getCartKey(item, selectedOptions, measuredQuantityValue, weightPricing?.unitPrice ?? null);
     setCheckoutNotice(null);
+    setSimplePaymentOpen(false);
     setCustomerDisplayMode("business");
     setCart((current) => {
       const existing = isPosBowl(item) ? undefined : current.find((entry) => entry.cartKey === cartKey);
@@ -2963,8 +2991,46 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     }
   }
 
+  function toggleSimpleMode() {
+    const next = !simpleMode;
+    if (operationsRef.current) operationsRef.current.open = !next;
+    setCartOpen(false);
+    setSimplePaymentOpen(false);
+    setSimpleCartTool(null);
+    setSimpleMode(next);
+    window.requestAnimationFrame(() => modeToggleRef.current?.focus({ preventScroll: true }));
+    try {
+      window.localStorage.setItem(simplePosStorageKey, next ? "1" : "0");
+    } catch {
+      // The current tab retains the selected layout.
+    }
+  }
+
+  function toggleSimpleCartTool(tool: "promotions" | "member") {
+    setSimpleCartTool((current) => current === tool ? null : tool);
+    if (cartScrollRef.current) cartScrollRef.current.scrollTop = 0;
+  }
+
+  function returnToSimpleOrder() {
+    setSimplePaymentOpen(false);
+    if (cartScrollRef.current) cartScrollRef.current.scrollTop = 0;
+    if (checkoutNotice?.kind === "success") {
+      setCheckoutNotice(null);
+      setMessage("");
+    }
+  }
+
+  function openSimplePayment() {
+    setSimpleCartTool(null);
+    setSimplePaymentOpen(true);
+    if (cartScrollRef.current) cartScrollRef.current.scrollTop = 0;
+    window.requestAnimationFrame(() => {
+      checkoutSectionRef.current?.querySelector<HTMLButtonElement>("button.is-active")?.focus({ preventScroll: true });
+    });
+  }
+
   function revealCheckoutSection() {
-    if (window.matchMedia("(max-width: 900px)").matches) {
+    if (window.matchMedia(cartDialogMedia).matches) {
       setCartOpen(true);
       return;
     } else {
@@ -2998,20 +3064,28 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     }
   }
 
-  async function openPrintFromTransaction(orderId: string) {
+  function requestPrintOrder(orderId: string) {
+    if (simpleMode && operationsRef.current) operationsRef.current.open = true;
+    setRequestedPrintOrder({ id: orderId, request: Date.now() });
+  }
+
+  async function openPrintAfterDialog(orderId: string, historyKey: string, closeDialog: () => void) {
     const store = selectedStoreId;
     const flag = String(window.history.state?.__foundr1Modal || '');
-    // Finish the transaction modal's own history pop before the print drawer
-    // creates its history entry. Otherwise that pop immediately closes it.
-    if (flag.startsWith('__foundr1Modal:store-pos-transactions:')) {
+    // Wait for the current dialog's history pop before opening the print drawer.
+    if (flag.startsWith(`__foundr1Modal:${historyKey}:`)) {
       await new Promise<void>(resolve => {
         const done = () => { window.clearTimeout(timer); window.removeEventListener('popstate', done); resolve(); };
         const timer = window.setTimeout(done, 1500);
         window.addEventListener('popstate', done, { once: true });
-        setTransactionDialogOpen(false);
+        closeDialog();
       });
-    } else setTransactionDialogOpen(false);
-    if (selectedStoreIdRef.current === store) setRequestedPrintOrder({ id: orderId, request: Date.now() });
+    } else closeDialog();
+    if (selectedStoreIdRef.current === store) requestPrintOrder(orderId);
+  }
+
+  function openPrintFromTransaction(orderId: string) {
+    return openPrintAfterDialog(orderId, "store-pos-transactions", () => setTransactionDialogOpen(false));
   }
 
   async function openTransactionDialog() {
@@ -3107,8 +3181,366 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     window.location.assign("/store/pos");
   }
 
+  const memberPanel = !debugMode ? (
+    <div className={selectedMember ? "store-pos-member-panel is-linked" : "store-pos-member-panel"}>
+      <div className="store-pos-member-title">
+        <div>
+          <UserRound size={16} />
+          <span>会員</span>
+        </div>
+        {selectedMember ? (
+          <button type="button" onClick={clearSelectedMember} aria-label="会員を解除">
+            <X size={14} />
+          </button>
+        ) : null}
+      </div>
+      {offlineCheckoutOnly ? (
+        <small className="store-pos-member-empty-coupon">オフライン中は会員証・クーポンを利用できません。</small>
+      ) : selectedMember ? (
+        <>
+          <div className="store-pos-member-card">
+            <strong>{selectedMember.displayName || selectedMember.email || selectedMember.memberNumber}</strong>
+            <span>{selectedMember.memberNumber} / {selectedMember.pointBalance.toLocaleString("ja-JP")} pt</span>
+          </div>
+          {memberCoupons.length ? (
+            <div className="store-pos-coupon-panel">
+              <div className="store-pos-coupon-head">
+                <span><Gift size={14} /> 利用可能クーポン</span>
+                {shouldShowRecommendedCoupon && recommendedCoupon ? (
+                  <button type="button" onClick={() => setSelectedCouponId(recommendedCoupon.id)}>
+                    おすすめを適用
+                  </button>
+                ) : null}
+              </div>
+              {shouldShowRecommendedCoupon && recommendedCoupon ? (
+                <p className="store-pos-coupon-recommend">
+                  {recommendedCouponExpiringSoon && recommendedCouponExpiryLabel
+                    ? `${recommendedCoupon.name} は ${recommendedCouponExpiryLabel} です。有効期限が近いため優先利用を案内してください。`
+                    : `${recommendedCoupon.name} の方が ${formatYen(Math.max(0, recommendedCouponDiscountAmount - selectedCouponDiscountAmount))} お得です。`}
+                </p>
+              ) : null}
+              <div className="store-pos-coupon-list">
+                {memberCoupons.map((coupon) => {
+                  const discount = getCouponDiscountAmount(coupon, subtotal, getExchangeEligibleBodyAmounts(coupon));
+                  const isSelected = selectedCouponId === coupon.id;
+                  const isRecommended = recommendedCoupon?.id === coupon.id && discount > 0;
+                  const isCustomerSelected = customerSelectedCouponId === coupon.id;
+                  const isUnavailable = couponBlockedByDiscount || (subtotal > 0 && discount <= 0);
+                  const expiryLabel = getCouponExpiryLabel(coupon);
+                  const expiringSoon = isCouponExpiringSoon(coupon);
+                  const couponBadges = [
+                    couponBlockedByDiscount ? "割引中は併用不可" : "",
+                    isCustomerSelected ? "客さま選択済み" : "",
+                    expiringSoon && expiryLabel ? `期限優先 ${expiryLabel}` : expiryLabel ? `期限 ${expiryLabel}` : "",
+                    isRecommended ? "おすすめ" : ""
+                  ].filter(Boolean);
+                  return (
+                    <button
+                      key={coupon.id}
+                      className={[
+                        "store-pos-coupon-choice",
+                        isSelected ? "is-selected" : "",
+                        isCustomerSelected ? "is-customer-selected" : "",
+                        isRecommended ? "is-recommended" : ""
+                      ].filter(Boolean).join(" ")}
+                      type="button"
+                      disabled={isUnavailable}
+                      onClick={() => setSelectedCouponId((current) => current === coupon.id ? "" : coupon.id)}
+                    >
+                      <span>
+                        <strong>{coupon.name}</strong>
+                        <small>{getCouponScopeLabel(coupon)} / {coupon.couponCode} / {getCouponValueLabel(coupon)}{couponBadges.length ? ` / ${couponBadges.join(" / ")}` : ""}</small>
+                      </span>
+                      <b>{getCouponPosStatusLabel(coupon, discount, subtotal)}</b>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <small className="store-pos-member-empty-coupon">利用可能クーポンはありません。</small>
+          )}
+        </>
+      ) : (
+        <div className="store-pos-member-lookup-wrap">
+          <div className="store-pos-member-lookup">
+            <ScanLine size={16} />
+            <input
+              value={memberLookupInput}
+              onChange={(event) => setMemberLookupInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void lookupMember();
+                }
+              }}
+              placeholder="会員番号 / 電話番号 / メール / QR"
+              inputMode="text"
+            />
+            <button className="secondary-button" type="button" onClick={() => void lookupMember()} disabled={!memberLookupInput.trim() || memberLookupLoading}>
+              {memberLookupLoading ? "確認中" : "確認"}
+            </button>
+            <button className="secondary-button store-pos-member-scan-button" type="button" onClick={() => setMemberScannerOpen(true)}>
+              <Camera size={15} />
+              POS背面
+            </button>
+            <button className="secondary-button store-pos-member-scan-button" type="button" onClick={() => void openCustomerDisplayMemberScanner()} disabled={!selectedStoreId || customerDisplayScannerLoading}>
+              <ScanLine size={15} />
+              客席表示前面
+            </button>
+          </div>
+          <small>POS 本体または客席表示の前面カメラで会員 QR を読み取れます。</small>
+        </div>
+      )}
+    </div>
+  ) : null;
+  function renderBowlNote(item: PosCartItem) {
+    const label = t("この杯の厨房メモ");
+    const input = <input value={item.preparationNote || ""} maxLength={300} disabled={saving} aria-label={label}
+      onChange={(event) => setCart((current) => current.map((entry) => entry.cartKey === item.cartKey ? { ...entry, preparationNote: event.target.value } : entry))} />;
+    return simpleMode ? (
+      <details className="store-pos-simple-bowl-note">
+        <summary>{label}</summary>
+        {input}
+      </details>
+    ) : <label className="store-pos-bowl-note"><span>{label}</span>{input}</label>;
+  }
+  const kitchenNote = (
+    <label className="store-pos-note">
+      <span>会計全体の厨房メモ（全杯に適用）</span>
+      <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="任意" />
+    </label>
+  );
+  const discountPanel = (
+    <div className="store-pos-discount-panel">
+      {!simpleMode ? <span>割引</span> : null}
+      {enabledDiscountPresets.length ? enabledDiscountPresets.map((preset) => {
+        const discount = getPosDiscountAmount(preset, cart, subtotal);
+        const isActive = discountPresetKey === preset.key;
+        return (
+          <button
+            key={preset.key}
+            className={isActive ? "is-active" : ""}
+            type="button"
+            disabled={offlineCheckoutOnly || (subtotal > 0 && discount <= 0)}
+            onClick={() => {
+              setDiscountPresetKey((current) => current === preset.key ? "" : preset.key);
+              if (!preset.allowCouponCombination) setSelectedCouponId("");
+            }}
+          >
+            {preset.name}
+            {discount > 0 ? ` -${formatYen(discount)}` : ""}
+          </button>
+        );
+      }) : <small>設定済みの割引はありません。</small>}
+      {!simpleMode && selectedDiscountPreset?.applicationMode === "campaign" && posDiscountAmount > 0 ? (
+        <div className="store-pos-campaign-applied" role="status" data-pos-campaign-applied>
+          <span>{hasBowlChoice ? t("適用中の特典") : t("キャンペーン自動適用")}</span>
+          <strong>{selectedDiscountPreset.name} -{formatYen(posDiscountAmount)}</strong>
+          <small>{t("同じ商品に特典を重ねず、よりお得な方を適用しています。")}</small>
+        </div>
+      ) : null}
+      {!simpleMode && !posDiscountAmount && !selectedTableCheckout ? posSettings.discountPresets.filter(preset => preset.campaignBasis!=="bowl_choice" && isPosCampaignActive(preset, discountNow) && (preset.minimumSubtotal ?? 0) > subtotal && getPosDiscountAmount(preset, cart, subtotal) > 0).sort((a,b) => (a.minimumSubtotal ?? 0) - (b.minimumSubtotal ?? 0)).slice(0, 1).map(preset => (
+        <small key={preset.key}>キャンペーン「{preset.name}」は商品小計{formatYen(preset.minimumSubtotal ?? 0)}から適用</small>
+      )) : null}
+      {offlineCheckoutOnly ? (
+        <small>オフライン中は割引・キャンペーンを利用できません。適用中の場合は接続を確認してください。</small>
+      ) : selectedDiscountPreset && (!simpleMode || selectedDiscountPreset.applicationMode !== "campaign") ? (
+        <small>
+          {getDiscountTargetLabel(selectedDiscountPreset)}
+          {selectedDiscountPreset.allowCouponCombination ? " / クーポン併用可" : " / クーポン併用不可"}
+          {selectedDiscountPreset.stampEligible ? " / スタンプ対象" : " / スタンプ対象外"}
+        </small>
+      ) : null}
+    </div>
+  );
+  function renderBowlBenefit(item: PosCartItem, index: number) {
+    return <PosBowlBenefitPicker rules={posSettings.discountPresets} gifts={giftCatalog} now={discountNow}
+      disabled={saving || offlineCheckoutOnly} compact={simpleMode} line={bowlLines[index]}
+      applied={bowlEvaluation.applications.find(application => application.index === index)}
+      onChange={value => setCart(current => current.map(entry => entry.cartKey === item.cartKey ? { ...entry, bowlBenefit: value } : entry))} />;
+  }
+
+  const campaignsAvailable = simpleMode && !offlineCheckoutOnly && !selectedTableCheckout;
+  const activeCampaigns = campaignsAvailable ? posSettings.discountPresets.filter(preset =>
+    isPosCampaignActive(preset, discountNow) && Number.isSafeInteger(preset.minimumSubtotal ?? 0)
+    && (preset.minimumSubtotal ?? (preset.campaignBasis === "bowl_choice" ? -1 : 0)) >= 0
+  ) : [];
+  const appliedBowls = new Set(bowlEvaluation.applications.map(application => application.index));
+  const campaignGifts = campaignsAvailable ? bowlEvaluation.applications.flatMap(application => application.gift ? [application.gift] : []) : [];
+  const baseCampaign = bowlEvaluation.base.preset;
+  const orderCampaignAmount = campaignsAvailable && baseCampaign?.applicationMode === "campaign"
+    ? bowlEvaluation.allocations.reduce((sum, amount, index) => sum + (appliedBowls.has(index) ? 0 : amount), 0)
+    : 0;
+  const belowThreshold = (amount: number) => ({ state: "below" as const, status: t("あと{amount}", { amount: formatYen(amount) }) });
+  const campaignRows = activeCampaigns.map(preset => {
+    const minimum = preset.minimumSubtotal ?? 0;
+    const byBowl = preset.campaignBasis === "bowl_choice";
+    const discountLabel = preset.discountType === "percent"
+      ? t("{rate}%割引", { rate: preset.discountValue })
+      : t("{amount}引き", { amount: formatYen(preset.discountValue) });
+    const giftLabel = preset.giftButtonLabel || t("プレゼント");
+    const benefit = !byBowl || preset.bowlBenefitMode === "discount_only" ? discountLabel
+      : preset.bowlBenefitMode === "gift_only" ? giftLabel : `${discountLabel} / ${giftLabel}`;
+    const basis = t(byBowl ? "1杯" : "会計全体");
+    const condition = minimum > 0 ? t("{basis} {amount}以上", { basis, amount: formatYen(minimum) }) : basis;
+    const target = preset.targetScope === "brand"
+      ? brands.find(brand => brand.id === preset.targetValue)?.name ?? t("ブランド指定")
+      : t(getDiscountTargetLabel(preset));
+    let result: { state: "applied" | "select" | "below" | "unavailable"; status: string };
+    if (byBowl) {
+      const applications = bowlEvaluation.applications.filter(application => application.campaignKey === preset.key);
+      const eligible = bowlLines.filter(line => posBowlEligible(preset, line, discountNow));
+      const canChoose = preset.bowlBenefitMode !== "gift_only" || giftCatalog.some(gift => posGiftAllowed(preset, gift));
+      if (eligible.some(line => line.choice?.campaignKey === preset.key && line.choice.kind === "gift" && !line.choice.giftItemId)) {
+        result = { state: "select", status: t("プレゼントを選択") };
+      } else if (applications.length) {
+        result = { state: "applied", status: t("{count}杯に適用", { count: applications.length }) };
+      } else if (eligible.length && eligible.every(line => line.choice?.kind === "none")) {
+        result = { state: "unavailable", status: t("特典なしを選択中") };
+      } else if (eligible.length) {
+        result = canChoose ? { state: "select", status: t("特典を選択") }
+          : { state: "unavailable", status: t("選べるプレゼントなし") };
+      } else {
+        const matchingAmount = bowlLines.reduce((highest, line) => line.isBowl && line.quantity === 1
+          && posDiscountEligibleAmount(preset, [line], line.amount) > 0 ? Math.max(highest, line.amount) : highest, 0);
+        result = matchingAmount > 0 && matchingAmount < minimum ? belowThreshold(minimum - matchingAmount)
+          : { state: "unavailable", status: t("対象の1杯を追加") };
+      }
+    } else if (baseCampaign?.key === preset.key && orderCampaignAmount > 0) {
+      result = { state: "applied", status: t("自動適用 −{amount}", { amount: formatYen(orderCampaignAmount) }) };
+    } else if (subtotal < minimum) {
+      result = belowThreshold(minimum - subtotal);
+    } else {
+      result = { state: "unavailable", status: t(bowlEvaluation.base.campaigns.some(candidate => candidate.preset.key === preset.key)
+        ? "他の特典を適用中" : "対象条件を確認") };
+    }
+    return { preset, benefit, condition, target, ...result };
+  });
+  const campaignShortcutState = campaignRows.some(row => row.state === "select") ? "select"
+    : campaignRows.some(row => row.state === "applied") ? "applied" : undefined;
+
+  const campaignPanel = (
+    <section className="store-pos-simple-promotions" data-pos-campaigns aria-label={t("キャンペーン")}>
+      <h4>{t("キャンペーン")}</h4>
+      {!campaignsAvailable ? <p>{t(offlineCheckoutOnly ? "オフライン中は割引・キャンペーンを利用できません。" : "テーブル会計は確定済みの金額でお支払いください。")}</p>
+        : campaignRows.length ? (
+          <ul className="store-pos-simple-promotion-list">
+            {campaignRows.map(({ preset, benefit, condition, target, state, status }) => (
+              <li className="store-pos-simple-promotion-row" key={preset.key} data-pos-campaign-state={state}>
+                <b>{preset.name}</b>
+                <strong data-pos-campaign-status>{status}</strong>
+                <small>{condition} · {benefit}{preset.targetScope !== "all" ? ` · ${target}` : ""}</small>
+              </li>
+            ))}
+          </ul>
+        ) : <p>{t("実施中のキャンペーンはありません。")}</p>}
+      {!selectedTableCheckout ? bowlLines.map((line, index) => line.isBowl && (
+        line.choice || activeCampaigns.some(preset => posBowlEligible(preset, line, discountNow))
+      ) ? (
+        <section className="store-pos-simple-promotion-bowl" key={line.cartKey}>
+          <h5>{index + 1}. {line.name} · {formatYen(line.amount)}</h5>
+          {renderBowlBenefit(line, index)}
+        </section>
+      ) : null) : null}
+      {enabledDiscountPresets.length ? (
+        <details className="store-pos-simple-manual-discount">
+          <summary>{t("手動割引")}</summary>
+          {discountPanel}
+        </details>
+      ) : null}
+    </section>
+  );
+
+  const recoveryPanel = (
+    <>
+    {checkoutRecovery.filter((record) => record.storeId === selectedStoreId).map((record) => (
+      <div className="inline-alert is-warning" key={record.storeId}>
+        <p>未確認の会計があります。新しい会計を作成せず、元の会計結果を確認してください。</p>
+        <button className="secondary-button" type="button" disabled={saving || printBusy} onClick={() => void recoverCheckout(record)}>元の会計結果を確認</button>
+        <button className="secondary-button" type="button" disabled={saving || printBusy} onClick={() => void abandonCheckout(record)}>未保存の場合だけ無効化</button>
+      </div>
+    ))}
+    {reprintOrderId && !printJobs.some((job) => job.orderId === reprintOrderId) ? <div className="inline-alert is-warning">この端末の印刷記録を確認できません。元のレジ端末で伝票を確認してください。</div> : null}
+    {(showPrintQueue || reprintOrderId) && printJobs.some((job) => job.storeId === selectedStoreId) ? (
+      <details id="pos-print-documents" className="procedure-reference-disclosure store-pos-print-documents" open={Boolean(reprintOrderId) || printJobs.some((job) => job.storeId === selectedStoreId && job.state !== "sent")}>
+        <summary>伝票の送信状況・再印刷</summary>
+        <p>送信済みでも実際の印刷を確認してください。結果不明の伝票は現物を確認してから同じ番号で再印刷します。</p>
+        {printJobs.filter((job) => job.storeId === selectedStoreId && job.state !== "sent").concat(printJobs.filter((job) => job.storeId === selectedStoreId && job.state === "sent" && (!reprintOrderId || job.orderId === reprintOrderId)).slice(reprintOrderId ? 0 : -10)).map((job) => (
+          <div className="store-pos-cart-row" key={job.id}>
+            <span>{job.label} / {job.state === "sent" ? "送信済み" : job.state === "pending" ? "未送信" : "要確認"}{job.error ? ` / ${job.error}` : ""}</span>
+            <button className="secondary-button" type="button" disabled={saving || printBusy} onClick={() => void retryPrintJob(job)}>同じ番号で再印刷</button>
+          </div>
+        ))}
+      </details>
+    ) : null}
+    </>
+  );
+  const bowlPrintNotice = !debugMode && !selectedTableCheckout && cart.some(isPosBowl) ? (
+    <div className="inline-alert">1杯ごとに厨房伝票→出品伝票→お客様番号札の順で同じ受付番号を印刷します。最後に会計ごとのレシートを1枚印刷します。</div>
+  ) : null;
+  const menuRefreshNotice = <PosMenuRefreshNotice available={menuRefresh.updateAvailable} error={menuRefresh.error} checking={menuRefresh.checking} blocked={menuRefreshBlocked} hasDraft={hasMenuDraft} onRefresh={() => void menuRefresh.refresh()} />;
+  const pageNotice = message ? <div className="action-notice store-pos-notice">{message}</div> : null;
+  const modeToggle = !debugMode ? (
+    <button type="button" className="secondary-button" ref={modeToggleRef} data-pos-mode-toggle aria-pressed={simpleMode} onClick={toggleSimpleMode}>
+      {t("簡易モード")}
+    </button>
+  ) : null;
+  const offlineNotice = offlineCheckoutOnly || offlinePendingCount > 0 ? (
+        <div className="action-notice store-pos-offline-notice" role="status">
+          <strong>{offlineCheckoutOnly ? "オフライン応急モード（現金のみ）" : "オフライン注文を同期中"}</strong>
+          <span> 未同期 {offlinePendingCount} 件</span>
+          {offlineCheckoutOnly ? <small>会員・クーポン・割引・外部決済・テーブル会計・レジ操作はオンライン復帰後に利用できます。</small> : null}
+          {browserOnline && offlinePendingCount > 0 ? <button type="button" onClick={() => void syncOfflineOrders()}>今すぐ同期</button> : null}
+          {offlineSyncError ? <small>{offlineSyncError}</small> : null}
+        </div>
+      ) : null;
+
+  const simpleCheckoutComplete = simpleMode && checkoutNotice?.kind === "success";
+  const paymentActions = (
+    <div className={checkoutStyles.actionButtons}>
+      {simpleMode && !simpleCheckoutComplete ? <div className={checkoutStyles.simpleFooterTotal} data-pos-footer-total><span>{t("合計")}</span><strong>{formatYen(activeCheckoutAmount)}</strong></div> : null}
+      {checkoutNotice ? (
+        <div className={`${checkoutStyles.notice} ${checkoutNotice.kind === "error" ? checkoutStyles.error : checkoutStyles.success}`} role={checkoutNotice.kind === "error" ? "alert" : "status"}>
+          <span>{t(checkoutNotice.text)}{checkoutNotice.kind === "success" && lastPaidPrintOrderId ? <button type="button" className={checkoutStyles.viewPrint} data-print-paid-open onClick={() => void openPrintAfterDialog(lastPaidPrintOrderId, "store-pos-cart", () => setCartOpen(false))}>{t("伝票を確認")}</button> : null}</span>
+          {!simpleCheckoutComplete ? <button type="button" aria-label={t("閉じる")} onClick={() => setCheckoutNotice(null)}><X size={16} /></button> : null}
+        </div>
+      ) : null}
+      {!simpleMode ? (
+        <button className="danger-button store-pos-cancel-transaction" type="button" onClick={cancelCurrentTransaction} disabled={!hasCurrentTransaction || saving}>
+          会計を中止
+        </button>
+      ) : null}
+      {simpleCheckoutComplete ? (
+        <button className="primary-button store-pos-checkout" type="button" onClick={returnToSimpleOrder} disabled={saving}>
+          {t("次の注文")}
+        </button>
+      ) : (
+        <button className="primary-button store-pos-checkout" data-pos-debug-checkout={debugMode || undefined} type="button" onClick={checkout} disabled={!canCheckout || menuBlocksCurrentOrder}>
+          {debugMode ? t("テスト会計を確認") : saving ? t("保存中...") : !selectedTableCheckout && !offlineCheckoutOnly && printMode === "deferred"
+            ? simpleMode ? <>{t("会計を確定")}<small>{t("あとで印刷")}</small></> : t("会計を確定・あとで印刷")
+            : t("会計を確定")}
+        </button>
+      )}
+    </div>
+  );
+
   return (
-    <main className="store-workbench-shell store-pos-page" data-pos-debug={debugMode || undefined}>
+    <main className="store-workbench-shell store-pos-page" data-pos-debug={debugMode || undefined} data-pos-simple={simpleMode || undefined} data-pos-cart-open={(simpleMode && cartOpen) || undefined}>
+      <div className="store-pos-simple-header">
+        {simpleMode ? (
+          <div className="store-pos-simple-header-main">
+            <h1>POS</h1>
+            {modeToggle}
+            {!loading && !offlineCheckoutOnly ? reconciliation.activeSession
+              ? <span className="store-pos-simple-register-status">{t("開店済み")}</span>
+              : <button className="primary-button" type="button" onClick={() => setCashDialog("open")}>{t("開店確認")}</button>
+            : null}
+          </div>
+        ) : null}
+        <details className="store-pos-simple-operations" ref={operationsRef} open={!simpleMode}>
+          <summary className="secondary-button" hidden={!simpleMode}>{t("店舗操作")}</summary>
+          <div className="store-pos-simple-operations-body">
       <header className="store-workbench-topbar">
         <a className="brand-block" href={debugMode ? "/store/pos" : "/store"} onClick={debugMode ? event => { event.preventDefault(); exitDebugMode(); } : undefined} aria-label="Foundr1 店舗">
           <div className="brand-mark">F1</div>
@@ -3128,6 +3560,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           <h2>店頭会計</h2>
         </div>
         <div className="store-pos-head-actions">
+          {!simpleMode ? modeToggle : null}
           {!debugMode ? <button className="secondary-button" type="button" onClick={() => void openTransactionDialog()} disabled={offlineCheckoutOnly}>取引履歴</button> : null}
           {debugMode && debugLoadError && !loading ? <button type="button" className="secondary-button" data-pos-debug-retry onClick={() => void load(selectedStoreId)}>{t("再試行")}</button> : null}
           <button type="button" className={`secondary-button ${menuRefreshStyles.refresh}`} data-pos-menu-refresh disabled={!selectedStoreId || menuRefreshBlocked || menuRefresh.checking} title={menuRefreshBlocked ? t("会計や処理が完了してから、メニューを更新してください。") : undefined} onClick={() => void menuRefresh.refresh()}><RefreshCw size={15} aria-hidden="true" />{t(menuRefresh.checking ? "更新確認中…" : "メニューを更新")}</button>
@@ -3135,24 +3568,16 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         </div>
       </section>
 
-      <PosMenuRefreshNotice available={menuRefresh.updateAvailable} error={menuRefresh.error} checking={menuRefresh.checking} blocked={menuRefreshBlocked} hasDraft={hasMenuDraft} onRefresh={() => void menuRefresh.refresh()} />
-
-      {message ? <div className="action-notice store-pos-notice">{message}</div> : null}
+      {!simpleMode ? menuRefreshNotice : null}
+      {!simpleMode ? pageNotice : null}
       {debugMode && debugLoadError ? <div className="inline-alert is-warning" role="alert">{t(debugLoadError)}</div> : null}
       {!debugMode ? <StoreRelayPanel relay={relay} storeId={selectedStoreId} /> : null}
       {!debugMode ? <PosPrintDocumentsPanel storeId={selectedStoreId} controller={printDocuments} requestedOrder={requestedPrintOrder} canPrint={nativePrintAvailable || relayPrintAvailable} showSummary={showPrintQueue} /> : null}
       {!debugMode ? <PosFulfillmentPanel storeId={selectedStoreId} enabled={posSettings.fulfillmentWorkspace.enabled}
         overdueMinutes={posSettings.fulfillmentWorkspace.overdueMinutes} disabled={offlineCheckoutOnly}
         checkoutRefreshKey={summary.latestOrders[0]?.id ?? ""} /> : null}
-      {offlineCheckoutOnly || offlinePendingCount > 0 ? (
-        <div className="action-notice store-pos-offline-notice" role="status">
-          <strong>{offlineCheckoutOnly ? "オフライン応急モード（現金のみ）" : "オフライン注文を同期中"}</strong>
-          <span> 未同期 {offlinePendingCount} 件</span>
-          {offlineCheckoutOnly ? <small>会員・クーポン・割引・外部決済・テーブル会計・レジ操作はオンライン復帰後に利用できます。</small> : null}
-          {browserOnline && offlinePendingCount > 0 ? <button type="button" onClick={() => void syncOfflineOrders()}>今すぐ同期</button> : null}
-          {offlineSyncError ? <small>{offlineSyncError}</small> : null}
-        </div>
-      ) : null}
+      {!simpleMode ? offlineNotice : null}
+      {simpleMode ? bowlPrintNotice : null}
 
       {!debugMode ? <section className={`store-pos-cash-strip ${reconciliation.activeSession ? "is-open" : "is-locked"}`}>
         <div>
@@ -3199,7 +3624,13 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           )}
         </div>
       </section> : null}
+          </div>
+        </details>
+      </div>
 
+      {simpleMode ? menuRefreshNotice : null}
+      {simpleMode && (!simplePaymentOpen || !checkoutNotice) ? pageNotice : null}
+      {simpleMode ? offlineNotice : null}
       <section className="store-pos-layout">
         <div className="store-pos-menu-panel">
           <aside className="store-pos-filter-panel">
@@ -3295,21 +3726,48 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           </section>
         </div>
 
-        <aside ref={cartDialogRef} className={`store-pos-cart-panel${cartOpen ? " is-open" : ""}`} role={cartOpen ? "dialog" : undefined} aria-modal={cartOpen || undefined} aria-label="会計内容">
+        <aside id="store-pos-cart" ref={cartDialogRef} className={`store-pos-cart-panel${cartOpen ? " is-open" : ""}`} role={cartOpen ? "dialog" : undefined} aria-modal={cartOpen || undefined} aria-label="会計内容">
           {cartOpen ? <ModalHistoryScope historyKey="store-pos-cart" onClose={() => setCartOpen(false)}><span /></ModalHistoryScope> : null}
           {debugMode ? <PosDebugBanner compact onExit={exitDebugMode} /> : null}
           <button className="secondary-button store-pos-cart-back" type="button" onClick={() => setCartOpen(false)}>商品選択に戻る</button>
           <div className="store-pos-cart-head">
             <div>
               <p className="eyebrow">Cart</p>
-              <h3>会計内容</h3>
+              <h3>{simpleMode && simplePaymentOpen ? t(simpleCheckoutComplete ? "会計完了" : "お支払い") : t("会計内容")}</h3>
             </div>
-            <div className="store-pos-cart-head-actions">
-              <strong>{cartCount} 点</strong>
-            </div>
+            {simpleMode && simplePaymentOpen && !simpleCheckoutComplete ? (
+              <button className="secondary-button" type="button" disabled={saving} onClick={returnToSimpleOrder}>{t("注文に戻る")}</button>
+            ) : null}
+            {!simpleCheckoutComplete ? (
+              <div className="store-pos-cart-head-actions">
+                <strong>{cartCount} 点</strong>
+              </div>
+            ) : null}
           </div>
 
-          <PosMenuRefreshNotice available={menuRefresh.updateAvailable} error={menuRefresh.error} checking={menuRefresh.checking} blocked={menuRefreshBlocked} hasDraft={hasMenuDraft} onRefresh={() => void menuRefresh.refresh()} />
+          {simpleMode && !simplePaymentOpen ? (
+            <div className="store-pos-simple-cart-tools">
+              <button className="secondary-button" type="button" data-pos-simple-promotions data-pos-promotion-state={campaignShortcutState}
+                aria-expanded={simpleCartTool === "promotions"} aria-controls="pos-simple-promotions" onClick={() => toggleSimpleCartTool("promotions")}>
+                <Gift size={18} aria-hidden="true" /><span>{t("キャンペーン")}</span>
+                {campaignShortcutState ? <strong aria-live="polite">{t(campaignShortcutState === "select" ? "特典を選択" : "適用中")}</strong> : null}
+              </button>
+              <button className="secondary-button" type="button" aria-expanded={simpleCartTool === "member"} aria-controls="pos-simple-member" onClick={() => toggleSimpleCartTool("member")}>
+                <UserRound size={18} aria-hidden="true" /> {t("会員・クーポン")}{couponDiscountAmount > 0 ? <strong>-{formatYen(couponDiscountAmount)}</strong> : null}
+              </button>
+            </div>
+          ) : null}
+          <div ref={cartScrollRef} className="store-pos-simple-cart-scroll">
+          {(!simpleMode || cartOpen) ? menuRefreshNotice : null}
+          {simpleMode ? recoveryPanel : null}
+          {simpleMode && hasBowlChoice && bowlEvaluation.errors.length ? <p className="store-pos-error" role="alert">{t(bowlEvaluation.errors[0])}</p> : null}
+          <div className="store-pos-simple-order-view" hidden={simpleMode && simplePaymentOpen}>
+          {simpleMode ? (
+            <>
+              <div className="store-pos-simple-cart-tool" id="pos-simple-promotions" hidden={simpleCartTool !== "promotions"}>{campaignPanel}</div>
+              <div className="store-pos-simple-cart-tool" id="pos-simple-member" hidden={simpleCartTool !== "member"}>{memberPanel}</div>
+            </>
+          ) : null}
           {!debugMode && tableCheckoutRequests.length ? (
             <section className="store-pos-table-checkout-panel" aria-label="テーブル会計待ち">
               <div className="store-pos-table-checkout-head">
@@ -3350,29 +3808,8 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
             ))}
           </div>
 
-          {!debugMode && !selectedTableCheckout && cart.some(isPosBowl) ? (
-            <div className="inline-alert">1杯ごとに厨房伝票→出品伝票→お客様番号札の順で同じ受付番号を印刷します。最後に会計ごとのレシートを1枚印刷します。</div>
-          ) : null}
-          {checkoutRecovery.filter((record) => record.storeId === selectedStoreId).map((record) => (
-            <div className="inline-alert is-warning" key={record.storeId}>
-              <p>未確認の会計があります。新しい会計を作成せず、元の会計結果を確認してください。</p>
-              <button className="secondary-button" type="button" disabled={saving || printBusy} onClick={() => void recoverCheckout(record)}>元の会計結果を確認</button>
-              <button className="secondary-button" type="button" disabled={saving || printBusy} onClick={() => void abandonCheckout(record)}>未保存の場合だけ無効化</button>
-            </div>
-          ))}
-          {reprintOrderId && !printJobs.some((job) => job.orderId === reprintOrderId) ? <div className="inline-alert is-warning">この端末の印刷記録を確認できません。元のレジ端末で伝票を確認してください。</div> : null}
-          {(showPrintQueue || reprintOrderId) && printJobs.some((job) => job.storeId === selectedStoreId) ? (
-            <details id="pos-print-documents" className="procedure-reference-disclosure store-pos-print-documents" open={Boolean(reprintOrderId) || printJobs.some((job) => job.storeId === selectedStoreId && job.state !== "sent")}>
-              <summary>伝票の送信状況・再印刷</summary>
-              <p>送信済みでも実際の印刷を確認してください。結果不明の伝票は現物を確認してから同じ番号で再印刷します。</p>
-              {printJobs.filter((job) => job.storeId === selectedStoreId && job.state !== "sent").concat(printJobs.filter((job) => job.storeId === selectedStoreId && job.state === "sent" && (!reprintOrderId || job.orderId === reprintOrderId)).slice(reprintOrderId ? 0 : -10)).map((job) => (
-                <div className="store-pos-cart-row" key={job.id}>
-                  <span>{job.label} / {job.state === "sent" ? "送信済み" : job.state === "pending" ? "未送信" : "要確認"}{job.error ? ` / ${job.error}` : ""}</span>
-                  <button className="secondary-button" type="button" disabled={saving || printBusy} onClick={() => void retryPrintJob(job)}>同じ番号で再印刷</button>
-                </div>
-              ))}
-            </details>
-          ) : null}
+          {!simpleMode ? bowlPrintNotice : null}
+          {!simpleMode ? recoveryPanel : null}
 
           <div className="store-pos-cart-list">
             {selectedTableCheckout ? (
@@ -3456,8 +3893,8 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                   {getWeightLineLabel(item) ? <small>{getWeightLineLabel(item)}</small> : null}
                   {item.weightMeasurement?.mode === 'preset' ? <small>{t(item.weightMeasurement.tarePresetId === 'small' ? 'ボウル（小）' : 'ボウル（大）')} −{item.weightMeasurement.tareGrams} g · {t('総重量')} {item.weightMeasurement.grossGrams} g</small> : item.weightMeasurement?.mode === 'manual_net' && item.measuredQuantity ? <small>{t('正味重量を手入力')}</small> : null}
                   {item.selectedOptions.length ? <small>{getOptionLabel(item.selectedOptions)}</small> : null}
-                  {isPosBowl(item) ? <label className="store-pos-bowl-note"><span>この杯の厨房メモ</span><input value={item.preparationNote || ""} maxLength={300} disabled={saving} onChange={(event) => setCart((current) => current.map((entry) => entry.cartKey === item.cartKey ? { ...entry, preparationNote: event.target.value } : entry))} /></label> : null}
-                  {isPosBowl(item)?<PosBowlBenefitPicker rules={posSettings.discountPresets} gifts={giftCatalog} now={discountNow} disabled={saving||offlineCheckoutOnly} line={{...item,amount:getCartItemAmount(item),isBowl:true,choice:item.bowlBenefit}} applied={bowlEvaluation.applications.find(a=>a.index===itemIndex)} onChange={value=>setCart(current=>current.map(entry=>entry.cartKey===item.cartKey?{...entry,bowlBenefit:value}:entry))}/>:null}
+                  {isPosBowl(item) ? renderBowlNote(item) : null}
+                  {!simpleMode && isPosBowl(item) ? renderBowlBenefit(item, itemIndex) : null}
                   <span>{formatYen(getLineUnitPrice(item))}{item.measuredQuantity ? "" : ` x ${item.quantity}`}</span>
                 </div>
                 <div className="store-pos-quantity">
@@ -3474,167 +3911,18 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
             ))}
           </div>
 
-          {!debugMode ? <div className={selectedMember ? "store-pos-member-panel is-linked" : "store-pos-member-panel"}>
-            <div className="store-pos-member-title">
-              <div>
-                <UserRound size={16} />
-                <span>会員</span>
-              </div>
-              {selectedMember ? (
-                <button type="button" onClick={clearSelectedMember} aria-label="会員を解除">
-                  <X size={14} />
-                </button>
-              ) : null}
-            </div>
-            {offlineCheckoutOnly ? (
-              <small className="store-pos-member-empty-coupon">オフライン中は会員証・クーポンを利用できません。</small>
-            ) : selectedMember ? (
-              <>
-                <div className="store-pos-member-card">
-                  <strong>{selectedMember.displayName || selectedMember.email || selectedMember.memberNumber}</strong>
-                  <span>{selectedMember.memberNumber} / {selectedMember.pointBalance.toLocaleString("ja-JP")} pt</span>
-                </div>
-                {memberCoupons.length ? (
-                  <div className="store-pos-coupon-panel">
-                    <div className="store-pos-coupon-head">
-                      <span><Gift size={14} /> 利用可能クーポン</span>
-                      {shouldShowRecommendedCoupon && recommendedCoupon ? (
-                        <button type="button" onClick={() => setSelectedCouponId(recommendedCoupon.id)}>
-                          おすすめを適用
-                        </button>
-                      ) : null}
-                    </div>
-                    {shouldShowRecommendedCoupon && recommendedCoupon ? (
-                      <p className="store-pos-coupon-recommend">
-                        {recommendedCouponExpiringSoon && recommendedCouponExpiryLabel
-                          ? `${recommendedCoupon.name} は ${recommendedCouponExpiryLabel} です。有効期限が近いため優先利用を案内してください。`
-                          : `${recommendedCoupon.name} の方が ${formatYen(Math.max(0, recommendedCouponDiscountAmount - selectedCouponDiscountAmount))} お得です。`}
-                      </p>
-                    ) : null}
-                    <div className="store-pos-coupon-list">
-                      {memberCoupons.map((coupon) => {
-                        const discount = getCouponDiscountAmount(coupon, subtotal, getExchangeEligibleBodyAmounts(coupon));
-                        const isSelected = selectedCouponId === coupon.id;
-                        const isRecommended = recommendedCoupon?.id === coupon.id && discount > 0;
-                        const isCustomerSelected = customerSelectedCouponId === coupon.id;
-                        const isUnavailable = couponBlockedByDiscount || (subtotal > 0 && discount <= 0);
-                        const expiryLabel = getCouponExpiryLabel(coupon);
-                        const expiringSoon = isCouponExpiringSoon(coupon);
-                        const couponBadges = [
-                          couponBlockedByDiscount ? "割引中は併用不可" : "",
-                          isCustomerSelected ? "客さま選択済み" : "",
-                          expiringSoon && expiryLabel ? `期限優先 ${expiryLabel}` : expiryLabel ? `期限 ${expiryLabel}` : "",
-                          isRecommended ? "おすすめ" : ""
-                        ].filter(Boolean);
-                        return (
-                          <button
-                            key={coupon.id}
-                            className={[
-                              "store-pos-coupon-choice",
-                              isSelected ? "is-selected" : "",
-                              isCustomerSelected ? "is-customer-selected" : "",
-                              isRecommended ? "is-recommended" : ""
-                            ].filter(Boolean).join(" ")}
-                            type="button"
-                            disabled={isUnavailable}
-                            onClick={() => setSelectedCouponId((current) => current === coupon.id ? "" : coupon.id)}
-                          >
-                            <span>
-                              <strong>{coupon.name}</strong>
-                              <small>{getCouponScopeLabel(coupon)} / {coupon.couponCode} / {getCouponValueLabel(coupon)}{couponBadges.length ? ` / ${couponBadges.join(" / ")}` : ""}</small>
-                            </span>
-                            <b>{getCouponPosStatusLabel(coupon, discount, subtotal)}</b>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <small className="store-pos-member-empty-coupon">利用可能クーポンはありません。</small>
-                )}
-              </>
-            ) : (
-              <div className="store-pos-member-lookup-wrap">
-                <div className="store-pos-member-lookup">
-                  <ScanLine size={16} />
-                  <input
-                    value={memberLookupInput}
-                    onChange={(event) => setMemberLookupInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void lookupMember();
-                      }
-                    }}
-                    placeholder="会員番号 / 電話番号 / メール / QR"
-                    inputMode="text"
-                  />
-                  <button className="secondary-button" type="button" onClick={() => void lookupMember()} disabled={!memberLookupInput.trim() || memberLookupLoading}>
-                    {memberLookupLoading ? "確認中" : "確認"}
-                  </button>
-                  <button className="secondary-button store-pos-member-scan-button" type="button" onClick={() => setMemberScannerOpen(true)}>
-                    <Camera size={15} />
-                    POS背面
-                  </button>
-                  <button className="secondary-button store-pos-member-scan-button" type="button" onClick={() => void openCustomerDisplayMemberScanner()} disabled={!selectedStoreId || customerDisplayScannerLoading}>
-                    <ScanLine size={15} />
-                    客席表示前面
-                  </button>
-                </div>
-                <small>POS 本体または客席表示の前面カメラで会員 QR を読み取れます。</small>
-              </div>
-            )}
-          </div> : null}
+          {!simpleMode ? memberPanel : null}
 
-          <label className="store-pos-note">
-            <span>会計全体の厨房メモ（全杯に適用）</span>
-            <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="任意" />
-          </label>
+          {simpleMode ? <details className="store-pos-simple-note"><summary>{t("厨房メモ")}</summary>{kitchenNote}</details> : kitchenNote}
+          {simpleMode ? <button className="danger-text-button store-pos-simple-cancel" type="button" onClick={cancelCurrentTransaction} disabled={!hasCurrentTransaction || saving}>{t("会計を中止")}</button> : null}
 
-          {hasBowlChoice&&bowlEvaluation.errors.length?<p className="store-pos-error" role="alert">{t(bowlEvaluation.errors[0])}</p>:null}
-          <div className="store-pos-discount-panel">
-            <span>割引</span>
-            {enabledDiscountPresets.length ? enabledDiscountPresets.map((preset) => {
-              const discount = getPosDiscountAmount(preset, cart, subtotal);
-              const isActive = discountPresetKey === preset.key;
-              return (
-                <button
-                  key={preset.key}
-                  className={isActive ? "is-active" : ""}
-                  type="button"
-                  disabled={offlineCheckoutOnly || (subtotal > 0 && discount <= 0)}
-                  onClick={() => {
-                    setDiscountPresetKey((current) => current === preset.key ? "" : preset.key);
-                    if (!preset.allowCouponCombination) setSelectedCouponId("");
-                  }}
-                >
-                  {preset.name}
-                  {discount > 0 ? ` -${formatYen(discount)}` : ""}
-                </button>
-              );
-            }) : <small>設定済みの割引はありません。</small>}
-            {selectedDiscountPreset?.applicationMode === "campaign" && posDiscountAmount > 0 ? (
-              <div className="store-pos-campaign-applied" role="status" data-pos-campaign-applied>
-                <span>{hasBowlChoice ? t("適用中の特典") : t("キャンペーン自動適用")}</span>
-                <strong>{selectedDiscountPreset.name} -{formatYen(posDiscountAmount)}</strong>
-                <small>{t("同じ商品に特典を重ねず、よりお得な方を適用しています。")}</small>
-              </div>
-            ) : null}
-            {!posDiscountAmount && !selectedTableCheckout ? posSettings.discountPresets.filter(preset => preset.campaignBasis!=="bowl_choice" && isPosCampaignActive(preset, discountNow) && (preset.minimumSubtotal ?? 0) > subtotal && getPosDiscountAmount(preset, cart, subtotal) > 0).sort((a,b) => (a.minimumSubtotal ?? 0) - (b.minimumSubtotal ?? 0)).slice(0, 1).map(preset => (
-              <small key={preset.key}>キャンペーン「{preset.name}」は商品小計{formatYen(preset.minimumSubtotal ?? 0)}から適用</small>
-            )) : null}
-            {offlineCheckoutOnly ? (
-              <small>オフライン中は割引・キャンペーンを利用できません。適用中の場合は接続を確認してください。</small>
-            ) : selectedDiscountPreset ? (
-              <small>
-                {getDiscountTargetLabel(selectedDiscountPreset)}
-                {selectedDiscountPreset.allowCouponCombination ? " / クーポン併用可" : " / クーポン併用不可"}
-                {selectedDiscountPreset.stampEligible ? " / スタンプ対象" : " / スタンプ対象外"}
-              </small>
-            ) : null}
+          {!simpleMode && hasBowlChoice && bowlEvaluation.errors.length ? <p className="store-pos-error" role="alert">{t(bowlEvaluation.errors[0])}</p> : null}
+          {!simpleMode ? discountPanel : null}
           </div>
 
-          <div className="store-pos-payment-grid" id="store-pos-payment-section" ref={checkoutSectionRef}>
+          <div className="store-pos-simple-payment-view" hidden={simpleMode && (!simplePaymentOpen || simpleCheckoutComplete)}>
+
+          <div className={simpleMode ? `store-pos-payment-grid ${checkoutStyles.simplePayment}` : "store-pos-payment-grid"} id="store-pos-payment-section" ref={checkoutSectionRef}>
             {paymentOptions.map((option) => {
               const Icon = option.icon;
               return (
@@ -3642,26 +3930,27 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                   key={option.value}
                   className={paymentMethod === option.value ? "is-active" : ""}
                   type="button"
+                  aria-pressed={paymentMethod === option.value}
                   disabled={offlineCheckoutOnly && option.value !== "cash"}
                   onClick={() => setPaymentMethod(option.value)}
                   title={offlineCheckoutOnly && option.value !== "cash" ? "オフライン中は現金のみ利用できます" : undefined}
                 >
-                  <Icon size={18} />
-                  {option.value === "card" ? getPaymentDisplayLabel(option.value) : option.label}
+                  <Icon size={18} aria-hidden="true" />
+                  <span>{option.value === "card" ? getPaymentDisplayLabel(option.value) : option.label}</span>
                 </button>
               );
             })}
           </div>
 
           {paymentMethod !== "cash" ? (
-            <div className="store-pos-external-payment">
+            <div className={simpleMode ? `store-pos-external-payment ${checkoutStyles.simpleExternalPayment}` : "store-pos-external-payment"}>
               <span>{getPaymentDisplayLabel(paymentMethod)}</span>
               <strong>{debugMode ? t("支払方法のテストです。決済端末では操作しないでください。") : "端末の決済完了画面を確認してから会計を確定してください。"}</strong>
             </div>
           ) : null}
 
           {paymentMethod === "cash" ? (
-            <div className="store-pos-cash-payment">
+            <div className={simpleMode ? `store-pos-cash-payment ${checkoutStyles.simpleCash}` : "store-pos-cash-payment"}>
               <label>
                 <span>お預かり</span>
                 <input
@@ -3679,7 +3968,13 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
             </div>
           ) : null}
 
-          <div className="store-pos-total">
+          {campaignGifts.length ? (
+            <div className="store-pos-simple-payment-gifts" data-pos-campaign-gifts>
+              <strong>{t("プレゼント")}</strong>
+              <span>{campaignGifts.map(gift => gift.name).join(" / ")} · {formatYen(0)}</span>
+            </div>
+          ) : null}
+          <div className={simpleMode ? `store-pos-total ${checkoutStyles.simpleTotals}` : "store-pos-total"}>
             {selectedTableCheckout ? (
               <>
                 <span>QR追加会計</span>
@@ -3689,7 +3984,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
               </>
             ) : (
               <>
-                <span>{posSettings.priceTaxMode === "tax_excluded" ? "小計" : "合計"}</span>
+                <span>{simpleMode || posSettings.priceTaxMode === "tax_excluded" ? "小計" : "合計"}</span>
                 <strong>{formatYen(subtotal)}</strong>
                 {posDiscountAmount ? (
                   <>
@@ -3709,7 +4004,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                     <strong className="is-tax">{formatYen(taxSummary.taxAmount)}</strong>
                   </>
                 ) : null}
-                {posSettings.priceTaxMode === "tax_excluded" || posDiscountAmount || couponDiscountAmount ? (
+                {!simpleMode && (posSettings.priceTaxMode === "tax_excluded" || posDiscountAmount || couponDiscountAmount) ? (
                   <>
                     <span>お会計</span>
                     <strong>{formatYen(payableAmount)}</strong>
@@ -3718,35 +4013,42 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
               </>
             )}
           </div>
-          <div className={`store-pos-checkout-actions ${checkoutStyles.actions}`}>
-          {!debugMode ? <fieldset className={checkoutStyles.receiptChoice} disabled={saving}>
-            <legend><span>{t('お客様用の書類')}</span><strong data-pos-footer-total>{t('合計')} {formatYen(activeCheckoutAmount)}</strong></legend>
-            <div className={checkoutStyles.receiptButtons}>
-              <button type="button" className={!receiptRequested ? 'secondary-button is-active' : 'secondary-button'} data-pos-receipt-choice="receipt" aria-pressed={!receiptRequested} onClick={() => setReceiptRequested(false)}>{t('レシート')}</button>
-              <button type="button" className={receiptRequested ? 'secondary-button is-active' : 'secondary-button'} data-pos-receipt-choice="invoice" aria-pressed={receiptRequested} onClick={() => setReceiptRequested(true)}>{t('領収書')}</button>
-            </div>
-            {receiptRequested ? <div className={checkoutStyles.invoiceFields}>
-              <label>{t('宛名（敬称不要）')}<input data-pos-invoice-recipient value={invoiceRecipient} maxLength={120} placeholder={t('空欄の場合は上様')} onChange={event => setInvoiceRecipient(event.target.value)} /></label>
-              <label>{t('但し書き')}<input data-pos-invoice-purpose value={invoicePurpose} maxLength={160} onChange={event => setInvoicePurpose(event.target.value)} /></label>
-            </div> : null}
-          </fieldset> : null}
-            {!debugMode && !selectedTableCheckout && !offlineCheckoutOnly ? <label className={checkoutStyles.printMode}><span>{t("伝票の印刷")}</span><select data-pos-print-mode value={printMode} disabled={saving} onChange={event => setPrintModeChoice(event.target.value as PosPrintMode)}>
-              <option value="auto" disabled={!canAutoPrint}>{t("印刷する")}</option><option value="deferred">{t("あとで印刷")}</option><option value="none">{t("印刷しない")}</option>
-            </select></label> : null}
-            {checkoutNotice ? (
-              <div className={`${checkoutStyles.notice} ${checkoutNotice.kind === "error" ? checkoutStyles.error : checkoutStyles.success}`} role={checkoutNotice.kind === "error" ? "alert" : "status"}>
-                <span>{t(checkoutNotice.text)}{checkoutNotice.kind === "success" && lastPaidPrintOrderId ? <button type="button" className={checkoutStyles.viewPrint} data-print-paid-open onClick={() => { setCartOpen(false); setRequestedPrintOrder({ id: lastPaidPrintOrderId, request: Date.now() }); }}>{t("伝票を確認")}</button> : null}</span>
-                <button type="button" aria-label={t("閉じる")} onClick={() => setCheckoutNotice(null)}><X size={16} /></button>
+          <div className={`store-pos-checkout-actions ${checkoutStyles.actions}${simpleMode ? ` ${checkoutStyles.simpleActions}` : ""}`}>
+            {!debugMode ? (
+              <div className={checkoutStyles.documentOptions}>
+                <fieldset className={checkoutStyles.receiptChoice} disabled={saving}>
+                  <legend><span>{t('お客様用の書類')}</span>{!simpleMode ? <strong data-pos-footer-total>{t('合計')} {formatYen(activeCheckoutAmount)}</strong> : null}</legend>
+                  <div className={checkoutStyles.receiptButtons}>
+                    <button type="button" className={!receiptRequested ? 'secondary-button is-active' : 'secondary-button'} data-pos-receipt-choice="receipt" aria-pressed={!receiptRequested} onClick={() => setReceiptRequested(false)}>{t('レシート')}</button>
+                    <button type="button" className={receiptRequested ? 'secondary-button is-active' : 'secondary-button'} data-pos-receipt-choice="invoice" aria-pressed={receiptRequested} onClick={() => setReceiptRequested(true)}>{t('領収書')}</button>
+                  </div>
+                  {receiptRequested ? <div className={checkoutStyles.invoiceFields}>
+                    <label>{t('宛名（敬称不要）')}<input data-pos-invoice-recipient value={invoiceRecipient} maxLength={120} placeholder={t('空欄の場合は上様')} onChange={event => setInvoiceRecipient(event.target.value)} /></label>
+                    <label>{t('但し書き')}<input data-pos-invoice-purpose value={invoicePurpose} maxLength={160} onChange={event => setInvoicePurpose(event.target.value)} /></label>
+                  </div> : null}
+                </fieldset>
+                {!selectedTableCheckout && !offlineCheckoutOnly ? <label className={checkoutStyles.printMode}><span>{t("伝票の印刷")}</span><select data-pos-print-mode value={printMode} disabled={saving} onChange={event => setPrintModeChoice(event.target.value as PosPrintMode)}>
+                  <option value="auto" disabled={!canAutoPrint}>{t("印刷する")}</option><option value="deferred">{t("あとで印刷")}</option><option value="none">{t("印刷しない")}</option>
+                </select></label> : null}
               </div>
             ) : null}
-            <button className="danger-button store-pos-cancel-transaction" type="button" onClick={cancelCurrentTransaction} disabled={!hasCurrentTransaction || saving}>
-              会計を中止
-            </button>
-            <button className="primary-button store-pos-checkout" data-pos-debug-checkout={debugMode || undefined} type="button" onClick={checkout} disabled={!canCheckout || menuBlocksCurrentOrder}>
-              {debugMode ? t("テスト会計を確認") : saving ? "保存中..." : !selectedTableCheckout && !offlineCheckoutOnly && printMode === "deferred" ? "会計を確定・あとで印刷" : "会計を確定"}
-            </button>
+            {!simpleMode ? paymentActions : null}
           </div>
           {debugMode && debugResult ? <PosDebugResultPreview result={debugResult} onClear={() => setDebugResult(null)} /> : null}
+          </div>
+          </div>
+          {simpleMode && simplePaymentOpen ? (
+            <div className={`${checkoutStyles.actions} ${checkoutStyles.simpleActions}`}>{paymentActions}</div>
+          ) : null}
+          {simpleMode && !simplePaymentOpen ? (
+            <div className="store-pos-simple-checkout-bar">
+              <div><span>{t("合計")}</span><strong>{formatYen(activeCheckoutAmount)}</strong></div>
+              <button className="primary-button" type="button" aria-controls="store-pos-payment-section" onClick={openSimplePayment}
+                disabled={saving || (!cart.length && !selectedTableCheckout)}>
+                <ShoppingCart size={20} aria-hidden="true" /> {t("会計へ")}
+              </button>
+            </div>
+          ) : null}
         </aside>
       </section>
 
@@ -3759,12 +4061,12 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           <button
             className="primary-button"
             type="button"
-            aria-controls="store-pos-payment-section"
+            aria-controls={simpleMode ? "store-pos-cart" : "store-pos-payment-section"}
             onClick={revealCheckoutSection}
             disabled={saving}
           >
             <ShoppingCart size={18} />
-            会計へ
+            {simpleMode ? t("会計内容") : "会計へ"}
           </button>
         </aside>
       </>
