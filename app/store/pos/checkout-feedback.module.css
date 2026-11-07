@@ -56,8 +56,8 @@
 .viewPrint { display: block; margin-top: 6px; min-height: 30px; padding: 4px 0; border: 0; background: transparent; color: inherit; font-size: 12px; text-decoration: underline; }
 
 .actions { grid-template-columns: minmax(100px,.75fr) minmax(140px,1.25fr); }
-.actions > button { white-space: normal; word-break: keep-all; overflow-wrap: normal; padding-inline: 10px; }
-.actions > :global(.store-pos-checkout) { grid-column: 2; }
+.actions:not(.simpleActions) .actionButtons > button { white-space: normal; word-break: keep-all; overflow-wrap: normal; padding-inline: 10px; }
+.actions:not(.simpleActions) .actionButtons > :global(.store-pos-checkout) { grid-column: 2; }
 .receiptChoice { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 10px 0; border: 0; border-top: 1px solid var(--line); }
 .receiptChoice legend { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; font-size: 12px; color: var(--muted); }
 .receiptChoice legend strong { color: var(--ink); font-size: 15px; white-space: nowrap; }
@@ -67,3 +67,223 @@
 .invoiceFields { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; }
 .invoiceFields label { display: grid; gap: 4px; min-width: 0; font-size: 12px; }
 .invoiceFields input { width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: var(--panel, white); color: var(--ink); }
+
+.documentOptions,
+.actionButtons {
+  display: contents;
+}
+
+.simplePayment:global(.store-pos-payment-grid) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.simplePayment:global(.store-pos-payment-grid) button {
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 6px 4px;
+  font-size: 16px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.simplePayment button svg {
+  flex-shrink: 0;
+}
+
+.simpleCash:global(.store-pos-cash-payment) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.simpleCash:global(.store-pos-cash-payment) label,
+.simpleCash:global(.store-pos-cash-payment) > div {
+  align-content: start;
+  gap: 4px;
+  padding: 8px;
+}
+
+:global(.store-pos-simple-cart-scroll) .simpleCash:global(.store-pos-cash-payment) label input {
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding-inline: 6px;
+  background: var(--panel);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.simpleCash:global(.store-pos-cash-payment) strong {
+  display: grid;
+  align-content: center;
+  min-height: 48px;
+  overflow-wrap: anywhere;
+}
+
+.simpleCash:global(.store-pos-cash-payment) span,
+.simpleCash:global(.store-pos-cash-payment) small,
+.simpleTotals:global(.store-pos-total) span,
+.simpleExternalPayment:global(.store-pos-external-payment) {
+  font-size: 16px;
+}
+
+.simpleCash:global(.store-pos-cash-payment) strong,
+.simpleFooterTotal strong {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.simpleActions.actions {
+  display: contents;
+}
+
+.simpleActions .documentOptions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+  gap: 8px;
+  align-items: start;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  font-size: 15px;
+}
+
+.simpleActions .receiptChoice {
+  grid-column: auto;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.simpleActions .receiptChoice legend {
+  margin-bottom: 4px;
+  padding: 0;
+  color: var(--ink);
+  font-size: inherit;
+}
+
+.simpleActions .receiptChoice:has(.invoiceFields) {
+  grid-column: 1 / -1;
+}
+
+.simpleActions .receiptButtons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.simpleActions .receiptButtons button {
+  min-height: 48px;
+  padding: 4px 2px;
+  font-size: 15px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.simpleActions .receiptButtons button[aria-pressed="true"] {
+  border-color: var(--store-primary-border, var(--green));
+  background: var(--store-primary-soft, var(--green-soft));
+  color: var(--store-primary-text, var(--green));
+}
+
+.simpleActions .invoiceFields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(132px, 100%), 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.simpleActions .invoiceFields label,
+.simpleActions .printMode {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--ink);
+  font-size: inherit;
+}
+
+.simpleActions .printMode {
+  grid-column: auto;
+  justify-content: stretch;
+}
+
+:global(.store-pos-simple-cart-scroll) .simpleActions .documentOptions :is(.invoiceFields input, .printMode select) {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 6px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+
+.simpleActions .actionButtons {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 6px 8px;
+  border-top: 1px solid var(--line);
+  padding: 6px 0;
+  background: var(--panel);
+}
+
+.simpleFooterTotal {
+  grid-column: 1;
+  display: grid;
+  min-width: 0;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.simpleFooterTotal strong {
+  overflow-wrap: anywhere;
+}
+
+.simpleActions .actionButtons > :global(.store-pos-checkout) {
+  grid-column: 2;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: 56px;
+  padding: 6px;
+  font-size: 18px;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.simpleActions .notice {
+  grid-row: 1;
+  align-items: center;
+  font-size: 15px;
+}
+
+.simpleActions .notice > span {
+  max-height: none;
+  overflow: visible;
+}
+
+.simpleActions .notice > button,
+.simpleActions .viewPrint {
+  min-height: 48px;
+}
+
+.simpleActions .notice > button {
+  flex-basis: 48px;
+}
+
+.simpleActions .viewPrint {
+  display: block;
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 650;
+}

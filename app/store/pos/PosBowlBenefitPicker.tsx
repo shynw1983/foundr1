@@ -2,13 +2,14 @@
 import { isPosCampaignActive, type PosDiscountRule } from "../../../lib/pos-discount-campaigns";
 import {resolvePosBowlChoice,posBowlEligible,posGiftAllowed,type PosBowlChoice,type PosBowlLine,type PosGiftItem,type PosBowlApplication} from "../../../lib/pos-bowl-benefits";
 import {useOsTranslation} from "../../os/components/OsTranslationProvider";
-export function PosBowlBenefitPicker({rules,line,gifts,now,disabled,onChange,applied}:{rules:PosDiscountRule[];line:PosBowlLine;gifts:PosGiftItem[];now:number;disabled:boolean;onChange:(value:PosBowlChoice|undefined)=>void;applied?:PosBowlApplication}) {
+export function PosBowlBenefitPicker({rules,line,gifts,now,disabled,onChange,applied,compact}:{rules:PosDiscountRule[];line:PosBowlLine;gifts:PosGiftItem[];now:number;disabled:boolean;onChange:(value:PosBowlChoice|undefined)=>void;applied?:PosBowlApplication;compact?:boolean}) {
  const {t}=useOsTranslation();const active=rules.filter(r=>r.campaignBasis==='bowl_choice'&&isPosCampaignActive(r,now));
  const effective=resolvePosBowlChoice(rules,line,now), defaultChoice=resolvePosBowlChoice(rules,{...line,choice:undefined},now);
  const clear=()=>onChange(defaultChoice?{campaignKey:defaultChoice.campaignKey,kind:'none'}:undefined);
- if(!active.length&&!line.choice)return null;
+ const visibleRules=compact?active.filter(rule=>posBowlEligible(rule,line,now)||line.choice?.campaignKey===rule.key):active;
+ if(!visibleRules.length&&!line.choice)return null;
  return <div className="store-pos-bowl-benefits" data-pos-bowl-benefits>
-  {active.map(rule=>{const eligible=posBowlEligible(rule,line,now),selected=effective?.campaignKey===rule.key&&effective.kind!=='none'?effective:undefined,allowed=gifts.filter(g=>posGiftAllowed(rule,g));return <div key={rule.key}>
+  {visibleRules.map(rule=>{const eligible=posBowlEligible(rule,line,now),selected=effective?.campaignKey===rule.key&&effective.kind!=='none'?effective:undefined,allowed=gifts.filter(g=>posGiftAllowed(rule,g));return <div key={rule.key}>
    <small>{rule.name} · {t('1杯')} ¥{rule.minimumSubtotal?.toLocaleString('ja-JP')}〜{!eligible?` · ${t('対象金額未満・通常価格')}`:''}</small>
    {eligible?<div className="store-pos-bowl-benefit-actions">{rule.bowlBenefitMode!=="gift_only"?<button type="button" data-pos-bowl-discount aria-pressed={selected?.kind==='discount'} disabled={disabled} onClick={()=>selected?.kind==='discount'?clear():onChange({campaignKey:rule.key,kind:'discount'})}>{t('割引')} {rule.discountType==='percent'?`${rule.discountValue}%`:`¥${rule.discountValue}`}</button>:null}
     {rule.bowlBenefitMode!=="discount_only"?<button type="button" data-pos-bowl-gift aria-pressed={selected?.kind==='gift'} disabled={disabled||!allowed.length} onClick={()=>selected?.kind==='gift'?clear():onChange({campaignKey:rule.key,kind:'gift'})}>{rule.giftButtonLabel||t('プレゼント')}</button>:null}
