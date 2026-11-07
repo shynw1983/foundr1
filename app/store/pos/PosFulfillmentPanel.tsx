@@ -15,6 +15,7 @@ export type PosFulfillmentPanelProps = {
   disabled?: boolean;
   overdueMinutes?: number;
   checkoutRefreshKey?: string | number;
+  simpleMode?: boolean;
   prepareAction?: (payload: Record<string, unknown>) => Promise<PosOperatorProof | null | undefined>;
 };
 
@@ -25,14 +26,14 @@ function parseTime(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export function PosFulfillmentPanel({ storeId, enabled, disabled = false, overdueMinutes = 15, checkoutRefreshKey, prepareAction }: PosFulfillmentPanelProps) {
+export function PosFulfillmentPanel({ storeId, enabled, disabled = false, overdueMinutes = 15, checkoutRefreshKey, prepareAction, simpleMode = false }: PosFulfillmentPanelProps) {
   const { t } = useOsTranslation();
   const queue = usePosFulfillmentQueue({ storeId, enabled, disabled, refreshKey: checkoutRefreshKey, prepareAction });
   const [expanded, setExpanded] = useState(false);
   const [wide, setWide] = useState(false);
   const [preferredSide, setPreferredSide] = useState(false);
   const [now, setNow] = useState(Date.now());
-  const pinned = enabled && wide && preferredSide;
+  const pinned = !simpleMode && enabled && wide && preferredSide;
   const drawerOpen = enabled && expanded && !pinned;
   const dialogRef = useStoreDialog(drawerOpen, () => setExpanded(false));
 
@@ -124,7 +125,7 @@ export function PosFulfillmentPanel({ storeId, enabled, disabled = false, overdu
     <header className={styles.boardHeader}>
       <div><h3 id="store-pos-fulfillment-title">{t("提供状況")}</h3><p>{t("できあがったら呼び出し、実際にお渡ししたら完了にします。")}</p></div>
       <div className={styles.headerActions}>
-        {wide ? <button className="secondary-button" type="button" onClick={toggleSide} title={t(pinned ? "常駐表示を解除" : "この端末で常駐表示")} aria-label={t(pinned ? "常駐表示を解除" : "この端末で常駐表示")}>
+        {wide && !simpleMode ? <button className="secondary-button" type="button" onClick={toggleSide} title={t(pinned ? "常駐表示を解除" : "この端末で常駐表示")} aria-label={t(pinned ? "常駐表示を解除" : "この端末で常駐表示")}>
           {pinned ? <PanelRightClose size={19} aria-hidden="true" /> : <PanelRightOpen size={19} aria-hidden="true" />}
         </button> : null}
         {!pinned ? <button className="secondary-button" type="button" onClick={() => setExpanded(false)} aria-label={t("閉じる")}><X size={20} aria-hidden="true" /></button> : null}
@@ -145,7 +146,7 @@ export function PosFulfillmentPanel({ storeId, enabled, disabled = false, overdu
     </div>
   </>;
 
-  return <section className={`${styles.root}${pinned ? ` ${styles.pinned}` : ""}`} data-pos-fulfillment-pinned={pinned ? "true" : "false"} aria-label={t("提供状況")}>
+  return <section className={`${styles.root}${simpleMode ? ` ${styles.simple}` : ""}${pinned ? ` ${styles.pinned}` : ""}`} data-pos-fulfillment-pinned={pinned ? "true" : "false"} aria-label={t("提供状況")}>
     <div className={styles.strip}>
       <button className={styles.expand} type="button" onClick={() => setExpanded(current => !current)} aria-expanded={drawerOpen || pinned} aria-controls="store-pos-fulfillment-board" disabled={pinned}>
         <span>{t("提供状況")}</span>
