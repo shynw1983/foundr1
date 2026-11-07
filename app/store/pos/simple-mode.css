@@ -376,55 +376,108 @@
   color: var(--store-primary-text, var(--green));
 }
 
-.store-pos-page[data-pos-simple] .store-pos-simple-promotion-bowl {
+.store-pos-page[data-pos-simple] .store-pos-quick-bowl-benefits {
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding-block-start: 8px;
-  border-block-start: 1px solid var(--line);
-}
-
-.store-pos-page[data-pos-simple] .store-pos-simple-promotion-bowl h5 {
-  margin: 0;
-  font-size: 16px;
-  overflow-wrap: anywhere;
-}
-
-.store-pos-page[data-pos-simple] .store-pos-simple-promotion-bowl .store-pos-bowl-benefits {
-  margin: 0;
+  margin: 4px 0;
   border: 0;
-  padding: 0;
-  font-size: 15px;
+  padding: 4px 0;
+  font-size: 14px;
 }
 
-.store-pos-page[data-pos-simple] .store-pos-simple-promotion-bowl .store-pos-bowl-benefits > div + div {
-  margin-block-start: 8px;
+.store-pos-page[data-pos-simple] .store-pos-quick-bowl-benefits > div + div {
+  margin-block-start: 4px;
+  border-block-start: 1px solid var(--line);
+  padding-block-start: 8px;
 }
 
-.store-pos-page[data-pos-simple] .store-pos-simple-promotion-bowl .store-pos-bowl-benefit-actions {
+.store-pos-page[data-pos-simple] .store-pos-quick-bowl-benefits small {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.store-pos-page[data-pos-simple] .store-pos-bowl-benefit-actions.is-quick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
   gap: 6px;
   margin: 6px 0;
 }
 
-.store-pos-page[data-pos-simple] .store-pos-simple-promotion-bowl :is(button, select) {
-  min-height: var(--pos-simple-touch);
-  max-width: 100%;
-  font-size: 16px;
-}
-
-.store-pos-page[data-pos-simple] .store-pos-simple-promotion-bowl .store-pos-bowl-benefit-actions label {
-  flex: 1 0 100%;
-}
-
-.store-pos-page[data-pos-simple] .store-pos-simple-promotion-bowl .store-pos-bowl-benefit-actions select {
-  max-width: none;
+.store-pos-page[data-pos-simple] .store-pos-bowl-benefit-actions.is-quick button {
+  min-width: 0;
+  min-height: 56px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 7px;
+  padding: 7px 6px;
   background: var(--panel);
   color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-.store-pos-page[data-pos-simple] .store-pos-simple-promotion-bowl [data-pos-bowl-applied-gift] {
+.store-pos-page[data-pos-simple] .store-pos-bowl-benefit-actions.is-quick [data-pos-bowl-quick-gift] {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+}
+
+.store-pos-page[data-pos-simple] .store-pos-bowl-benefit-actions.is-quick button span {
+  color: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.store-pos-page[data-pos-simple] .store-pos-bowl-benefit-actions.is-quick button small {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.store-pos-page[data-pos-simple] .store-pos-bowl-benefit-actions.is-quick button[aria-pressed="true"] {
+  border-color: var(--store-primary, var(--green));
+  background: var(--store-primary, var(--green));
+  color: var(--store-on-primary, white);
+}
+
+.store-pos-page[data-pos-simple] .store-pos-bowl-benefit-actions.is-quick button:focus-visible {
+  outline: 2px solid var(--store-primary, var(--green));
+  outline-offset: 2px;
+}
+
+.store-pos-page[data-pos-simple] .store-pos-bowl-benefit-actions.is-quick button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.store-pos-page[data-pos-simple] .store-pos-bowl-benefit-actions.is-quick [data-pos-bowl-more-gifts] {
+  grid-column: 1 / -1;
+  min-height: 44px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.store-pos-page[data-pos-simple] .store-pos-quick-bowl-benefits > button {
+  justify-self: start;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 6px 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.store-pos-page[data-pos-simple] .store-pos-quick-bowl-benefits [data-pos-bowl-applied-gift] {
+  color: var(--store-success, var(--green));
   font-size: 15px;
   font-weight: 600;
 }

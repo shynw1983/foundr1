@@ -3558,14 +3558,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
             ))}
           </ul>
         ) : <p>{t("実施中のキャンペーンはありません。")}</p>}
-      {!selectedTableCheckout ? bowlLines.map((line, index) => line.isBowl && (
-        line.choice || activeCampaigns.some(preset => posBowlEligible(preset, line, discountNow))
-      ) ? (
-        <section className="store-pos-simple-promotion-bowl" key={line.cartKey}>
-          <h5>{index + 1}. {line.name} · {formatYen(line.amount)}</h5>
-          {renderBowlBenefit(line, index)}
-        </section>
-      ) : null) : null}
+
       {enabledDiscountPresets.length ? (
         <details className="store-pos-simple-manual-discount">
           <summary>{t("手動割引")}</summary>
@@ -3899,7 +3892,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
               <button className="secondary-button" type="button" data-pos-simple-promotions data-pos-promotion-state={campaignShortcutState}
                 aria-expanded={simpleCartTool === "promotions"} aria-controls="pos-simple-promotions" onClick={() => toggleSimpleCartTool("promotions")}>
                 <Gift size={18} aria-hidden="true" /><span>{t("キャンペーン")}</span>
-                {campaignShortcutState ? <strong aria-live="polite">{t(campaignShortcutState === "select" ? "特典を選択" : "適用中")}</strong> : null}
+                {campaignShortcutState ? <strong aria-live="polite">{t(campaignShortcutState === "select" ? "特典を選択できます" : "適用中")}</strong> : null}
               </button>
               {!debugMode ? <button className="secondary-button" type="button" aria-expanded={simpleCartTool === "member"} aria-controls="pos-simple-member" onClick={() => toggleSimpleCartTool("member")}>
                 <UserRound size={18} aria-hidden="true" /> {t("会員・クーポン")}{couponDiscountAmount > 0 ? <strong>-{formatYen(couponDiscountAmount)}</strong> : null}
@@ -4036,6 +4029,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                   <strong>{item.name}</strong>
                   {getWeightLineLabel(item) ? <small>{getWeightLineLabel(item)}</small> : null}
                   {item.weightMeasurement?.mode === 'preset' ? <small>{t(item.weightMeasurement.tarePresetId === 'small' ? 'ボウル（小）' : 'ボウル（大）')} −{item.weightMeasurement.tareGrams} g · {t('総重量')} {item.weightMeasurement.grossGrams} g</small> : item.weightMeasurement?.mode === 'manual_net' && item.measuredQuantity ? <small>{t('正味重量を手入力')}</small> : null}
+                  {simpleMode && isPosBowl(item) ? renderBowlBenefit(item, itemIndex) : null}
                   {item.selectedOptions.length ? <small>{getOptionLabel(item.selectedOptions)}</small> : null}
                   {sharedTakeout && hasCounterTakeoutRestriction(item) ? <small>{t("店内のみ")}</small> : null}
                   {isPosBowl(item) ? renderBowlNote(item) : null}
