@@ -1,26 +1,128 @@
 "use client";
+
+import { useState } from "react";
 import { isPosCampaignActive, type PosDiscountRule } from "../../../lib/pos-discount-campaigns";
-import {resolvePosBowlChoice,posBowlEligible,posGiftAllowed,type PosBowlChoice,type PosBowlLine,type PosGiftItem,type PosBowlApplication} from "../../../lib/pos-bowl-benefits";
-import {useOsTranslation} from "../../os/components/OsTranslationProvider";
-export function PosBowlBenefitPicker({rules,line,gifts,now,disabled,onChange,applied,compact}:{rules:PosDiscountRule[];line:PosBowlLine;gifts:PosGiftItem[];now:number;disabled:boolean;onChange:(value:PosBowlChoice|undefined)=>void;applied?:PosBowlApplication;compact?:boolean}) {
- const {t}=useOsTranslation();const active=rules.filter(r=>r.campaignBasis==='bowl_choice'&&isPosCampaignActive(r,now));
- const effective=resolvePosBowlChoice(rules,line,now), defaultChoice=resolvePosBowlChoice(rules,{...line,choice:undefined},now);
- const clear=()=>onChange(defaultChoice?{campaignKey:defaultChoice.campaignKey,kind:'none'}:undefined);
- const visibleRules=compact?active.filter(rule=>posBowlEligible(rule,line,now)||line.choice?.campaignKey===rule.key):active;
- if(!visibleRules.length&&!line.choice)return null;
- return <div className="store-pos-bowl-benefits" data-pos-bowl-benefits>
-  {visibleRules.map(rule=>{const eligible=posBowlEligible(rule,line,now),selected=effective?.campaignKey===rule.key&&effective.kind!=='none'?effective:undefined,allowed=gifts.filter(g=>posGiftAllowed(rule,g));return <div key={rule.key}>
-   <small>{rule.name} · {t('1杯')} ¥{rule.minimumSubtotal?.toLocaleString('ja-JP')}〜{!eligible?` · ${t('対象金額未満・通常価格')}`:''}</small>
-   {eligible?<div className="store-pos-bowl-benefit-actions">{rule.bowlBenefitMode!=="gift_only"?<button type="button" data-pos-bowl-discount aria-pressed={selected?.kind==='discount'} disabled={disabled} onClick={()=>selected?.kind==='discount'?clear():onChange({campaignKey:rule.key,kind:'discount'})}>{t('割引')} {rule.discountType==='percent'?`${rule.discountValue}%`:`¥${rule.discountValue}`}</button>:null}
-    {rule.bowlBenefitMode!=="discount_only"?<button type="button" data-pos-bowl-gift aria-pressed={selected?.kind==='gift'} disabled={disabled||!allowed.length} onClick={()=>selected?.kind==='gift'?clear():onChange({campaignKey:rule.key,kind:'gift'})}>{rule.giftButtonLabel||t('プレゼント')}</button>:null}
-    {selected?.kind==='gift'&&rule.bowlBenefitMode!=="discount_only"?<label><span className="sr-only">{t('プレゼント')}</span><select data-pos-bowl-gift-item disabled={disabled} value={selected.giftItemId||''} onChange={e=>onChange({...selected,giftItemId:e.target.value})}><option value="">{t('プレゼントを選択')}</option>{allowed.map(g=><option key={g.id} value={g.id}>{g.kind==='option'?`${g.groupName} / `:''}{g.name} · ¥0</option>)}</select></label>:null}
-    {!selected?<small>{t('特典を選択できます')}</small>:applied?.campaignKey!==rule.key&&(selected.kind!=='gift'||selected.giftItemId)?<small>{t('他の割引の方がお得なため、そちらを適用')}</small>:null}
-   </div>:null}
-  </div>})}
-  {!line.choice&&effective?<small data-pos-bowl-auto>{t('条件を満たしたため割引を自動選択')}</small>:null}
-  {line.choice?.kind==='none'?<small>{t('この杯の特典は適用しません')}</small>:null}
-  {line.choice&&line.choice.kind!=='none'&&!active.some(r=>posBowlEligible(r,line,now)&&r.key===line.choice!.campaignKey)?<small>{t('特典の条件が変わりました。解除して確認してください。')}</small>:null}
-  {effective&&effective.kind!=='none'?<button type="button" data-pos-bowl-clear disabled={disabled} onClick={clear}>{t('特典を解除')}</button>:line.choice?.kind==='none'&&defaultChoice?<button type="button" data-pos-bowl-auto-restore disabled={disabled} onClick={()=>onChange(undefined)}>{t('自動選択に戻す')}</button>:null}
-  {applied?.gift?<small data-pos-bowl-applied-gift>{t('サービス')} · {applied.gift.name} · ¥0</small>:applied?<small>{t('この杯の割引')} −¥{applied.discountAmount}</small>:null}
- </div>
+import {
+  resolvePosBowlChoice,
+  posBowlEligible,
+  posGiftAllowed,
+  type PosBowlChoice,
+  type PosBowlLine,
+  type PosGiftItem,
+  type PosBowlApplication
+} from "../../../lib/pos-bowl-benefits";
+import { useOsTranslation } from "../../os/components/OsTranslationProvider";
+
+type Props = {
+  rules: PosDiscountRule[];
+  line: PosBowlLine;
+  gifts: PosGiftItem[];
+  now: number;
+  disabled: boolean;
+  onChange: (value: PosBowlChoice | undefined) => void;
+  applied?: PosBowlApplication;
+  compact?: boolean;
+};
+
+const quickGiftLimit = 3;
+
+export function PosBowlBenefitPicker({ rules, line, gifts, now, disabled, onChange, applied, compact }: Props) {
+  const { t } = useOsTranslation();
+  const [expandedGiftRules, setExpandedGiftRules] = useState<Record<string, boolean>>({});
+  const activeRules = rules.filter(rule => rule.campaignBasis === "bowl_choice" && isPosCampaignActive(rule, now));
+  const effectiveChoice = resolvePosBowlChoice(rules, line, now);
+  const defaultChoice = resolvePosBowlChoice(rules, { ...line, choice: undefined }, now);
+  const clear = () => onChange(defaultChoice ? { campaignKey: defaultChoice.campaignKey, kind: "none" } : undefined);
+  const visibleRules = compact
+    ? activeRules.filter(rule => posBowlEligible(rule, line, now) || line.choice?.campaignKey === rule.key)
+    : activeRules;
+
+  if (!visibleRules.length && !line.choice) return null;
+
+  return (
+    <div className={compact ? "store-pos-bowl-benefits store-pos-quick-bowl-benefits" : "store-pos-bowl-benefits"} data-pos-bowl-benefits>
+      {visibleRules.map(rule => {
+        const eligible = posBowlEligible(rule, line, now);
+        const selected = effectiveChoice?.campaignKey === rule.key && effectiveChoice.kind !== "none" ? effectiveChoice : undefined;
+        const allowedGifts = gifts.filter(gift => posGiftAllowed(rule, gift));
+        const allowDiscount = rule.bowlBenefitMode !== "gift_only";
+        const allowGift = rule.bowlBenefitMode !== "discount_only";
+        const expanded = expandedGiftRules[rule.key] === true;
+        const visibleGifts = expanded ? allowedGifts : allowedGifts.filter((gift, index) =>
+          index < quickGiftLimit || (selected?.kind === "gift" && selected.giftItemId === gift.id));
+        const canExpandGifts = allowedGifts.length > visibleGifts.length;
+        const selectedWasOverridden = selected && applied?.campaignKey !== rule.key
+          && (selected.kind !== "gift" || selected.giftItemId);
+
+        return (
+          <div key={rule.key}>
+            <small>{rule.name} · {t("1杯")} ¥{rule.minimumSubtotal?.toLocaleString("ja-JP")}〜{!eligible ? ` · ${t("対象金額未満・通常価格")}` : ""}</small>
+            {eligible ? (
+              <div className={compact ? "store-pos-bowl-benefit-actions is-quick" : "store-pos-bowl-benefit-actions"}>
+                {allowDiscount ? (
+                  <button type="button" data-pos-bowl-discount aria-pressed={selected?.kind === "discount"} disabled={disabled}
+                    onClick={() => !compact && selected?.kind === "discount" ? clear() : onChange({ campaignKey: rule.key, kind: "discount" })}>
+                    {t("割引")} {rule.discountType === "percent" ? `${rule.discountValue}%` : `¥${rule.discountValue}`}
+                  </button>
+                ) : null}
+                {compact ? (
+                  <>
+                    {allowGift ? visibleGifts.map(gift => (
+                      <button key={gift.id} type="button" data-pos-bowl-quick-gift={gift.id}
+                        aria-pressed={selected?.kind === "gift" && selected.giftItemId === gift.id} disabled={disabled}
+                        onClick={() => onChange({ campaignKey: rule.key, kind: "gift", giftItemId: gift.id })}>
+                        <span>{gift.name}</span>
+                        <small>{gift.kind === "option" && gift.groupName ? `${gift.groupName} · ` : ""}{t("プレゼント")} · ¥0</small>
+                      </button>
+                    )) : null}
+                    {allowGift && (canExpandGifts || (expanded && allowedGifts.length > quickGiftLimit)) ? (
+                      <button type="button" data-pos-bowl-more-gifts aria-expanded={expanded} disabled={disabled}
+                        onClick={() => setExpandedGiftRules(current => ({ ...current, [rule.key]: !current[rule.key] }))}>
+                        {expanded ? t("閉じる") : <>{t("その他")} ({allowedGifts.length - visibleGifts.length})</>}
+                      </button>
+                    ) : null}
+                    {allowGift && !allowedGifts.length ? <small>{t("選べるプレゼントなし")}</small> : null}
+                  </>
+                ) : (
+                  <>
+                    {allowGift ? (
+                      <button type="button" data-pos-bowl-gift aria-pressed={selected?.kind === "gift"} disabled={disabled || !allowedGifts.length}
+                        onClick={() => selected?.kind === "gift" ? clear() : onChange({ campaignKey: rule.key, kind: "gift" })}>
+                        {rule.giftButtonLabel || t("プレゼント")}
+                      </button>
+                    ) : null}
+                    {selected?.kind === "gift" && allowGift ? (
+                      <label>
+                        <span className="sr-only">{t("プレゼント")}</span>
+                        <select data-pos-bowl-gift-item disabled={disabled} value={selected.giftItemId || ""}
+                          onChange={event => onChange({ ...selected, giftItemId: event.target.value })}>
+                          <option value="">{t("プレゼントを選択")}</option>
+                          {allowedGifts.map(gift => (
+                            <option key={gift.id} value={gift.id}>{gift.kind === "option" ? `${gift.groupName} / ` : ""}{gift.name} · ¥0</option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                  </>
+                )}
+                {!selected && !compact ? <small>{t("特典を選択できます")}</small>
+                  : selectedWasOverridden ? <small>{t("他の割引の方がお得なため、そちらを適用")}</small> : null}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+      {!line.choice && effectiveChoice ? <small data-pos-bowl-auto>{t("条件を満たしたため割引を自動選択")}</small> : null}
+      {line.choice?.kind === "none" ? <small>{t("この杯の特典は適用しません")}</small> : null}
+      {line.choice && line.choice.kind !== "none" && !activeRules.some(rule => posBowlEligible(rule, line, now) && rule.key === line.choice!.campaignKey)
+        ? <small>{t("特典の条件が変わりました。解除して確認してください。")}</small> : null}
+      {effectiveChoice && effectiveChoice.kind !== "none"
+        ? <button type="button" data-pos-bowl-clear disabled={disabled} onClick={clear}>{t("特典を解除")}</button>
+        : line.choice?.kind === "none" && defaultChoice
+          ? <button type="button" data-pos-bowl-auto-restore disabled={disabled} onClick={() => onChange(undefined)}>{t("自動選択に戻す")}</button> : null}
+      {applied?.gift
+        ? <small data-pos-bowl-applied-gift>{t("サービス")} · {applied.gift.name} · ¥0</small>
+        : applied ? <small>{t("この杯の割引")} −¥{applied.discountAmount}</small> : null}
+    </div>
+  );
 }
