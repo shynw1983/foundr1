@@ -45,17 +45,19 @@ import { getPosOptionSelectionType, getPosOptionSelectionRules, isStoreDineInSel
 import { runPosPrintJobs, type PosPrintJob } from "../../../lib/pos-print-jobs";
 import { posPickupTicketCopy } from "../../../lib/pos-pickup-ticket-copy";
 import { isPosSellableItem } from "../../../lib/pos-catalog-policy";
+import { defaultPosCounterMenuPolicy, normalizePosCounterMenuPolicy, usesLocalPosMenu, type PosCounterMenuPolicy } from "../../../lib/pos-counter-menu-policy";
+import { allocatePosAmountByWeight, calculatePosCounterTax, type PosCounterTaxBucket } from "../../../lib/pos-counter-tax";
 
 import { posOptionGiftCatalog } from "../../../lib/pos-option-gifts";
 import { evaluatePosBowlBenefits, posBowlEligible, posBowlQuote, posGiftAllowed, type PosBowlChoice } from "../../../lib/pos-bowl-benefits";
 import { PosBowlBenefitPicker } from "./PosBowlBenefitPicker";
 import { Banknote, Camera, CreditCard, Gift, Minus, Plus, ReceiptText, RefreshCw, ScanLine, Search, ShoppingCart, Trash2, UserRound, X } from "lucide-react";
 import jsQR from "jsqr";
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { addOfflinePosOrder, savePosCheckoutRecovery, listPosCheckoutRecovery, removePosCheckoutRecovery, type PosCheckoutRecovery, savePosPrintJob, savePosPrintBatch, listPosPrintJobs, getOfflinePosSnapshot, listOfflinePosOrders, removeOfflinePosOrder, saveOfflinePosSnapshot, updateOfflinePosOrderError, type OfflinePosOrder } from "../../../lib/offline-pos";
 import { getCashBreakdownTotal, normalizeCashBreakdown, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
-import { createAutoStarBluetoothPrinter, createPhysicalCustomerDisplayPayload, defaultPosPrinterSettings, displayWithAndroidBridge, getKitchenPrinterForBrand, getReceiptPrinter, getPosReceiptCopies, getPosBowlTicketCopies, hasPosPrinterDestination, normalizePosPrinterSettings, printWithAndroidBridge, resolvePosKitchenTicketTemplate, resolvePosReceiptTemplate, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
+import { applyPosReceiptTaxBreakdown, createAutoStarBluetoothPrinter, createPhysicalCustomerDisplayPayload, defaultPosPrinterSettings, displayWithAndroidBridge, getKitchenPrinterForBrand, getReceiptPrinter, getPosReceiptCopies, getPosBowlTicketCopies, hasPosPrinterDestination, normalizePosPrinterSettings, prefixPosReducedTaxMarker, printWithAndroidBridge, resolvePosKitchenTicketTemplate, resolvePosReceiptTemplate, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
 import { createStoreRefreshCoordinator } from "../../../lib/store-polling-client";
 import { bindStoreRealtimeChannels } from "../../../lib/store-realtime-refresh";
 import { ModalHistoryScope } from "../../os/components/useModalHistory";
@@ -85,6 +87,8 @@ type PosMenuItem = {
   optionGroupIds?: string[];
   productionType?: 'bowl' | 'drink' | 'item';
   fulfillmentMode?: PosItemFulfillmentMode;
+  counterStandardTax?: boolean;
+  counterTakeoutRestricted?: boolean;
   brandId: string;
   brandName: string;
   name: string;
@@ -112,6 +116,8 @@ type PosMenuOption = {
   name: string;
   displayNames?: Record<string, string>;
   priceDelta: number | null;
+  counterStandardTax?: boolean;
+  counterTakeoutRestricted?: boolean;
   sortOrder: number;
 };
 
@@ -282,6 +288,7 @@ type PosSettings = {
   printerSettings: PosPrinterSettings;
   scaleTareSettings: PosScaleTareSettings;
   fulfillmentWorkspace: PosFulfillmentWorkspaceSettings;
+  counterMenuPolicy: PosCounterMenuPolicy;
 };
 
 type PosMenuSnapshot = PosMenuVersions & Record<string, unknown> & {
@@ -292,19 +299,22 @@ type PosMenuSnapshot = PosMenuVersions & Record<string, unknown> & {
   dineInMenu: { items: PosMenuItem[]; categories: PosMenuCategory[]; optionGroups: PosOptionGroup[] } | null;
   posSettings: Partial<PosSettings>;
 };
+const emptyPosMenu: NonNullable<PosMenuSnapshot["dineInMenu"]> = { items: [], categories: [], optionGroups: [] };
 
 function normalizeRuntimePosSettings(value: Partial<PosSettings> | undefined): PosSettings {
+  const counterMenuPolicy = normalizePosCounterMenuPolicy(value?.counterMenuPolicy);
   return {
     dineInEnabled: value?.dineInEnabled !== false,
     takeoutEnabled: value?.takeoutEnabled !== false,
     dineInTaxRate: Number(value?.dineInTaxRate ?? 10),
     takeoutTaxRate: Number(value?.takeoutTaxRate ?? 8),
     externalPaymentTerminalBrand: value?.externalPaymentTerminalBrand ?? "PayCAS",
-    priceTaxMode: value?.priceTaxMode ?? "tax_included",
+    priceTaxMode: counterMenuPolicy.sharedMenuForTakeout ? "tax_included" : value?.priceTaxMode ?? "tax_included",
     discountPresets: Array.isArray(value?.discountPresets) ? value.discountPresets : [],
     printerSettings: normalizePosPrinterSettings(value?.printerSettings ?? defaultPosPrinterSettings),
     scaleTareSettings: normalizePosScaleTareSettings(value?.scaleTareSettings),
-    fulfillmentWorkspace: normalizePosFulfillmentWorkspaceSettings(value?.fulfillmentWorkspace)
+    fulfillmentWorkspace: normalizePosFulfillmentWorkspaceSettings(value?.fulfillmentWorkspace),
+    counterMenuPolicy
   };
 }
 
@@ -314,7 +324,24 @@ function validPosMenuSnapshot(value: PosMenuSnapshot): boolean {
     return Boolean(source && Array.isArray(source.items) && Array.isArray(source.categories) && Array.isArray(source.optionGroups));
   };
   return catalog(value) && Array.isArray(value.brands) && Boolean(value.posSettings && typeof value.posSettings === "object" && !Array.isArray(value.posSettings))
-    && (value.dineInMenu === null || catalog(value.dineInMenu));
+    && (value.dineInMenu === null || catalog(value.dineInMenu))
+    && (!normalizePosCounterMenuPolicy(value.posSettings.counterMenuPolicy).sharedMenuForTakeout || validCounterPolicyRevision(value.counterMenuPolicyRevision));
+}
+
+function validCounterPolicyRevision(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+const counterTakeoutRestrictionMessage = "持ち帰りできない商品やオプションが含まれています。店内に切り替えるか、該当する内容を外してください。";
+
+function hasCounterTakeoutRestriction(item: Pick<PosCartItem, "counterTakeoutRestricted" | "selectedOptions">) {
+  return item.counterTakeoutRestricted === true || item.selectedOptions.some(option => option.counterTakeoutRestricted === true);
+}
+
+function getCounterTakeoutCandidateGroups(groups: PosOptionGroup[], keepRestricted?: (groupId: string, optionId: string) => boolean) {
+  // Keep the group and its original selection rules even when no eligible option remains.
+  return groups.map(group => ({ ...group, options: group.options.filter(option =>
+    option.counterTakeoutRestricted !== true || keepRestricted?.(group.id, option.id)) }));
 }
 
 type PosCashSession = {
@@ -653,8 +680,8 @@ function getNestedSchemaNumber(schema: Record<string, unknown> | undefined, pare
 
 type PosItemPricing = Pick<PosMenuItem, "itemKind" | "posPricingMode" | "posPricingOverride" | "posWeightUnit" | "posWeightUnitPrice" | "variableSchema">;
 
-function getWeightPricingConfig(item: PosItemPricing, orderType: string) {
-  if (orderType !== "eat_in" || resolvePosItemPricingMode(item) !== "weight") return null;
+function getWeightPricingConfig(item: PosItemPricing, useLocalMenu: boolean) {
+  if (!useLocalMenu || resolvePosItemPricingMode(item) !== "weight") return null;
   const schema = item.variableSchema ?? {};
   const nested = typeof schema.posWeightPricing === "object" && schema.posWeightPricing !== null
     ? schema.posWeightPricing as Record<string, unknown>
@@ -667,8 +694,8 @@ function getWeightPricingConfig(item: PosItemPricing, orderType: string) {
   return { unit, unitPrice };
 }
 
-function formatWeightPrice(item: PosItemPricing, orderType: string) {
-  const config = getWeightPricingConfig(item, orderType);
+function formatWeightPrice(item: PosItemPricing, useLocalMenu: boolean) {
+  const config = getWeightPricingConfig(item, useLocalMenu);
   if (!config) return "";
   return config.unitPrice && config.unitPrice > 0
     ? `${formatYen(config.unitPrice)}/${config.unit}`
@@ -809,6 +836,8 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   const [dineInMenu, setDineInMenu] = useState<typeof brandMenu | null>(null);
   const [posMenuRevision,setPosMenuRevision] = useState('');
   const [dineInMenuRevision,setDineInMenuRevision] = useState('');
+  const [counterMenuPolicyRevision, setCounterMenuPolicyRevision] = useState("");
+  const [counterMenuReadBlocked, setCounterMenuReadBlocked] = useState(false);
   const [tableCheckoutRequests, setTableCheckoutRequests] = useState<PosTableCheckoutRequest[]>([]);
   const [selectedTableCheckoutKey, setSelectedTableCheckoutKey] = useState("");
   const [tableCheckoutAdjustingKey, setTableCheckoutAdjustingKey] = useState("");
@@ -817,7 +846,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   const [printJobs, setPrintJobs] = useState<PosPrintJob[]>([]);
   const [printBusy, setPrintBusy] = useState(false);
   const uncertainCheckoutRef = useRef<{ signature: string; id: string; createdAt: string } | null>(null);
-  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: [], printerSettings: defaultPosPrinterSettings, scaleTareSettings: defaultPosScaleTareSettings(), fulfillmentWorkspace: normalizePosFulfillmentWorkspaceSettings(null) });
+  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: [], printerSettings: defaultPosPrinterSettings, scaleTareSettings: defaultPosScaleTareSettings(), fulfillmentWorkspace: normalizePosFulfillmentWorkspaceSettings(null), counterMenuPolicy: defaultPosCounterMenuPolicy });
   const [selectedStoreId, setSelectedStoreId] = useState(() => debugMode
     ? typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("storeId") || ""
     : getStoredStoreSelection());
@@ -855,7 +884,10 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   const [optionDraft, setOptionDraft] = useState<Record<string, string[]>>({});
   const [weightDraft, setWeightDraft] = useState("");
   const [orderType, setOrderType] = useState("eat_in");
-  const {items,categories,optionGroups} = orderType === 'eat_in' && dineInMenu ? dineInMenu : brandMenu;
+  const useLocalMenu = usesLocalPosMenu(orderType, posSettings.counterMenuPolicy);
+  const sharedCounterMenu = posSettings.counterMenuPolicy.sharedMenuForTakeout;
+  const sharedTakeout = sharedCounterMenu && orderType === "takeout";
+  const {items,categories,optionGroups} = useLocalMenu ? dineInMenu ?? (sharedCounterMenu ? emptyPosMenu : brandMenu) : brandMenu;
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [cashTenderedAmount, setCashTenderedAmount] = useState("");
   const [memberLookupInput, setMemberLookupInput] = useState("");
@@ -1003,25 +1035,39 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     };
     let body: Record<string, any>;
     let loadedOnline = true;
+    let rejectedSharedProjection = false;
     try {
       let response = await fetchPosData(nextStoreId);
       if (response.status === 403 && nextStoreId) response = await fetchPosData("");
       if (!response.ok) throw new Error("POS データを読み込めませんでした。");
       body = await response.json();
-      if (debugMode && (body.debugMode !== true || !body.access || !validPosMenuSnapshot(body as PosMenuSnapshot))) {
-        throw new Error("Invalid test menu projection");
+      const incomingShared = normalizePosCounterMenuPolicy(body.posSettings?.counterMenuPolicy).sharedMenuForTakeout;
+      const invalidProjection = (debugMode || incomingShared) && (!body.access || !validPosMenuSnapshot(body as PosMenuSnapshot));
+      rejectedSharedProjection = incomingShared && invalidProjection;
+      if ((debugMode && body.debugMode !== true) || invalidProjection) {
+        throw new Error("Invalid POS menu projection");
       }
     } catch {
       if (debugMode) {
         setDebugLoadError("テスト用メニューを読み込めません。接続を確認して再試行してください。");
         setBrands([]); setBrandMenu({ categories: [], items: [], optionGroups: [] }); setDineInMenu(null);
+        setCounterMenuPolicyRevision("");
         setPosSettingsStoreId(""); setCart([]); setConfiguringItem(null); setDebugResult(null);
+        setLoading(false);
+        return;
+      }
+      // A successful server read identified shared mode. Never turn its invalid
+      // projection into a new sale from an older cached separate catalog.
+      if (rejectedSharedProjection || counterMenuReadBlocked) {
+        setCounterMenuReadBlocked(true);
         setLoading(false);
         return;
       }
       const snapshot = await getOfflinePosSnapshot(nextStoreId || getStoredStoreSelection()).catch(() => undefined);
       const snapshotAge = snapshot ? Date.now() - new Date(snapshot.savedAt).getTime() : Number.POSITIVE_INFINITY;
-      if (!snapshot || !Number.isFinite(snapshotAge) || snapshotAge > 24 * 60 * 60 * 1000) {
+      if (!snapshot || !Number.isFinite(snapshotAge) || snapshotAge > 24 * 60 * 60 * 1000
+        || snapshot.data?.selectedStoreId !== snapshot.storeId || !snapshot.data.access
+        || !validPosMenuSnapshot(snapshot.data as PosMenuSnapshot)) {
         setMessage("オフライン用のメニューがありません。オンラインで一度 POS を開いてください。");
         setLoading(false);
         return;
@@ -1052,6 +1098,8 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
       } : null);
       setPosMenuRevision(String(body.posMenuRevision || ''));
       setDineInMenuRevision(String(body.dineInMenuRevision || ''));
+      setCounterMenuPolicyRevision(validCounterPolicyRevision(body.counterMenuPolicyRevision) ? body.counterMenuPolicyRevision : "");
+      setCounterMenuReadBlocked(false);
     }
     const nextTableCheckoutRequests = (debugMode ? [] : body.tableCheckoutRequests ?? []) as PosTableCheckoutRequest[];
     setTableCheckoutRequests(nextTableCheckoutRequests);
@@ -1343,7 +1391,8 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   const discountEvaluation = evaluatePosDiscounts(posSettings.discountPresets, discountPresetKey,
     cart.map(item => ({ ...item, amount: getCartItemAmount(item) })), subtotal, discountNow);
   const giftCatalog = [...items.filter(item=>!isPosBowl(item)).map(item=>({id:item.id,sourceItemId:item.sourceItemId,brandId:item.brandId,category:item.category,name:item.name,displayNames:item.displayNames,
-    price:getItemPrice(item),available:item.isAvailable!==false,fixed:!getWeightPricingConfig(item,orderType),requiresOptions:getItemOptionGroups(item).some(group=>getPosOptionSelectionRules(group).min>0)})),...posOptionGiftCatalog(optionGroups)];
+    price:getItemPrice(item),available:item.isAvailable!==false && (!sharedTakeout || item.counterTakeoutRestricted !== true),fixed:!getWeightPricingConfig(item,useLocalMenu),requiresOptions:getItemOptionGroups(item).some(group=>getPosOptionSelectionRules(group).min>0)})),
+    ...posOptionGiftCatalog(sharedTakeout ? optionGroups.map(group => ({ ...group, options: group.options.filter(option => option.counterTakeoutRestricted !== true) })) : optionGroups)];
   const bowlLines = cart.map(item => ({ ...item, amount: getCartItemAmount(item), isBowl: isPosBowl(item), choice: item.bowlBenefit }));
   const bowlEvaluation = evaluatePosBowlBenefits(posSettings.discountPresets, discountPresetKey, bowlLines, giftCatalog, discountNow);
   const hasBowlChoice = bowlEvaluation.applications.length > 0 || cart.some(item=>item.bowlBenefit);
@@ -1352,9 +1401,11 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   const discountQuote = hasBowlChoice ? posBowlQuote(bowlEvaluation) : { version: 1 as const, appliedKey: discountEvaluation.appliedKey, amount: posDiscountAmount };
   const selectedCoupon = memberCoupons.find((coupon) => coupon.id === selectedCouponId);
   const couponBlockedByDiscount = bowlEvaluation.usedRules.some(rule=>!rule.allowCouponCombination);
-  const couponDiscountAmount = couponBlockedByDiscount ? 0 : getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBodyAmounts(selectedCoupon));
-  const taxRate = getOrderTaxRate(posSettings, orderType);
-  const taxSummary = getTaxSummary({
+  const couponDiscountQuote = couponBlockedByDiscount ? 0 : getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBodyAmounts(selectedCoupon));
+  const counterTax = sharedCounterMenu ? getCounterTaxSummary() : null;
+  const couponDiscountAmount = counterTax?.couponDiscountAmount ?? couponDiscountQuote;
+  const taxRate = counterTax?.taxRate ?? getOrderTaxRate(posSettings, orderType);
+  const taxSummary = counterTax ? { taxAmount: counterTax.taxAmount, payableAmount: counterTax.amount } : getTaxSummary({
     subtotal,
     discountAmount: posDiscountAmount,
     couponDiscountAmount,
@@ -1363,6 +1414,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   });
   const payableAmount = taxSummary.payableAmount;
   const activeCheckoutAmount = selectedTableCheckout ? tableCheckoutAmount : payableAmount;
+  const counterTakeoutBlocked = !selectedTableCheckout && sharedTakeout && cart.some(hasCounterTakeoutRestriction);
   const getMenuDisplayPrice = (item: PosMenuItem) => {
     const price = getItemPrice(item);
     return posSettings.priceTaxMode === "tax_excluded" ? price + Math.floor(price * taxRate / 100) : price;
@@ -1415,6 +1467,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   const canCheckout = Boolean(
     (cart.length > 0 || selectedTableCheckout) &&
     !saving &&
+    !counterTakeoutBlocked &&
     bowlEvaluation.errors.length===0 &&
     canUseRegister &&
     (!offlineCheckoutOnly || (!selectedTableCheckout && !selectedMember && !selectedCouponId && !discountPresetKey && !posDiscountAmount && !hasBowlChoice && paymentMethod === "cash")) &&
@@ -1440,7 +1493,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     debugMode,
     storeId: selectedStoreId,
     enabled: Boolean(selectedStoreId && posSettingsStoreId === selectedStoreId && !loading && !offlineCheckoutOnly),
-    posMenuRevision, dineInMenuRevision,
+    posMenuRevision, dineInMenuRevision, counterMenuPolicyRevision,
     validateSnapshot: snapshot => validPosMenuSnapshot(snapshot) && (!debugMode || snapshot.debugMode === true),
     prepareManualApply: () => {
       if (menuRefreshBlocked) return false;
@@ -1457,18 +1510,22 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
       const localCatalog = snapshot.dineInMenu ? { ...snapshot.dineInMenu, items: snapshot.dineInMenu.items.filter(isPosSellableItem).map(item => ({ ...item, fulfillmentMode: getPosItemFulfillmentMode(item) })) } : null;
       setBrands(snapshot.brands); setBrandMenu(brandCatalog); setDineInMenu(localCatalog);
       setPosMenuRevision(snapshot.posMenuRevision); setDineInMenuRevision(snapshot.dineInMenuRevision);
+      setCounterMenuPolicyRevision(validCounterPolicyRevision(snapshot.counterMenuPolicyRevision) ? snapshot.counterMenuPolicyRevision : "");
+      setCounterMenuReadBlocked(false);
       const nextSettings = normalizeRuntimePosSettings(snapshot.posSettings);
       setPosSettings(nextSettings); setPosSettingsStoreId(snapshot.selectedStoreId);
       setOrderType(current => current === "eat_in" && !nextSettings.dineInEnabled ? "takeout" : current === "takeout" && !nextSettings.takeoutEnabled ? "eat_in" : current);
       setSelectedBrandId(current => snapshot.brands.some(brand => brand.id === current) ? current : snapshot.brands[0]?.id || "");
-      const nextCatalog = orderType === "eat_in" && localCatalog ? localCatalog : brandCatalog;
+      const nextOrderType = orderType === "eat_in" && !nextSettings.dineInEnabled ? "takeout" : orderType === "takeout" && !nextSettings.takeoutEnabled ? "eat_in" : orderType;
+      const nextCatalog = usesLocalPosMenu(nextOrderType, nextSettings.counterMenuPolicy)
+        ? localCatalog ?? (nextSettings.counterMenuPolicy.sharedMenuForTakeout ? emptyPosMenu : brandCatalog) : brandCatalog;
       setSelectedCategory(current => current && nextCatalog.categories.some(category => category.name === current) ? current : null);
       if (!debugMode) void saveOfflinePosSnapshot({ storeId: snapshot.selectedStoreId, savedAt: new Date().toISOString(), data: snapshot, reconciliation: { ...reconciliation } }).catch(() => undefined);
       setMessage("メニューを更新しました。");
     }
   });
   const menuBlocksCurrentOrder = !selectedTableCheckout && !hasPendingCheckout && !uncertainCheckoutRef.current
-    && (menuRefresh.posChanged || menuRefresh.dineInChanged);
+    && (counterMenuReadBlocked || menuRefresh.posChanged || menuRefresh.dineInChanged || menuRefresh.counterPolicyChanged);
   const canRefundSelectedTransaction = Boolean(
     selectedTransaction &&
     selectedTransaction.status !== "cancelled" &&
@@ -1690,7 +1747,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   }
 
   function getItemOptionGroups(item: PosMenuItem) {
-    const scopedItem = { ...item, posPricingMode: getWeightPricingConfig(item, orderType) ? 'weight' : 'fixed' };
+    const scopedItem = { ...item, posPricingMode: getWeightPricingConfig(item, useLocalMenu) ? 'weight' : 'fixed' };
     return optionGroups
       .filter(group => (!item.optionGroupIds || item.optionGroupIds.includes(group.id))
         && dineInGroupAppliesToItem(group, scopedItem))
@@ -1707,7 +1764,13 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   }
 
   function updateOptionDraft(update: (current: Record<string, string[]>) => Record<string, string[]>) {
-    setOptionDraft(current => reconcilePosOptionDependencies(configuringItem ? getItemOptionGroups(configuringItem) : [], update(current), current));
+    setOptionDraft(current => {
+      const next = update(current);
+      const groups = configuringItem ? getItemOptionGroups(configuringItem) : [];
+      const candidates = sharedTakeout ? getCounterTakeoutCandidateGroups(groups, (groupId, optionId) =>
+        (current[groupId] || []).includes(optionId) && (next[groupId] || []).includes(optionId)) : groups;
+      return reconcilePosOptionDependencies(candidates, next, current);
+    });
   }
 
   function getOptionLabel(options: PosSelectedOption[]) {
@@ -1829,16 +1892,12 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     const isInvoice = Boolean(body.receiptRequested ?? receiptRequested);
     const brandIds = Array.from(new Set(cartSnapshot.map((item) => item.brandId).filter(Boolean)));
     const receiptTemplate = resolvePosReceiptTemplate(posSettings.printerSettings, brandIds.length === 1 ? brandIds[0] : null, isInvoice ? "invoice" : "receipt");
-    return {
-      version: 1,
-      jobType: "receipt",
-      printer,
-      storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "Foundr1 OS",
-      printedAt: new Date().toISOString(),
-      receiptTemplate: absolutizeReceiptTemplateMedia(receiptTemplate),
-      order: {
+    const receiptOrderType = String(body.orderType || orderType);
+    const taxBreakdown = Array.isArray(body.taxBreakdown) ? body.taxBreakdown as PosCounterTaxBucket[] : undefined;
+    const reducedTakeout = receiptOrderType === "takeout" && posSettings.dineInTaxRate > 8 && Boolean(taxBreakdown?.some(bucket => bucket.rate === 8));
+    const order: NonNullable<PosPrintPayload["order"]> = {
         pickupCode: String(body.pickupCode || ""),
-        orderType: String(body.orderType || orderType),
+        orderType: receiptOrderType,
         paymentMethod: String(body.paymentMethod || paymentMethod),
         paymentLabel: getPaymentDisplayLabel(String(body.paymentMethod || paymentMethod)),
         note: body.offline ? `[オフライン未同期] ${String(body.note ?? note)}`.trim() : String(body.note ?? note),
@@ -1851,17 +1910,31 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         couponDiscountAmount: Number(body.couponDiscountAmount ?? couponDiscountAmount) || 0,
         taxAmount: Number(body.taxAmount ?? taxSummary.taxAmount) || 0,
         taxRate: Number(body.taxRate ?? taxRate) || 0,
+        taxBreakdown,
         totalAmount: Number(body.amount ?? payableAmount) || 0,
         cashTenderedAmount: (body.paymentMethod || paymentMethod) === "cash" ? Number(body.cashTenderedAmount ?? cashTenderedValue) : null,
         cashChangeAmount: (body.paymentMethod || paymentMethod) === "cash" ? Number(body.cashChangeAmount ?? cashTenderedValue - payableAmount) : null,
-        items: cartSnapshot.map((item, index) => ({
-          name: `${!isPosImmediateItem(item) ? (body.servingTickets as PosServingTicket[] | undefined)?.find((ticket) => ticket.itemIndex === index)?.pickupCode || "" : ""} ${getLocalizedDisplayName(item.name, item.displayNames, "ja")}`.trim(),
-          quantity: item.quantity,
-          unitPrice: getLineUnitPrice(item),
-          amount: getLineUnitPrice(item) * item.quantity,
-          options: [getWeightLineLabel(item), ...getCustomerDisplayOptionLabel(item.selectedOptions, "ja").split(" / ")].filter(Boolean)
-        }))
-      }
+        items: cartSnapshot.map((item, index) => {
+          const basePrice = item.measuredQuantity ? Math.round(item.measuredQuantity * Number(item.measuredUnitPrice ?? 0)) : getItemPrice(item);
+          const name = prefixPosReducedTaxMarker(getLocalizedDisplayName(item.name, item.displayNames, "ja"), reducedTakeout && basePrice > 0 && item.counterStandardTax !== true);
+          const options = reducedTakeout ? item.selectedOptions.map(option => ({ ...option,
+            name: prefixPosReducedTaxMarker(option.name, getOptionPrice(option) > 0 && !(option.counterStandardTax ?? item.counterStandardTax)) })) : item.selectedOptions;
+          return {
+            name: `${!isPosImmediateItem(item) ? (body.servingTickets as PosServingTicket[] | undefined)?.find((ticket) => ticket.itemIndex === index)?.pickupCode || "" : ""} ${name}`.trim(),
+            quantity: item.quantity,
+            unitPrice: getLineUnitPrice(item),
+            amount: getLineUnitPrice(item) * item.quantity,
+            options: [getWeightLineLabel(item), ...getCustomerDisplayOptionLabel(options, "ja").split(" / ")].filter(Boolean)
+          };
+        })
+    };
+    return {
+      version: 1,
+      jobType: "receipt",
+      printer,
+      storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "Foundr1 OS",
+      printedAt: new Date().toISOString(),
+      ...applyPosReceiptTaxBreakdown(absolutizeReceiptTemplateMedia(receiptTemplate), order)
     };
   }
 
@@ -1984,7 +2057,8 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
       if (!response.ok) throw new Error(result.error || "会計を確認できません。");
       await removePosCheckoutRecovery(record.storeId);
       uncertainCheckoutRef.current = null;
-      if (!cart.length) setCart(record.cart as PosCartItem[]);
+      if (!cart.length) setCart((record.cart as PosCartItem[]).flatMap(item => isPosBowl(item) && item.quantity > 1
+        ? expandPosBowls([item]).map((bowl, index) => index ? { ...bowl, cartKey: window.crypto.randomUUID() } : bowl) : [item]));
       await refreshPrintJobs();
       setMessage("未保存の会計リクエストを無効にしました。支払いと内容を確認してから会計してください。");
     } catch (error) { setMessage(error instanceof Error ? error.message : "会計を確認できません。"); }
@@ -2256,6 +2330,26 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     });
   }
 
+  function getCounterTaxSummary() {
+    const couponBases = bowlLines.map((line, index) => Math.max(0, line.amount - bowlEvaluation.allocations[index]));
+    let exchangeIndex = -1;
+    if (couponDiscountQuote > 0 && selectedCoupon && isExchangeCoupon(selectedCoupon)) {
+      let highestAmount = 0;
+      for (const [index, item] of cart.entries()) {
+        if (selectedCoupon.brandId && item.brandId !== selectedCoupon.brandId) continue;
+        const amount = getExchangeEligibleBodyAmount(item);
+        if (amount > highestAmount) { highestAmount = amount; exchangeIndex = index; }
+      }
+    }
+    const couponShares = exchangeIndex < 0 ? allocatePosAmountByWeight(couponDiscountQuote, couponBases)
+      : couponBases.map((_, index) => index === exchangeIndex ? couponDiscountQuote : 0);
+    const couponAllocations = couponShares.map((share, index) => Math.min(share, couponBases[index]));
+    const tax = calculatePosCounterTax({ orderType, dineInTaxRate: posSettings.dineInTaxRate, takeoutTaxRate: posSettings.takeoutTaxRate,
+      lines: bowlLines.map((line, index) => ({ ...line, paidAmount: couponBases[index] - couponAllocations[index],
+        discountAmount: bowlEvaluation.allocations[index], couponDiscountAmount: couponAllocations[index], exchangeCoupon: exchangeIndex === index })) });
+    return { ...tax, couponDiscountAmount: couponAllocations.reduce((sum, amount) => sum + amount, 0) };
+  }
+
   function getWeightLineLabel(item: Pick<PosCartItem, "measuredQuantity" | "measuredUnit" | "measuredUnitPrice">) {
     if (!item.measuredQuantity || !item.measuredUnitPrice) return "";
     return `${item.measuredQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${item.measuredUnit || "g"} x ${formatYen(item.measuredUnitPrice)}/${item.measuredUnit || "g"}`;
@@ -2272,8 +2366,12 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
       setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
       return;
     }
+    if (sharedTakeout && hasCounterTakeoutRestriction({ ...item, selectedOptions })) {
+      setMessage(t(counterTakeoutRestrictionMessage));
+      return;
+    }
     setSelectedTableCheckoutKey("");
-    const weightPricing = getWeightPricingConfig(item, orderType);
+    const weightPricing = getWeightPricingConfig(item, useLocalMenu);
     const measuredQuantity = weightPricing ? Number(weightInput) : 0;
     if (weightPricing) {
       if (!weightPricing.unitPrice || weightPricing.unitPrice <= 0) {
@@ -2317,14 +2415,16 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
       setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
       return;
     }
+    if (sharedTakeout && item.counterTakeoutRestricted === true) return;
     setCustomerDisplayMode("business");
     const groups = getItemOptionGroups(item);
-    if (!groups.length && !getWeightPricingConfig(item, orderType)) {
+    if (!groups.length && !getWeightPricingConfig(item, useLocalMenu)) {
       addItem(item);
       return;
     }
     const nextDraft: Record<string, string[]> = {};
-    for (const group of groups) {
+    const defaultGroups = sharedTakeout ? getCounterTakeoutCandidateGroups(groups) : groups;
+    for (const group of defaultGroups) {
       const categoryDefaults = group.ruleJson?.defaultOptionKeysByCategory;
       const categoryDefault = categoryDefaults && typeof categoryDefaults === 'object' && !Array.isArray(categoryDefaults)
         ? String((categoryDefaults as Record<string, unknown>)[item.category || '未分類'] ?? '').trim() : '';
@@ -2346,13 +2446,17 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     setOptionQuery("");
     setOptionGroupId("");
     setWeightDraft("");
-    setOptionDraft(reconcilePosOptionDependencies(groups, nextDraft));
+    setOptionDraft(reconcilePosOptionDependencies(defaultGroups, nextDraft));
   }
 
   function toggleOption(group: PosOptionGroup, optionId: string) {
     updateOptionDraft((current) => {
       const selected = current[group.id] ?? [];
       const selectionType = getEffectiveSelectionType(group);
+      if (sharedTakeout && group.options.some(option => option.id === optionId && option.counterTakeoutRestricted === true)) {
+        return selectionType !== "quantity" && selected.includes(optionId)
+          ? { ...current, [group.id]: selected.filter(id => id !== optionId) } : current;
+      }
       if (selectionType === "single") {
         const optional = isStoreDineInSelection(group) && getPosOptionSelectionRules(group).min === 0;
         return { ...current, [group.id]: optional && selected.includes(optionId) ? [] : [optionId] };
@@ -2411,6 +2515,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     if (amount > 0 && menuBlocksCurrentOrder) return;
     setCheckoutNotice(null);
     const entry = cart.find((item) => item.cartKey === cartKey);
+    if (amount > 0 && sharedTakeout && entry && hasCounterTakeoutRestriction(entry)) return;
     if (entry && isPosBowl(entry) && amount > 0) {
       setCart((current) => [...current, { ...entry, bowlBenefit:undefined, cartKey: window.crypto.randomUUID(), quantity: 1 }]);
       return;
@@ -2422,14 +2527,20 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   }
 
   function changeOrderType(nextOrderType: string) {
-    if (saving || printBusy || checkoutRecovery.some((record) => record.storeId === selectedStoreId)) return;
+    if (saving || printBusy || hasPendingCheckout || uncertainCheckoutRef.current) return;
     if (nextOrderType === orderType) return;
     setCheckoutNotice(null);
+    if (sharedCounterMenu) {
+      // Both modes use this exact local catalog; only fulfillment/tax context changes.
+      setOrderType(nextOrderType);
+      setCustomerDisplayMode("business");
+      return;
+    }
     const needsCartReset = cart.some((item) => (
       Boolean(dineInMenu) || Boolean(item.sourceItemId) ||
       Boolean(item.measuredQuantity) ||
-      Boolean(getWeightPricingConfig(item, orderType)) ||
-      Boolean(getWeightPricingConfig(item, nextOrderType))
+      Boolean(getWeightPricingConfig(item, useLocalMenu)) ||
+      Boolean(getWeightPricingConfig(item, usesLocalPosMenu(nextOrderType, posSettings.counterMenuPolicy)))
     ));
     setOrderType(nextOrderType);
     setCustomerDisplayMode("business");
@@ -2453,6 +2564,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
 
   async function checkout() {
     if (!selectedStoreId || (!cart.length && !selectedTableCheckout) || saving) return;
+    if (counterTakeoutBlocked) { showCheckoutNotice("error", t(counterTakeoutRestrictionMessage)); return; }
     if (menuBlocksCurrentOrder) { showCheckoutNotice("error", "メニューが更新されました。更新して商品を選び直してください。"); return; }
     setCheckoutNotice(null);
     setLastPaidPrintOrderId("");
@@ -2475,7 +2587,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         number: testNumber,
         storeName: stores.find(store => store.id === selectedStoreId)?.name || "",
         orderType: getOrderTypeLabel(orderType), paymentLabel: getPaymentDisplayLabel(paymentMethod),
-        subtotal, discount: posDiscountAmount, tax: taxSummary.taxAmount, taxRate,
+        subtotal, discount: posDiscountAmount, tax: taxSummary.taxAmount, taxRate, taxBreakdown: counterTax?.taxBreakdown,
         taxIncluded: posSettings.priceTaxMode === "tax_included", total: payableAmount,
         tendered: paymentMethod === "cash" ? cashTenderedValue : null,
         change: paymentMethod === "cash" ? cashChangeAmount : null, note,
@@ -2524,7 +2636,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     try {
       const cartSnapshot = expandPosBowls(cart);
       const useServerPrintDocuments = navigator.onLine && !selectedTableCheckout;
-      const signature = JSON.stringify({ store: selectedStoreId, cart: cartSnapshot, orderType, paymentMethod, cashTenderedValue, note, receiptRequested, invoiceRecipient, invoicePurpose, selectedMember, selectedCouponId, discountPresetKey, discountQuote, table: selectedTableCheckout?.tableSessionKey, ...(useServerPrintDocuments ? { printMode } : {}) });
+      const signature = JSON.stringify({ store: selectedStoreId, cart: cartSnapshot, orderType, counterMenuPolicyRevision, paymentMethod, cashTenderedValue, note, receiptRequested, invoiceRecipient, invoicePurpose, selectedMember, selectedCouponId, discountPresetKey, discountQuote, table: selectedTableCheckout?.tableSessionKey, ...(useServerPrintDocuments ? { printMode } : {}) });
       if (uncertainCheckoutRef.current && uncertainCheckoutRef.current.signature !== signature) {
         throw new Error("前の会計結果を確認できていません。内容を元に戻して再確認してください。");
       }
@@ -2537,6 +2649,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           ...(useServerPrintDocuments ? { printDocumentVersion: POS_PRINT_DOCUMENT_VERSION, printMode } : {}),
           posMenuRevision,
           dineInMenuRevision,
+          counterMenuPolicyRevision: counterMenuPolicyRevision || undefined,
           bowlTicketVersion: 1,
           posFulfillmentPolicyVersion: 1,
           dineInAssociationVersion: 1,
@@ -2642,6 +2755,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           taxableAmount: activeCheckoutAmount,
           taxAmount: taxSummary.taxAmount,
           taxRate,
+          ...(counterTax ? { taxBreakdown: counterTax.taxBreakdown } : {}),
           priceTaxMode: posSettings.priceTaxMode,
           discountAmount: 0,
           couponDiscountAmount: 0,
@@ -2772,7 +2886,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     }
   }
 
-  const configuringWeightPricing = configuringItem ? getWeightPricingConfig(configuringItem, orderType) : null;
+  const configuringWeightPricing = configuringItem ? getWeightPricingConfig(configuringItem, useLocalMenu) : null;
   const configuringWeightQuantity = Number(weightDraft);
   const configuringWeightBasePrice = configuringWeightPricing?.unitPrice && Number.isFinite(configuringWeightQuantity) && configuringWeightQuantity > 0
     ? Math.round(configuringWeightQuantity * configuringWeightPricing.unitPrice)
@@ -2801,7 +2915,9 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     return selected.length < rules.min || selected.length > rules.max || (isStoreDineInSelection(group)
       && selected.some(id => selected.filter(value => value === id).length > rules.perOptionMax));
   }) : undefined;
-  const canAddConfiguredItem = !invalidConfiguredGroup && !menuBlocksCurrentOrder && (!configuringWeightPricing ||
+  const configuredTakeoutBlocked = Boolean(sharedTakeout && configuringItem && (configuringItem.counterTakeoutRestricted === true
+    || getAvailableItemOptionGroups(configuringItem).some(group => group.options.some(option => option.counterTakeoutRestricted === true && (optionDraft[group.id] || []).includes(option.id)))));
+  const canAddConfiguredItem = !configuredTakeoutBlocked && !invalidConfiguredGroup && !menuBlocksCurrentOrder && (!configuringWeightPricing ||
     Boolean(configuringWeightPricing.unitPrice && configuringWeightPricing.unitPrice > 0 && Number.isFinite(configuringWeightQuantity) && configuringWeightQuantity > 0
       && (!requiresScaleConfirmation || scaleManualMode || automaticWeightReady)));
 
@@ -3479,7 +3595,22 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   const bowlPrintNotice = !debugMode && !selectedTableCheckout && cart.some(isPosBowl) ? (
     <div className="inline-alert">1杯ごとに厨房伝票→出品伝票→お客様番号札の順で同じ受付番号を印刷します。最後に会計ごとのレシートを1枚印刷します。</div>
   ) : null;
-  const menuRefreshNotice = <PosMenuRefreshNotice available={menuRefresh.updateAvailable} error={menuRefresh.error} checking={menuRefresh.checking} blocked={menuRefreshBlocked} hasDraft={hasMenuDraft} onRefresh={() => void menuRefresh.refresh()} />;
+  const retryMenuRefresh = () => {
+    if (counterMenuReadBlocked && (!selectedStoreId || posSettingsStoreId !== selectedStoreId)) void load(selectedStoreId);
+    else void menuRefresh.refresh();
+  };
+  const menuRefreshNotice = <PosMenuRefreshNotice available={menuRefresh.updateAvailable}
+    error={menuRefresh.error || (counterMenuReadBlocked ? "POS データを読み込めませんでした。" : "")}
+    checking={menuRefresh.checking} blocked={menuRefreshBlocked} hasDraft={hasMenuDraft} onRefresh={retryMenuRefresh} />;
+  const renderOrderTypeSelector = (placement: "cart" | "options" | "payment") => (
+    <div className="store-pos-segmented" role="group" aria-label={t("注文区分")} data-pos-order-type-selector={placement}>
+      {visibleOrderTypeOptions.map(option => (
+        <button key={option.value} data-pos-order-type={option.value} className={orderType === option.value ? "is-active" : ""}
+          type="button" aria-pressed={orderType === option.value} disabled={saving || printBusy || hasPendingCheckout || Boolean(uncertainCheckoutRef.current)}
+          onClick={() => changeOrderType(option.value)}>{t(option.label)}</button>
+      ))}
+    </div>
+  );
   const pageNotice = message ? <div className="action-notice store-pos-notice">{message}</div> : null;
   const modeToggle = !debugMode ? (
     <button type="button" className="secondary-button" ref={modeToggleRef} data-pos-mode-toggle aria-pressed={simpleMode} onClick={toggleSimpleMode}>
@@ -3516,7 +3647,8 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           {t("次の注文")}
         </button>
       ) : (
-        <button className="primary-button store-pos-checkout" data-pos-debug-checkout={debugMode || undefined} type="button" onClick={checkout} disabled={!canCheckout || menuBlocksCurrentOrder}>
+        <button className="primary-button store-pos-checkout" data-pos-debug-checkout={debugMode || undefined} type="button" onClick={checkout} disabled={!canCheckout || menuBlocksCurrentOrder}
+          aria-describedby={counterTakeoutBlocked ? "store-pos-counter-takeout-blocked" : undefined}>
           {debugMode ? t("テスト会計を確認") : saving ? t("保存中...") : !selectedTableCheckout && !offlineCheckoutOnly && printMode === "deferred"
             ? simpleMode ? <>{t("会計を確定")}<small>{t("あとで印刷")}</small></> : t("会計を確定・あとで印刷")
             : t("会計を確定")}
@@ -3563,7 +3695,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           {!simpleMode ? modeToggle : null}
           {!debugMode ? <button className="secondary-button" type="button" onClick={() => void openTransactionDialog()} disabled={offlineCheckoutOnly}>取引履歴</button> : null}
           {debugMode && debugLoadError && !loading ? <button type="button" className="secondary-button" data-pos-debug-retry onClick={() => void load(selectedStoreId)}>{t("再試行")}</button> : null}
-          <button type="button" className={`secondary-button ${menuRefreshStyles.refresh}`} data-pos-menu-refresh disabled={!selectedStoreId || menuRefreshBlocked || menuRefresh.checking} title={menuRefreshBlocked ? t("会計や処理が完了してから、メニューを更新してください。") : undefined} onClick={() => void menuRefresh.refresh()}><RefreshCw size={15} aria-hidden="true" />{t(menuRefresh.checking ? "更新確認中…" : "メニューを更新")}</button>
+          <button type="button" className={`secondary-button ${menuRefreshStyles.refresh}`} data-pos-menu-refresh disabled={(!selectedStoreId && !counterMenuReadBlocked) || menuRefreshBlocked || menuRefresh.checking} title={menuRefreshBlocked ? t("会計や処理が完了してから、メニューを更新してください。") : undefined} onClick={retryMenuRefresh}><RefreshCw size={15} aria-hidden="true" />{t(menuRefresh.checking ? "更新確認中…" : "メニューを更新")}</button>
           {!debugMode ? <PosDailySummary key={selectedStoreId} storeId={selectedStoreId} summary={summary} onRefresh={() => void refreshSummary()} refreshing={summaryRefreshing} refreshError={summaryError} /> : null}
         </div>
       </section>
@@ -3712,12 +3844,14 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
             ) : (
               <div className="store-pos-item-grid">
                 {visibleItems.map((item) => (
-                  <button key={item.id} className="store-pos-item-button" type="button" onClick={() => beginItemSelection(item)} disabled={!canUseRegister || saving || printBusy || menuBlocksCurrentOrder || checkoutRecovery.some((record) => record.storeId === selectedStoreId)}>
+                  <button key={item.id} className="store-pos-item-button" type="button" onClick={() => beginItemSelection(item)}
+                    disabled={!canUseRegister || saving || printBusy || menuBlocksCurrentOrder || hasPendingCheckout || (sharedTakeout && item.counterTakeoutRestricted === true)}>
                     {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <span className="store-pos-image-empty">F1</span>}
                     <div className="store-pos-item-info">
                       <span>{item.category || item.brandName}</span>
                       <strong>{item.name}</strong>
-                      <em>{formatWeightPrice(item, orderType) || `${formatYen(getMenuDisplayPrice(item))}${posSettings.priceTaxMode === "tax_excluded" ? " 税込" : ""}`}</em>
+                      <em>{formatWeightPrice(item, useLocalMenu) || `${formatYen(getMenuDisplayPrice(item))}${posSettings.priceTaxMode === "tax_excluded" ? " 税込" : ""}`}</em>
+                      {sharedTakeout && item.counterTakeoutRestricted === true ? <small>{t("店内のみ")}</small> : null}
                     </div>
                   </button>
                 ))}
@@ -3760,6 +3894,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           <div ref={cartScrollRef} className="store-pos-simple-cart-scroll">
           {(!simpleMode || cartOpen) ? menuRefreshNotice : null}
           {simpleMode ? recoveryPanel : null}
+          {counterTakeoutBlocked ? <p id="store-pos-counter-takeout-blocked" className="store-pos-error" role="status">{t(counterTakeoutRestrictionMessage)}</p> : null}
           {simpleMode && hasBowlChoice && bowlEvaluation.errors.length ? <p className="store-pos-error" role="alert">{t(bowlEvaluation.errors[0])}</p> : null}
           <div className="store-pos-simple-order-view" hidden={simpleMode && simplePaymentOpen}>
           {simpleMode ? (
@@ -3800,13 +3935,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
             </section>
           ) : null}
 
-          <div className="store-pos-segmented">
-            {visibleOrderTypeOptions.map((option) => (
-              <button key={option.value} className={orderType === option.value ? "is-active" : ""} type="button" onClick={() => changeOrderType(option.value)}>
-                {option.label}
-              </button>
-            ))}
-          </div>
+          {renderOrderTypeSelector("cart")}
 
           {!simpleMode ? bowlPrintNotice : null}
           {!simpleMode ? recoveryPanel : null}
@@ -3893,6 +4022,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                   {getWeightLineLabel(item) ? <small>{getWeightLineLabel(item)}</small> : null}
                   {item.weightMeasurement?.mode === 'preset' ? <small>{t(item.weightMeasurement.tarePresetId === 'small' ? 'ボウル（小）' : 'ボウル（大）')} −{item.weightMeasurement.tareGrams} g · {t('総重量')} {item.weightMeasurement.grossGrams} g</small> : item.weightMeasurement?.mode === 'manual_net' && item.measuredQuantity ? <small>{t('正味重量を手入力')}</small> : null}
                   {item.selectedOptions.length ? <small>{getOptionLabel(item.selectedOptions)}</small> : null}
+                  {sharedTakeout && hasCounterTakeoutRestriction(item) ? <small>{t("店内のみ")}</small> : null}
                   {isPosBowl(item) ? renderBowlNote(item) : null}
                   {!simpleMode && isPosBowl(item) ? renderBowlBenefit(item, itemIndex) : null}
                   <span>{formatYen(getLineUnitPrice(item))}{item.measuredQuantity ? "" : ` x ${item.quantity}`}</span>
@@ -3902,7 +4032,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                     <>
                       <button type="button" onClick={() => changeQuantity(item.cartKey, -1)} aria-label="数量を減らす"><Minus size={16} /></button>
                       <span>{item.quantity}</span>
-                      <button type="button" onClick={() => changeQuantity(item.cartKey, 1)} disabled={menuBlocksCurrentOrder} aria-label="数量を増やす"><Plus size={16} /></button>
+                      <button type="button" onClick={() => changeQuantity(item.cartKey, 1)} disabled={menuBlocksCurrentOrder || (sharedTakeout && hasCounterTakeoutRestriction(item))} aria-label="数量を増やす"><Plus size={16} /></button>
                     </>
                   ) : null}
                   <button type="button" onClick={() => changeQuantity(item.cartKey, -99)} aria-label="削除"><Trash2 size={16} /></button>
@@ -3921,6 +4051,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           </div>
 
           <div className="store-pos-simple-payment-view" hidden={simpleMode && (!simplePaymentOpen || simpleCheckoutComplete)}>
+          {simpleMode && sharedCounterMenu && !selectedTableCheckout && visibleOrderTypeOptions.length > 1 ? renderOrderTypeSelector("payment") : null}
 
           <div className={simpleMode ? `store-pos-payment-grid ${checkoutStyles.simplePayment}` : "store-pos-payment-grid"} id="store-pos-payment-section" ref={checkoutSectionRef}>
             {paymentOptions.map((option) => {
@@ -3998,9 +4129,12 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                     <strong className="is-discount">-{formatYen(couponDiscountAmount)}</strong>
                   </>
                 ) : null}
-                {subtotal > 0 ? (
+                {counterTax?.taxBreakdown.length ? counterTax.taxBreakdown.map(bucket => <Fragment key={bucket.rate}>
+                  <span>{t("内消費税")} {bucket.rate}%</span>
+                  <strong className="is-tax" data-pos-tax-rate={bucket.rate}>{formatYen(bucket.taxAmount)}</strong>
+                </Fragment>) : subtotal > 0 ? (
                   <>
-                    <span>{posSettings.priceTaxMode === "tax_excluded" ? `消費税 ${taxRate}%` : `内消費税 ${taxRate}%`}</span>
+                    <span>{t(posSettings.priceTaxMode === "tax_excluded" ? "消費税" : "内消費税")}{!counterTax || taxRate ? ` ${taxRate}%` : ""}</span>
                     <strong className="is-tax">{formatYen(taxSummary.taxAmount)}</strong>
                   </>
                 ) : null}
@@ -4531,12 +4665,13 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
               <div>
                 <p className="eyebrow">Options</p>
                 <h3>{configuringItem.name}</h3>
-                <span>{configuringWeightPricing ? `重量単価 ${formatWeightPrice(configuringItem, orderType)}` : `基本価格 ${formatYen(getItemPrice(configuringItem))}`}</span>
+                <span>{configuringWeightPricing ? `重量単価 ${formatWeightPrice(configuringItem, useLocalMenu)}` : `基本価格 ${formatYen(getItemPrice(configuringItem))}`}</span>
               </div>
               <button className="secondary-button" type="button" onClick={() => setConfiguringItem(null)}>閉じる</button>
             </div>
 
-            <PosMenuRefreshNotice available={menuRefresh.updateAvailable} error={menuRefresh.error} checking={menuRefresh.checking} blocked={menuRefreshBlocked} hasDraft={hasMenuDraft} onRefresh={() => void menuRefresh.refresh()} />
+            {menuRefreshNotice}
+            {sharedCounterMenu && visibleOrderTypeOptions.length > 1 ? renderOrderTypeSelector("options") : null}
             <div className="store-pos-option-navigation">
               <input aria-label="オプションを検索" placeholder="オプションを検索" value={optionQuery} onChange={(event) => setOptionQuery(event.target.value)} />
               <select aria-label="オプショングループ" value={optionGroupId} onChange={(event) => setOptionGroupId(event.target.value)}>
@@ -4599,6 +4734,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                         const selectedIds = optionDraft[group.id] ?? [];
                         const count = selectedIds.filter((id) => id === option.id).length;
                         const selected = count > 0;
+                        const restricted = sharedTakeout && option.counterTakeoutRestricted === true;
                         return (
                           <div
                             className={selected ? "store-pos-option-choice is-active" : "store-pos-option-choice"}
@@ -4607,6 +4743,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                             <button
                               type="button"
                               aria-pressed={selected}
+                              disabled={restricted && (!selected || selectionType === "quantity")}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 toggleOption(group, option.id);
@@ -4614,6 +4751,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                             >
                               <span>{option.name}</span>
                               {getOptionPrice(option) ? <small>{formatYen(getOptionPrice(option))}</small> : <small>+¥0</small>}
+                              {restricted ? <small>{t("店内のみ")}</small> : null}
                             </button>
                             {selectionType === "quantity" ? (
                               <div className="store-pos-option-stepper">
@@ -4635,7 +4773,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                                     event.stopPropagation();
                                     toggleOption(group, option.id);
                                   }}
-                                  disabled={(optionDraft[group.id] || []).length >= getOptionGroupLimit(group) || count >= getPosOptionSelectionRules(group).perOptionMax}
+                                  disabled={restricted || (optionDraft[group.id] || []).length >= getOptionGroupLimit(group) || count >= getPosOptionSelectionRules(group).perOptionMax}
                                   aria-label="数量を増やす"
                                 >
                                   <Plus size={14} />
@@ -4655,6 +4793,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
               <div className="store-pos-option-summary">
                 <strong>{formatYen((configuringWeightPricing ? configuringWeightBasePrice : getItemPrice(configuringItem)) + selectedOptionPreviewTotal)}</strong>
                 <span>{getAvailableItemOptionGroups(configuringItem).flatMap((group) => (optionDraft[group.id] ?? []).map((id) => group.options.find((option) => option.id === id)?.name)).filter(Boolean).join(" / ") || "未選択"}</span>
+                {configuredTakeoutBlocked ? <small role="status">{t(counterTakeoutRestrictionMessage)}</small> : null}
                 {invalidConfiguredGroup ? <small role="status">{invalidConfiguredGroup.name}: {t("最低 {min} 点から最大 {max} 点まで選択してください。").replace("{min}", String(getPosOptionSelectionRules(invalidConfiguredGroup).min)).replace("{max}", String(getPosOptionSelectionRules(invalidConfiguredGroup).max))}</small> : null}
               </div>
             <button className="primary-button store-pos-option-add" type="button" onClick={addConfiguredItem} disabled={!canAddConfiguredItem}>

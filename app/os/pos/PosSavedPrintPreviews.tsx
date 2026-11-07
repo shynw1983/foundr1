@@ -76,7 +76,7 @@ export function PosPrintContentPreview({ content }: { content: PosSavedPrintCont
         <div className={styles.pair}><span>小計</span><span>{yen(order.subtotalAmount)}</span></div>
         {order.discountAmount ? <div className={styles.pair}><span>割引</span><span>-{yen(order.discountAmount)}</span></div> : null}
         {order.couponDiscountAmount ? <div className={styles.pair}><span>クーポン</span><span>-{yen(order.couponDiscountAmount)}</span></div> : null}
-        {template.showTaxSummary ? <div className={styles.pair}><span>消費税 {order.taxRate}%</span><span>{yen(order.taxAmount)}</span></div> : null}
+        {template.showTaxSummary ? <div className={styles.pair}><span>{order.taxRate > 0 ? `消費税 ${order.taxRate}%` : '消費税'}</span><span>{yen(order.taxAmount)}</span></div> : null}
         <div className={`${styles.pair} ${styles.total}`}><span>合計</span><span>{yen(order.totalAmount)}</span></div>
         {order.paymentMethod === 'cash' ? <><div className={styles.pair}><span>お預かり</span><span>{yen(order.cashTenderedAmount)}</span></div><div className={styles.pair}><span>お釣り</span><span>{yen(order.cashChangeAmount)}</span></div></> : null}
         {template.showOrderNote && order.note ? <div>備考: {order.note}</div> : null}</>,

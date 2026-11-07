@@ -1,4 +1,5 @@
 import { posPickupTicketCopy } from './pos-pickup-ticket-copy';
+import type { PosCounterTaxBucket } from './pos-counter-tax';
 
 export type PosPrinterConnection = {
   deviceType: "escpos_network" | "escpos_bluetooth" | "escpos_usb" | "star_printer";
@@ -181,12 +182,37 @@ export type PosPrintPayload = {
     couponDiscountAmount: number;
     taxAmount: number;
     taxRate: number;
+    taxBreakdown?: PosCounterTaxBucket[];
+    originalNote?: string;
     totalAmount: number;
     cashTenderedAmount?: number | null;
     cashChangeAmount?: number | null;
     items: PosPrintLineItem[];
   };
 };
+
+export function prefixPosReducedTaxMarker(name: string, reduced: boolean) {
+  return reduced && name ? `※${name}` : name;
+}
+
+export function applyPosReceiptTaxBreakdown(
+  receiptTemplate: PosReceiptTemplateSettings,
+  order: NonNullable<PosPrintPayload['order']>,
+  taxBreakdown = order.taxBreakdown
+) {
+  if (!taxBreakdown?.length) return { receiptTemplate, order };
+  const yen = (amount: number) => `¥${amount.toLocaleString('ja-JP')}`;
+  const taxNotes = taxBreakdown.map(bucket => `${bucket.rate}%対象 ${yen(bucket.grossAmount)} (内税 ${yen(bucket.taxAmount)})`);
+  if (taxBreakdown.some(bucket => bucket.rate === 8)) taxNotes.push('※軽減税率対象');
+  const originalNote = order.originalNote ?? order.note ?? '';
+  // Both installed receipt renderers wrap order.note. A plain separator works
+  // in the raw renderer and the bitmap renderer without requiring a new APK.
+  const note = [...taxNotes, ...(receiptTemplate.showOrderNote && originalNote ? [originalNote] : [])].join(' / ');
+  return {
+    receiptTemplate: { ...receiptTemplate, showOrderNote: true },
+    order: { ...order, note, originalNote, taxBreakdown, taxRate: taxBreakdown.length > 1 ? 0 : taxBreakdown[0].rate }
+  };
+}
 
 type BridgePrintResult = {
   ok?: boolean;

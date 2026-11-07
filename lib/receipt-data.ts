@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import type { PosCounterTaxBucket } from "./pos-counter-tax";
 
 export type OnlineReceiptBrand = "nanacha" | "maamaa";
 
@@ -38,8 +39,10 @@ export type OnlineReceiptViewModel = {
   };
   purposeText: string;
   taxRate: number;
+  taxBreakdown?: PosCounterTaxBucket[];
   items: OnlineReceiptItem[];
   subtotalAmount: number;
+  posDiscountAmount?: number;
   couponDiscountAmount: number;
   totalAmount: number;
   refundAmount: number;
@@ -60,6 +63,7 @@ type OrderRow = {
   pickupDate: string;
   pickupTime: string;
   amount: number;
+  counterRefundAmount: number | null;
   currency: string;
   drink: string;
   size: string;
@@ -184,6 +188,29 @@ export function getOnlineReceiptTaxRate(input: {
   return 8;
 }
 
+/** Undefined is a legacy receipt; null means an existing POS snapshot is invalid. */
+export function getSavedPosReceiptTaxBreakdown(input: {
+  orderSource: unknown;
+  customerSummary: unknown;
+  originalAmount: number;
+}): PosCounterTaxBucket[] | null | undefined {
+  if (clean(input.orderSource).toLowerCase() !== "store_pos") return undefined;
+  const summary = asRecord(input.customerSummary);
+  if (!("taxBreakdown" in summary)) return undefined;
+  const { taxBreakdown } = summary;
+  if (!Array.isArray(taxBreakdown) || taxBreakdown.length > 2 || !Number.isSafeInteger(input.originalAmount) || input.originalAmount < 0
+    || summary.taxableAmount !== input.originalAmount) return null;
+  const buckets: PosCounterTaxBucket[] = [];
+  for (const raw of taxBreakdown) {
+    const { rate, grossAmount, taxAmount } = asRecord(raw);
+    if (typeof rate !== "number" || !Number.isFinite(rate) || rate < 0 || rate > 100 || buckets.some(bucket => bucket.rate === rate)
+      || typeof grossAmount !== "number" || !Number.isSafeInteger(grossAmount) || grossAmount <= 0
+      || typeof taxAmount !== "number" || !Number.isSafeInteger(taxAmount) || taxAmount < 0 || taxAmount > grossAmount) return null;
+    buckets.push({ rate, grossAmount, taxAmount });
+  }
+  return buckets.reduce((sum, bucket) => sum + bucket.grossAmount, 0) === input.originalAmount ? buckets : null;
+}
+
 function getIncludedTax(totalAmount: number, taxRate: number) {
   return Math.round(totalAmount * taxRate / (100 + taxRate));
 }
@@ -302,10 +329,12 @@ function getMaamaaDetailsFromSummary(summary: CustomerSummary) {
   });
 }
 
-function buildItems(order: OrderRow, itemRows: ItemRow[], brand: OnlineReceiptBrand): OnlineReceiptItem[] {
+function buildItems(order: OrderRow, itemRows: ItemRow[], brand: OnlineReceiptBrand, taxBreakdown?: PosCounterTaxBucket[]): OnlineReceiptItem[] {
   if (itemRows.length) {
     const maamaaSections = brand === "maamaa" ? getMaamaaSections(order.customerSummary) : [];
     const maamaaDetails = brand === "maamaa" ? getMaamaaDetailsFromSummary(order.customerSummary) : [];
+    const posItems = taxBreakdown ? asArray(order.customerSummary.items) : [];
+    const markReduced = taxBreakdown?.some(bucket => bucket.rate === 8) ?? false;
     return itemRows.map((item, index) => {
       const details = brand === "maamaa"
         ? (maamaaDetails[index]?.length ? maamaaDetails[index] : [item.sizeLabel, item.optionLabel].map(clean).filter(Boolean))
@@ -314,6 +343,31 @@ function buildItems(order: OrderRow, itemRows: ItemRow[], brand: OnlineReceiptBr
         ? (maamaaSections[index] ?? [])
         : (item.toppingLabels.length ? [{ title: "トッピング", items: item.toppingLabels }] : []);
       const measured = item.measuredQuantity && item.measuredUnit ? `${item.measuredQuantity}${item.measuredUnit}` : "";
+      const posItem = asRecord(posItems[index]);
+      if (posItem.name === item.itemName) {
+        const optionsByGroup = new Map<string, Map<string, number>>();
+        const standard = posItem.counterStandardTax === true;
+        for (const raw of asArray(posItem.options)) {
+          const option = asRecord(raw);
+          const name = clean(option.name);
+          if (!name) continue;
+          const group = clean(option.groupName) || "オプション";
+          const choices = optionsByGroup.get(group) ?? new Map<string, number>();
+          const reduced = markReduced && !(option.counterStandardTax ?? standard) && option.complimentary !== true && Number(option.priceDelta) > 0;
+          const label = reduced ? `※${name}` : name;
+          choices.set(label, (choices.get(label) ?? 0) + 1);
+          optionsByGroup.set(group, choices);
+        }
+        return {
+          title: markReduced && !standard ? `※${item.itemName}` : item.itemName,
+          description: measured || (item.quantity > 1 ? `数量 ${item.quantity}` : ""),
+          details: [],
+          sections: Array.from(optionsByGroup, ([title, choices]) => ({
+            title, items: Array.from(choices, ([label, quantity]) => quantity > 1 ? `${label} x${quantity}` : label)
+          })),
+          amount: Number(item.amount ?? 0)
+        };
+      }
       return {
         title: item.itemName || `商品 ${index + 1}`,
         description: measured || (item.quantity > 1 ? `数量 ${item.quantity}` : ""),
@@ -339,8 +393,7 @@ function buildItems(order: OrderRow, itemRows: ItemRow[], brand: OnlineReceiptBr
 export async function getOnlineReceiptViewModel(input: {
   orderId: string;
   pickupCode: string;
-  downloadedAt?: Date | string | null;
-  downloadCount?: number;
+  recordDownload?: boolean;
 }): Promise<OnlineReceiptViewModel | null> {
   const orderRows = await sql`
     select
@@ -354,6 +407,9 @@ export async function getOnlineReceiptViewModel(input: {
       store_customer_orders.pickup_date::text as "pickupDate",
       store_customer_orders.pickup_time as "pickupTime",
       store_customer_orders.amount,
+      case when store_customer_orders.order_source = 'store_pos' and store_customer_orders.customer_summary ? 'taxBreakdown'
+        then (select coalesce(sum(refunded_amount), 0)::int from store_customer_order_items where order_id = store_customer_orders.id)
+      end as "counterRefundAmount",
       store_customer_orders.currency,
       store_customer_orders.drink,
       store_customer_orders.size,
@@ -384,6 +440,12 @@ export async function getOnlineReceiptViewModel(input: {
   `;
   const order = orderRows[0] as OrderRow | undefined;
   if (!order || !["paid", "refunded", "partial_refunded"].includes(order.paymentStatus)) return null;
+  const customerSummary = asRecord(order.customerSummary);
+  const totalAmount = Number(order.amount ?? 0);
+  const taxBreakdown = getSavedPosReceiptTaxBreakdown({
+    orderSource: order.orderSource, customerSummary, originalAmount: totalAmount + Number(order.counterRefundAmount ?? 0)
+  });
+  if (taxBreakdown === null) return null;
 
   const itemRows = await sql`
     select
@@ -406,21 +468,21 @@ export async function getOnlineReceiptViewModel(input: {
     order by sort_order asc, created_at asc
   ` as ItemRow[];
 
-  const refundRows = await sql`
+  const refundRows = order.counterRefundAmount == null ? await sql`
     select coalesce(sum(refunded_amount), 0)::int as "refundAmount"
     from store_customer_order_items
     where order_id = ${input.orderId}
-  `;
+  ` : [];
 
-  const customerSummary = asRecord(order.customerSummary);
   const brand = getBrand(order);
-  const totalAmount = Number(order.amount ?? 0);
-  const rawRefundAmount = Number(refundRows[0]?.refundAmount ?? 0);
+  const rawRefundAmount = Number(order.counterRefundAmount ?? refundRows[0]?.refundAmount ?? 0);
   const receiptStatus = getReceiptStatus(order, rawRefundAmount > 0 ? rawRefundAmount : order.paymentStatus === "refunded" ? totalAmount : 0);
-  const items = buildItems({ ...order, customerSummary }, itemRows, brand);
+  const items = buildItems({ ...order, customerSummary }, itemRows, brand, taxBreakdown);
   const couponDiscountAmount = getCouponDiscount(customerSummary);
   const subtotalAmount = getSubtotal(customerSummary, totalAmount, couponDiscountAmount, items);
-  const taxRate = getOnlineReceiptTaxRate({ orderSource: order.orderSource, customerSummary });
+  const taxRate = taxBreakdown ? (taxBreakdown.length === 1 ? taxBreakdown[0].rate : 0) : getOnlineReceiptTaxRate({ orderSource: order.orderSource, customerSummary });
+  const posDiscountAmount = Number(customerSummary.discountAmount);
+  const downloadRecord = input.recordDownload ? await recordOnlineReceiptDownload(input) : null;
 
   return {
     brand,
@@ -435,8 +497,8 @@ export async function getOnlineReceiptViewModel(input: {
     pickupTime: clean(order.pickupTime),
     paidAt: formatDateTime(order.paidAt) || formatDateTime(order.createdAt),
     paymentProvider: clean(order.paymentProvider).toUpperCase(),
-    downloadedAt: formatDateTime(input.downloadedAt ?? null),
-    downloadCount: Math.max(0, Math.round(Number(input.downloadCount ?? 0) || 0)),
+    downloadedAt: formatDateTime(downloadRecord?.downloadedAt ?? null),
+    downloadCount: Math.max(0, Math.round(Number(downloadRecord?.downloadCount ?? 0) || 0)),
     issuer: {
       name: clean(order.issuerName) || "会社名未設定",
       address: clean(order.issuerAddress),
@@ -445,13 +507,14 @@ export async function getOnlineReceiptViewModel(input: {
     },
     purposeText: getReceiptPurposeText(order.receiptPurposeText),
     taxRate,
+    ...(taxBreakdown ? { taxBreakdown, ...(Number.isSafeInteger(posDiscountAmount) && posDiscountAmount > 0 ? { posDiscountAmount } : {}) } : {}),
     items,
     subtotalAmount,
     couponDiscountAmount,
     totalAmount,
     refundAmount: receiptStatus.refundAmount,
     refundedAt: receiptStatus.refundedAt,
-    taxIncludedAmount: getIncludedTax(totalAmount, taxRate)
+    taxIncludedAmount: taxBreakdown ? taxBreakdown.reduce((sum, bucket) => sum + bucket.taxAmount, 0) : getIncludedTax(totalAmount, taxRate)
   };
 }
 

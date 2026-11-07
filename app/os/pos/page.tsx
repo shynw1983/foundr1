@@ -12,6 +12,7 @@ import discountListStyles from "./PosDiscountCard.module.css";
 import { PosSettingsNavigation, posSettingsPanes, posSettingsGroups, type PosSettingsPane, type PosSettingsGroup } from "./PosSettingsNavigation";
 import settingsNavigationStyles from "./PosSettingsNavigation.module.css";
 import { PosCampaignFields } from "./PosCampaignFields";
+import { PosCounterMenuPolicySettings } from "./PosCounterMenuPolicySettings";
 
 import {
   BarChart3,
@@ -1172,6 +1173,10 @@ export default function PosPage() {
             </div>
           </div>
           </>)}
+          <div hidden={activeSettingsPane !== "general"}>
+            <PosCounterMenuPolicySettings key={selectedStoreId} storeId={selectedStoreId} active={activeSettingsPane === "general"}
+              canManage={canManagePosSettings} blocked={loading || taxSaving || categorySaving} />
+          </div>
           {renderSettingsPane("fulfillment", <>
           <PosFulfillmentSettingsSection
             value={taxForm.fulfillmentWorkspace}

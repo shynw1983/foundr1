@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import puppeteer from "puppeteer-core";
-import { getDemoOnlineReceiptViewModel, getOnlineReceiptViewModel, recordOnlineReceiptDownload } from "../../../../../../lib/receipt-data";
+import { getDemoOnlineReceiptViewModel, getOnlineReceiptViewModel } from "../../../../../../lib/receipt-data";
 import type { Browser } from "puppeteer-core";
 import type { Page } from "puppeteer-core";
 import type { OnlineReceiptItem, OnlineReceiptViewModel } from "../../../../../../lib/receipt-data";
@@ -169,6 +169,10 @@ function getReceiptHtml(receipt: OnlineReceiptViewModel) {
   const refundRow = receiptWithAssets.refundAmount > 0
     ? `<div class="is-refund"><dt>${escapeHtml(receiptWithAssets.receiptStatus === "cancelled" ? "取消・返金額" : "返金額")}</dt><dd>-${escapeHtml(formatCurrency(receiptWithAssets.refundAmount))}</dd></div>`
     : "";
+  const taxRows = receiptWithAssets.taxBreakdown ? [
+    ...receiptWithAssets.taxBreakdown.map(bucket => `<div><dt>会計時 ${escapeHtml(bucket.rate)}%対象（税込）</dt><dd>${escapeHtml(formatCurrency(bucket.grossAmount))}（内税 ${escapeHtml(formatCurrency(bucket.taxAmount))}）</dd></div>`),
+    ...(receiptWithAssets.taxBreakdown.some(bucket => bucket.rate === 8) ? ['<div><dt>※</dt><dd>軽減税率対象</dd></div>'] : [])
+  ].join("") : `<div><dt>内消費税等 ${escapeHtml(receiptWithAssets.taxRate)}%対象</dt><dd>${escapeHtml(formatCurrency(receiptWithAssets.taxIncludedAmount))}</dd></div>`;
   const footerNotice = receiptWithAssets.receiptStatus === "cancelled"
     ? "この領収書は取消済みです。返金記録として保存してください。"
     : receiptWithAssets.receiptStatus === "partially_refunded"
@@ -241,10 +245,11 @@ function getReceiptHtml(receipt: OnlineReceiptViewModel) {
       <section class="online-receipt-total-panel" aria-label="合計">
         <dl>
           <div><dt>小計</dt><dd>${escapeHtml(formatCurrency(receiptWithAssets.subtotalAmount))}</dd></div>
+          ${receiptWithAssets.posDiscountAmount ? `<div><dt>割引</dt><dd>-${escapeHtml(formatCurrency(receiptWithAssets.posDiscountAmount))}</dd></div>` : ""}
           ${receiptWithAssets.couponDiscountAmount > 0 ? `<div><dt>クーポン値引き</dt><dd>-${escapeHtml(formatCurrency(receiptWithAssets.couponDiscountAmount))}</dd></div>` : ""}
           ${refundRow}
           <div class="is-total"><dt>合計</dt><dd>${escapeHtml(formatCurrency(receiptWithAssets.totalAmount))}</dd></div>
-          <div><dt>内消費税等 ${escapeHtml(receiptWithAssets.taxRate)}%対象</dt><dd>${escapeHtml(formatCurrency(receiptWithAssets.taxIncludedAmount))}</dd></div>
+          ${taxRows}
         </dl>
       </section>
 
@@ -334,16 +339,12 @@ export async function GET(request: Request) {
   const recipientMode = getRecipientMode(clean(url.searchParams.get("recipientMode")));
   const recipientName = clean(url.searchParams.get("recipientName")).slice(0, 80);
 
-  const downloadRecord = demo === "nanacha" || demo === "maamaa" || !orderId || !pickupCode
-    ? null
-    : await recordOnlineReceiptDownload({ orderId, pickupCode });
   const receipt = demo === "nanacha" || demo === "maamaa"
     ? getDemoOnlineReceiptViewModel(demo)
     : orderId && pickupCode ? await getOnlineReceiptViewModel({
         orderId,
         pickupCode,
-        downloadedAt: downloadRecord?.downloadedAt ?? null,
-        downloadCount: downloadRecord?.downloadCount ?? 0
+        recordDownload: true
       }) : null;
 
   if (!receipt) {

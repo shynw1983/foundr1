@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { sql } from './db';
 import { relayPrintLock } from './store-relay-print-policy';
-import { normalizePosPrinterSettings, resolvePosReceiptTemplate, type PosPrintPayload } from './pos-printer';
+import { applyPosReceiptTaxBreakdown, normalizePosPrinterSettings, resolvePosReceiptTemplate, type PosPrintPayload } from './pos-printer';
 import { invoiceRecipientStem, validateInvoiceDetails } from './pos-invoice';
 
 const validId = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -34,11 +34,11 @@ export async function issuePosInvoice(input: { storeId: string; orderId: string;
   const source = original.payload as PosPrintPayload;
   const fingerprint = createHash('sha256').update(JSON.stringify({ orderId: input.orderId, ...details })).digest('hex');
   const documentId = randomUUID();
-  const payload = { ...structuredClone(source), printer: { ...source.printer, openCashDrawer: false }, receiptTemplate: structuredClone(template),
-    invoiceIssuance: { originalDocumentId: original.id, operationId: input.operationId, employeeId, issuedAt: new Date().toISOString(), requestFingerprint: fingerprint },
-    order: { ...source.order!, receiptRequested: true, receiptTitle: template.invoiceTitle,
-      receiptRecipientName: invoiceRecipientStem(details.receiptRecipientName ?? template.invoiceRecipientName),
-      receiptPurposeText: details.receiptPurposeText ?? template.invoicePurposeText } };
+  const receipt = applyPosReceiptTaxBreakdown(template, { ...source.order!, receiptRequested: true, receiptTitle: template.invoiceTitle,
+    receiptRecipientName: invoiceRecipientStem(details.receiptRecipientName ?? template.invoiceRecipientName),
+    receiptPurposeText: details.receiptPurposeText ?? template.invoicePurposeText });
+  const payload = { ...structuredClone(source), ...receipt, printer: { ...source.printer, openCashDrawer: false },
+    invoiceIssuance: { originalDocumentId: original.id, operationId: input.operationId, employeeId, issuedAt: new Date().toISOString(), requestFingerprint: fingerprint } };
   await sql.transaction([
     relayPrintLock(input.storeId),
     sql`select 1 / case when exists(select 1 from store_customer_orders where id::text=${input.orderId} and store_id::text=${input.storeId}
