@@ -3706,9 +3706,6 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
       {debugMode && debugLoadError && !simpleMode ? <div className="inline-alert is-warning" role="alert">{t(debugLoadError)}</div> : null}
       {!debugMode ? <StoreRelayPanel relay={relay} storeId={selectedStoreId} /> : null}
       {!debugMode ? <PosPrintDocumentsPanel storeId={selectedStoreId} controller={printDocuments} requestedOrder={requestedPrintOrder} canPrint={nativePrintAvailable || relayPrintAvailable} showSummary={showPrintQueue} /> : null}
-      {!debugMode ? <PosFulfillmentPanel storeId={selectedStoreId} enabled={posSettings.fulfillmentWorkspace.enabled}
-        overdueMinutes={posSettings.fulfillmentWorkspace.overdueMinutes} disabled={offlineCheckoutOnly}
-        checkoutRefreshKey={summary.latestOrders[0]?.id ?? ""} /> : null}
       {!simpleMode ? offlineNotice : null}
       {simpleMode ? bowlPrintNotice : null}
 
@@ -3771,6 +3768,9 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
       {simpleMode ? menuRefreshNotice : null}
       {simpleMode && (!simplePaymentOpen || !checkoutNotice) ? pageNotice : null}
       {simpleMode ? offlineNotice : null}
+      {!debugMode ? <PosFulfillmentPanel storeId={selectedStoreId} enabled={posSettings.fulfillmentWorkspace.enabled}
+        overdueMinutes={posSettings.fulfillmentWorkspace.overdueMinutes} disabled={offlineCheckoutOnly}
+        checkoutRefreshKey={summary.latestOrders[0]?.id ?? ""} simpleMode={simpleMode} /> : null}
       <section className="store-pos-layout">
         <div className="store-pos-menu-panel">
           <aside className="store-pos-filter-panel">

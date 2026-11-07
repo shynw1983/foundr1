@@ -48,6 +48,20 @@
 .root button:focus-visible { outline: 2px solid var(--store-focus-ring, var(--green)); outline-offset: 2px; }
 .root button:disabled { cursor: not-allowed; }
 
+.simple { flex: 0 0 auto; }
+.simple .strip { min-height: 52px; padding: 2px 10px; }
+.simple .expand { min-height: 48px; gap: 12px; font-size: 16px; }
+.simple .count { font-size: 14px; }
+.simple .count strong { font-size: 18px; }
+.simple .expandLabel { font-size: 14px; }
+.simple .refresh,
+.simple .headerActions button { min-width: 44px; min-height: 44px; }
+.simple .ticketActions button { min-height: 48px; font-size: 16px; }
+.simple .summary,
+.simple .boardHeader p { font-size: 14px; }
+.simple .noticeActions button,
+.simple .undo button { min-height: 44px; font-size: 14px; }
+
 @media (max-width: 560px) {
   .strip { gap: 6px; padding: 4px 8px; }
   .expand { gap: 9px; font-size: 12px; }
@@ -61,6 +75,10 @@
   .ticketActions { flex-direction: column; }
   .summary { font-size: 12px; }
   .ticketActions button { padding: 8px; font-size: 12px; }
+  .simple .strip { gap: 6px; padding: 2px 8px; }
+  .simple .expand { gap: 8px; font-size: 15px; }
+  .simple .count { font-size: 13px; }
+  .simple .expandLabel { font-size: 13px; }
 }
 
 @media (min-width: 1440px) {
