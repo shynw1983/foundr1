@@ -24,6 +24,8 @@ import menuRefreshStyles from "./PosMenuRefreshNotice.module.css";
 import { PosMenuRefreshNotice } from "./PosMenuRefreshNotice";
 import { usePosMenuRefresh, type PosMenuVersions } from "./usePosMenuRefresh";
 import { PosPrintDocumentsPanel } from "./PosPrintDocumentsPanel";
+import { buildPosPrintDocumentSnapshots } from "../../../lib/pos-print-document-builder";
+import { posCheckoutPrintStatus } from "../../../lib/pos-checkout-print-notice";
 import { usePosPrintDocuments } from "./usePosPrintDocuments";
 import { POS_PRINT_DOCUMENT_VERSION, type PosPrintMode } from "../../../lib/pos-print-document-contract";
 import { getPosItemFulfillmentMode, isPosImmediateItem, type PosItemFulfillmentMode } from "../../../lib/pos-item-fulfillment";
@@ -926,7 +928,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [checkoutNotice, setCheckoutNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const [checkoutNotice, setCheckoutNotice] = useState<{ kind: "error" | "success"; text: string; print?: { orderId: string; count: number } } | null>(null);
   const [printModeChoice, setPrintModeChoice] = useState<PosPrintMode | null>(null);
   const [requestedPrintOrder, setRequestedPrintOrder] = useState<{ id: string; request: number } | null>(null);
   const [lastPaidPrintOrderId, setLastPaidPrintOrderId] = useState("");
@@ -2122,29 +2124,17 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     function add(label: string, payload: PosPrintPayload, kind: "kitchen" | "finishing" | "pickup" | "receipt" = "kitchen", itemId?: string) {
       jobs.push({ kind, itemId, offline: Boolean(body.offline), createdAt: batchCreatedAt, sequence: jobs.length, id: `${body.offlineClientOrderId || body.orderId}:${jobs.length}`, clientOrderId: String(body.offlineClientOrderId || ""), storeId: selectedStoreId, orderId: String(body.orderId), label, payload, state: "pending", error: "" });
     }
-    for (const ticket of tickets) {
-      const item = cartSnapshot[ticket.itemIndex];
-      if (!item) throw new Error("料理と伝票の対応を確認できません。");
-      const kitchen = createKitchenPrintPayload({ ...body, pickupCode: ticket.pickupCode }, [item], getStoreReceiptPrinter(), item.brandName, item.brandId);
-      if (item.preparationNote && kitchen.order) kitchen.order.note = [item.preparationNote, kitchen.order.note].filter(Boolean).join(" / ");
-      kitchen.printer = { ...kitchen.printer, openCashDrawer: false };
-      kitchen.kitchenTicketTemplate = { ...kitchen.kitchenTicketTemplate!, title: "厨房伝票", showTitle: true, showPickupCode: true, showItems: true, showOptions: true, showNote: true, largeText: true,
-        blockStyles: { ...kitchen.kitchenTicketTemplate!.blockStyles, pickup: { ...kitchen.kitchenTicketTemplate!.blockStyles.pickup, textSize: "xlarge", bold: true } } };
-      add(`${ticket.pickupCode} 厨房伝票`, kitchen, "kitchen", ticket.itemId);
-      if (includeFinishing) add(`${ticket.pickupCode} 出品伝票`, {
-        ...kitchen,
-        kitchenTicketTemplate: { ...kitchen.kitchenTicketTemplate!, title: "出品伝票", showTitle: true, showAmounts: false,
-          customMessage: "厨房伝票と番号を照合し、味付け・追加・メモを確認してください。" }
-      }, "finishing", ticket.itemId);
-      const customerLanguage = String(body.memberLanguage || "ja");
-      const customerCopy = posPickupTicketCopy[customerLanguage] || posPickupTicketCopy.ja;
-      add(`${ticket.pickupCode} お客様番号札`, { ...kitchen,
-        order: { ...kitchen.order!, note: "", items: [{ name: getLocalizedDisplayName(item.name, item.displayNames, customerLanguage), quantity: 1, amount: 0,
-          options: [getWeightLineLabel(item), ...getCustomerDisplayOptionLabel(item.selectedOptions, customerLanguage).split(" / ")].filter(Boolean) }] },
-        printer: { ...getStoreReceiptPrinter(), openCashDrawer: false },
-        kitchenTicketTemplate: { ...kitchen.kitchenTicketTemplate!, language: "ja", title: customerCopy.title, showTitle: true, showAmounts: false, showNote: false, showOrderType: false,
-          customMessage: customerCopy.message, showTimestamp: true }
-      }, "pickup", ticket.itemId);
+    const bowlDocuments = buildPosPrintDocumentSnapshots(posSettings.printerSettings, stores.find(store => store.id === selectedStoreId)?.name || "", {
+      pickupCode: String(body.pickupCode || ""), orderType: String(body.orderType || orderType), paymentMethod,
+      amount: Number(body.amount || 0), subtotalAmount: Number(body.subtotalAmount || body.amount || 0),
+      discountAmount: Number(body.discountAmount || 0), couponDiscountAmount: Number(body.couponDiscountAmount || 0),
+      taxAmount: Number(body.taxAmount || 0), taxRate: Number(body.taxRate || 0),
+      cashTenderedAmount: null, cashChangeAmount: null, receiptRequested: false,
+      note: String(body.note || ""), memberLanguage: String(body.memberLanguage || "ja"), printedAt: batchCreatedAt
+    }, cartSnapshot.map(item => ({ ...item, amount: getCartItemAmount(item), measuredUnit: item.measuredUnit || "g", preparationNote: item.preparationNote || "" })), tickets, "auto");
+    for (const document of bowlDocuments) {
+      if (!document.requested || !document.documentKey.startsWith("item:") || document.kind === "receipt" || (!includeFinishing && document.kind === "finishing")) continue;
+      add(document.label, document.payload, document.kind, document.itemId || undefined);
     }
     // Other brands still get their own kitchen document in a mixed checkout.
     const otherItems = cartSnapshot.filter((item, index) => !tickets.some((ticket) => ticket.itemIndex === index) && !isPosImmediateItem(item));
@@ -2554,8 +2544,8 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     }
   }
 
-  function showCheckoutNotice(kind: "error" | "success", text: string) {
-    setCheckoutNotice({ kind, text });
+  function showCheckoutNotice(kind: "error" | "success", text: string, print?: { orderId: string; count: number }) {
+    setCheckoutNotice({ kind, text, print });
     setMessage(text);
   }
 
@@ -2837,7 +2827,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
       const receiptRequestLabel = receiptRequested ? " / 領収書" : "";
       const customerDisplayLanguage = getCustomerDisplayLanguage(selectedMember);
       const savedPrintLabel = serverPrintDocuments?.pendingCount ? "会計済み・印刷待ち" : "会計を保存しました";
-      showCheckoutNotice("success", `${t(body.offline ? "オフライン会計を端末に保存しました" : savedPrintLabel)}。${checkoutNumberLabel(body)} / ${formatYen(body.amount)}${discountLabel}${couponLabel}${changeLabel}${receiptRequestLabel}${receiptPrintMessage}${kitchenPrintMessage}`);
+      showCheckoutNotice("success", `${t(body.offline ? "オフライン会計を端末に保存しました" : savedPrintLabel)}。${checkoutNumberLabel(body)} / ${formatYen(body.amount)}${discountLabel}${couponLabel}${changeLabel}${receiptRequestLabel}${receiptPrintMessage}${kitchenPrintMessage}`, serverPrintDocuments ? { orderId: serverPrintDocuments.orderId, count: serverPrintDocuments.documentCount } : undefined);
       setCompletedDisplayState({
         status: "complete",
         storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",
@@ -2872,12 +2862,10 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         try {
           await removePosCheckoutRecovery(selectedStoreId);
           await refreshPrintJobs();
-          await printDocuments.refresh();
+          await printDocuments.refresh(serverPrintDocuments.orderId);
           if (serverPrintDocuments.mode === "auto" && serverPrintDocuments.pendingCount > 0 && !body.relayPrinting) {
             const sent = await printDocuments.sendCurrentOrder(serverPrintDocuments.orderId, offlineClientOrderId);
-            showCheckoutNotice("success", sent.ok
-              ? `${t("会計済み・伝票送信済み")}。${checkoutNumberLabel(body)} / ${formatYen(body.amount)}`
-              : `${t("会計済み・印刷待ち")}。${checkoutNumberLabel(body)} / ${formatYen(body.amount)} / ${t(sent.error || "印刷待ちの伝票を確認してください。")}`);
+            if (!sent.ok) setMessage(t(sent.error || "印刷待ちの伝票を確認してください。"));
           }
         } catch (error) {
           showCheckoutNotice("success", `${t("会計済み・印刷状況を確認してください。")} ${checkoutNumberLabel(body)} / ${formatYen(body.amount)} / ${t(error instanceof Error ? error.message : "印刷待ちの伝票を確認してください。")}`);
@@ -3611,7 +3599,10 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
       ))}
     </div>
   );
-  const pageNotice = message ? <div className="action-notice store-pos-notice">{message}</div> : null;
+  const checkoutNoticeText = checkoutNotice?.print
+    ? checkoutNotice.text.replace(/^[^。]*。/, `${t(posCheckoutPrintStatus(checkoutNotice.print.orderId, checkoutNotice.print.count, printDocuments.orderQueues.get(checkoutNotice.print.orderId) ?? printDocuments.queue, printDocuments.orderQueues.has(checkoutNotice.print.orderId) ? checkoutNotice.print.orderId : printDocuments.queueOrderId, printDocuments.readError))}。`)
+    : checkoutNotice?.text || "";
+  const pageNotice = message ? <div className="action-notice store-pos-notice">{message === checkoutNotice?.text ? checkoutNoticeText : message}</div> : null;
   const modeToggle = (
     <button type="button" className="secondary-button" ref={modeToggleRef} data-pos-mode-toggle aria-pressed={simpleMode} onClick={toggleSimpleMode}>
       {t("簡易モード")}
@@ -3634,7 +3625,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
       {simpleMode && !simpleCheckoutComplete ? <div className={checkoutStyles.simpleFooterTotal} data-pos-footer-total><span>{t("合計")}</span><strong>{formatYen(activeCheckoutAmount)}</strong></div> : null}
       {checkoutNotice ? (
         <div className={`${checkoutStyles.notice} ${checkoutNotice.kind === "error" ? checkoutStyles.error : checkoutStyles.success}`} role={checkoutNotice.kind === "error" ? "alert" : "status"}>
-          <span>{t(checkoutNotice.text)}{checkoutNotice.kind === "success" && lastPaidPrintOrderId ? <button type="button" className={checkoutStyles.viewPrint} data-print-paid-open onClick={() => void openPrintAfterDialog(lastPaidPrintOrderId, "store-pos-cart", () => setCartOpen(false))}>{t("伝票を確認")}</button> : null}</span>
+          <span>{t(checkoutNoticeText)}{checkoutNotice.kind === "success" && lastPaidPrintOrderId ? <button type="button" className={checkoutStyles.viewPrint} data-print-paid-open onClick={() => void openPrintAfterDialog(lastPaidPrintOrderId, "store-pos-cart", () => setCartOpen(false))}>{t("伝票を確認")}</button> : null}</span>
           {!simpleCheckoutComplete ? <button type="button" aria-label={t("閉じる")} onClick={() => setCheckoutNotice(null)}><X size={16} /></button> : null}
         </div>
       ) : null}

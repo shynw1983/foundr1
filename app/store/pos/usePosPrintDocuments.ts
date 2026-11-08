@@ -47,6 +47,8 @@ export function usePosPrintDocuments({ storeId, directAvailable, relayOwner }: {
   const busyRef = useRef(false);
   const filterRef = useRef("");
   const queueRef = useRef<PosPrintDocumentQueue | null>(null);
+  const [queueOrderId, setQueueOrderId] = useState("");
+  const orderQueuesRef = useRef(new Map<string, PosPrintDocumentQueue>());
   const requestRef = useRef({ version: 0, append: false, cursor: "" });
   const lastSuccessfulRequestRef = useRef(-1);
   const progressRef = useRef({ signature: "", observedAt: 0 });
@@ -70,6 +72,12 @@ export function usePosPrintDocuments({ storeId, directAvailable, relayOwner }: {
       const next = request.append && current ? { ...body, documents: [...current.documents, ...body.documents.filter(doc => !current.documents.some(old => old.id === doc.id))] } : body;
       queueRef.current = next;
       setQueue(next);
+      setQueueOrderId(orderId);
+      if (orderId) {
+        orderQueuesRef.current.delete(orderId);
+        if (!next.hasMore && next.documents.length > 0 && next.documents.every(document => document.state !== "pending" && document.state !== "sending")) orderQueuesRef.current.set(orderId, next);
+        if (orderQueuesRef.current.size > 10) orderQueuesRef.current.delete(orderQueuesRef.current.keys().next().value!);
+      }
       requestRef.current = { ...request, append: false, cursor: "" };
       const signature = next.documents.filter(doc => doc.state === "pending" || doc.state === "sending")
         .map(doc => `${doc.id}:${doc.revision}:${doc.state}`).join("|");
@@ -100,7 +108,8 @@ export function usePosPrintDocuments({ storeId, directAvailable, relayOwner }: {
     generationRef.current += 1; filterRef.current = ""; queueRef.current = null; lastSuccessfulRequestRef.current = -1;
     requestRef.current = { version: requestRef.current.version + 1, append: false, cursor: "" };
     progressRef.current = { signature: "", observedAt: 0 };
-    setQueue(null); setReadError(""); setActionError(""); setLoading(false);
+    orderQueuesRef.current.clear();
+    setQueueOrderId(""); setQueue(null); setReadError(""); setActionError(""); setLoading(false);
     if (!storeId) return;
     // Queue events do not yet cover relay ACKs. Read-only task confirmation is
     // bounded to two minutes of observed progress, then returns to idle cadence.
@@ -108,7 +117,7 @@ export function usePosPrintDocuments({ storeId, directAvailable, relayOwner }: {
       healthyIntervalMs: 5 * 60_000,
       fallbackIntervalMs: () => posPrintQueueRefreshInterval(queueRef.current, progressRef.current.observedAt),
       maxFailureIntervalMs: 5 * 60_000,
-      onUnauthorized: () => { queueRef.current = null; setQueue(null); }
+      onUnauthorized: () => { orderQueuesRef.current.clear(); queueRef.current = null; setQueue(null); }
     });
     coordinatorRef.current = coordinator;
     coordinator.start({ immediate: true });
@@ -240,6 +249,6 @@ export function usePosPrintDocuments({ storeId, directAvailable, relayOwner }: {
   function needsPhysicalReview(document: PosPrintDocument) {
     try { return Boolean(window.localStorage.getItem(attemptKey(storeId, document.id))); } catch { return false; }
   }
-  return { queue, loading, readError, actionError, busy, online, refresh, printDocuments, sendCurrentOrder, confirmPrinted, voidIneligible, needsPhysicalReview };
+  return { queue, queueOrderId, orderQueues: orderQueuesRef.current, loading, readError, actionError, busy, online, refresh, printDocuments, sendCurrentOrder, confirmPrinted, voidIneligible, needsPhysicalReview };
 }
 export type PosPrintDocumentsController = ReturnType<typeof usePosPrintDocuments>;

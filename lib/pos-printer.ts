@@ -90,6 +90,9 @@ export type PosKitchenTicketTemplateSettings = {
   showOrderType: boolean;
   showItems: boolean;
   showOptions: boolean;
+  showWeight: boolean;
+  showOptionGroupNames: boolean;
+  optionGroupVisibility: Record<string, boolean>;
   showNote: boolean;
   showTimestamp: boolean;
   showAmounts: boolean;
@@ -301,6 +304,9 @@ export const defaultPosKitchenTicketTemplateSettings: PosKitchenTicketTemplateSe
   showOrderType: true,
   showItems: true,
   showOptions: true,
+  showWeight: true,
+  showOptionGroupNames: true,
+  optionGroupVisibility: {},
   showNote: true,
   showTimestamp: true,
   showAmounts: false,
@@ -473,6 +479,9 @@ export function normalizePosKitchenTicketTemplateSettings(value: unknown): PosKi
     showOrderType: source.showOrderType !== false,
     showItems: source.showItems !== false,
     showOptions: source.showOptions !== false,
+    showWeight: source.showWeight !== false,
+    showOptionGroupNames: source.showOptionGroupNames !== false,
+    optionGroupVisibility: Object.fromEntries(Object.entries(source.optionGroupVisibility && typeof source.optionGroupVisibility === "object" && !Array.isArray(source.optionGroupVisibility) ? source.optionGroupVisibility : {}).filter(([key, value]) => key.length > 0 && key.length <= 160 && typeof value === "boolean").slice(0, 1000)),
     showNote: source.showNote !== false,
     showTimestamp: source.showTimestamp !== false,
     showAmounts: source.showAmounts === true,
@@ -635,7 +644,7 @@ export function getPosReceiptCopies(settings: PosPrinterSettings): number {
   return isPosReceiptPrintingEnabled(settings) ? normalizePosDocumentCopies(settings.receiptCopies) : 0;
 }
 
-/** These locks are shared by the settings preview, direct printing and the Android relay. */
+/** Explicit per-document content rules are shared by preview, direct printing and relay. */
 export function resolvePosBowlTicketTemplate(settings: PosPrinterSettings, kind: PosBowlTicketKind, brandId?: string | null, customerLanguage = 'ja'): PosKitchenTicketTemplateSettings {
   const config = getPosBowlTicketSettings(settings, kind);
   const selected = config.templateVariants.find(value => value.brandId === String(brandId ?? '').trim())?.template ?? config.template;
@@ -647,8 +656,7 @@ export function resolvePosBowlTicketTemplate(settings: PosPrinterSettings, kind:
     if (template.title === posPickupTicketCopy.ja.title) template.title = copy.title;
     if (template.customMessage === posPickupTicketCopy.ja.message) template.customMessage = copy.message;
   }
-  return { ...template, showTitle: true, showPickupCode: true, showItems: true, showOptions: true,
-    showNote: kind !== 'pickup', ...(kind === 'pickup' ? { showAmounts: false } : {}) };
+  return template;
 }
 
 export function getReceiptPrinter(settings: PosPrinterSettings) {

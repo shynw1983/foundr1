@@ -9,6 +9,7 @@ const bundle = await build({
       import { renderToStaticMarkup } from 'react-dom/server';
       import { PosPrintContentPreview } from './app/os/pos/PosSavedPrintPreviews';
       import { OsTranslationProvider } from './app/os/components/OsTranslationProvider';
+      export { posCheckoutPrintStatus } from './lib/pos-checkout-print-notice';
       export { buildPosPrintDocumentSnapshots } from './lib/pos-print-document-builder';
       export { buildRelayDocuments } from './lib/store-relay-documents';
       export { applyPosReceiptTaxBreakdown, normalizePosPrinterSettings } from './lib/pos-printer';
@@ -111,4 +112,51 @@ test('single-rate takeout keeps the reduced-rate markers and legacy sales gain n
   assert.equal(legacy.order.taxBreakdown, undefined);
   assert.equal(legacy.order.items[0].name, 'ウーロン茶');
   assert.equal(legacy.receiptTemplate.showOrderNote, false);
+});
+
+test('ticket content rules filter structured groups independently and leave receipts intact', () => {
+  const config = normalizePosPrinterSettings({ ...settings, bowlTickets: {
+    kitchen: { enabled: true, copies: 1, template: { showWeight: false, showOptionGroupNames: false, optionGroupVisibility: { heat: false } } },
+    finishing: { enabled: true, copies: 1, template: { showNote: false, optionGroupVisibility: { noodles: false }, showTimestamp: false } },
+    pickup: { enabled: true, copies: 1, template: { showOptions: false, showWeight: false, showTitle: false, showItems: false } }
+  } });
+  const meal = { ...items[0], selectedOptions: [
+    {id:'n',groupId:'noodles',groupName:'麺',name:'春雨 50g'},
+    {id:'h',groupId:'heat',groupName:'辛さ',name:'辛さ3'},
+    {id:'future',groupId:'new-group',groupName:'新規',name:'新しい選択肢'}
+  ] };
+  const snapshots = buildPosPrintDocumentSnapshots(config, 'Test', sale, [meal], [{itemIndex:0,itemId:'item',pickupCode:'001'}], 'auto');
+  const kitchen = snapshots.find(d=>d.kind==='kitchen').payload;
+  assert.deepEqual(kitchen.order.items[0].options, ['春雨 50g','新しい選択肢']);
+  const finishing = snapshots.find(d=>d.kind==='finishing').payload;
+  assert(!finishing.order.items[0].options.some(x=>x.includes('春雨')));
+  assert(finishing.order.items[0].options.some(x=>x.includes('辛さ3')));
+  assert.equal(finishing.order.note,'');
+  assert.equal(finishing.kitchenTicketTemplate.showTimestamp,false);
+  const customer = snapshots.find(d=>d.kind==='pickup').payload;
+  assert.deepEqual(customer.order.items[0].options,[]);
+  assert.equal(customer.kitchenTicketTemplate.showTitle,false);
+  assert.equal(customer.kitchenTicketTemplate.showItems,false);
+  const receipt = snapshots.find(d=>d.kind==='receipt').payload;
+  assert(receipt.order.items[0].options.some(x=>x.includes('春雨')));
+  assert(receipt.order.items[0].options.some(x=>x.includes('辛さ3')));
+  const relaySnapshots=buildRelayDocuments(config,'Test',sale,[meal],[{itemIndex:0,itemId:'item',pickupCode:'001'}]);
+  assert.deepEqual(relaySnapshots[0].payload.order.items[0].options,kitchen.order.items[0].options);
+  assert.equal(settings.bowlTickets.kitchen.template,null);
+});
+
+test('completed checkout follows exact order acknowledgements and refuses incomplete or stale queues', () => {
+  const status=compiled.exports.posCheckoutPrintStatus;
+  const queue=states=>({hasMore:false,documents:states.map((state,i)=>({id:String(i),orderId:'sale',state}))});
+  assert.match(status('sale',2,null,''),/確認中/);
+  assert.match(status('sale',2,queue(['pending','sending']),'sale'),/印刷待ち/);
+  assert.match(status('sale',2,queue(['sent','sent']),'sale'),/伝票送信済み/);
+  assert.match(status('sale',2,queue(['sent','uncertain']),'sale'),/確認してください/);
+  assert.match(status('sale',2,queue(['sent']),'sale'),/確認中/);
+  assert.match(status('sale',2,queue([]),'sale'),/確認中/);
+  assert.match(status('sale',2,queue(['sent','sent']),'previous-sale'),/確認中/);
+  assert.match(status('sale',2,{...queue(['sent','sent']),hasMore:true},'sale'),/確認中/);
+  assert.match(status('sale',2,queue(['sent','sent']),'sale','read failed'),/確認してください/);
+  assert.match(status('sale',2,queue(['sent','cancelled']),'sale'),/取消済み/);
+  assert.match(status('sale',2,queue(['not_requested','not_requested']),'sale'),/印刷なし/);
 });

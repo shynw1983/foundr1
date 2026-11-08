@@ -4,7 +4,7 @@ import {
   applyPosReceiptTaxBreakdown, getKitchenPrinterForBrand, getReceiptPrinter, getPosBowlTicketSettings,
   normalizePosDocumentCopies, posBowlTicketKinds, prefixPosReducedTaxMarker, resolvePosBowlTicketTemplate,
   resolvePosKitchenTicketTemplate, resolvePosReceiptTemplate,
-  type PosPrintPayload, type PosPrinterSettings
+  type PosPrintPayload, type PosPrinterSettings, type PosKitchenTicketTemplateSettings
 } from "./pos-printer";
 import type { PosServingTicket } from "./pos-serving-policy";
 import type { PosPrintDocumentKind, PosPrintMode } from "./pos-print-document-contract";
@@ -91,19 +91,20 @@ export function buildPosPrintDocumentSnapshots(
   const language = ["en", "zh", "zh-Hans", "zh-Hant", "ko", "vi", "ne"].includes(sale.memberLanguage) ? sale.memberLanguage : "ja";
   const receiptPrinter = getReceiptPrinter(settings);
   const documents: PosPrintDocumentSnapshot[] = [];
-  const line = (item: PosPrintSnapshotItem, lang = "ja", hideAmount = false, markReducedRate = false) => {
+  const line = (item: PosPrintSnapshotItem, lang = "ja", hideAmount = false, markReducedRate = false, template?: PosKitchenTicketTemplateSettings) => {
     const choices = new Map<string, { text: string; count: number }>();
     for (const option of item.selectedOptions) {
+      if (template && (!template.showOptions || template.optionGroupVisibility[option.groupId || ""] === false)) continue;
       const key = `${option.groupId || option.groupName || ""}:${option.id || option.name}:${option.complimentary ? "gift" : "paid"}`;
       const group = localized(option.groupName || "", option.groupDisplayNames, lang);
       const optionName = prefixPosReducedTaxMarker(localized(option.name, option.displayNames, lang),
         markReducedRate && !(option.counterStandardTax ?? item.counterStandardTax) && !option.complimentary && Number(option.priceDelta) > 0);
-      const text = [group, optionName].filter(Boolean).join(": ");
+      const text = [template?.showOptionGroupNames === false ? "" : group, optionName].filter(Boolean).join(": ");
       const entry = choices.get(key);
       if (entry) entry.count += 1;
       else choices.set(key, { text, count: 1 });
     }
-    const weight = item.measuredQuantity
+    const weight = template?.showWeight !== false && item.measuredQuantity
       ? `${item.measuredQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${item.measuredUnit}`
       : "";
     return {
@@ -151,18 +152,19 @@ export function buildPosPrintDocumentSnapshots(
     for (const kind of posBowlTicketKinds) {
       const config = getPosBowlTicketSettings(settings, kind);
       const customer = kind === "pickup";
+      const template = resolvePosBowlTicketTemplate(settings, kind, item.brandId, language);
       add(kind, config.copies, config.enabled, `item:${ticket.itemIndex}`, ticket.pickupCode,
         ticket.itemId || item.orderItemId || null, item.brandId || null, "receipt", {
           version: 1, jobType: "kitchen", printer: { ...receiptPrinter, openCashDrawer: false },
           storeName: `${storeName} / ${item.brandName}`, printedAt,
-          kitchenTicketTemplate: resolvePosBowlTicketTemplate(settings, kind, item.brandId, language),
+          kitchenTicketTemplate: { ...template, showOptions: template.showOptions || template.showWeight },
           order: {
             ...base, pickupCode: ticket.pickupCode, paymentMethod: "kitchen", paymentLabel: "厨房",
-            subtotalAmount: customer ? 0 : item.amount, totalAmount: customer ? 0 : item.amount,
+            subtotalAmount: customer && !template.showAmounts ? 0 : item.amount, totalAmount: customer && !template.showAmounts ? 0 : item.amount,
             discountAmount: 0, couponDiscountAmount: 0, taxAmount: 0, taxRate: 0,
             cashTenderedAmount: null, cashChangeAmount: null,
-            note: customer ? "" : [item.preparationNote, sale.note].filter(Boolean).join(" / "),
-            items: [line(item, customer ? language : "ja", customer)]
+            note: template.showNote ? [item.preparationNote, sale.note].filter(Boolean).join(" / ") : "",
+            items: [line(item, customer ? language : "ja", customer && !template.showAmounts, false, template)]
           }
         });
     }

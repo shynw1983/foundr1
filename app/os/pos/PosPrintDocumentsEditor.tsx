@@ -8,6 +8,8 @@ import { useOsTranslation } from "../components/OsTranslationProvider";
 import { PosPrintContentPreview } from "./PosSavedPrintPreviews";
 import styles from "./PosPrintDocumentsEditor.module.css";
 
+export type PosPrintOptionGroup = { id: string; name: string; brandId: string; options?: Array<{ name: string }> };
+
 export type PosPrintDocumentTab = PosBowlTicketKind | "receipt";
 const documentLabels: Record<PosPrintDocumentTab, string> = { kitchen: "厨房伝票", finishing: "出品伝票", pickup: "お客様番号札", receipt: "レシート" };
 const documentKinds = ["kitchen", "finishing", "pickup", "receipt"] as const;
@@ -16,7 +18,7 @@ const visibilityKeys = { title: "showTitle", store: "showStoreName", pickup: "sh
 const sampleName = (en: string, zh: string, zhHant: string) => ({ en, zh, "zh-Hant": zhHant });
 
 /** A read-only example follows the production document builder and resolver. */
-export function createPosTicketExample(settings: PosPrinterSettings, kind: PosBowlTicketKind, brandId: string, brandName: string, storeName: string, language = "ja"): PosPrintPayload {
+export function createPosTicketExample(settings: PosPrinterSettings, kind: PosBowlTicketKind, brandId: string, brandName: string, storeName: string, language = "ja", groups: PosPrintOptionGroup[] = []): PosPrintPayload {
   const noodle = { id: "sample-noodle", groupId: "sample-noodles", groupName: "麺", groupDisplayNames: sampleName("Noodles", "面条", "麵條"), name: "春雨 50g", displayNames: sampleName("Glass noodles 50g", "粉丝 50g", "冬粉 50g") };
   const documents = buildPosPrintDocumentSnapshots(settings, storeName, {
     pickupCode: "037", orderType: "eat_in", paymentMethod: "cash", amount: 1920, subtotalAmount: 1920,
@@ -25,7 +27,7 @@ export function createPosTicketExample(settings: PosPrinterSettings, kind: PosBo
   }, [{
     orderItemId: "sample-bowl", brandId, brandName, name: "麻辣湯", displayNames: sampleName("Malatang", "麻辣烫", "麻辣燙"),
     quantity: 1, amount: 1920, measuredQuantity: 250, measuredUnit: "g", measuredUnitPrice: 4, preparationNote: "辛さ控えめ・アレルギーを確認",
-    selectedOptions: [
+    selectedOptions: groups.length ? groups.map(group => ({ id: `sample-${group.id}`, groupId: group.id, groupName: group.name, name: group.options?.[0]?.name || "選択肢の例" })) : [
       { id: "sample-flavor", groupId: "sample-flavors", groupName: "味", groupDisplayNames: sampleName("Flavor", "口味", "口味"), name: "豚骨", displayNames: sampleName("Pork broth", "豚骨", "豚骨") },
       noodle, noodle,
       { id: "sample-topping", groupId: "sample-toppings", groupName: "追加", groupDisplayNames: sampleName("Add-ons", "加料", "加料"), name: "牛筋 50g", displayNames: sampleName("Beef tendon 50g", "牛筋 50g", "牛筋 50g") },
@@ -49,7 +51,7 @@ export function PosKitchenTicketPreview({ payload, sample = true }: { payload: P
   </aside>;
 }
 
-function PosBowlTicketSettings({ settings, kind, brandId, brandName, storeName, disabled, onChange }: { settings: PosPrinterSettings; kind: PosBowlTicketKind; brandId: string; brandName: string; storeName: string; disabled: boolean; onChange: (settings: PosPrinterSettings) => void }) {
+function PosBowlTicketSettings({ settings, kind, brandId, brandName, storeName, disabled, onChange, optionGroups = [] }: { optionGroups?: PosPrintOptionGroup[]; settings: PosPrinterSettings; kind: PosBowlTicketKind; brandId: string; brandName: string; storeName: string; disabled: boolean; onChange: (settings: PosPrinterSettings) => void }) {
   const { t } = useOsTranslation();
   const [previewLanguage, setPreviewLanguage] = useState("ja");
   const document = getPosBowlTicketSettings(settings, kind);
@@ -76,8 +78,8 @@ function PosBowlTicketSettings({ settings, kind, brandId, brandName, storeName, 
     if (index < 0 || target < 0 || target >= order.length) return;
     [order[index], order[target]] = [order[target], order[index]]; updateTemplate({ blockOrder: order });
   }
-  const locked = (block: PosKitchenTicketBlock) => block === "title" || block === "pickup" || block === "items" || block === "note";
-  const example = createPosTicketExample(settings, kind, brandId || "sample-brand", brandName || "まぁ麻", storeName, kind === "pickup" ? previewLanguage : "ja");
+  const groups = optionGroups.filter(group => !brandId || group.brandId === brandId);
+  const example = createPosTicketExample(settings, kind, brandId || "sample-brand", brandName || "まぁ麻", storeName, kind === "pickup" ? previewLanguage : "ja", groups);
   return <div className={styles.document} data-bowl-editor={kind}>
     <fieldset disabled={disabled} className={styles.fieldset}>
       <div className={styles.documentControls}>
@@ -86,25 +88,36 @@ function PosBowlTicketSettings({ settings, kind, brandId, brandName, storeName, 
       </div>
       <p className={styles.help}>{t("印刷のON/OFFと枚数は、この票種の全ブランド共通です。ブランド切替はテンプレートだけに適用します。")}</p>
       <div className={styles.scopeNotice}><span>{brandId ? t("選択中のブランドのテンプレート") : t("店舗共通のテンプレート")}</span><button type="button" className="secondary-button compact-button" data-print-template-inherit disabled={!hasOverride} onClick={() => brandId ? updateDocument({ templateVariants: document.templateVariants.filter(item => item.brandId !== brandId) }) : updateDocument({ template: null })}>{t("継承する設定に戻す")}</button></div>
-      <p className={styles.help}>{t(kind === "pickup" ? "お客様番号札には内部の備考・金額を印刷しません。商品名・選択肢は会員の言語に合わせます。言語不明の場合は日本語です。" : "厨房・出品伝票の商品名・選択肢は日本語で印刷します。基本言語は見出しなどの表記に適用します。")}</p>
+      <p className={styles.help}>{t(kind === "pickup" ? "お客様番号札の備考・金額は既定で非表示です。有効にするとお客様にも表示されます。商品名・選択肢は会員の言語に合わせます。" : "厨房・出品伝票の商品名・選択肢は日本語で印刷します。基本言語は見出しなどの表記に適用します。")}</p>
       {kind === "pickup" ? <p className={styles.help}>{t("既定のタイトル・案内文も会員の言語に合わせます。独自に入力した文章はそのまま印刷します。")}</p> : null}
-      <p className={styles.help}>{t("タイトル・受取番号・商品・選択内容は必ず印刷します。厨房・出品伝票には備考も印刷します。")}</p>
+      <p className={styles.help}>{t("表示する情報を票種ごとに選択します。非表示の情報とその余白は印刷しません。")}</p>
       <div className={styles.workspace}>
         <div className={styles.editor}>
           <div className={styles.grid}>
             <label><span>{t("タイトル")}</span><input data-print-template-title value={template.title} maxLength={80} onChange={event => updateTemplate({ title: event.target.value })} /></label>
             <label><span>{t("見出しの基本表記")}</span><select data-print-template-language value={template.language} onChange={event => updateTemplate({ language: event.target.value as "ja" | "zh" })}><option value="ja">{t("日本語")}</option><option value="zh">{t("中国語")}</option></select></label>
             <label className={styles.check}><input type="checkbox" data-print-template-large checked={template.largeText} onChange={event => updateTemplate({ largeText: event.target.checked })} /><span>{t("大きめの文字で印刷")}</span></label>
-            {kind !== "pickup" ? <label className={styles.check}><input type="checkbox" data-print-template-amounts checked={template.showAmounts} onChange={event => updateTemplate({ showAmounts: event.target.checked })} /><span>{t("金額を表示")}</span></label> : null}
+            {<label className={styles.check}><input type="checkbox" data-print-template-amounts checked={template.showAmounts} onChange={event => updateTemplate({ showAmounts: event.target.checked })} /><span>{t("金額を表示")}</span></label>}
+          </div>
+          <div className={styles.contentRules} data-ticket-content-rules>
+            <strong>{t("商品情報の表示")}</strong>
+            {([['showWeight', '重量を表示'], ['showOptions', '選択肢を表示'], ['showOptionGroupNames', '選択肢のグループ名を表示']] as const).map(([key, label]) => <label className={styles.check} key={key}><input type="checkbox" data-ticket-content={key} checked={template[key]} onChange={event => updateTemplate({ [key]: event.target.checked })} /><span>{t(label)}</span></label>)}
+            <details open data-ticket-option-groups><summary>{t("印刷する選択肢グループ")}</summary>
+              <p className={styles.help}>{t("未設定・新規グループは表示します。この票種だけに適用され、メニューや他の伝票は変更しません。")}</p>
+              <div className={styles.groupActions}><button type="button" className="secondary-button compact-button" onClick={() => updateTemplate({ optionGroupVisibility: { ...template.optionGroupVisibility, ...Object.fromEntries(groups.map(group => [group.id, true])) } })}>{t("すべて表示")}</button><button type="button" className="secondary-button compact-button" onClick={() => updateTemplate({ optionGroupVisibility: { ...template.optionGroupVisibility, ...Object.fromEntries(groups.map(group => [group.id, false])) } })}>{t("すべて非表示")}</button></div>
+              {groups.map(group => <label className={styles.check} key={group.id}><input type="checkbox" data-ticket-option-group={group.id} disabled={!template.showOptions} checked={template.optionGroupVisibility[group.id] !== false} onChange={event => updateTemplate({ optionGroupVisibility: { ...template.optionGroupVisibility, [group.id]: event.target.checked } })} /><span data-i18n-ignore>{group.name}</span></label>)}
+              {!groups.length ? <p className={styles.help}>{t("現在のメニューに選択肢グループがありません。")}</p> : null}
+            </details>
+            {!template.showPickupCode ? <p className={styles.help}>{t("受取番号を非表示にすると、伝票同士の照合ができなくなります。")}</p> : null}
           </div>
           <label className={styles.message}><span>{t("固定メッセージ")}</span><textarea data-print-template-message rows={2} maxLength={240} value={template.customMessage} onChange={event => updateTemplate({ customMessage: event.target.value })} /></label>
           <div className={styles.blockHeading}><strong>{t("表示区画と順序")}</strong><span>{t("矢印で並べ替え、区画ごとに印刷スタイルを指定")}</span></div>
-          {template.blockOrder.map((block, index) => <div key={block} className={styles.blockRow} data-print-block={block} data-print-block-locked={locked(block)}>
+          {template.blockOrder.map((block, index) => <div key={block} className={styles.blockRow} data-print-block={block} data-print-block-locked={false}>
             <div className={styles.blockTop}>
-              {locked(block) ? <span>{t(blockLabels[block])}<small className={styles.required}>{block === "note" && kind === "pickup" ? t("番号札には表示しません") : t("必須")}</small></span> : block === "message" ? <span>{t(blockLabels[block])}</span> : <label className={styles.check}><input type="checkbox" data-print-block-visible checked={isVisible(template, block)} onChange={event => updateTemplate({ [visibilityKeys[block]]: event.target.checked })} /><span>{t(blockLabels[block])}</span></label>}
+              {block === "message" ? <span>{t(blockLabels[block])}</span> : <label className={styles.check}><input type="checkbox" data-print-block-visible checked={isVisible(template, block)} onChange={event => updateTemplate({ [visibilityKeys[block]]: event.target.checked })} /><span>{t(blockLabels[block])}</span></label>}
               <div className={styles.move}><button type="button" data-print-block-move="up" className="icon-button" aria-label={t("「{name}」を上へ", { name: t(blockLabels[block]) })} onClick={() => move(block, -1)} disabled={index === 0}><ArrowUp size={14} /></button><button type="button" data-print-block-move="down" className="icon-button" aria-label={t("「{name}」を下へ", { name: t(blockLabels[block]) })} onClick={() => move(block, 1)} disabled={index === template.blockOrder.length - 1}><ArrowDown size={14} /></button></div>
             </div>
-            {block === "note" && kind === "pickup" ? null : <div className={styles.blockControls}>
+            {<div className={styles.blockControls}>
               <label><span>{t("文字")}</span><select data-print-block-font value={template.blockStyles[block].textSize} onChange={event => updateStyle(block, { textSize: event.target.value as PosKitchenTicketBlockStyle["textSize"] })}>{([['small', '小'], ['standard', '標準'], ['large', '大'], ['xlarge', '特大']] as const).map(([value, label]) => <option value={value} key={value}>{t(label)}</option>)}</select></label>
               <label><span>{t("配置")}</span><select data-print-block-alignment value={template.blockStyles[block].alignment} onChange={event => updateStyle(block, { alignment: event.target.value as "left" | "center" })}><option value="left">{t("左")}</option><option value="center">{t("中央")}</option></select></label>
               <label className={styles.check}><input type="checkbox" data-print-block-bold checked={template.blockStyles[block].bold} onChange={event => updateStyle(block, { bold: event.target.checked })} /><span>{t("太字")}</span></label>
@@ -121,10 +134,10 @@ function PosBowlTicketSettings({ settings, kind, brandId, brandName, storeName, 
   </div>;
 }
 
-export function PosPrintDocumentsEditor({ settings, kind, onKindChange, brandId, onBrandChange, storeName, brands, disabled, onChange, onSave, saving, receiptEditor, recentDocuments }: {
+export function PosPrintDocumentsEditor({ settings, kind, onKindChange, brandId, onBrandChange, storeName, brands, disabled, onChange, onSave, saving, receiptEditor, recentDocuments, optionGroups = [] }: {
   settings: PosPrinterSettings; kind: PosPrintDocumentTab; onKindChange: (kind: PosPrintDocumentTab) => void;
   brandId: string; onBrandChange: (brandId: string) => void; storeName: string; brands: Array<{ brandId: string; brandName: string }>;
-  disabled: boolean; saving: boolean; onChange: (settings: PosPrinterSettings) => void; onSave: () => void; receiptEditor: ReactNode; recentDocuments?: ReactNode;
+  disabled: boolean; saving: boolean; onChange: (settings: PosPrinterSettings) => void; onSave: () => void; receiptEditor: ReactNode; recentDocuments?: ReactNode; optionGroups?: PosPrintOptionGroup[];
 }) {
   const { t } = useOsTranslation();
   function moveTab(event: KeyboardEvent<HTMLButtonElement>, current: PosPrintDocumentTab) {
@@ -147,7 +160,7 @@ export function PosPrintDocumentsEditor({ settings, kind, onKindChange, brandId,
       {kind === "receipt" ? <fieldset disabled={disabled} className={styles.fieldset}>
         <div className={styles.documentControls}><label className={styles.check}><input type="checkbox" data-print-receipt-enabled checked={settings.receiptEnabled} onChange={event => onChange({ ...settings, receiptEnabled: event.target.checked })} /><span>{t("会計後にレシート印刷")}</span></label><label className={styles.copies}><span>{t("印刷枚数")}</span><select data-print-receipt-copies value={settings.receiptCopies} onChange={event => onChange({ ...settings, receiptCopies: Number(event.target.value) })}>{[1, 2, 3, 4, 5].map(value => <option value={value} key={value}>{value}</option>)}</select></label></div>
         <p className={styles.help}>{t("印刷のON/OFFと枚数は、この票種の全ブランド共通です。ブランド切替はテンプレートだけに適用します。")}</p>{receiptEditor}
-      </fieldset> : <PosBowlTicketSettings key={`${kind}:${brandId}`} settings={settings} kind={kind} brandId={brandId} brandName={brands.find(brand => brand.brandId === brandId)?.brandName || ""} storeName={storeName} disabled={disabled} onChange={onChange} />}
+      </fieldset> : <PosBowlTicketSettings key={`${kind}:${brandId}`} settings={settings} kind={kind} brandId={brandId} brandName={brands.find(brand => brand.brandId === brandId)?.brandName || ""} storeName={storeName} optionGroups={optionGroups} disabled={disabled} onChange={onChange} />}
     </div>
     <section className={styles.recent} data-pos-saved-print-region>{recentDocuments}</section>
   </section>;

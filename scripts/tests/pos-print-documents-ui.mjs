@@ -39,8 +39,10 @@ const bundle = await build({ stdin: { contents: entry, resolveDir: source, loade
 const css = await readFile(join(source, 'app/globals.css'), 'utf8') + '\n' + await readFile(join(source, 'app/store/store-responsive.css'), 'utf8') + '\n' + (bundle.outputFiles.find(f => f.path.endsWith('.css'))?.text || '');
 const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body><div id="root"></div><script src="/fixture.js"></script></body></html>`;
 let settings, posts, rejectCheckout, checkoutResponses, customerDisplayPosts;
+let relayTest = false;
 let ledger, printMutations, printOperations, rejectPrintClaim, dropAckResponse, queueReadError;
 function reset({ enabled = false, receiptEnabled = false, reject = false } = {}) {
+  relayTest = false;
   settings = { enabled, receiptEnabled, kitchenEnabled: false, receiptPrinter: printer, kitchenPrinter: printer, customerDisplay: { enabled: false } };
   ledger=[];printMutations=[];printOperations=new Map();rejectPrintClaim=false;dropAckResponse=false;queueReadError=false;
   posts = []; checkoutResponses = []; customerDisplayPosts = []; rejectCheckout = reject;
@@ -89,19 +91,22 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/api/store/context') return send(res, { selectedStoreId: url.searchParams.get('storeId') || store.id, access: { role: 'owner', canUseAllStoreView: true, stores: [store,otherStore] } });
     if (url.pathname === '/api/store/theme') return send(res, { storeId: url.searchParams.get('storeId') || store.id, storeName: store.name, target: 'operations', theme: { mode: 'custom', primaryColor: '#006b7d', paletteVersion: 1 }, brand: null, canManageTheme: true, stores: [store,otherStore], updatedAt: null, revision: null });
     if (url.pathname === '/api/store/realtime-config') return send(res, { key: 'fixture', cluster: 'fixture', channels: ['private-checkout-fixture'] });
+    if (url.pathname === '/api/store/pos/summary') return send(res, { selectedStoreId: store.id, ...summary, summary });
     if (url.pathname === '/api/store/pos/operator') return send(res, { enabled: false, settings: { enabled: false, idleMinutes: 10 }, operator: null, employees: [], serverNow: new Date().toISOString() });
     if (url.pathname === '/api/store/pos/customer-display') {
       if (req.method === 'POST') { let raw = ''; for await (const part of req) raw += part; customerDisplayPosts.push(JSON.parse(raw)); }
       return send(res, { ok: true, state: { status: 'advertising', weighingRevision: 0 }, customerDisplayMediaSettings: { weighing: { enabled: false } } });
     }
-    if (url.pathname === '/api/store/pos/reconciliation') return send(res, { businessDate: '2026-10-20', activeSession: openSession, sessions: [openSession], movements: [], activeCashResponsibleEmployees: [] });
+    if (url.pathname === '/api/store/pos/reconciliation') return send(res, { selectedStoreId: url.searchParams.get('storeId') || store.id, businessDate: '2026-10-20', activeSession: openSession, sessions: [openSession], movements: [], activeCashResponsibleEmployees: [] });
     if (url.pathname.includes('/device-relay')) return send(res, { stations: [], jobs: [], canManage: true, serverNow: new Date().toISOString() });
     if (url.pathname === '/api/store/pos' && req.method === 'POST') {
       let raw = ''; for await (const part of req) raw += part; const body = JSON.parse(raw); posts.push(body);
       if (rejectCheckout) return send(res, { error: 'Fixture: メニューが更新されました。商品と金額を確認してください。' }, 409);
       assert.equal(body.items.length, 1); assert.equal(body.items[0].menuCatalogItemId, item.id); assert.equal(body.items[0].quantity, 1);
       const response = { ok: true, orderId: `22222222-2222-4222-8222-${String(posts.length).padStart(12,'0')}`, pickupCode: 'D-FIXTURE', servingTickets: [{ itemIndex: 0, pickupCode: '037', itemId: 'fixture-order-item', taskId: 'fixture-task' }], amount: 652, subtotalAmount: 815, taxableAmount: 652, taxAmount: 49, taxRate: 8, priceTaxMode: 'tax_included', discountAmount: 163, couponDiscountAmount: 0, cashTenderedAmount: body.cashTenderedAmount, cashChangeAmount: body.cashTenderedAmount - 652, receiptRequested: body.receiptRequested, todaySummary: { ...summary, orderCount: 1, total: 652, average: 652 } };
-      if(body.printDocumentVersion===1)createDocuments(body,response);checkoutResponses.push(response); return send(res, response);
+      if(body.printDocumentVersion===1)createDocuments(body,response);
+      if (relayTest) { response.relayPrinting = true; const currentOrder = response.orderId; setTimeout(() => { ledger.filter(doc=>doc.orderId===currentOrder && doc.state==='pending').forEach(doc=>{doc.state='sent';doc.transport='relay';doc.revision+=1;}); }, 300); }
+      checkoutResponses.push(response); return send(res, response);
     }
     if (url.pathname === '/api/store/pos') return send(res, { selectedStoreId: url.searchParams.get('storeId') || store.id, access: { role: 'owner', stores: [store,otherStore] }, brands: [brand], items: [item], categories: [], optionGroups: [], posMenuRevision: 'fixture-revision', dineInMenuRevision: '', todaySummary: summary, posSettings: { dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: 'KOMOJU', priceTaxMode: 'tax_included', discountPresets: [{ key: 'student', name: '学割 20%OFF', discountType: 'percent', discountValue: 20, targetScope: 'all', targetValue: '', enabled: true, stampEligible: false, allowCouponCombination: false }], printerSettings: settings, customerDisplayMediaSettings: { weighing: { enabled: false } } } });
     if (url.pathname.startsWith('/api/')) return send(res, { items: [], notifications: [], unreadCount: 0 });
@@ -128,7 +133,7 @@ async function createPage({ width = 390, bridge = false, language = 'ja' } = {})
   await page.waitForFunction(() => document.querySelectorAll('.store-pos-cart-list > .store-pos-cart-row').length === 1);
   if (width <= 900) { await page.click('.store-pos-floating-checkout button'); await page.waitForSelector('.store-pos-cart-panel.is-open'); }
   await page.evaluate(() => [...document.querySelectorAll('.store-pos-segmented button')].find(el => el.textContent === '持ち帰り')?.click());
-  await page.click('.store-pos-discount-panel button');
+  await page.$eval('.store-pos-discount-panel button',el=>el.click());
   await page.type('.store-pos-cash-payment input', '2000');
   await page.waitForFunction(() => !document.querySelector('.store-pos-checkout').disabled);
   const values = await page.$eval('.store-pos-cart-panel', panel => ({ cash: panel.querySelector('.store-pos-cash-payment input').value, change: panel.querySelector('.store-pos-cash-payment strong').textContent, total: panel.querySelector('.store-pos-total').innerText, takeout: [...panel.querySelectorAll('.store-pos-segmented button')].find(el => el.classList.contains('is-active'))?.textContent }));
@@ -177,6 +182,20 @@ async function printError(page) { const selector = `${drawer} [data-print-error]
 async function until(predicate, label) { const deadline=Date.now()+30000; while(!predicate()){ if(Date.now()>deadline)throw new Error(`Fixture wait timed out: ${label}`); await pause(20); } }
 
 try {
+  reset({ enabled: true, receiptEnabled: true }); relayTest = true;
+  {
+    const {page,context} = await createPage({width:1024,bridge:true});
+    await page.click('.store-pos-checkout');
+    await page.waitForFunction(()=>document.body.innerText.includes('会計済み・伝票送信済み'),{timeout:15000});
+    const allNotices=await page.evaluate(()=>document.body.innerText);
+    assert.match(allNotices,/1,348/); assert.match(allNotices,/652/); assert.match(allNotices,/学割/);
+    assert.equal(posts.length,1); assert.equal(printMutations.length,0); assert.equal(await page.evaluate(()=>window.__prints.length),0);
+    await page.screenshot({path:join(output,'relay-complete-1024.png'),fullPage:true});
+    await openDocuments(page); await pending(page,0); await page.click(`${drawer} button[aria-label="閉じる"]`);
+    assert.match(await page.$eval('.store-pos-checkout-actions [role="status"]',el=>el.textContent),/伝票送信済み/);
+    results.push({name:'relay-ack-updates-paid-notice-preserves-change-discount-without-print-retry',passed:true});
+    await context.close();
+  }
   for (const width of [390, 800, 1366]) {
     reset(); const { page, context, values } = await createPage({ width }); page.on('dialog', dialog => dialog.accept());
     assert.equal(await page.$eval('[data-pos-print-mode]', select => select.value), 'deferred');
@@ -185,7 +204,7 @@ try {
     const status = await geometry(page, '.store-pos-checkout-actions [role="status"]'); assertGeometry(status); assert.match(status.text, /会計済み・印刷待ち/); assert.match(status.text, /652/); assert.match(status.text, /1,348/);
     await page.screenshot({ path: join(output, `deferred-paid-${width}.png`), fullPage: true });
     const paidAccess=await geometry(page,'[data-print-paid-open]');assertGeometry(paidAccess);await page.click('[data-print-paid-open]');await page.waitForSelector(drawer);await page.waitForFunction(()=>document.querySelectorAll('[data-print-document]').length===4);assert.equal(await page.$$eval('[data-print-document][data-print-state="not_requested"]',rows=>rows.length),1);await page.click(`${drawer} button[aria-label="閉じる"]`);
-    await openDocuments(page); await page.waitForSelector('[data-print-document]'); assert.equal(await page.$$eval('[data-print-document]', rows => rows.length), 3); assert.equal(await page.$eval('[data-print-submit]', button => button.disabled), true);
+    await openDocuments(page); await page.waitForFunction(()=>document.querySelectorAll('[data-print-document]').length===3); assert.equal(await page.$$eval('[data-print-document]', rows => rows.length), 3); assert.equal(await page.$eval('[data-print-submit]', button => button.disabled), true);
     const layout = await drawerGeometry(page); await page.screenshot({ path: join(output, `persistent-queue-${width}.png`), fullPage: true });
     await page.reload({ waitUntil: 'domcontentloaded' }); await pending(page, 3); assert.equal(printMutations.length, 0); assert.equal(posts.length, 1);
     if (width === 390) {
@@ -202,7 +221,7 @@ try {
     assert.deepEqual(await page.evaluate(() => window.__prints.map(payload => payload.kitchenTicketTemplate.title)), ['pickup', 'kitchen', 'finishing']); assert.equal(posts.length, 1);
     await page.evaluate(() => { window.dispatchEvent(new Event('online')); window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); }); await pause(400); assert.equal(await page.evaluate(() => window.__prints.length), 3); assert.equal(posts.length, 1);
     await page.click(`${drawer} button[aria-label="閉じる"]`);
-    await page.evaluate(() => [...document.querySelectorAll('.store-pos-cart-panel button')].find(button => button.textContent === '履歴').click()); await page.waitForSelector('.store-pos-transaction-list button'); await page.click('.store-pos-transaction-list button'); await page.waitForSelector('[data-print-history-open]'); await page.click('[data-print-history-open]'); await page.waitForSelector(drawer); await page.waitForFunction(() => document.querySelectorAll('[data-print-document]').length === 4);
+    await page.evaluate(() => [...document.querySelectorAll('button')].find(button => button.textContent === '取引履歴').click()); await page.waitForSelector('.store-pos-transaction-list button'); await page.click('.store-pos-transaction-list button'); await page.waitForSelector('[data-print-history-open]'); await page.click('[data-print-history-open]'); await page.waitForSelector(drawer); await page.waitForFunction(() => document.querySelectorAll('[data-print-document]').length === 4);
     assert.equal(await page.$$eval('[data-print-document][data-print-state="sent"] input[type="checkbox"]', inputs => inputs.every(input => input.disabled)), true, 'Sent documents are excluded from ordinary selection');
     const receipt = ledger.find(doc => doc.kind === 'receipt'); await selectDocument(page, receipt); await printSelection(page); await page.waitForFunction(() => window.__prints.length === 4); await until(()=>receipt.state==='sent','receipt acknowledgement'); assert.equal(receipt.state, 'sent'); assert.equal(posts.length, 1); assert.equal(printMutations.at(-2).reprint, true); assert.equal(printMutations.at(-2).physicalConfirmed, true); assert.equal(await page.evaluate(() => window.__prints.at(-1).printer.openCashDrawer), false);
     await page.screenshot({ path: join(output, 'history-manual-role-selection-1366.png'), fullPage: true });
@@ -239,7 +258,7 @@ try {
     const { page, context } = await createPage({ width: 800, bridge: true }); assert.equal(await page.$eval('[data-pos-print-mode]', select => select.value), 'auto'); await page.evaluate(() => { window.__failPrint = true; });
     await paid(page); await page.waitForFunction(() => window.__prints.length === 1); await page.waitForFunction(() => document.querySelector('[data-print-queue-open]')?.innerText.includes('要確認'));
     assert.equal(posts.length, 1); assert.equal(ledger.filter(doc => doc.state === 'uncertain').length, 1); assert.equal(ledger.filter(doc => doc.state === 'pending').length, 3); assert.equal(await page.$eval('.store-pos-checkout', button => button.disabled), true);
-    const status = await geometry(page, '.store-pos-checkout-actions [role="status"]'); assertGeometry(status); assert.match(status.text, /会計済み・印刷待ち/); await page.reload({ waitUntil: 'domcontentloaded' }); await pending(page, 3); await page.evaluate(() => { window.dispatchEvent(new Event('online')); window.dispatchEvent(new Event('focus')); }); await pause(400); assert.equal(await page.evaluate(() => window.__prints.length), 0); assert.equal(posts.length, 1);
+    const status = await geometry(page, '.store-pos-checkout-actions [role="status"]'); assertGeometry(status); assert.match(status.text, /会計済み・印刷状況を確認してください/); await page.reload({ waitUntil: 'domcontentloaded' }); await pending(page, 3); await page.evaluate(() => { window.dispatchEvent(new Event('online')); window.dispatchEvent(new Event('focus')); }); await pause(400); assert.equal(await page.evaluate(() => window.__prints.length), 0); assert.equal(posts.length, 1);
     results.push({ name: 'auto-print-failure-is-already-paid-no-second-checkout-no-reload-or-reconnect-print', passed: true, status, checkoutPosts: 1, pending: 3, uncertain: 1 }); await context.close();
   }
   reset(); {
