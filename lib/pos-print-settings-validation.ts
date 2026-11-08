@@ -30,9 +30,9 @@ function kitchenTemplate(value: unknown): boolean {
     || Object.entries(value.optionGroupVisibility).some(([key, visible]) => !/^[a-zA-Z0-9:_-]{1,160}$/.test(key) || typeof visible !== 'boolean'))) return false;
   if (own(value, 'blockStyles')) {
     if (!object(value.blockStyles) || Object.keys(value.blockStyles).some(key => !bowlBlocks.includes(key))) return false;
-    for (const style of Object.values(value.blockStyles)) {
+    for (const [block, style] of Object.entries(value.blockStyles)) {
       if (!object(style) || Object.keys(style).some(key => !['textSize', 'alignment', 'bold', 'separatorBefore'].includes(key))) return false;
-      if (own(style, 'textSize') && !enumeration(style.textSize, ['small', 'standard', 'large', 'xlarge'])
+      if (own(style, 'textSize') && !enumeration(style.textSize, ['small', 'standard', 'large', 'xlarge', ...(block === 'pickup' ? ['jumbo'] : [])])
         || own(style, 'alignment') && !enumeration(style.alignment, ['left', 'center'])
         || ['bold', 'separatorBefore'].some(key => own(style, key) && typeof style[key] !== 'boolean')) return false;
     }

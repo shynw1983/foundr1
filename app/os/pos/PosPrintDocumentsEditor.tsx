@@ -113,6 +113,7 @@ function PosBowlTicketSettings({ settings, kind, brandId, brandName, storeName, 
             {!template.showPickupCode ? <p className={styles.help}>{t("受取番号を非表示にすると、伝票同士の照合ができなくなります。")}</p> : null}
           </div>
           <label className={styles.message}><span>{t("固定メッセージ")}</span><textarea data-print-template-message rows={2} maxLength={240} value={template.customMessage} onChange={event => updateTemplate({ customMessage: event.target.value })} /></label>
+          <p className={styles.help}>{t("受取番号の「番号用大字」は数字だけを大きく表示します。No. は省略し、注文区分は元の文字サイズを保ちます。印刷には Store 0.2.36 以降が必要です。")}</p>
           <div className={styles.blockHeading}><strong>{t("表示区画と順序")}</strong><span>{t("矢印で並べ替え、区画ごとに印刷スタイルを指定")}</span></div>
           {template.blockOrder.map((block, index) => <div key={block} className={styles.blockRow} data-print-block={block} data-print-block-locked={false}>
             <div className={styles.blockTop}>
@@ -120,7 +121,7 @@ function PosBowlTicketSettings({ settings, kind, brandId, brandName, storeName, 
               <div className={styles.move}><button type="button" data-print-block-move="up" className="icon-button" aria-label={t("「{name}」を上へ", { name: t(blockLabels[block]) })} onClick={() => move(block, -1)} disabled={index === 0}><ArrowUp size={14} /></button><button type="button" data-print-block-move="down" className="icon-button" aria-label={t("「{name}」を下へ", { name: t(blockLabels[block]) })} onClick={() => move(block, 1)} disabled={index === template.blockOrder.length - 1}><ArrowDown size={14} /></button></div>
             </div>
             {<div className={styles.blockControls}>
-              <label><span>{t("文字")}</span><select data-print-block-font value={template.blockStyles[block].textSize} onChange={event => updateStyle(block, { textSize: event.target.value as PosKitchenTicketBlockStyle["textSize"] })}>{([['small', '小'], ['standard', '標準'], ['large', '大'], ['xlarge', '特大']] as const).map(([value, label]) => <option value={value} key={value}>{t(label)}</option>)}</select></label>
+              <label><span>{t("文字")}</span><select data-print-block-font value={template.blockStyles[block].textSize} onChange={event => updateStyle(block, { textSize: event.target.value as PosKitchenTicketBlockStyle["textSize"] })}>{([['small', '小'], ['standard', '標準'], ['large', '大'], ['xlarge', '特大'], ...(block === 'pickup' ? [['jumbo', '番号用大字'] as const] : [])] as const).map(([value, label]) => <option value={value} key={value}>{t(label)}</option>)}</select></label>
               <label><span>{t("配置")}</span><select data-print-block-alignment value={template.blockStyles[block].alignment} onChange={event => updateStyle(block, { alignment: event.target.value as "left" | "center" })}><option value="left">{t("左")}</option><option value="center">{t("中央")}</option></select></label>
               <label className={styles.check}><input type="checkbox" data-print-block-bold checked={template.blockStyles[block].bold} onChange={event => updateStyle(block, { bold: event.target.checked })} /><span>{t("太字")}</span></label>
               <label className={styles.check}><input type="checkbox" data-print-block-separator checked={template.blockStyles[block].separatorBefore} onChange={event => updateStyle(block, { separatorBefore: event.target.checked })} /><span>{t("上罫線")}</span></label>

@@ -152,7 +152,11 @@ export function buildPosPrintDocumentSnapshots(
     for (const kind of posBowlTicketKinds) {
       const config = getPosBowlTicketSettings(settings, kind);
       const customer = kind === "pickup";
-      const template = resolvePosBowlTicketTemplate(settings, kind, item.brandId, language);
+      const resolvedTemplate = resolvePosBowlTicketTemplate(settings, kind, item.brandId, language);
+      const template = resolvedTemplate.blockStyles.pickup.textSize === 'jumbo' ? {
+        ...resolvedTemplate, pickupNumberScale: 'jumbo' as const,
+        blockStyles: { ...resolvedTemplate.blockStyles, pickup: { ...resolvedTemplate.blockStyles.pickup, textSize: 'xlarge' as const } }
+      } : resolvedTemplate;
       add(kind, config.copies, config.enabled, `item:${ticket.itemIndex}`, ticket.pickupCode,
         ticket.itemId || item.orderItemId || null, item.brandId || null, "receipt", {
           version: 1, jobType: "kitchen", printer: { ...receiptPrinter, openCashDrawer: false },

@@ -194,3 +194,13 @@ test('number-right layout is saved in immutable snapshots and preview renders di
     assert.doesNotMatch(renderPreview(doc),/data-ticket-block="orderType"/);
   }
 });
+
+test('jumbo pickup size survives normalization and snapshots without enlarging the dining label', () => {
+  const config=normalizePosPrinterSettings({...settings,bowlTickets:{pickup:{enabled:true,copies:1,template:{showOrderType:true,orderTypePosition:'number_right',blockStyles:{pickup:{textSize:'jumbo'},orderType:{textSize:'small'}}}}}});
+  const doc=buildPosPrintDocumentSnapshots(config,'Test',sale,[bowl],tickets,'auto').find(d=>d.kind==='pickup').payload;
+  assert.equal(doc.kitchenTicketTemplate.blockStyles.pickup.textSize,'xlarge');
+  assert.equal(doc.kitchenTicketTemplate.pickupNumberScale,'jumbo');
+  assert.equal(doc.kitchenTicketTemplate.blockStyles.orderType.textSize,'small');
+  const markup=renderPreview(doc);assert.match(markup,/font-size:56px/);assert.match(markup,/>001<\/span>/);assert.doesNotMatch(markup,/No\. 001/);
+  assert.equal(doc.order.pickupCode,'001');
+});
