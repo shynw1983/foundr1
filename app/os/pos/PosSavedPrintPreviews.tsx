@@ -44,11 +44,12 @@ export function PosPrintContentPreview({ content }: { content: PosSavedPrintCont
     const template = content.kitchenTicketTemplate;
     if (!template) return <p>{t('保存された伝票テンプレートがありません。')}</p>;
     const zh = template.language === 'zh';
+    const inlineOrderType = template.orderTypePosition === "number_right" && template.showPickupCode && template.showOrderType;
     const values: Record<string, ReactNode> = {
       title: template.showTitle ? template.title : null,
       store: template.showStoreName ? content.storeName : null,
-      pickup: template.showPickupCode ? `No. ${order.pickupCode}` : null,
-      orderType: template.showOrderType ? orderType(order.orderType, zh) : null,
+      pickup: template.showPickupCode ? inlineOrderType ? <div className={styles.numberRow}><span className={styles.numberCode}>No. {order.pickupCode}</span><span className={styles.numberType} style={{ fontSize: ({ small: 12, standard: 14, large: 17, xlarge: 21 } as const)[template.blockStyles.orderType.textSize], fontWeight: template.blockStyles.orderType.bold ? 700 : 400 }}>{orderType(order.orderType, zh)}</span></div> : `No. ${order.pickupCode}` : null,
+      orderType: template.showOrderType && !inlineOrderType ? orderType(order.orderType, zh) : null,
       items: template.showItems ? <>{items(template.showOptions, template.showAmounts)}{template.showAmounts ? <div className={styles.total}>{zh ? '合计' : '合計'} {yen(order.totalAmount)}</div> : null}</> : null,
       note: template.showNote && order.note ? `${zh ? '备注：' : '備考: '}${order.note}` : null,
       message: template.customMessage || null,

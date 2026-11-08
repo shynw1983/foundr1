@@ -88,6 +88,7 @@ export type PosKitchenTicketTemplateSettings = {
   showStoreName: boolean;
   showPickupCode: boolean;
   showOrderType: boolean;
+  orderTypePosition: "below" | "number_right";
   showItems: boolean;
   showOptions: boolean;
   showWeight: boolean;
@@ -302,6 +303,7 @@ export const defaultPosKitchenTicketTemplateSettings: PosKitchenTicketTemplateSe
   showStoreName: true,
   showPickupCode: true,
   showOrderType: true,
+  orderTypePosition: "below",
   showItems: true,
   showOptions: true,
   showWeight: true,
@@ -477,6 +479,7 @@ export function normalizePosKitchenTicketTemplateSettings(value: unknown): PosKi
     showStoreName: source.showStoreName !== false,
     showPickupCode: source.showPickupCode !== false,
     showOrderType: source.showOrderType !== false,
+    orderTypePosition: source.orderTypePosition === "number_right" ? "number_right" : "below",
     showItems: source.showItems !== false,
     showOptions: source.showOptions !== false,
     showWeight: source.showWeight !== false,

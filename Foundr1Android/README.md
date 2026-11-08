@@ -318,3 +318,7 @@ Import tests verify persistence inputs and downstream calls using doubles, not
 the production kitchen screen. The paired release uses the server repair and
 `1.0.53-test` (versionCode 54). Publish the server repair before installing the
 paired APK; a new live acceptance-to-kitchen test remains outstanding.
+
+### Store 0.2.35: inline pickup/order-type row
+
+Kitchen-style payloads accept `kitchenTicketTemplate.orderTypePosition: "number_right"`. With both visibility flags enabled, the pickup number is left aligned and the dining/takeout label is right aligned on the same baseline, retaining independent font sizes. A hidden pickup number restores a separate dining-type row. The default `below` preserves existing layouts. Web template previews and native rendering are tested separately; publication is not proof of installation or physical printer output.

@@ -179,3 +179,18 @@ test('offline checkout recovery reuses the original batch after template or copy
   assert.match(await fn({orderId:'paid',servingTickets:[{itemIndex:0,pickupCode:'001'}]},[{}]),/伝票送信済み/);
   assert.equal(recovered,1); assert.deepEqual(existing,original);
 });
+
+test('number-right layout is saved in immutable snapshots and preview renders dining type once', () => {
+  for (const paperWidth of ['58mm','80mm']) for (const orderType of ['eat_in','takeout']) {
+    const config=normalizePosPrinterSettings({...settings,receiptPrinter:{...printer,paperWidth},bowlTickets:{kitchen:{enabled:true,copies:1,template:{showOrderType:true,showPickupCode:true,orderTypePosition:'number_right'}}}});
+    const doc=buildPosPrintDocumentSnapshots(config,'Test',{...sale,orderType},[bowl],tickets,'auto')[0].payload;
+    assert.equal(doc.kitchenTicketTemplate.orderTypePosition,'number_right');
+    const markup=renderPreview(doc);
+    assert.match(markup,/No\. 001/);assert.equal((markup.match(/data-ticket-block="orderType"/g)||[]).length,0);
+    assert.equal((markup.match(new RegExp(orderType==='eat_in'?'店内':'持ち帰り','g'))||[]).length,1);
+    doc.kitchenTicketTemplate.showPickupCode=false;
+    assert.match(renderPreview(doc),/data-ticket-block="orderType"/);
+    doc.kitchenTicketTemplate.showOrderType=false;
+    assert.doesNotMatch(renderPreview(doc),/data-ticket-block="orderType"/);
+  }
+});

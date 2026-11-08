@@ -539,9 +539,12 @@ public class Foundr1PrinterBridge {
                     String[] defaultBlocks = { "title", "store", "pickup", "orderType", "items", "note", "message", "timestamp" };
                     for (String block : defaultBlocks) blockOrder.put(block);
                 }
+                boolean inlineOrderType = kitchenTemplate != null
+                    && "number_right".equals(kitchenTemplate.optString("orderTypePosition", "below"))
+                    && kitchenBool(kitchenTemplate, "showPickupCode", true) && kitchenBool(kitchenTemplate, "showOrderType", true);
                 for (int blockIndex = 0; blockIndex < blockOrder.length(); blockIndex += 1) {
                     String block = blockOrder.optString(blockIndex, "");
-                    if (!shouldShowKitchenBlock(kitchenTemplate, block, order)) continue;
+                    if (!shouldShowKitchenBlock(kitchenTemplate, block, order) || (inlineOrderType && "orderType".equals(block))) continue;
                     JSONObject style = kitchenBlockStyle(kitchenTemplate, block);
                     Paint blockPaint = kitchenBlockPaint(style, largeKitchenText, false);
                     if (style.optBoolean("separatorBefore", defaultKitchenSeparator(block))) {
@@ -552,7 +555,15 @@ public class Foundr1PrinterBridge {
                     } else if ("store".equals(block)) {
                         addKitchenText(lines, payload.optString("storeName", "Foundr1 OS"), blockPaint, style, contentWidth);
                     } else if ("pickup".equals(block)) {
-                        addKitchenText(lines, "No. " + order.optString("pickupCode", ""), blockPaint, style, contentWidth);
+                        if (inlineOrderType) {
+                            String label = chineseKitchen ? formatChineseKitchenOrderTypeLabel(order.optString("orderType", "")) : formatOrderTypeLabel(order.optString("orderType", ""));
+                            Paint labelPaint = kitchenBlockPaint(kitchenBlockStyle(kitchenTemplate, "orderType"), largeKitchenText, false);
+                            Paint numberPaint = new Paint(blockPaint);
+                            String number = "No. " + order.optString("pickupCode", "");
+                            float available = Math.max(1, contentWidth - labelPaint.measureText(label) - 14);
+                            if (numberPaint.measureText(number) > available) numberPaint.setTextSize(numberPaint.getTextSize() * available / numberPaint.measureText(number));
+                            lines.add(new RasterLine(number, label, numberPaint, labelPaint));
+                        } else addKitchenText(lines, "No. " + order.optString("pickupCode", ""), blockPaint, style, contentWidth);
                     } else if ("orderType".equals(block)) {
                         addKitchenText(
                             lines,
@@ -1132,6 +1143,7 @@ public class Foundr1PrinterBridge {
         final String left;
         final String right;
         final Paint paint;
+        Paint rightPaint;
         final int align;
         final Bitmap image;
         final int spacerHeight;
@@ -1140,9 +1152,15 @@ public class Foundr1PrinterBridge {
             this.left = left;
             this.right = right;
             this.paint = paint;
+            this.rightPaint = paint;
             this.align = align;
             this.image = null;
             this.spacerHeight = 0;
+        }
+
+        private RasterLine(String left, String right, Paint paint, Paint rightPaint) {
+            this(left, right, paint, 3);
+            this.rightPaint = rightPaint;
         }
 
         private RasterLine(Bitmap image, int align) {
@@ -1199,7 +1217,8 @@ public class Foundr1PrinterBridge {
             if (spacerHeight > 0) return spacerHeight;
             if (image != null) return image.getHeight() + (compact ? 6 : 10);
             Paint.FontMetrics metrics = paint.getFontMetrics();
-            return Math.round(metrics.descent - metrics.ascent) + (compact ? 3 : 8);
+            Paint.FontMetrics other = rightPaint == null ? metrics : rightPaint.getFontMetrics();
+            return Math.round(Math.max(metrics.descent, other.descent) - Math.min(metrics.ascent, other.ascent)) + (compact ? 3 : 8);
         }
 
         void draw(Canvas canvas, int leftEdge, int rightEdge, int top) {
@@ -1210,7 +1229,8 @@ public class Foundr1PrinterBridge {
                 return;
             }
             Paint.FontMetrics metrics = paint.getFontMetrics();
-            float baseline = top - metrics.ascent + 2;
+            Paint.FontMetrics other = rightPaint == null ? metrics : rightPaint.getFontMetrics();
+            float baseline = top - Math.min(metrics.ascent, other.ascent) + 2;
             if (align == 1) {
                 float x = leftEdge + (rightEdge - leftEdge - paint.measureText(left)) / 2;
                 canvas.drawText(left, x, baseline, paint);
@@ -1218,7 +1238,7 @@ public class Foundr1PrinterBridge {
                 canvas.drawText(left, rightEdge - paint.measureText(left), baseline, paint);
             } else if (align == 3) {
                 canvas.drawText(left, leftEdge, baseline, paint);
-                canvas.drawText(right, rightEdge - paint.measureText(right), baseline, paint);
+                canvas.drawText(right, rightEdge - rightPaint.measureText(right), baseline, rightPaint);
             } else {
                 canvas.drawText(left, leftEdge, baseline, paint);
             }
