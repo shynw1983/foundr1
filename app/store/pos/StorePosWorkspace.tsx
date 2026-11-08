@@ -45,7 +45,6 @@ import { resolvePosItemPricingMode } from "../../../lib/pos-item-pricing";
 import { dineInGroupAppliesToItem, dineInOptionAppliesToItem } from '../../../lib/store-dine-in-menu-policy';
 import { getPosOptionSelectionType, getPosOptionSelectionRules, isStoreDineInSelection } from "../../../lib/dine-in-option-selection";
 import { runPosPrintJobs, type PosPrintJob } from "../../../lib/pos-print-jobs";
-import { posPickupTicketCopy } from "../../../lib/pos-pickup-ticket-copy";
 import { isPosSellableItem } from "../../../lib/pos-catalog-policy";
 import { defaultPosCounterMenuPolicy, normalizePosCounterMenuPolicy, usesLocalPosMenu, type PosCounterMenuPolicy } from "../../../lib/pos-counter-menu-policy";
 import { allocatePosAmountByWeight, calculatePosCounterTax, type PosCounterTaxBucket } from "../../../lib/pos-counter-tax";
@@ -2110,9 +2109,9 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     if (!tickets.length && !immediateOnly) return `${await printKitchenAfterCheckout(body, cartSnapshot)}${await printReceiptAfterCheckout(body, cartSnapshot)}`;
     const existing = (await listPosPrintJobs()).filter((job) => job.storeId === selectedStoreId &&
       (job.orderId === String(body.orderId) || Boolean(body.offlineClientOrderId && job.clientOrderId === String(body.offlineClientOrderId))));
-    if (!posSettings.printerSettings.enabled) {
+    if (existing.length || !posSettings.printerSettings.enabled) {
       if (!existing.length) return "";
-      // A recovered checkout keeps its saved documents even if printing was disabled later.
+      // Recovery reuses the entire immutable batch, including original roles, copies and filters.
       await runPosPrintJobs(existing, savePosPrintJob, printWithAndroidBridge);
       await refreshPrintJobs();
       return existing.every((job) => job.state === "sent") ? " / 伝票送信済み" : " / 未送信の伝票があります。送信状況を確認してください。";

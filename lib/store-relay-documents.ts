@@ -1,5 +1,4 @@
 import { applyPosReceiptTaxBreakdown, getReceiptPrinter, getKitchenPrinterForBrand, hasPosPrinterDestination, prefixPosReducedTaxMarker, resolvePosKitchenTicketTemplate, resolvePosReceiptTemplate, type PosPrinterSettings, type PosPrintPayload } from './pos-printer';
-import { posPickupTicketCopy } from './pos-pickup-ticket-copy';
 import type { PosServingTicket } from './pos-serving-policy';
 import { isPosImmediateItem } from './pos-item-fulfillment';
 import { buildPosPrintDocumentSnapshots, type PosPrintSnapshotItem, type PosPrintSnapshotSale } from './pos-print-document-builder';

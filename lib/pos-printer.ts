@@ -597,7 +597,7 @@ function legacyPosBowlTicketTemplate(base: PosKitchenTicketTemplateSettings, kin
 function normalizePosBowlTemplate(value: unknown, kind: PosBowlTicketKind): PosKitchenTicketTemplateSettings {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Partial<PosKitchenTicketTemplateSettings> : {};
   const defaults = legacyPosBowlTicketTemplate(defaultPosKitchenTicketTemplateSettings, kind);
-  // An explicitly configured template owns its appearance. Only the resolver applies safety locks.
+  // An explicitly configured template owns its appearance and content visibility.
   return normalizePosKitchenTicketTemplateSettings({ ...defaults, ...source, title: String(source.title ?? '').trim() || defaults.title });
 }
 

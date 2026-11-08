@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import ts from 'typescript';
 import { build } from 'esbuild';
 
 const bundle = await build({
@@ -159,4 +161,21 @@ test('completed checkout follows exact order acknowledgements and refuses incomp
   assert.match(status('sale',2,queue(['sent','sent']),'sale','read failed'),/確認してください/);
   assert.match(status('sale',2,queue(['sent','cancelled']),'sale'),/取消済み/);
   assert.match(status('sale',2,queue(['not_requested','not_requested']),'sale'),/印刷なし/);
+});
+
+test('offline checkout recovery reuses the original batch after template or copy changes', async () => {
+  const source=readFileSync('app/store/pos/StorePosWorkspace.tsx','utf8');
+  const ast=ts.createSourceFile('StorePosWorkspace.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+  let found;
+  function visit(node) { if(ts.isFunctionDeclaration(node) && node.name?.text==='printCheckoutDocuments')found=node; ts.forEachChild(node,visit); }
+  visit(ast); assert(found);
+  const code=ts.transpileModule(found.getText(ast),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
+  const existing=[{storeId:'shop',orderId:'paid',clientOrderId:'original',kind:'kitchen',state:'sent',payload:{order:{note:'original fixed note',items:[{options:['original noodles']}]}}}];
+  const original=structuredClone(existing); let recovered=0;
+  const scope={debugMode:false,relay:{refresh(){}},isPosImmediateItem:()=>false,selectedStoreId:'shop',
+    listPosPrintJobs:async()=>existing,posSettings:{printerSettings:{enabled:true,bowlTickets:{kitchen:{copies:5}}}},
+    runPosPrintJobs:async jobs=>{assert.deepEqual(jobs,existing);recovered++;},savePosPrintJob:()=>{},printWithAndroidBridge:()=>{throw Error('unexpected print');},refreshPrintJobs:async()=>{}};
+  const fn=new Function('scope', 'with(scope){'+code+';return printCheckoutDocuments;}')(scope);
+  assert.match(await fn({orderId:'paid',servingTickets:[{itemIndex:0,pickupCode:'001'}]},[{}]),/伝票送信済み/);
+  assert.equal(recovered,1); assert.deepEqual(existing,original);
 });
