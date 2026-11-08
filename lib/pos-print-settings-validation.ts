@@ -18,8 +18,9 @@ function order(value: unknown, blocks: string[]) {
 function kitchenTemplate(value: unknown): boolean {
   if (!object(value)) return false;
   const booleans = ['showTitle', 'showStoreName', 'showPickupCode', 'showOrderType', 'showItems', 'showOptions', 'showWeight', 'showOptionGroupNames', 'showNote', 'showTimestamp', 'showAmounts', 'largeText'];
-  const allowed = new Set([...booleans, 'language', 'title', 'customMessage', 'blockOrder', 'blockStyles', 'optionGroupVisibility']);
+  const allowed = new Set([...booleans, 'language', 'title', 'customMessage', 'blockOrder', 'blockStyles', 'optionGroupVisibility', 'orderTypePosition']);
   if (Object.keys(value).some(key => !allowed.has(key)) || booleans.some(key => own(value, key) && typeof value[key] !== 'boolean')) return false;
+  if (own(value, 'orderTypePosition') && !enumeration(value.orderTypePosition, ['below', 'number_right'])) return false;
   if (own(value, 'language') && !enumeration(value.language, ['ja', 'zh'])
     || own(value, 'title') && !string(value.title, 80, true)
     || own(value, 'customMessage') && !string(value.customMessage, 240)

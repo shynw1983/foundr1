@@ -20,3 +20,7 @@
 .receiptTitle { text-align:center; }
 .qr { max-width:46% !important; }
 .help { font-size:11px !important; }
+
+.numberRow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; text-align: left; }
+.numberCode { min-width: 0; overflow-wrap: anywhere; }
+.numberType { flex-shrink: 0; white-space: nowrap; text-align: right; }

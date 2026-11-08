@@ -108,6 +108,8 @@ function PosBowlTicketSettings({ settings, kind, brandId, brandName, storeName, 
               {groups.map(group => <label className={styles.check} key={group.id}><input type="checkbox" data-ticket-option-group={group.id} disabled={!template.showOptions} checked={template.optionGroupVisibility[group.id] !== false} onChange={event => updateTemplate({ optionGroupVisibility: { ...template.optionGroupVisibility, [group.id]: event.target.checked } })} /><span data-i18n-ignore>{group.name}</span></label>)}
               {!groups.length ? <p className={styles.help}>{t("現在のメニューに選択肢グループがありません。")}</p> : null}
             </details>
+            <label><span>{t("注文区分の位置")}</span><select data-ticket-order-type-position value={template.orderTypePosition} onChange={event => updateTemplate({ orderTypePosition: event.target.value as "below" | "number_right" })}><option value="below">{t("独立した行")}</option><option value="number_right">{t("受取番号の右側（右揃え）")}</option></select></label>
+            <p className={styles.help}>{t("番号と注文区分を両方表示すると同じ行になります。番号を非表示にした場合は独立した行に表示します。")}</p>
             {!template.showPickupCode ? <p className={styles.help}>{t("受取番号を非表示にすると、伝票同士の照合ができなくなります。")}</p> : null}
           </div>
           <label className={styles.message}><span>{t("固定メッセージ")}</span><textarea data-print-template-message rows={2} maxLength={240} value={template.customMessage} onChange={event => updateTemplate({ customMessage: event.target.value })} /></label>
