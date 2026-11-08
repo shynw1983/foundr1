@@ -547,6 +547,8 @@ public class Foundr1PrinterBridge {
                     if (!shouldShowKitchenBlock(kitchenTemplate, block, order) || (inlineOrderType && "orderType".equals(block))) continue;
                     JSONObject style = kitchenBlockStyle(kitchenTemplate, block);
                     Paint blockPaint = kitchenBlockPaint(style, largeKitchenText, false);
+                    boolean jumboNumber = "pickup".equals(block) && ("jumbo".equals(style.optString("textSize", "")) || "jumbo".equals(kitchenTemplate == null ? "" : kitchenTemplate.optString("pickupNumberScale", "")));
+                    if (jumboNumber) blockPaint.setTextSize(96);
                     if (style.optBoolean("separatorBefore", defaultKitchenSeparator(block))) {
                         addSeparator(lines, contentWidth, normal);
                     }
@@ -559,11 +561,12 @@ public class Foundr1PrinterBridge {
                             String label = chineseKitchen ? formatChineseKitchenOrderTypeLabel(order.optString("orderType", "")) : formatOrderTypeLabel(order.optString("orderType", ""));
                             Paint labelPaint = kitchenBlockPaint(kitchenBlockStyle(kitchenTemplate, "orderType"), largeKitchenText, false);
                             Paint numberPaint = new Paint(blockPaint);
-                            String number = "No. " + order.optString("pickupCode", "");
+                            numberPaint.setTextSize(blockPaint.getTextSize());
+                            String number = (jumboNumber ? "" : "No. ") + order.optString("pickupCode", "");
                             float available = Math.max(1, contentWidth - labelPaint.measureText(label) - 14);
                             if (numberPaint.measureText(number) > available) numberPaint.setTextSize(numberPaint.getTextSize() * available / numberPaint.measureText(number));
                             lines.add(new RasterLine(number, label, numberPaint, labelPaint));
-                        } else addKitchenText(lines, "No. " + order.optString("pickupCode", ""), blockPaint, style, contentWidth);
+                        } else addKitchenText(lines, (jumboNumber ? "" : "No. ") + order.optString("pickupCode", ""), blockPaint, style, contentWidth);
                     } else if ("orderType".equals(block)) {
                         addKitchenText(
                             lines,
@@ -638,7 +641,8 @@ public class Foundr1PrinterBridge {
     private Paint kitchenBlockPaint(JSONObject style, boolean largeText, boolean option) {
         String size = style.optString("textSize", "standard");
         int baseSize;
-        if ("xlarge".equals(size)) baseSize = largeText ? 38 : 32;
+        if ("jumbo".equals(size)) baseSize = 96;
+        else if ("xlarge".equals(size)) baseSize = largeText ? 38 : 32;
         else if ("large".equals(size)) baseSize = largeText ? 34 : 28;
         else if ("small".equals(size)) baseSize = largeText ? 24 : 21;
         else baseSize = largeText ? 28 : 24;

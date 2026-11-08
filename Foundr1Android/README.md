@@ -322,3 +322,7 @@ paired APK; a new live acceptance-to-kitchen test remains outstanding.
 ### Store 0.2.35: inline pickup/order-type row
 
 Kitchen-style payloads accept `kitchenTicketTemplate.orderTypePosition: "number_right"`. With both visibility flags enabled, the pickup number is left aligned and the dining/takeout label is right aligned on the same baseline, retaining independent font sizes. A hidden pickup number restores a separate dining-type row. The default `below` preserves existing layouts. Web template previews and native rendering are tested separately; publication is not proof of installation or physical printer output.
+
+### Store 0.2.36: jumbo pickup number
+
+`kitchenTicketTemplate.pickupNumberScale: "jumbo"` renders the pickup code at 96px and omits `No.` while keeping the dining-label font separate. Inline rows still fit the number to the remaining width without overlap. The server retains an `xlarge` base font for older APKs. Codes, leading zeros, payment data and prior snapshots are unchanged. The renderer tests assert the actual paint size and coordinates for both paper widths.

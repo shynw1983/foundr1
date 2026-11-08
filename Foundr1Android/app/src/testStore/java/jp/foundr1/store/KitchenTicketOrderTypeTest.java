@@ -23,13 +23,15 @@ import static org.junit.Assert.*;
 @Config(sdk = 28, shadows = KitchenTicketOrderTypeTest.RecordingCanvas.class)
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class KitchenTicketOrderTypeTest {
+    private String numberSize;
+    private boolean compatibleNumberHint;
     @Implements(Canvas.class)
     public static class RecordingCanvas extends ShadowLegacyCanvas {
         static final List<String> text = new ArrayList<>();
         static final List<float[]> bounds = new ArrayList<>();
         @Implementation protected void drawText(String value, float x, float y, Paint paint) {
             text.add(value);
-            bounds.add(new float[]{x, y, paint.measureText(value)});
+            bounds.add(new float[]{x, y, paint.measureText(value), paint.getTextSize()});
             super.drawText(value, x, y, paint);
         }
     }
@@ -45,6 +47,8 @@ public class KitchenTicketOrderTypeTest {
         JSONObject template = new JSONObject().put("title", title).put("language", language)
             .put("orderTypePosition", position).put("showPickupCode", showNumber).put("showOrderType", show).put("showItems", false).put("showTimestamp", false)
             .put("blockOrder", new JSONArray().put("title").put("pickup").put("orderType"));
+        if (compatibleNumberHint) template.put("pickupNumberScale", "jumbo");
+        if (numberSize != null) template.put("blockStyles", new JSONObject().put("pickup", new JSONObject().put("textSize", numberSize).put("alignment", "left").put("bold", true)));
         JSONObject payload = new JSONObject().put("jobType", job).put("order", order).put("kitchenTicketTemplate", template);
         Method method = Foundr1PrinterBridge.class.getDeclaredMethod("createReceiptBitmap", JSONObject.class, String.class);
         method.setAccessible(true);
@@ -92,6 +96,19 @@ public class KitchenTicketOrderTypeTest {
         assertTrue(text.contains("037")); assertFalse(text.contains("持ち帰り"));
         text = render("kitchen", "出品伝票", "takeout", "ja", true, "58mm", "number_right", false, "037");
         assertFalse(text.contains("037")); assertTrue(text.contains("持ち帰り"));
+    }
+
+    @Test public void jumboNumberIsLargeWithoutPrefixAndKeepsDiningTypeSmall() throws Exception {
+        numberSize = "xlarge"; compatibleNumberHint = true;
+        for (String paper : new String[]{"58mm", "80mm"}) {
+            String text = render("kitchen", "番号札", "eat_in", "ja", true, paper, "number_right", true, "037");
+            int left = RecordingCanvas.text.indexOf("037"), right = RecordingCanvas.text.indexOf("店内");
+            assertTrue(text, left >= 0 && right >= 0); assertFalse(text.contains("No."));
+            float[] a = RecordingCanvas.bounds.get(left), b = RecordingCanvas.bounds.get(right);
+            assertEquals(96f, a[3], 0.1f); assertTrue(b[3] <= 38f);
+            assertEquals(a[1], b[1], 0.1f); assertTrue(a[0] + a[2] + 13 <= b[0]);
+            assertEquals(paper.equals("58mm") ? 366f : 558f, b[0] + b[2], 0.1f);
+        }
     }
 
 }

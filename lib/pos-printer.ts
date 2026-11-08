@@ -82,6 +82,8 @@ export type PosReceiptTemplateVariant = {
 };
 
 export type PosKitchenTicketTemplateSettings = {
+  /** Native payload hint; old apps retain the xlarge fallback. Not an editor write field. */
+  pickupNumberScale?: "jumbo";
   language: "ja" | "zh";
   showTitle: boolean;
   title: string;
@@ -106,7 +108,7 @@ export type PosKitchenTicketTemplateSettings = {
 export type PosKitchenTicketBlock = "title" | "store" | "pickup" | "orderType" | "items" | "note" | "message" | "timestamp";
 
 export type PosKitchenTicketBlockStyle = {
-  textSize: "small" | "standard" | "large" | "xlarge";
+  textSize: "small" | "standard" | "large" | "xlarge" | "jumbo";
   alignment: "left" | "center";
   bold: boolean;
   separatorBefore: boolean;
@@ -462,7 +464,7 @@ export function normalizePosKitchenTicketTemplateSettings(value: unknown): PosKi
   const blockStyles = Object.fromEntries(validBlocks.map((block) => {
     const fallback = defaultPosKitchenTicketTemplateSettings.blockStyles[block];
     const raw = sourceStyles[block] && typeof sourceStyles[block] === "object" ? sourceStyles[block] : {};
-    const textSize = ["small", "standard", "large", "xlarge"].includes(String(raw.textSize))
+    const textSize = ["small", "standard", "large", "xlarge", ...(block === "pickup" ? ["jumbo"] : [])].includes(String(raw.textSize))
       ? raw.textSize as PosKitchenTicketBlockStyle["textSize"]
       : fallback.textSize;
     return [block, {
