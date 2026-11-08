@@ -57,7 +57,7 @@ import { createPosScaleTareForm, PosScaleTareSettingsSection, validatePosScaleTa
 import { createPosFulfillmentForm, PosFulfillmentSettingsSection, validatePosFulfillmentForm, type PosFulfillmentFormState } from "./PosFulfillmentSettings";
 import { translatePosDisplayStandbyError } from "../../../lib/pos-display-standby-i18n";
 import { PosDisplayStandbyEditor } from "./PosDisplayStandbyEditor";
-import { PosPrintDocumentsEditor, type PosPrintDocumentTab } from "./PosPrintDocumentsEditor";
+import { PosPrintDocumentsEditor, type PosPrintDocumentTab, type PosPrintOptionGroup } from "./PosPrintDocumentsEditor";
 import PosSavedPrintPreviews from "./PosSavedPrintPreviews";
 import { defaultPosDisplayStandbySettings, normalizePosDisplayStandbySettings, validatePosDisplayStandbySettings, type PosDisplayStandbySettings } from "../../../lib/pos-display-standby";
 import type { PosFulfillmentWorkspaceSettings } from "../../../lib/pos-fulfillment-settings";
@@ -343,6 +343,7 @@ export default function PosPage() {
   const [expandedDiscountKey, setExpandedDiscountKey] = useState("");
   const [discountQuery, setDiscountQuery] = useState("");
   const [discountStatus, setDiscountStatus] = useState("all");
+  const [printOptionGroups, setPrintOptionGroups] = useState<PosPrintOptionGroup[]>([]);
   const [giftItems,setGiftItems] = useState<PosGiftItem[]>([]);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
@@ -440,6 +441,7 @@ export default function PosPage() {
       activeStoreRef.current = selectedId;
       const giftMenu=body.dineInMenu || body;
       const productGifts = (giftMenu.items || []).filter((item:{brandName?:string;itemKind?:string;productionType?:string})=>!isPosBowl(item)).filter((item:Parameters<typeof resolvePosItemPricingMode>[0])=>resolvePosItemPricingMode(item)==='fixed').filter((item:Parameters<typeof dineInGroupAppliesToItem>[1] & {optionGroupIds?:string[]})=>!(giftMenu.optionGroups||[]).some((g:Parameters<typeof dineInGroupAppliesToItem>[0] & Parameters<typeof getPosOptionSelectionRules>[0])=>(!item.optionGroupIds||item.optionGroupIds.includes(g.id))&&dineInGroupAppliesToItem(g,item)&&getPosOptionSelectionRules(g).min>0)).map((item:PosGiftItem & {priceOverride?:number|null;basePrice?:number|null;isAvailable?:boolean})=>({...item,price:Number(item.priceOverride??item.price??item.basePrice??0),available:item.isAvailable!==false,fixed:true})).filter((item:PosGiftItem)=>item.available);
+      setPrintOptionGroups(giftMenu.optionGroups || []);
       setGiftItems([...productGifts,...posOptionGiftCatalog(giftMenu.optionGroups||[])]);
       setStores(body.access?.stores ?? []);
       setSelectedStoreId(selectedId);
@@ -1672,7 +1674,7 @@ export default function PosPage() {
           </div>
           </>)}
           {renderSettingsPane("printing", <>
-          <PosPrintDocumentsEditor settings={taxForm.printerSettings} kind={printDocumentTab} onKindChange={setPrintDocumentTab}
+          <PosPrintDocumentsEditor optionGroups={printOptionGroups} settings={taxForm.printerSettings} kind={printDocumentTab} onKindChange={setPrintDocumentTab}
             brandId={receiptPreviewBrandId} onBrandChange={setReceiptPreviewBrandId} brands={taxForm.posBrandSettings}
             storeName={taxSettings?.storeName || stores.find(store => store.id === selectedStoreId)?.name || t("店舗名")}
             disabled={!canManagePosSettings || (taxSaving||categorySaving) || loading} saving={(taxSaving||categorySaving)}

@@ -90,3 +90,7 @@
 最初排查轮次只写入规则，未改动运行时。随后经用户授权进行的 Web 改造范围、档位、例外及验证边界见[2026-11-03 改造记录](realtime-refresh-rollout-20261103.md)，正式发布状态以该记录所指的发布证据为准。未覆盖的原生运行时和历史模块不能据此认定已完成迁移。以后新增/修改刷新逻辑时必须遵守本规范；无关的小改不要求顺带重构全系统。
 
 改造顺序：先补齐订阅健康、重连校准、事件在途补读和缺失的发布链路；再合并重复调度、验证恢复及业务副作用；最后按档位降频并分别报告代码、服务端发布、原生安装与实机结果。
+
+### POS completed-sale print notice
+
+The completed-sale notice consumes the existing print queue coordinator, scoped to the exact paid order. It does not create another timer, retry a print, or interpret an empty/partial queue as success. A terminal message requires a complete order-scoped document set; uncertain/read failures remain reviewable. Amount, discount and change remain visible while only the status label changes.

@@ -17,13 +17,16 @@ function order(value: unknown, blocks: string[]) {
 }
 function kitchenTemplate(value: unknown): boolean {
   if (!object(value)) return false;
-  const booleans = ['showTitle', 'showStoreName', 'showPickupCode', 'showOrderType', 'showItems', 'showOptions', 'showNote', 'showTimestamp', 'showAmounts', 'largeText'];
-  const allowed = new Set([...booleans, 'language', 'title', 'customMessage', 'blockOrder', 'blockStyles']);
+  const booleans = ['showTitle', 'showStoreName', 'showPickupCode', 'showOrderType', 'showItems', 'showOptions', 'showWeight', 'showOptionGroupNames', 'showNote', 'showTimestamp', 'showAmounts', 'largeText'];
+  const allowed = new Set([...booleans, 'language', 'title', 'customMessage', 'blockOrder', 'blockStyles', 'optionGroupVisibility']);
   if (Object.keys(value).some(key => !allowed.has(key)) || booleans.some(key => own(value, key) && typeof value[key] !== 'boolean')) return false;
   if (own(value, 'language') && !enumeration(value.language, ['ja', 'zh'])
     || own(value, 'title') && !string(value.title, 80, true)
     || own(value, 'customMessage') && !string(value.customMessage, 240)
     || own(value, 'blockOrder') && !order(value.blockOrder, bowlBlocks)) return false;
+  if (own(value, 'optionGroupVisibility') && (!object(value.optionGroupVisibility)
+    || Object.keys(value.optionGroupVisibility).length > 1000
+    || Object.entries(value.optionGroupVisibility).some(([key, visible]) => !/^[a-zA-Z0-9:_-]{1,160}$/.test(key) || typeof visible !== 'boolean'))) return false;
   if (own(value, 'blockStyles')) {
     if (!object(value.blockStyles) || Object.keys(value.blockStyles).some(key => !bowlBlocks.includes(key))) return false;
     for (const style of Object.values(value.blockStyles)) {

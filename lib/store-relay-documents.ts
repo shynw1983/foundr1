@@ -1,8 +1,7 @@
 import { applyPosReceiptTaxBreakdown, getReceiptPrinter, getKitchenPrinterForBrand, hasPosPrinterDestination, prefixPosReducedTaxMarker, resolvePosKitchenTicketTemplate, resolvePosReceiptTemplate, type PosPrinterSettings, type PosPrintPayload } from './pos-printer';
-import { posPickupTicketCopy } from './pos-pickup-ticket-copy';
 import type { PosServingTicket } from './pos-serving-policy';
 import { isPosImmediateItem } from './pos-item-fulfillment';
-import type { PosPrintSnapshotItem, PosPrintSnapshotSale } from './pos-print-document-builder';
+import { buildPosPrintDocumentSnapshots, type PosPrintSnapshotItem, type PosPrintSnapshotSale } from './pos-print-document-builder';
 export type RelayDocument={kind:'kitchen'|'pickup'|'receipt';payload:PosPrintPayload};
 const localized=(name:string,names:Record<string,string>|undefined,lang:string)=>lang==='ja'?name:names?.[lang]||names?.en||name;
 export function buildRelayDocuments(settings:PosPrinterSettings,storeName:string,sale:PosPrintSnapshotSale,items:PosPrintSnapshotItem[],tickets:PosServingTicket[]):RelayDocument[]{
@@ -20,21 +19,9 @@ export function buildRelayDocuments(settings:PosPrinterSettings,storeName:string
     note:sale.note,subtotalAmount:sale.subtotalAmount,discountAmount:sale.discountAmount,couponDiscountAmount:sale.couponDiscountAmount,
     taxAmount:sale.taxAmount,taxRate:sale.taxRate,totalAmount:sale.amount,cashTenderedAmount:sale.cashTenderedAmount,cashChangeAmount:sale.cashChangeAmount};
   const jobs:RelayDocument[]=[];
-  for(const ticket of tickets){
-    const item=items[ticket.itemIndex];if(!item)throw new Error('料理と伝票の対応を確認してください。');
-    if(isPosImmediateItem(item))continue;
-    const template=resolvePosKitchenTicketTemplate(settings,item.brandId);
-    const kitchen:PosPrintPayload={version:1,jobType:'kitchen',printer:{...receiptPrinter,openCashDrawer:false},storeName:`${storeName} / ${item.brandName}`,printedAt,
-      kitchenTicketTemplate:{...template,title:'厨房伝票',showTitle:true,showPickupCode:true,showItems:true,showOptions:true,showNote:true,largeText:true,
-        blockStyles:{...template.blockStyles,pickup:{...template.blockStyles.pickup,textSize:'xlarge',bold:true}}},
-      order:{...base,subtotalAmount:item.amount,totalAmount:item.amount,discountAmount:0,couponDiscountAmount:0,taxAmount:0,taxRate:0,pickupCode:ticket.pickupCode,paymentMethod:'kitchen',paymentLabel:'厨房',note:[item.preparationNote,sale.note].filter(Boolean).join(' / '),items:[line(item)]}};
-    jobs.push({kind:'kitchen',payload:kitchen});
-    // Both internal documents use the kitchen transport; their printed titles distinguish the roles.
-    jobs.push({kind:'kitchen',payload:{...kitchen,kitchenTicketTemplate:{...kitchen.kitchenTicketTemplate!,title:'出品伝票',showTitle:true,showAmounts:false,
-      customMessage:'厨房伝票と番号を照合し、味付け・追加・メモを確認してください。'}}});
-    const copy=posPickupTicketCopy[sale.memberLanguage]||posPickupTicketCopy.ja;
-    jobs.push({kind:'pickup',payload:{...kitchen,order:{...kitchen.order!,note:'',items:[line(item,sale.memberLanguage)]},
-      kitchenTicketTemplate:{...kitchen.kitchenTicketTemplate!,language:'ja',title:copy.title,customMessage:copy.message,showTitle:true,showAmounts:false,showNote:false,showOrderType:false}}});
+  for (const document of buildPosPrintDocumentSnapshots(settings, storeName, sale, items, tickets, 'auto')) {
+    if (!document.requested || !document.documentKey.startsWith('item:') || document.kind === 'receipt') continue;
+    jobs.push({ kind: document.kind === 'finishing' ? 'kitchen' : document.kind, payload: document.payload });
   }
   if(settings.kitchenEnabled){
     const other=items.filter((item,i)=>!tickets.some(t=>t.itemIndex===i)&&!isPosImmediateItem(item));
