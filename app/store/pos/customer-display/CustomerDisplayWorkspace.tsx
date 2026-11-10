@@ -51,6 +51,7 @@ type DisplayState = {
   memberMessage: string;
   discountName: string;
   discountAmount: number;
+  paymentRoundingAmount?: number;
   couponName: string;
   couponDiscountAmount: number;
   subtotal: number;
@@ -157,6 +158,7 @@ const customerDisplayText: Record<DisplayLanguage, {
   payment: string;
   total: string;
   discountApplied: string;
+  paymentRounding: string;
   couponApplied: string;
   cashTendered: string;
   change: string;
@@ -189,6 +191,7 @@ const customerDisplayText: Record<DisplayLanguage, {
     payment: "お支払い",
     total: "合計",
     discountApplied: "割引適用",
+    paymentRounding: "端数調整",
     couponApplied: "クーポン適用",
     cashTendered: "お預り",
     change: "お釣り",
@@ -221,6 +224,7 @@ const customerDisplayText: Record<DisplayLanguage, {
     payment: "支付方式",
     total: "合计",
     discountApplied: "已应用折扣",
+    paymentRounding: "抹零",
     couponApplied: "已应用优惠券",
     cashTendered: "已收款",
     change: "找零",
@@ -253,6 +257,7 @@ const customerDisplayText: Record<DisplayLanguage, {
     payment: "付款方式",
     total: "合計",
     discountApplied: "已套用折扣",
+    paymentRounding: "尾數調整",
     couponApplied: "已套用優惠券",
     cashTendered: "已收款",
     change: "找零",
@@ -285,6 +290,7 @@ const customerDisplayText: Record<DisplayLanguage, {
     payment: "Payment",
     total: "Total",
     discountApplied: "Discount applied",
+    paymentRounding: "Rounding adjustment",
     couponApplied: "Coupon applied",
     cashTendered: "Received",
     change: "Change",
@@ -317,6 +323,7 @@ const customerDisplayText: Record<DisplayLanguage, {
     payment: "결제",
     total: "합계",
     discountApplied: "할인 적용",
+    paymentRounding: "결제 금액 조정",
     couponApplied: "쿠폰 적용",
     cashTendered: "받은 금액",
     change: "거스름돈",
@@ -349,6 +356,7 @@ const customerDisplayText: Record<DisplayLanguage, {
     payment: "Thanh toán",
     total: "Tổng cộng",
     discountApplied: "Đã áp dụng giảm giá",
+    paymentRounding: "Điều chỉnh làm tròn",
     couponApplied: "Đã áp dụng phiếu ưu đãi",
     cashTendered: "Đã nhận",
     change: "Tiền thừa",
@@ -381,6 +389,7 @@ const customerDisplayText: Record<DisplayLanguage, {
     payment: "भुक्तानी",
     total: "जम्मा",
     discountApplied: "छुट लागू",
+    paymentRounding: "रकम समायोजन",
     couponApplied: "कुपन लागू",
     cashTendered: "प्राप्त रकम",
     change: "फिर्ता रकम",
@@ -905,7 +914,7 @@ export default function CustomerDisplayWorkspace({ debugMode = false }: { debugM
 
   const hasDiscount = Boolean(state.discountName && state.discountAmount > 0);
   const hasCoupon = Boolean(state.couponName && state.couponDiscountAmount > 0);
-  const hasPromotions = hasDiscount || hasCoupon;
+  const hasPromotions = hasDiscount || hasCoupon || Boolean(state.paymentRoundingAmount);
   const connectionActive = debugMode ? debugDisplay.status === "connected" : realtimeStatus === "connected";
   const normalDisplayHref = `/store/pos/customer-display${selectedStoreId ? `?storeId=${encodeURIComponent(selectedStoreId)}` : ""}`;
   const standbyActive = mediaSettings.standby.enabled && !loading && !memberScannerOpen
@@ -918,6 +927,9 @@ export default function CustomerDisplayWorkspace({ debugMode = false }: { debugM
   const promotionCards = <>
     {hasDiscount ? <div className="customer-display-discount">
       <span>{text.discountApplied}</span><strong>{state.discountName}</strong><b>-{formatYen(state.discountAmount)}</b>
+    </div> : null}
+    {state.paymentRoundingAmount ? <div className="customer-display-discount customer-display-rounding">
+      <span>{text.paymentRounding}</span><b>-{formatYen(state.paymentRoundingAmount)}</b>
     </div> : null}
     {hasCoupon ? <div className="customer-display-discount">
       <span>{text.couponApplied}</span><strong>{state.couponName}</strong><b>-{formatYen(state.couponDiscountAmount)}</b>

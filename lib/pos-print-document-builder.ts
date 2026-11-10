@@ -40,6 +40,7 @@ export type PosPrintSnapshotSale = {
   amount: number;
   subtotalAmount: number;
   discountAmount: number;
+  paymentRoundingAmount?: number;
   couponDiscountAmount: number;
   taxAmount: number;
   taxRate: number;
@@ -117,7 +118,7 @@ export function buildPosPrintDocumentSnapshots(
   };
   const base = {
     pickupCode: sale.pickupCode, orderType: sale.orderType, paymentMethod: sale.paymentMethod,
-    paymentLabel: ({ cash: "現金", card: "カード", other: "その他" } as Record<string, string>)[sale.paymentMethod] || sale.paymentMethod,
+    paymentLabel: ({ cash: "現金", card: "カード", qr: "QRコード決済", other: "その他" } as Record<string, string>)[sale.paymentMethod] || sale.paymentMethod,
     cashierName: sale.cashierName, note: sale.note,
     subtotalAmount: sale.subtotalAmount, discountAmount: sale.discountAmount,
     couponDiscountAmount: sale.couponDiscountAmount, taxAmount: sale.taxAmount,
@@ -197,7 +198,7 @@ export function buildPosPrintDocumentSnapshots(
   }
   const markReducedRate = sale.taxBreakdown?.some(bucket => bucket.rate === 8) ?? false;
   const receipt = applyPosReceiptTaxBreakdown(template, {
-    ...base, receiptRequested: sale.receiptRequested,
+    ...base, receiptRequested: sale.receiptRequested, paymentRoundingAmount: sale.paymentRoundingAmount,
     receiptTitle: sale.receiptRequested ? template.invoiceTitle : template.receiptTitle,
     receiptRecipientName: sale.receiptRequested ? invoiceRecipientStem(sale.receiptRecipientName ?? template.invoiceRecipientName) : "",
     receiptPurposeText: sale.receiptRequested ? (sale.receiptPurposeText ?? template.invoicePurposeText) : "",

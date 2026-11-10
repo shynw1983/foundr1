@@ -80,6 +80,55 @@ try {
   assert.deepEqual(dine.taxBreakdown, [{ rate: 10, grossAmount: 2200, taxAmount: 200 }]);
   assert.deepEqual(takeaway.taxBreakdown, [{ rate: 8, grossAmount: 1650, taxAmount: 123 }, { rate: 10, grossAmount: 550, taxAmount: 50 }]);
   assert.equal(takeaway.servingTickets.length, 1);
+  const roundingMigration = readFileSync('db/migrations/20261110_pos_payment_rounding.sql', 'utf8');
+  await db.exec('alter table pos_store_settings drop column payment_rounding');
+  assert.deepEqual((await readPos()).posSettings.paymentRounding, { cash: false, qr: false, card: false });
+  await db.exec(roundingMigration);
+  await db.exec(roundingMigration);
+  const settingsApi = f.reload('app/api/os/pos/settings/route.ts');
+  const settingsBody = { section: 'general', storeId: ids.store, dineInEnabled: true, takeoutEnabled: true,
+    dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: 'PayCAS', priceTaxMode: 'tax_included',
+    posBrandSettings: [] };
+  const saveRounding = (paymentRounding, storeId = ids.store) => settingsApi.POST(f.request('/api/os/pos/settings', {
+    ...settingsBody, storeId, ...(paymentRounding ? { paymentRounding } : {})
+  }));
+  await json(await saveRounding({ cash: true }, ids.other), 403);
+  const roundedLine = { ...withLinkedBeer, measuredQuantity: 251 };
+  const quote = (paymentMethod, offlineExpectedAmount, paymentRoundingQuote) => ({
+    paymentMethod, offlineExpectedAmount, paymentRoundingQuote
+  });
+  for (const method of ['cash', 'qr', 'card']) {
+    const toggles = { cash: method === 'cash', qr: method === 'qr', card: method === 'card' };
+    assert.deepEqual((await json(await saveRounding(toggles))).settings.paymentRounding, toggles);
+    assert.deepEqual((await json(await saveRounding())).settings.paymentRounding, toggles);
+    assert.deepEqual((await readPos()).posSettings.paymentRounding, toggles);
+    const beforeWrongQuote = await f.counts();
+    await writeOrder('takeout', [roundedLine], quote(method, 2204, 0), 409);
+    assert.deepEqual(await f.counts(), beforeWrongQuote);
+    const rounded = await writeOrder('takeout', [roundedLine], quote(method, 2200, 4));
+    assert.equal(rounded.result.amount, 2200);
+    assert.equal(rounded.result.paymentRoundingAmount, 4);
+    assert.equal(rounded.result.cashChangeAmount, method === 'cash' ? 2800 : null);
+    assert.equal(rounded.result.taxBreakdown.reduce((sum, bucket) => sum + bucket.grossAmount, 0), 2200);
+    const ticket = await receipt(rounded.result.orderId);
+    assert.equal(ticket.order.totalAmount, 2200);
+    assert.match(ticket.order.note, /端数調整 -¥4/);
+    const stored = (await db.query('select amount, payment_provider, customer_summary from store_customer_orders where id=$1', [rounded.result.orderId])).rows[0];
+    assert.equal(Number(stored.amount), 2200);
+    assert.equal(stored.payment_provider, method);
+    assert.equal(stored.customer_summary.paymentRoundingAmount, 4);
+    for (const otherMethod of ['cash', 'qr', 'card', 'other'].filter(value => value !== method)) {
+      const { result } = await writeOrder('takeout', [roundedLine], quote(otherMethod, 2204, 0));
+      assert.equal(result.amount, 2204);
+      assert.equal(result.paymentRoundingAmount, 0);
+    }
+    const retry = await json(await pos.POST(f.request('/api/store/pos', rounded.body)));
+    assert.equal(retry.orderId, rounded.result.orderId);
+    assert.equal(retry.paymentRoundingAmount, 4);
+  }
+  await json(await saveRounding({ cash: false, qr: false, card: false }));
+  check('store-scoped rounding, exact quote rejection, three independent methods, cash change, saved tax and receipt');
+
   const takeoutLine = (await rows(takeaway.orderId))[0];
   assert.equal(takeoutLine.measured_quantity, 250);
   assert.equal(takeoutLine.menu_catalog_item_id, ids.menu);

@@ -1,4 +1,5 @@
 "use client";
+import { normalizePosPaymentRounding, posRoundingMethods, posRoundingMethodLabels, type PosPaymentRounding } from "../../../lib/pos-payment-rounding";
 import { invoiceRecipientLabel } from '../../../lib/pos-invoice';
 import { posCampaignDate, validatePosCampaignPresets, type PosCampaignFields as CampaignFields } from "../../../lib/pos-discount-campaigns";
 import { dineInGroupAppliesToItem } from "../../../lib/store-dine-in-menu-policy";
@@ -141,6 +142,7 @@ type PosTaxSettings = {
   dineInTaxRate: number;
   takeoutTaxRate: number;
   externalPaymentTerminalBrand: string;
+  paymentRounding: PosPaymentRounding;
   priceTaxMode: string;
   discountPresets: PosDiscountPreset[];
   customerDisplayMediaSettings: CustomerDisplayMediaSettings;
@@ -158,6 +160,7 @@ type PosTaxFormState = {
   dineInTaxRate: string;
   takeoutTaxRate: string;
   externalPaymentTerminalBrand: string;
+  paymentRounding: PosPaymentRounding;
   priceTaxMode: string;
   discountPresets: PosDiscountPreset[];
   customerDisplayMediaSettings: CustomerDisplayMediaSettings;
@@ -316,6 +319,7 @@ function ReceiptQrPreview({ value, label, size, alignment }: { value: string; la
 }
 
 function getPaymentLabel(value: string) {
+  if (value === "qr") return "QRコード決済";
   if (value === "cash") return "現金";
   if (value === "card") return "カード";
   if (value === "other") return "その他";
@@ -327,7 +331,7 @@ function createPosTaxFormSnapshot(form: PosTaxFormState) {
 }
 
 function generalFields(form:PosTaxFormState) {
- return {dineInEnabled:form.dineInEnabled,takeoutEnabled:form.takeoutEnabled,dineInTaxRate:form.dineInTaxRate,takeoutTaxRate:form.takeoutTaxRate,externalPaymentTerminalBrand:form.externalPaymentTerminalBrand,priceTaxMode:form.priceTaxMode,posBrandSettings:form.posBrandSettings};
+ return {dineInEnabled:form.dineInEnabled,takeoutEnabled:form.takeoutEnabled,dineInTaxRate:form.dineInTaxRate,takeoutTaxRate:form.takeoutTaxRate,externalPaymentTerminalBrand:form.externalPaymentTerminalBrand,paymentRounding:form.paymentRounding,priceTaxMode:form.priceTaxMode,posBrandSettings:form.posBrandSettings};
 }
 function mediaFields(settings:CustomerDisplayMediaSettings) {
  const {standby:_standby,...media}=settings;return media;
@@ -355,6 +359,7 @@ export default function PosPage() {
     dineInTaxRate: "10",
     takeoutTaxRate: "8",
     externalPaymentTerminalBrand: "PayCAS",
+    paymentRounding: normalizePosPaymentRounding(null),
     priceTaxMode: "tax_included",
     discountPresets: [],
     customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings,
@@ -457,6 +462,7 @@ export default function PosPage() {
         dineInTaxRate: String(nextSettings?.dineInTaxRate ?? 10),
         takeoutTaxRate: String(nextSettings?.takeoutTaxRate ?? 8),
         externalPaymentTerminalBrand: nextSettings?.externalPaymentTerminalBrand ?? "PayCAS",
+        paymentRounding: normalizePosPaymentRounding(nextSettings?.paymentRounding),
         priceTaxMode: nextSettings?.priceTaxMode ?? "tax_included",
         discountPresets: Array.isArray(nextSettings?.discountPresets) ? nextSettings.discountPresets : [],
         customerDisplayMediaSettings: { ...defaultCustomerDisplayMediaSettings, ...nextSettings?.customerDisplayMediaSettings, standby: normalizePosDisplayStandbySettings(nextSettings?.customerDisplayMediaSettings?.standby) },
@@ -607,6 +613,7 @@ export default function PosPage() {
       dineInTaxRate: String(settings.dineInTaxRate ?? taxForm.dineInTaxRate),
       takeoutTaxRate: String(settings.takeoutTaxRate ?? taxForm.takeoutTaxRate),
       externalPaymentTerminalBrand: settings.externalPaymentTerminalBrand ?? taxForm.externalPaymentTerminalBrand,
+      paymentRounding: settings.paymentRounding ?? taxForm.paymentRounding,
       priceTaxMode: settings.priceTaxMode ?? taxForm.priceTaxMode,
       discountPresets: Array.isArray(settings.discountPresets) ? settings.discountPresets : taxForm.discountPresets,
       customerDisplayMediaSettings: { ...(settings.customerDisplayMediaSettings ?? taxForm.customerDisplayMediaSettings), standby: normalizePosDisplayStandbySettings((settings.customerDisplayMediaSettings ?? taxForm.customerDisplayMediaSettings).standby) },
@@ -1108,6 +1115,18 @@ export default function PosPage() {
                 <option value="その他決済端末">その他決済端末</option>
               </select>
             </label>
+            <fieldset className="pos-admin-payment-rounding">
+              <legend>{t("5円単位の端数切り捨て")}</legend>
+              <small>{t("割引後の税込合計を、選んだ支払方法ごとに5円単位で切り捨てます。店頭会計に適用します。")}</small>
+              {posRoundingMethods.map(method => <label key={method}>
+                <input type="checkbox" checked={taxForm.paymentRounding[method]} disabled={!canManagePosSettings}
+                  onChange={event => {
+                    const checked = event.target.checked;
+                    setTaxForm(current => ({ ...current, paymentRounding: { ...current.paymentRounding, [method]: checked } }));
+                  }} />
+                {t(posRoundingMethodLabels[method])}
+              </label>)}
+            </fieldset>
             <label>
               <span>商品価格の税区分</span>
               <select

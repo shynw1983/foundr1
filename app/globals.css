@@ -17334,6 +17334,10 @@ body :where(
   font-weight: 400;
 }
 
+.customer-display-discount.customer-display-rounding span {
+  grid-column: 1;
+}
+
 .customer-display-discount strong,
 .customer-display-discount b {
   min-width: 0;
@@ -20641,6 +20645,31 @@ body:has(.store-courier-display) .floating-feedback {
   color: var(--ink);
   font-size: 13px;
   font-weight: 900;
+}
+
+.pos-admin-payment-rounding {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  min-width: 0;
+}
+
+.pos-admin-payment-rounding small {
+  flex-basis: 100%;
+  color: var(--muted);
+}
+
+.pos-admin-tax-grid .pos-admin-payment-rounding label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+}
+
+.pos-admin-tax-grid .pos-admin-payment-rounding input {
+  width: 18px;
+  height: 18px;
 }
 
 .pos-admin-tax-footer {

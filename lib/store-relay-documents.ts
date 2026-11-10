@@ -15,7 +15,7 @@ export function buildRelayDocuments(settings:PosPrinterSettings,storeName:string
     options:[item.measuredQuantity?`${item.measuredQuantity}${item.measuredUnit}`:'',...item.selectedOptions.map(option=>
       prefixPosReducedTaxMarker(localized(option.name,option.displayNames,lang),
         markReducedRate&&!(option.counterStandardTax??item.counterStandardTax)&&!option.complimentary&&Number(option.priceDelta)>0))].filter(Boolean)});
-  const base={pickupCode:sale.pickupCode,orderType:sale.orderType,paymentMethod:sale.paymentMethod,paymentLabel:({cash:'現金',card:'カード',other:'その他'} as Record<string,string>)[sale.paymentMethod] || sale.paymentMethod,
+  const base={pickupCode:sale.pickupCode,orderType:sale.orderType,paymentMethod:sale.paymentMethod,paymentLabel:({cash:'現金',card:'カード',qr:'QRコード決済',other:'その他'} as Record<string,string>)[sale.paymentMethod] || sale.paymentMethod,
     note:sale.note,subtotalAmount:sale.subtotalAmount,discountAmount:sale.discountAmount,couponDiscountAmount:sale.couponDiscountAmount,
     taxAmount:sale.taxAmount,taxRate:sale.taxRate,totalAmount:sale.amount,cashTenderedAmount:sale.cashTenderedAmount,cashChangeAmount:sale.cashChangeAmount};
   const jobs:RelayDocument[]=[];
@@ -36,7 +36,7 @@ export function buildRelayDocuments(settings:PosPrinterSettings,storeName:string
   const template=structuredClone(resolvePosReceiptTemplate(settings,brandIds.length===1?brandIds[0]:null,sale.receiptRequested?'invoice':'receipt'));
   const markReducedRate=sale.taxBreakdown?.some(bucket=>bucket.rate===8)??false;
   const receipt=applyPosReceiptTaxBreakdown(template,{
-    ...base,receiptRequested:sale.receiptRequested,receiptTitle:sale.receiptRequested?template.invoiceTitle:template.receiptTitle,
+    ...base,paymentRoundingAmount:sale.paymentRoundingAmount,receiptRequested:sale.receiptRequested,receiptTitle:sale.receiptRequested?template.invoiceTitle:template.receiptTitle,
     receiptRecipientName:sale.receiptRequested?template.invoiceRecipientName:'',receiptPurposeText:sale.receiptRequested?template.invoicePurposeText:'',
     items:items.map((item,index)=>{
       const printedLine=line(item,'ja',markReducedRate);

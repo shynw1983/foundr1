@@ -14,7 +14,7 @@ const args = Object.fromEntries(process.argv.slice(2).reduce((pairs, value, inde
 const source = resolve(args.source || process.cwd());
 const output = resolve(args.output || 'outputs/pos-checkout-print-optional-ui');
 const mode = args.mode || 'after';
-assert.ok(['before', 'after'].includes(mode), 'Expected --mode before or after');
+assert.ok(['before', 'after', 'rounding'].includes(mode), 'Expected --mode before, after, or rounding');
 const requireSource = createRequire(join(source, 'package.json'));
 const { build, stop } = requireSource('esbuild');
 const puppeteer = requireSource('puppeteer-core');
@@ -25,10 +25,10 @@ const store = { id: '11111111-1111-4111-8111-111111111111', name: '清水店', b
 const brand = { id: 'fixture-maamaa', name: 'まぁ麻' };
 const item = { id: 'fixture-soup', brandId: brand.id, brandName: brand.name, name: '麻辣湯スープ', displayNames: { ja: '麻辣湯スープ' }, itemKind: 'buildable_product', category: 'スープ', imageUrl: '', basePrice: 815, priceOverride: null, posPricingMode: 'fixed', posWeightUnit: 'g', posWeightUnitPrice: null, isAvailable: true, variableSchema: {} };
 const printer = { deviceType: 'escpos_network', connectionType: 'lan', host: '127.0.0.2', port: 9100, identifier: '', paperWidth: '80mm', characterEncoding: 'shift_jis', cutPaper: true, openCashDrawer: true };
-const entry = `import React from 'react';import{createRoot}from'react-dom/client';import Pos from './app/store/pos/page';import{OsTranslationProvider}from'./app/os/components/OsTranslationProvider';import{StoreThemeProvider}from'./app/store/components/StoreThemeProvider';
+const entry = `import React from 'react';import{createRoot}from'react-dom/client';import Pos from './app/store/pos/page';import CustomerDisplay from './app/store/pos/customer-display/CustomerDisplayWorkspace';import{OsTranslationProvider}from'./app/os/components/OsTranslationProvider';import{StoreThemeProvider}from'./app/store/components/StoreThemeProvider';
 localStorage.setItem('foundr1-os-language',new URLSearchParams(location.search).get('lang')||'ja');localStorage.setItem('foundr1-os-language-preference','manual');
 window.__prints=[];if(new URLSearchParams(location.search).get('bridge')==='yes')window.Foundr1Printer={isAvailable:()=>true,print:payload=>{window.__prints.push(JSON.parse(payload));return JSON.stringify({ok:true})}};
-createRoot(document.getElementById('root')).render(<OsTranslationProvider><StoreThemeProvider employeeId="fixture-employee"><Pos/></StoreThemeProvider></OsTranslationProvider>);`;
+createRoot(document.getElementById('root')).render(<OsTranslationProvider><StoreThemeProvider employeeId="fixture-employee">{location.pathname.endsWith('/customer-display')?<CustomerDisplay/>:<Pos/>}</StoreThemeProvider></OsTranslationProvider>);`;
 const bundle = await build({ stdin: { contents: entry, resolveDir: source, loader: 'tsx' }, bundle: true, write: false, outdir: '/virtual', charset: 'utf8', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"' }, plugins: [{ name: 'local-fixture-only', setup(b) {
   b.onResolve({ filter: /^next\/(link|navigation)$/ }, a => ({ path: a.path, namespace: 'fixture-navigation' }));
   b.onLoad({ filter: /.*/, namespace: 'fixture-navigation' }, a => ({ contents: a.path === 'next/link' ? `import React from 'react';export default function Link({children,...props}){return React.createElement('a',props,children)}` : `export const usePathname=()=>location.pathname;export const useRouter=()=>({push:url=>location.assign(url)});`, loader: 'js', resolveDir: source }));
@@ -37,8 +37,10 @@ const bundle = await build({ stdin: { contents: entry, resolveDir: source, loade
 } }] });
 const css = await readFile(join(source, 'app/globals.css'), 'utf8') + '\n' + await readFile(join(source, 'app/store/store-responsive.css'), 'utf8') + '\n' + (bundle.outputFiles.find(f => f.path.endsWith('.css'))?.text || '');
 const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body><div id="root"></div><script src="/fixture.js"></script></body></html>`;
-let settings, posts, rejectCheckout, checkoutResponses, customerDisplayPosts, serverPrintContract;
-function reset({ enabled = false, receiptEnabled = false, reject = false, serverDocuments = false } = {}) {
+let displayedCheckout, paymentRounding, settings, posts, rejectCheckout, checkoutResponses, customerDisplayPosts, serverPrintContract;
+function reset({ enabled = false, receiptEnabled = false, reject = false, serverDocuments = false, rounding = {} } = {}) {
+  displayedCheckout = undefined;
+  paymentRounding = rounding;
   settings = { enabled, receiptEnabled, kitchenEnabled: false, receiptPrinter: printer, kitchenPrinter: printer, customerDisplay: { enabled: false } };
   posts = []; checkoutResponses = []; customerDisplayPosts = []; rejectCheckout = reject; serverPrintContract = serverDocuments;
 }
@@ -62,20 +64,30 @@ const server = createServer(async (req, res) => {
       return send(res, { version: 1, selectedStoreId: store.id, documents, summary: { pendingDocuments: documents.length, pendingOrders: documents.length ? 1 : 0, needsReview: 0, sendingDocuments: 0 }, hasMore: false, cursor: null, relay: { available: false, online: false }, serverNow: new Date().toISOString() });
     }
     if (url.pathname === '/api/store/pos/customer-display') {
-      if (req.method === 'POST') { let raw = ''; for await (const part of req) raw += part; customerDisplayPosts.push(JSON.parse(raw)); }
-      return send(res, { ok: true, state: { status: 'advertising', weighingRevision: 0 }, customerDisplayMediaSettings: { weighing: { enabled: false } } });
+      if (req.method === 'POST') { let raw = ''; for await (const part of req) raw += part; const post = JSON.parse(raw);
+        if (post.action === 'claim') return send(res, { ok: true, streamId: 'fixture-display' });
+        customerDisplayPosts.push(post); }
+      return send(res, { ok: true, selectedStoreId: store.id, access: { stores: [store] }, serverNow: new Date().toISOString(),
+        state: displayedCheckout || customerDisplayPosts.at(-1)?.state || { status: 'advertising', weighingRevision: 0 }, customerDisplayMediaSettings: { weighing: { enabled: false } } });
     }
-    if (url.pathname === '/api/store/pos/reconciliation') return send(res, { businessDate: '2026-10-20', activeSession: openSession, sessions: [openSession], movements: [], activeCashResponsibleEmployees: [] });
+    if (url.pathname === '/api/store/pos/reconciliation') return send(res, { selectedStoreId: store.id, businessDate: '2026-10-20', activeSession: openSession, sessions: [openSession], movements: [], activeCashResponsibleEmployees: [] });
     if (url.pathname.includes('/device-relay')) return send(res, { stations: [], jobs: [], canManage: true, serverNow: new Date().toISOString() });
     if (url.pathname === '/api/store/pos' && req.method === 'POST') {
       let raw = ''; for await (const part of req) raw += part; const body = JSON.parse(raw); posts.push(body);
       if (rejectCheckout) return send(res, { error: 'Fixture: メニューが更新されました。商品と金額を確認してください。' }, 409);
       assert.equal(body.items.length, 1); assert.equal(body.items[0].menuCatalogItemId, item.id); assert.equal(body.items[0].quantity, 1);
       const response = { ok: true, orderId: 'fixture-order', pickupCode: 'D-FIXTURE', servingTickets: [{ itemIndex: 0, pickupCode: '037', itemId: 'fixture-order-item', taskId: 'fixture-task' }], amount: 652, subtotalAmount: 815, taxableAmount: 652, taxAmount: 49, taxRate: 8, priceTaxMode: 'tax_included', discountAmount: 163, couponDiscountAmount: 0, cashTenderedAmount: body.cashTenderedAmount, cashChangeAmount: body.cashTenderedAmount - 652, receiptRequested: body.receiptRequested, todaySummary: { ...summary, orderCount: 1, total: 652, average: 652 } };
+      const adjustment = paymentRounding[body.paymentMethod] ? 2 : 0;
+      if (mode === 'rounding') {
+        assert.equal(body.paymentRoundingQuote, adjustment);
+        assert.equal(body.offlineExpectedAmount, 652 - adjustment);
+        Object.assign(response, { amount: 652 - adjustment, paymentRoundingAmount: adjustment,
+          cashChangeAmount: body.paymentMethod === 'cash' ? body.cashTenderedAmount - (652 - adjustment) : null });
+      }
       if (serverPrintContract) response.printDocuments = { version: 1, orderId: 'fixture-order', mode: body.printMode, documentCount: 4, pendingCount: 4 };
       checkoutResponses.push(response); return send(res, response);
     }
-    if (url.pathname === '/api/store/pos') return send(res, { selectedStoreId: store.id, access: { role: 'owner', stores: [store] }, brands: [brand], items: [item], categories: [], optionGroups: [], posMenuRevision: 'fixture-revision', todaySummary: summary, posSettings: { dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: 'KOMOJU', priceTaxMode: 'tax_included', discountPresets: [{ key: 'student', name: '学割 20%OFF', discountType: 'percent', discountValue: 20, targetScope: 'all', targetValue: '', enabled: true, stampEligible: false, allowCouponCombination: false }], printerSettings: settings, customerDisplayMediaSettings: { weighing: { enabled: false } } } });
+    if (url.pathname === '/api/store/pos') return send(res, { selectedStoreId: store.id, access: { role: 'owner', stores: [store] }, brands: [brand], items: [item], categories: [], optionGroups: [], posMenuRevision: 'fixture-revision', todaySummary: summary, posSettings: { dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: 'KOMOJU', priceTaxMode: 'tax_included', paymentRounding, discountPresets: [{ key: 'student', name: '学割 20%OFF', discountType: 'percent', discountValue: 20, targetScope: 'all', targetValue: '', enabled: true, stampEligible: false, allowCouponCombination: false }], printerSettings: settings, customerDisplayMediaSettings: { weighing: { enabled: false } } } });
     if (url.pathname.startsWith('/api/')) return send(res, { items: [], notifications: [], unreadCount: 0 });
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(html);
   } catch (error) { serverErrors.push(error.stack); send(res, { error: error.message }, 500); }
@@ -110,11 +122,12 @@ async function createPage({ width = 390, bridge = false, language = 'ja' } = {})
   await page.waitForFunction(() => document.querySelectorAll('.store-pos-cart-list > .store-pos-cart-row').length === 1);
   if (width <= 900) { await page.click('.store-pos-floating-checkout button'); await page.waitForSelector('.store-pos-cart-panel.is-open'); }
   await page.evaluate(() => [...document.querySelectorAll('.store-pos-segmented button')].find(el => el.textContent === '持ち帰り')?.click());
-  await page.click('.store-pos-discount-panel button');
+  await clickVisible(page, '.store-pos-discount-panel button');
+  await page.waitForSelector('.store-pos-discount-panel button.is-active');
   await page.type('.store-pos-cash-payment input', '2000');
   await page.waitForFunction(() => !document.querySelector('.store-pos-checkout').disabled);
   const values = await page.$eval('.store-pos-cart-panel', panel => ({ cash: panel.querySelector('.store-pos-cash-payment input').value, change: panel.querySelector('.store-pos-cash-payment strong').textContent, total: panel.querySelector('.store-pos-total').innerText, takeout: [...panel.querySelectorAll('.store-pos-segmented button')].find(el => el.classList.contains('is-active'))?.textContent }));
-  assert.equal(values.cash, '2000'); assert.match(values.change, /1,348/); assert.match(values.total, /815/); assert.match(values.total, /163/); assert.match(values.total, /652/);
+  assert.equal(values.cash, '2000'); assert.match(values.change, paymentRounding.cash ? /1,350/ : /1,348/); assert.match(values.total, /815/); assert.match(values.total, /163/); assert.match(values.total, paymentRounding.cash ? /650/ : /652/);
   return { page, context, values };
 }
 async function geometry(page, selector) {
@@ -142,7 +155,49 @@ async function alertState(page) {
   const initial = await geometry(page, selector); assertGeometry(initial); return initial;
 }
 try {
-  for (const width of [390, 800, 1366]) {
+  if (mode === 'rounding') {
+    for (const [method, label, width] of [['cash', '現金', 390], ['qr', 'QRコード決済', 800], ['card', 'カード', 1366]]) {
+      reset({ enabled: true, receiptEnabled: true, rounding: { [method]: true } });
+      const { page, context } = await createPage({ width, bridge: true });
+      if (method !== 'cash') {
+        await page.evaluate(label => [...document.querySelectorAll('#store-pos-payment-section button')]
+          .find(button => button.textContent.includes(label)).click(), label);
+      }
+      assert.match(await page.$eval('.store-pos-total', element => element.textContent), /端数調整.*650/);
+      const paymentFrame = () => customerDisplayPosts.findLast(post => post.state?.paymentMethod === method &&
+        post.state?.paymentRoundingAmount === 2 && post.state?.status === (method === 'cash' ? 'cash_change' : 'external_wait'))?.state;
+      for (let attempt = 0; attempt < 40 && !paymentFrame(); attempt++) await pause(100);
+      const prePayment = paymentFrame();
+      assert.equal(prePayment?.subtotal, 650);
+      await geometry(page, '.store-pos-checkout');
+      await page.click('.store-pos-checkout');
+      await page.waitForFunction(() => window.__prints.some(print => print.jobType === 'receipt'));
+      const printed = await page.evaluate(() => window.__prints.find(print => print.jobType === 'receipt'));
+      assert.equal(posts.length, 1);
+      assert.equal(posts[0].paymentMethod, method);
+      assert.equal(printed.order.totalAmount, 650);
+      assert.equal(printed.order.cashChangeAmount, method === 'cash' ? 1350 : null);
+      assert.match(printed.order.note, /端数調整 -¥2/);
+      await page.waitForFunction(() => document.querySelectorAll('.store-pos-cart-list > .store-pos-cart-row').length === 0);
+      for (let attempt = 0; attempt < 40 && !customerDisplayPosts.some(post => post.state?.status === 'complete'); attempt++) await pause(100);
+      const displayed = customerDisplayPosts.findLast(post => post.state?.status === 'complete')?.state;
+      assert.equal(displayed?.subtotal, 650);
+      assert.equal(displayed.paymentRoundingAmount, 2);
+      displayedCheckout = prePayment;
+      const display = await context.newPage(); currentPage = display;
+      display.on('pageerror', error => pageErrors.push(error.message));
+      await display.setViewport({ width: 812, height: 375 });
+      await display.setRequestInterception(true);
+      display.on('request', request => { if (request.url().startsWith(base + '/')) return request.continue(); externalRequests.push(request.url()); return request.abort(); });
+      await display.goto(`${base}/store/pos/customer-display?storeId=${store.id}`, { waitUntil: 'domcontentloaded' });
+      await display.waitForFunction(() => [...document.querySelectorAll('.customer-display-discount')].some(element => element.textContent.includes('端数調整')));
+      assert.match(await display.$eval('.customer-display-total', element => element.textContent), /650/);
+      await display.screenshot({ path: join(output, `display-${method}.png`) });
+      results.push({ name: `rounding-${method}-${width}`, total: 650, cashChange: printed.order.cashChangeAmount, rounding: 2 });
+      await context.close();
+    }
+  }
+  if (mode !== 'rounding') for (const width of [390, 800, 1366]) {
     reset(); const { page, context, values } = await createPage({ width });
     const button = await geometry(page, '.store-pos-checkout'); assertGeometry(button);
     await page.click('.store-pos-checkout');

@@ -1,5 +1,6 @@
 "use client";
 
+import { getPosPaymentRoundingAmount, normalizePosPaymentRounding, type PosPaymentRounding } from "../../../lib/pos-payment-rounding";
 import { usePosDailySummary } from "./usePosDailySummary";
 import { createReadError } from "../../../components/useReadRequest";
 import PosDailySummary from "./PosDailySummary";
@@ -47,7 +48,7 @@ import { getPosOptionSelectionType, getPosOptionSelectionRules, isStoreDineInSel
 import { runPosPrintJobs, type PosPrintJob } from "../../../lib/pos-print-jobs";
 import { isPosSellableItem } from "../../../lib/pos-catalog-policy";
 import { defaultPosCounterMenuPolicy, normalizePosCounterMenuPolicy, usesLocalPosMenu, type PosCounterMenuPolicy } from "../../../lib/pos-counter-menu-policy";
-import { allocatePosAmountByWeight, calculatePosCounterTax, type PosCounterTaxBucket } from "../../../lib/pos-counter-tax";
+import { adjustPosTaxBreakdown, allocatePosAmountByWeight, calculatePosCounterTax, type PosCounterTaxBucket } from "../../../lib/pos-counter-tax";
 
 import { posOptionGiftCatalog } from "../../../lib/pos-option-gifts";
 import { evaluatePosBowlBenefits, posBowlEligible, posBowlQuote, posGiftAllowed, type PosBowlChoice } from "../../../lib/pos-bowl-benefits";
@@ -284,6 +285,7 @@ type PosSettings = {
   dineInTaxRate: number;
   takeoutTaxRate: number;
   externalPaymentTerminalBrand: string;
+  paymentRounding: PosPaymentRounding;
   priceTaxMode: string;
   discountPresets: PosDiscountPreset[];
   printerSettings: PosPrinterSettings;
@@ -310,6 +312,7 @@ function normalizeRuntimePosSettings(value: Partial<PosSettings> | undefined): P
     dineInTaxRate: Number(value?.dineInTaxRate ?? 10),
     takeoutTaxRate: Number(value?.takeoutTaxRate ?? 8),
     externalPaymentTerminalBrand: value?.externalPaymentTerminalBrand ?? "PayCAS",
+    paymentRounding: normalizePosPaymentRounding(value?.paymentRounding),
     priceTaxMode: counterMenuPolicy.sharedMenuForTakeout ? "tax_included" : value?.priceTaxMode ?? "tax_included",
     discountPresets: Array.isArray(value?.discountPresets) ? value.discountPresets : [],
     printerSettings: normalizePosPrinterSettings(value?.printerSettings ?? defaultPosPrinterSettings),
@@ -456,6 +459,7 @@ type PosReconciliation = {
 const paymentOptions = [
   { value: "cash", label: "現金", icon: Banknote },
   { value: "card", label: "カード", icon: CreditCard },
+  { value: "qr", label: "QRコード決済", icon: ScanLine },
   { value: "other", label: "その他", icon: ShoppingCart }
 ];
 
@@ -848,7 +852,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   const [printJobs, setPrintJobs] = useState<PosPrintJob[]>([]);
   const [printBusy, setPrintBusy] = useState(false);
   const uncertainCheckoutRef = useRef<{ signature: string; id: string; createdAt: string } | null>(null);
-  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: [], printerSettings: defaultPosPrinterSettings, scaleTareSettings: defaultPosScaleTareSettings(), fulfillmentWorkspace: normalizePosFulfillmentWorkspaceSettings(null), counterMenuPolicy: defaultPosCounterMenuPolicy });
+  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", paymentRounding: normalizePosPaymentRounding(null), priceTaxMode: "tax_included", discountPresets: [], printerSettings: defaultPosPrinterSettings, scaleTareSettings: defaultPosScaleTareSettings(), fulfillmentWorkspace: normalizePosFulfillmentWorkspaceSettings(null), counterMenuPolicy: defaultPosCounterMenuPolicy });
   const [selectedStoreId, setSelectedStoreId] = useState(() => debugMode
     ? typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("storeId") || ""
     : getStoredStoreSelection());
@@ -1407,14 +1411,18 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   const counterTax = sharedCounterMenu ? getCounterTaxSummary() : null;
   const couponDiscountAmount = counterTax?.couponDiscountAmount ?? couponDiscountQuote;
   const taxRate = counterTax?.taxRate ?? getOrderTaxRate(posSettings, orderType);
-  const taxSummary = counterTax ? { taxAmount: counterTax.taxAmount, payableAmount: counterTax.amount } : getTaxSummary({
+  const unadjustedTax = counterTax ? { taxAmount: counterTax.taxAmount, payableAmount: counterTax.amount } : getTaxSummary({
     subtotal,
     discountAmount: posDiscountAmount,
     couponDiscountAmount,
     taxRate,
     priceTaxMode: posSettings.priceTaxMode
   });
-  const payableAmount = taxSummary.payableAmount;
+  const paymentRoundingAmount = selectedTableCheckout ? 0 :
+    getPosPaymentRoundingAmount(unadjustedTax.payableAmount, paymentMethod, posSettings.paymentRounding);
+  const payableAmount = unadjustedTax.payableAmount - paymentRoundingAmount;
+  const checkoutTaxBreakdown = adjustPosTaxBreakdown(counterTax?.taxBreakdown, unadjustedTax.payableAmount, taxRate, paymentRoundingAmount);
+  const checkoutTaxAmount = checkoutTaxBreakdown?.reduce((sum, bucket) => sum + bucket.taxAmount, 0) ?? unadjustedTax.taxAmount;
   const activeCheckoutAmount = selectedTableCheckout ? tableCheckoutAmount : payableAmount;
   const counterTakeoutBlocked = !selectedTableCheckout && sharedTakeout && cart.some(hasCounterTakeoutRestriction);
   const getMenuDisplayPrice = (item: PosMenuItem) => {
@@ -1811,6 +1819,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
   function getPaymentDisplayLabel(value: string) {
     if (value === "cash") return "現金";
     if (value === "card") return posSettings.externalPaymentTerminalBrand || "外部決済端末";
+    if (value === "qr") return t("QRコード決済");
     if (value === "other") return "その他";
     return value || "-";
   }
@@ -1902,6 +1911,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         orderType: receiptOrderType,
         paymentMethod: String(body.paymentMethod || paymentMethod),
         paymentLabel: getPaymentDisplayLabel(String(body.paymentMethod || paymentMethod)),
+        paymentRoundingAmount: Number(body.paymentRoundingAmount ?? 0),
         note: body.offline ? `[オフライン未同期] ${String(body.note ?? note)}`.trim() : String(body.note ?? note),
         receiptRequested: isInvoice,
         receiptTitle: isInvoice ? receiptTemplate.invoiceTitle : receiptTemplate.receiptTitle,
@@ -1910,7 +1920,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         subtotalAmount: Number(body.subtotalAmount ?? subtotal),
         discountAmount: Number(body.discountAmount ?? posDiscountAmount) || 0,
         couponDiscountAmount: Number(body.couponDiscountAmount ?? couponDiscountAmount) || 0,
-        taxAmount: Number(body.taxAmount ?? taxSummary.taxAmount) || 0,
+        taxAmount: Number(body.taxAmount ?? checkoutTaxAmount) || 0,
         taxRate: Number(body.taxRate ?? taxRate) || 0,
         taxBreakdown,
         totalAmount: Number(body.amount ?? payableAmount) || 0,
@@ -2577,7 +2587,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         number: testNumber,
         storeName: stores.find(store => store.id === selectedStoreId)?.name || "",
         orderType: getOrderTypeLabel(orderType), paymentLabel: getPaymentDisplayLabel(paymentMethod),
-        subtotal, discount: posDiscountAmount, tax: taxSummary.taxAmount, taxRate, taxBreakdown: counterTax?.taxBreakdown,
+        subtotal, discount: posDiscountAmount, tax: checkoutTaxAmount, taxRate, taxBreakdown: checkoutTaxBreakdown,
         taxIncluded: posSettings.priceTaxMode === "tax_included", total: payableAmount,
         tendered: paymentMethod === "cash" ? cashTenderedValue : null,
         change: paymentMethod === "cash" ? cashChangeAmount : null, note,
@@ -2599,7 +2609,8 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         numberKind: cart.some(item => !isPosImmediateItem(item)) ? "pickup" : "accounting",
         preferredLanguage: "ja", memberDisplayName: "", memberMessage: "",
         ...getDisplayDiscountState(selectedDiscountPreset, posDiscountAmount, "", "ja"),
-        ...getDisplayCouponState(undefined, 0), ...getDisplayTaxState(taxSummary.taxAmount, taxRate),
+        ...getDisplayCouponState(undefined, 0), ...getDisplayTaxState(checkoutTaxAmount, taxRate),
+        paymentRoundingAmount,
         subtotal: payableAmount, cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" ? cashChangeAmount : null, items: getCustomerDisplayItems("ja")
       });
@@ -2631,7 +2642,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     try {
       const cartSnapshot = expandPosBowls(cart);
       const useServerPrintDocuments = navigator.onLine && !selectedTableCheckout;
-      const signature = JSON.stringify({ store: selectedStoreId, cart: cartSnapshot, orderType, counterMenuPolicyRevision, paymentMethod, cashTenderedValue, note, receiptRequested, invoiceRecipient, invoicePurpose, selectedMember, selectedCouponId, discountPresetKey, discountQuote, table: selectedTableCheckout?.tableSessionKey, ...(useServerPrintDocuments ? { printMode } : {}) });
+      const signature = JSON.stringify({ store: selectedStoreId, cart: cartSnapshot, orderType, counterMenuPolicyRevision, paymentMethod, activeCheckoutAmount, paymentRoundingAmount, cashTenderedValue, note, receiptRequested, invoiceRecipient, invoicePurpose, selectedMember, selectedCouponId, discountPresetKey, discountQuote, table: selectedTableCheckout?.tableSessionKey, ...(useServerPrintDocuments ? { printMode } : {}) });
       if (uncertainCheckoutRef.current && uncertainCheckoutRef.current.signature !== signature) {
         throw new Error("前の会計結果を確認できていません。内容を元に戻して再確認してください。");
       }
@@ -2652,6 +2663,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           offlineCreatedAt,
           offlinePickupCode,
           offlineExpectedAmount: activeCheckoutAmount,
+          ...(selectedTableCheckout ? {} : { paymentRoundingQuote: paymentRoundingAmount }),
           storeId: selectedStoreId,
           orderType,
           paymentMethod,
@@ -2746,11 +2758,12 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
           posFulfillmentPolicyVersion: 1,
           hasPreparation: cartSnapshot.some(item => !isPosImmediateItem(item)),
           amount: activeCheckoutAmount,
-          subtotalAmount: activeCheckoutAmount,
+          paymentRoundingAmount,
+          subtotalAmount: subtotal,
           taxableAmount: activeCheckoutAmount,
-          taxAmount: taxSummary.taxAmount,
+          taxAmount: checkoutTaxAmount,
           taxRate,
-          ...(counterTax ? { taxBreakdown: counterTax.taxBreakdown } : {}),
+          taxBreakdown: checkoutTaxBreakdown,
           priceTaxMode: posSettings.priceTaxMode,
           discountAmount: 0,
           couponDiscountAmount: 0,
@@ -2841,6 +2854,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
         ...getDisplayDiscountState(selectedDiscountPreset, body.discountAmount, body.discountName || "割引", customerDisplayLanguage),
         ...getDisplayCouponState(selectedCoupon, body.couponDiscountAmount, body.couponName || body.couponCode || "クーポン", customerDisplayLanguage),
+        paymentRoundingAmount: Number(body.paymentRoundingAmount ?? 0),
         subtotal: body.amount,
         ...getDisplayTaxState(body.taxAmount, body.taxRate, body.priceTaxMode),
         cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
@@ -2984,8 +2998,9 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
         memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
         ...getDisplayDiscountState(selectedDiscountPreset, posDiscountAmount, "", customerDisplayLanguage),
         ...getDisplayCouponState(selectedCoupon, couponDiscountAmount, "", customerDisplayLanguage),
+        paymentRoundingAmount,
         subtotal: activeCheckoutAmount,
-        ...getDisplayTaxState(taxSummary.taxAmount, taxRate),
+        ...getDisplayTaxState(checkoutTaxAmount, taxRate),
         cashTenderedAmount: paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" && cashChangeAmount !== null ? cashChangeAmount : null,
         weighing,
@@ -3004,7 +3019,7 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
     }, 180);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, posSettings.priceTaxMode, posSettings.printerSettings.customerDisplay.enabled, posSettings.printerSettings.receiptPrinter.connectionType, posSettings.printerSettings.receiptPrinter.deviceType, posSettings.printerSettings.receiptPrinter.identifier, selectedCoupon?.id, selectedCoupon?.name, selectedCoupon?.couponCode, selectedDiscountPreset?.key, selectedDiscountPreset?.name, selectedMember, selectedStoreId, payableAmount, posDiscountAmount, couponDiscountAmount, taxRate, taxSummary.taxAmount, canUseRegister, activeCheckoutAmount, selectedTableCheckout, tableCheckoutAmount, debugMode, debugSessionId, configuringItem, weightDraft, weighingPreviewId, optionDraft, scaleManualMode, requiresScaleConfirmation, automaticWeightReady, scaleCapture, offlineCheckoutOnly, relay.owner?.stationId, relay.owner?.token, relay.owner?.epoch, relay.required, posSettingsStoreId]);
+  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, posSettings.priceTaxMode, posSettings.printerSettings.customerDisplay.enabled, posSettings.printerSettings.receiptPrinter.connectionType, posSettings.printerSettings.receiptPrinter.deviceType, posSettings.printerSettings.receiptPrinter.identifier, selectedCoupon?.id, selectedCoupon?.name, selectedCoupon?.couponCode, selectedDiscountPreset?.key, selectedDiscountPreset?.name, selectedMember, selectedStoreId, payableAmount, paymentRoundingAmount, posDiscountAmount, couponDiscountAmount, taxRate, checkoutTaxAmount, canUseRegister, activeCheckoutAmount, selectedTableCheckout, tableCheckoutAmount, debugMode, debugSessionId, configuringItem, weightDraft, weighingPreviewId, optionDraft, scaleManualMode, requiresScaleConfirmation, automaticWeightReady, scaleCapture, offlineCheckoutOnly, relay.owner?.stationId, relay.owner?.token, relay.owner?.epoch, relay.required, posSettingsStoreId]);
 
   useEffect(() => {
     if (!selectedStoreId || !canUseRegister) return;
@@ -4061,12 +4076,12 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                   className={paymentMethod === option.value ? "is-active" : ""}
                   type="button"
                   aria-pressed={paymentMethod === option.value}
-                  disabled={offlineCheckoutOnly && option.value !== "cash"}
+                  disabled={saving || (offlineCheckoutOnly && option.value !== "cash")}
                   onClick={() => setPaymentMethod(option.value)}
                   title={offlineCheckoutOnly && option.value !== "cash" ? "オフライン中は現金のみ利用できます" : undefined}
                 >
                   <Icon size={18} aria-hidden="true" />
-                  <span>{option.value === "card" ? getPaymentDisplayLabel(option.value) : option.label}</span>
+                  <span>{option.value === "card" ? `${t(option.label)} · ${getPaymentDisplayLabel(option.value)}` : t(option.label)}</span>
                 </button>
               );
             })}
@@ -4128,16 +4143,20 @@ export default function StorePosWorkspace({ debugMode: initialDebugMode = false 
                     <strong className="is-discount">-{formatYen(couponDiscountAmount)}</strong>
                   </>
                 ) : null}
-                {counterTax?.taxBreakdown.length ? counterTax.taxBreakdown.map(bucket => <Fragment key={bucket.rate}>
+                {checkoutTaxBreakdown?.length ? checkoutTaxBreakdown.map(bucket => <Fragment key={bucket.rate}>
                   <span>{t("内消費税")} {bucket.rate}%</span>
                   <strong className="is-tax" data-pos-tax-rate={bucket.rate}>{formatYen(bucket.taxAmount)}</strong>
                 </Fragment>) : subtotal > 0 ? (
                   <>
                     <span>{t(posSettings.priceTaxMode === "tax_excluded" ? "消費税" : "内消費税")}{!counterTax || taxRate ? ` ${taxRate}%` : ""}</span>
-                    <strong className="is-tax">{formatYen(taxSummary.taxAmount)}</strong>
+                    <strong className="is-tax">{formatYen(checkoutTaxAmount)}</strong>
                   </>
                 ) : null}
-                {!simpleMode && (posSettings.priceTaxMode === "tax_excluded" || posDiscountAmount || couponDiscountAmount) ? (
+                {paymentRoundingAmount > 0 ? <>
+                  <span>{t("端数調整")}</span>
+                  <strong className="is-discount">-{formatYen(paymentRoundingAmount)}</strong>
+                </> : null}
+                {!simpleMode && (posSettings.priceTaxMode === "tax_excluded" || posDiscountAmount || couponDiscountAmount || paymentRoundingAmount) ? (
                   <>
                     <span>お会計</span>
                     <strong>{formatYen(payableAmount)}</strong>

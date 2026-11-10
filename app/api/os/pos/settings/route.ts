@@ -1,3 +1,4 @@
+import { normalizePosPaymentRounding } from "../../../../../lib/pos-payment-rounding";
 import { normalizePosCampaignFields, validatePosCampaignPresets, type PosCampaignFields } from "../../../../../lib/pos-discount-campaigns";
 import { randomUUID } from 'node:crypto';
 import { defaultPosScaleFilterSettings, normalizePosScaleFilterSettings, validatePosScaleFilterSettings } from '../../../../../lib/pos-scale-filter';
@@ -240,6 +241,7 @@ async function getSettings(storeId: string) {
       coalesce(pos_store_settings.takeout_enabled, true) as "takeoutEnabled",
       coalesce(pos_store_settings.dine_in_tax_rate, 10)::float as "dineInTaxRate",
       coalesce(pos_store_settings.takeout_tax_rate, 8)::float as "takeoutTaxRate",
+      to_jsonb(pos_store_settings)->'payment_rounding' as "paymentRounding",
       coalesce(nullif(pos_store_settings.external_payment_terminal_brand, ''), 'PayCAS') as "externalPaymentTerminalBrand",
       coalesce(nullif(pos_store_settings.price_tax_mode, ''), 'tax_included') as "priceTaxMode",
       coalesce(pos_store_settings.discount_presets, '[]'::jsonb) as "discountPresets",
@@ -272,6 +274,7 @@ async function getSettings(storeId: string) {
   return {
     ...settings,
     discountPresets: normalizeDiscountPresets(settings.discountPresets),
+    paymentRounding: normalizePosPaymentRounding(settings.paymentRounding),
     customerDisplayMediaSettings: {
       ...(settings.customerDisplayMediaSettings && typeof settings.customerDisplayMediaSettings === "object" && !Array.isArray(settings.customerDisplayMediaSettings)
         ? settings.customerDisplayMediaSettings as Record<string, unknown> : {}),
@@ -323,6 +326,7 @@ export async function POST(request: Request) {
     dineInTaxRate?: number | string;
     takeoutTaxRate?: number | string;
     externalPaymentTerminalBrand?: string;
+    paymentRounding?: unknown;
     priceTaxMode?: string;
     counterMenuPolicy?: unknown;
     counterMenuPolicyRevision?: unknown;
@@ -363,9 +367,9 @@ export async function POST(request: Request) {
     if (brandSettings.some(setting=>!linked.some(brand=>brand.id===setting.brandId))) return Response.json({error:"権限がありません。"},{status:403});
     try {
       await sql.transaction([posMenuLock(storeId), ...(body.priceTaxMode === "tax_excluded" ? [posCounterMenuTaxIncludedGuard(storeId)] : []),
-        sql`insert into pos_store_settings(store_id,dine_in_enabled,takeout_enabled,dine_in_tax_rate,takeout_tax_rate,external_payment_terminal_brand,price_tax_mode,updated_by)
-        values(${storeId}::uuid,${body.dineInEnabled},${body.takeoutEnabled},${normalizeRate(body.dineInTaxRate,10)},${normalizeRate(body.takeoutTaxRate,8)},${normalizeText(body.externalPaymentTerminalBrand)||"PayCAS"},${String(body.priceTaxMode)},${session.id}::uuid)
-        on conflict(store_id) do update set dine_in_enabled=excluded.dine_in_enabled,takeout_enabled=excluded.takeout_enabled,dine_in_tax_rate=excluded.dine_in_tax_rate,takeout_tax_rate=excluded.takeout_tax_rate,external_payment_terminal_brand=excluded.external_payment_terminal_brand,price_tax_mode=excluded.price_tax_mode,updated_by=excluded.updated_by,updated_at=now()`,
+        sql`insert into pos_store_settings(store_id,dine_in_enabled,takeout_enabled,dine_in_tax_rate,takeout_tax_rate,external_payment_terminal_brand,price_tax_mode,payment_rounding,updated_by)
+        values(${storeId}::uuid,${body.dineInEnabled},${body.takeoutEnabled},${normalizeRate(body.dineInTaxRate,10)},${normalizeRate(body.takeoutTaxRate,8)},${normalizeText(body.externalPaymentTerminalBrand)||"PayCAS"},${String(body.priceTaxMode)},${JSON.stringify(normalizePosPaymentRounding(body.paymentRounding))}::jsonb,${session.id}::uuid)
+        on conflict(store_id) do update set dine_in_enabled=excluded.dine_in_enabled,takeout_enabled=excluded.takeout_enabled,dine_in_tax_rate=excluded.dine_in_tax_rate,takeout_tax_rate=excluded.takeout_tax_rate,external_payment_terminal_brand=excluded.external_payment_terminal_brand,price_tax_mode=excluded.price_tax_mode,payment_rounding=case when ${body.paymentRounding !== undefined} then excluded.payment_rounding else pos_store_settings.payment_rounding end,updated_by=excluded.updated_by,updated_at=now()`,
         ...brandSettings.map(setting=>sql`update store_brands set pos_pricing_mode=${setting.posPricingMode},pos_weight_unit=${setting.posWeightUnit},pos_weight_unit_price=${setting.posPricingMode==="weight"?setting.posWeightUnitPrice:null} where store_id::text=${storeId} and brand_id::text=${setting.brandId}`)]);
     } catch (error) {
       if (body.priceTaxMode === "tax_excluded" && (error as { code?: string }).code === "22012") return Response.json({ error: sharedMenuBlocksTaxExcluded }, { status: 409 });

@@ -190,6 +190,7 @@ export type PosPrintPayload = {
     taxRate: number;
     taxBreakdown?: PosCounterTaxBucket[];
     originalNote?: string;
+    paymentRoundingAmount?: number;
     totalAmount: number;
     cashTenderedAmount?: number | null;
     cashChangeAmount?: number | null;
@@ -206,17 +207,19 @@ export function applyPosReceiptTaxBreakdown(
   order: NonNullable<PosPrintPayload['order']>,
   taxBreakdown = order.taxBreakdown
 ) {
-  if (!taxBreakdown?.length) return { receiptTemplate, order };
+  const rounding = order.paymentRoundingAmount ?? 0;
+  if (!taxBreakdown?.length && !rounding) return { receiptTemplate, order };
   const yen = (amount: number) => `¥${amount.toLocaleString('ja-JP')}`;
-  const taxNotes = taxBreakdown.map(bucket => `${bucket.rate}%対象 ${yen(bucket.grossAmount)} (内税 ${yen(bucket.taxAmount)})`);
-  if (taxBreakdown.some(bucket => bucket.rate === 8)) taxNotes.push('※軽減税率対象');
+  const taxNotes = (taxBreakdown ?? []).map(bucket => `${bucket.rate}%対象 ${yen(bucket.grossAmount)} (内税 ${yen(bucket.taxAmount)})`);
+  if (taxBreakdown?.some(bucket => bucket.rate === 8)) taxNotes.push('※軽減税率対象');
+  if (rounding > 0) taxNotes.push(`端数調整 -${yen(rounding)}`);
   const originalNote = order.originalNote ?? order.note ?? '';
   // Both installed receipt renderers wrap order.note. A plain separator works
   // in the raw renderer and the bitmap renderer without requiring a new APK.
   const note = [...taxNotes, ...(receiptTemplate.showOrderNote && originalNote ? [originalNote] : [])].join(' / ');
   return {
     receiptTemplate: { ...receiptTemplate, showOrderNote: true },
-    order: { ...order, note, originalNote, taxBreakdown, taxRate: taxBreakdown.length > 1 ? 0 : taxBreakdown[0].rate }
+    order: { ...order, note, originalNote, taxBreakdown, taxRate: taxBreakdown?.length ? (taxBreakdown.length > 1 ? 0 : taxBreakdown[0].rate) : order.taxRate }
   };
 }
 

@@ -163,6 +163,7 @@ function getBreakdownItems(value: CashBreakdown | null | undefined) {
 }
 
 function getPaymentLabel(value: string) {
+  if (value === "qr") return "QRコード決済";
   if (value === "cash") return "現金";
   if (value === "card") return "カード";
   if (value === "other") return "その他";

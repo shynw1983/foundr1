@@ -2308,6 +2308,8 @@ create table if not exists pos_store_settings (
   updated_at timestamptz not null default now()
 );
 
+alter table pos_store_settings add column if not exists payment_rounding jsonb not null default '{}'::jsonb;
+
 alter table pos_store_settings add column if not exists dine_in_enabled boolean not null default true;
 alter table pos_store_settings add column if not exists takeout_enabled boolean not null default true;
 alter table pos_store_settings add column if not exists external_payment_terminal_brand text not null default 'PayCAS';

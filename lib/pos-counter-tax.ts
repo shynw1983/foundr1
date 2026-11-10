@@ -10,6 +10,22 @@ export type PosCounterTaxLine = {
   selectedOptions?: readonly { priceDelta?: number | null; counterStandardTax?: boolean }[];
 };
 
+function taxBucket(rate: number, grossAmount: number): PosCounterTaxBucket {
+  const hundredths = Math.round(rate * 100);
+  const divisor = BigInt(10000 + hundredths);
+  const taxAmount = Number((BigInt(grossAmount) * BigInt(hundredths) + divisor - BigInt(1)) / divisor);
+  return { rate, grossAmount, taxAmount };
+}
+
+export function adjustPosTaxBreakdown(
+  breakdown: PosCounterTaxBucket[] | undefined, gross: number, rate: number, adjustment: number
+) {
+  if (!adjustment) return breakdown;
+  if (!breakdown?.length) return [taxBucket(rate, gross - adjustment)];
+  const shares = allocatePosAmountByWeight(adjustment, breakdown.map(bucket => bucket.grossAmount));
+  return breakdown.map((bucket, index) => taxBucket(bucket.rate, bucket.grossAmount - shares[index]));
+}
+
 const yen = (value: number) => {
   const rounded = Math.round(Number(value));
   return Number.isSafeInteger(rounded) && rounded > 0 ? rounded : 0;
@@ -68,12 +84,7 @@ export function calculatePosCounterTax(input: {
     add(parentStandard ? standardRate : reducedRate, paidShares[0]);
     options.forEach((option, index) => add(option.standard ? standardRate : reducedRate, paidShares[index + 1]));
   }
-  const taxBreakdown: PosCounterTaxBucket[] = [...buckets].sort(([a], [b]) => a - b).map(([rate, grossAmount]) => {
-    const hundredths = Math.round(rate * 100);
-    const divisor = BigInt(10000 + hundredths);
-    const taxAmount = Number((BigInt(grossAmount) * BigInt(hundredths) + divisor - BigInt(1)) / divisor);
-    return { rate, grossAmount, taxAmount };
-  });
+  const taxBreakdown = [...buckets].sort(([a], [b]) => a - b).map(([rate, grossAmount]) => taxBucket(rate, grossAmount));
   return {
     amount: taxBreakdown.reduce((total, bucket) => total + bucket.grossAmount, 0),
     taxAmount: taxBreakdown.reduce((total, bucket) => total + bucket.taxAmount, 0),

@@ -1,6 +1,7 @@
+import { getPosPaymentRoundingAmount, normalizePosPaymentRounding } from "../../../../lib/pos-payment-rounding";
 import { normalizePosCounterMenuPolicy, usesLocalPosMenu, type PosCounterMenuPolicy } from '../../../../lib/pos-counter-menu-policy';
 import { posCounterMenuGuard, posCounterMenuPolicyRevision, readCounterMenuState } from '../../../../lib/pos-counter-menu-data';
-import { allocatePosAmountByWeight, calculatePosCounterTax } from '../../../../lib/pos-counter-tax';
+import { adjustPosTaxBreakdown, allocatePosAmountByWeight, calculatePosCounterTax } from '../../../../lib/pos-counter-tax';
 import { getTodaySummary } from "../../../../lib/pos-daily-summary-data";
 import { rejectDebugWrite } from '../../../../lib/pos-debug-write';
 import { validateInvoiceDetails } from '../../../../lib/pos-invoice';
@@ -88,6 +89,7 @@ type PosCheckoutBody = {
   offlineCreatedAt?: string;
   offlinePickupCode?: string;
   offlineExpectedAmount?: number;
+  paymentRoundingQuote?: number;
   storeId?: string;
   orderType?: string;
   paymentMethod?: string;
@@ -762,7 +764,7 @@ async function refreshTableQrOrderAfterAdjustment(input: {
 }
 
 async function getPosSettings(selectedStoreId: string) {
-  const defaults = { dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: defaultDiscountPresets, customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings, printerSettings: normalizePosPrinterSettings(null), scaleTareSettings: defaultPosScaleTareSettings(), scaleFilterSettings: defaultPosScaleFilterSettings(), fulfillmentWorkspace: defaultPosFulfillmentWorkspaceSettings() };
+  const defaults = { dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", paymentRounding: normalizePosPaymentRounding(null), priceTaxMode: "tax_included", discountPresets: defaultDiscountPresets, customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings, printerSettings: normalizePosPrinterSettings(null), scaleTareSettings: defaultPosScaleTareSettings(), scaleFilterSettings: defaultPosScaleFilterSettings(), fulfillmentWorkspace: defaultPosFulfillmentWorkspaceSettings() };
   if (!selectedStoreId) return { ...defaults, counterMenuPolicyState: readCounterMenuState(), counterMenuPolicy: normalizePosCounterMenuPolicy(null) };
   const rows = await sql`
     select
@@ -771,6 +773,7 @@ async function getPosSettings(selectedStoreId: string) {
       coalesce(takeout_enabled, true) as "takeoutEnabled",
       coalesce(dine_in_tax_rate, 10)::float as "dineInTaxRate",
       coalesce(takeout_tax_rate, 8)::float as "takeoutTaxRate",
+      to_jsonb(pos_store_settings)->'payment_rounding' as "paymentRounding",
       coalesce(nullif(external_payment_terminal_brand, ''), 'PayCAS') as "externalPaymentTerminalBrand",
       coalesce(nullif(price_tax_mode, ''), 'tax_included') as "priceTaxMode",
       coalesce(discount_presets, '[]'::jsonb) as "discountPresets",
@@ -788,6 +791,7 @@ async function getPosSettings(selectedStoreId: string) {
   return settings ? {
     ...settings,
     discountPresets: normalizeDiscountPresets(settings.discountPresets),
+    paymentRounding: normalizePosPaymentRounding(settings.paymentRounding),
     customerDisplayMediaSettings: normalizeCustomerDisplayMediaSettings(settings.customerDisplayMediaSettings),
     printerSettings: normalizePosPrinterSettings(settings.printerSettings),
     fulfillmentWorkspace: normalizePosFulfillmentWorkspaceSettings((settings.printerSettings as unknown as Record<string, unknown> | null)?.fulfillmentWorkspace),
@@ -1655,17 +1659,26 @@ export async function POST(request: Request) {
       discountAmount: itemDiscountAmounts[index], couponDiscountAmount: itemCouponDiscountAmounts[index], exchangeCoupon: couponItemIndex === index }))
   }) : undefined;
   const taxRate = counterTax?.taxRate ?? orderRate;
-  const taxBreakdown = counterTax?.taxBreakdown;
-  const taxSummary = counterTax ? { ...counterTax, taxableAmount: counterTax.amount } : calculateTaxSummary({
+  const unadjustedTax = counterTax ? { ...counterTax, taxableAmount: counterTax.amount } : calculateTaxSummary({
     subtotalAmount,
     discountAmount: posDiscountAmount,
     couponDiscountAmount,
     taxRate,
     priceTaxMode: posSettings.priceTaxMode
   });
-  const amount = taxSummary.amount;
-  if (offlineClientOrderId && Number.isFinite(offlineExpectedAmount) && offlineExpectedAmount > 0 && amount !== Math.round(offlineExpectedAmount)) {
-    return Response.json({ error: offlineQueued
+  const paymentRoundingAmount = getPosPaymentRoundingAmount(unadjustedTax.amount, paymentMethod, posSettings.paymentRounding);
+  const amount = unadjustedTax.amount - paymentRoundingAmount;
+  const taxBreakdown = adjustPosTaxBreakdown(counterTax?.taxBreakdown, unadjustedTax.amount, taxRate, paymentRoundingAmount);
+  const taxSummary = paymentRoundingAmount && taxBreakdown
+    ? { taxableAmount: posSettings.priceTaxMode === "tax_excluded" ? amount - taxBreakdown[0].taxAmount : amount,
+        taxAmount: taxBreakdown.reduce((sum, bucket) => sum + bucket.taxAmount, 0) }
+    : unadjustedTax;
+  const requiresPaymentQuote = paymentRoundingAmount > 0 || body.paymentRoundingQuote !== undefined;
+  if (requiresPaymentQuote && (body.paymentRoundingQuote !== paymentRoundingAmount || typeof body.offlineExpectedAmount !== "number" || !Number.isSafeInteger(offlineExpectedAmount) || offlineExpectedAmount < 0)) {
+    return await findRecordedCheckout() ?? Response.json({ error: "会計金額を確認できません。POS を再読み込みしてください。" }, { status: 409 });
+  }
+  if ((requiresPaymentQuote || (offlineClientOrderId && Number.isFinite(offlineExpectedAmount) && offlineExpectedAmount > 0)) && amount !== Math.round(offlineExpectedAmount)) {
+    return await findRecordedCheckout() ?? Response.json({ error: offlineQueued
       ? `オフライン会計時の金額と現在のメニュー金額が一致しません（会計時 ${offlineExpectedAmount}円 / 現在 ${amount}円）。管理者の確認が必要です。`
       : 'メニューの価格が変更されました。再読込して商品を選び直してください。' }, { status: 409 });
   }
@@ -1683,7 +1696,7 @@ export async function POST(request: Request) {
   const posItemFulfillment = createPosItemFulfillmentSnapshot(normalizedItems.map((item, index) => ({ ...item, orderItemId: orderItemIds[index] })), handoffTime);
   const printSnapshots = durablePrintDocuments ? buildPosPrintDocumentSnapshots(posSettings.printerSettings,
     access.stores.find(store => store.id === storeId)?.name || 'Foundr1 STORE', {
-      pickupCode, orderType, paymentMethod, amount, subtotalAmount, discountAmount: posDiscountAmount, couponDiscountAmount,
+      pickupCode, orderType, paymentMethod, amount, subtotalAmount, discountAmount: posDiscountAmount, couponDiscountAmount, paymentRoundingAmount,
       taxAmount: taxSummary.taxAmount, taxRate, taxBreakdown, cashTenderedAmount, cashChangeAmount, receiptRequested, ...invoiceDetails, note,
       memberLanguage: normalizeMemberLanguage(member?.preferredLanguage || memberLanguage), cashierName: session.name
     }, normalizedItems.map((item, index) => ({ ...item, orderItemId: orderItemIds[index] })),
@@ -1753,6 +1766,7 @@ export async function POST(request: Request) {
         taxAmount: taxSummary.taxAmount,
         taxRate,
         taxBreakdown,
+        paymentRoundingAmount,
         priceTaxMode: posSettings.priceTaxMode,
         discountPresetKey,
         discountPresetName: discountPreset?.name ?? "",
@@ -1940,7 +1954,7 @@ export async function POST(request: Request) {
   if (!durablePrintDocuments && relayPrinting && relayStation) {
     let documents;
     try { documents = buildRelayDocuments(posSettings.printerSettings, access.stores.find(s=>s.id===storeId)?.name || 'Foundr1 STORE', {
-      pickupCode,orderType,paymentMethod,amount,subtotalAmount,discountAmount:posDiscountAmount,couponDiscountAmount,
+      pickupCode,orderType,paymentMethod,amount,subtotalAmount,discountAmount:posDiscountAmount,couponDiscountAmount,paymentRoundingAmount,
       taxAmount:taxSummary.taxAmount,taxRate,taxBreakdown,cashTenderedAmount,cashChangeAmount,receiptRequested,...invoiceDetails,note,
       memberLanguage:normalizeMemberLanguage(member?.preferredLanguage || memberLanguage)
     },normalizedItems,servingTickets); } catch(e) { return Response.json({error:e instanceof Error?e.message:'印刷設定を確認してください。'},{status:409}); }
@@ -2038,6 +2052,7 @@ export async function POST(request: Request) {
     taxAmount: taxSummary.taxAmount,
     taxRate,
     taxBreakdown,
+    paymentRoundingAmount,
     priceTaxMode: posSettings.priceTaxMode,
     discountAmount: posDiscountAmount,
     discountName: discountPreset?.name ?? "",

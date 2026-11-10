@@ -28,6 +28,7 @@ export function normalizePosDebugDisplayState(value: unknown): Record<string, un
     preferredLanguage: ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(String(input.preferredLanguage)) ? input.preferredLanguage : "ja",
     memberDisplayName: "", memberMessage: "", memberScanCommand: null,
     discountName: text(input.discountName), discountAmount: amount(input.discountAmount),
+    paymentRoundingAmount: Math.min(4, amount(input.paymentRoundingAmount)),
     couponName: "", couponDiscountAmount: 0, subtotal: amount(input.subtotal),
     taxLabel: text(input.taxLabel, 60), taxAmount: amount(input.taxAmount),
     cashTenderedAmount: nullable(input.cashTenderedAmount), cashChangeAmount: nullable(input.cashChangeAmount),
