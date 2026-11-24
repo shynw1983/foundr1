@@ -1380,7 +1380,7 @@ body:has(.os-editorial-root) {
   }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .os-ed-sidebar {
     display: none;
   }
@@ -1388,25 +1388,147 @@ body:has(.os-editorial-root) {
   .os-ed-mobile-bar {
     position: sticky;
     top: 0;
-    z-index: 30;
-    display: flex;
+    z-index: 35;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    gap: 10px 12px;
     padding: 10px 16px;
-    background: rgba(255, 255, 255, 0.94);
+    background: rgba(255, 255, 255, 0.96);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--ed-line);
   }
 
+  .os-ed-mobile-bar > .os-ed-brand {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+
   .os-ed-mobile-actions {
+    display: contents;
+  }
+
+  .os-ed-mobile-bar .mobile-nav-actions {
+    grid-column: 2;
+    grid-row: 1;
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: flex-end;
+    order: 0;
+    flex: 0 0 auto;
+    margin: 0;
+  }
+
+  .os-ed-mobile-bar .mobile-nav-menu {
+    position: static;
+    display: block;
+    width: auto;
+  }
+
+  .os-ed-mobile-bar .mobile-nav-menu summary {
+    display: inline-grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    min-height: 38px;
+    padding: 0;
+    border: 1px solid var(--ed-line-strong);
+    border-radius: 9px;
+    background: #ffffff;
+    color: var(--ed-ink);
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .os-ed-mobile-bar .mobile-nav-menu summary .hamburger-button {
+    display: inline-grid;
+    place-items: center;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    box-shadow: none;
+  }
+
+  .os-ed-mobile-bar .mobile-nav-menu-label {
+    display: none;
+  }
+
+  .os-ed-mobile-bar .mobile-nav-menu[open] .mobile-nav-list {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - 110px);
+    overflow-y: auto;
+    padding: 12px;
+    border: 1px solid var(--ed-line);
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
+    z-index: 60;
+  }
+
+  .os-ed-mobile-bar .mobile-nav-user {
+    display: block;
+    order: -1;
+    margin: 0 0 10px;
+    padding: 0 0 10px;
+    border-bottom: 1px solid var(--ed-line);
+  }
+
+  .os-ed-mobile-bar .mobile-store-context:has(> .os-global-store-picker) {
+    display: block;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    order: 0;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .os-ed-mobile-bar .mobile-store-context .os-global-store-picker {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    padding-top: 8px;
+    border-top: 1px solid var(--ed-line);
+  }
+
+  .os-ed-mobile-bar .mobile-store-context .os-global-store-picker-label {
+    color: var(--ed-muted);
+    font-size: 11.5px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .os-ed-mobile-bar .mobile-store-context .os-global-store-picker select {
+    min-height: 36px;
+    height: 36px;
+    padding: 0 28px 0 10px;
+    border: 1px solid var(--ed-line);
+    border-radius: 8px;
+    background: var(--ed-subtle);
+    color: var(--ed-ink);
+    font-size: 13px;
+    font-weight: 500;
   }
 
   .os-ed-content {
-    padding: 18px 16px 40px;
+    padding: 16px 16px 40px;
+  }
+
+  .os-ed-utility-row {
+    padding-bottom: 18px;
   }
 
   .os-ed-focal-amount {
@@ -1423,5 +1545,26 @@ body:has(.os-editorial-root) {
   .os-ed-module-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 4px;
+  }
+}
+
+/* Also refine compact subpage mobile headers (.shell .sidebar) cleanly */
+@media (max-width: 1120px) {
+  .os-editorial-root .shell .sidebar .mobile-store-context .os-global-store-picker-label {
+    color: var(--ed-muted);
+  }
+
+  .os-editorial-root .shell .sidebar .mobile-nav-menu summary {
+    border: 1px solid var(--ed-line-strong);
+    border-radius: 9px;
+    background: #ffffff;
+    color: var(--ed-ink);
+  }
+
+  .os-editorial-root .shell .sidebar .hamburger-button {
+    border: 0;
+    background: transparent;
+    color: var(--ed-ink);
+    box-shadow: none;
   }
 }

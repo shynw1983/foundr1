@@ -336,40 +336,41 @@ export default function Foundr1OsHome() {
             </span>
           </Link>
           <div className="os-ed-mobile-actions">
-            {canQuickActions ? <QuickOperationsDashboard /> : null}
             <MobileNavMenu navItems={canonicalNavItems} />
           </div>
         </header>
 
         <div className="os-ed-content">
-          {/* Quiet Top Utility Line: Store Selector Pills + Quick Action */}
+          {/* Quiet Top Utility Line: Store Selector Pills (when multi-store) + Quick Action */}
           <div className="os-ed-utility-row">
-            <div className="os-ed-store-pills" role="tablist" aria-label="対象店舗の切り替え">
-              {overview?.canSelectAllStores !== false && stores.length > 1 ? (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={selectedStoreId === "all"}
-                  className={`os-ed-pill${selectedStoreId === "all" ? " is-active" : ""}`}
-                  onClick={() => setSelectedStoreId("all")}
-                >
-                  全店舗（{stores.length}）
-                </button>
-              ) : null}
-              {stores.map((store) => (
-                <button
-                  type="button"
-                  role="tab"
-                  key={store.id}
-                  aria-selected={selectedStoreId === store.id}
-                  className={`os-ed-pill${selectedStoreId === store.id ? " is-active" : ""}`}
-                  onClick={() => setSelectedStoreId(store.id)}
-                  data-i18n-ignore
-                >
-                  {store.name}
-                </button>
-              ))}
-            </div>
+            {stores.length > 1 ? (
+              <div className="os-ed-store-pills" role="tablist" aria-label="対象店舗の切り替え">
+                {overview?.canSelectAllStores !== false ? (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={selectedStoreId === "all"}
+                    className={`os-ed-pill${selectedStoreId === "all" ? " is-active" : ""}`}
+                    onClick={() => setSelectedStoreId("all")}
+                  >
+                    全店舗（{stores.length}）
+                  </button>
+                ) : null}
+                {stores.map((store) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    key={store.id}
+                    aria-selected={selectedStoreId === store.id}
+                    className={`os-ed-pill${selectedStoreId === store.id ? " is-active" : ""}`}
+                    onClick={() => setSelectedStoreId(store.id)}
+                    data-i18n-ignore
+                  >
+                    {store.name}
+                  </button>
+                ))}
+              </div>
+            ) : <div />}
 
             <div className="os-ed-utility-actions">
               {canQuickActions ? <QuickOperationsDashboard /> : null}
