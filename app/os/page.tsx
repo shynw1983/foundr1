@@ -228,7 +228,7 @@ export default function Foundr1OsHome() {
     if (response.ok) {
       const nextResponse = await fetch("/api/settings/payroll-statutory-alerts", { cache: "no-store" });
       if (nextResponse.ok) {
-        const body = (await nextResponse.value.json()) as { alerts?: PayrollStatutoryAlert[]; canView?: boolean };
+        const body = (await nextResponse.json()) as { alerts?: PayrollStatutoryAlert[]; canView?: boolean };
         if (body.canView) setPayrollAlerts(body.alerts ?? []);
       }
     }
