@@ -5,13 +5,15 @@ import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store
 
 export const dynamic = "force-dynamic";
 
-type HourlyPoint = {
-  hour: number;
+type PeriodKey = "today" | "yesterday" | "this_week" | "last_week" | "last_month";
+
+type SeriesPoint = {
+  key: string;
   label: string;
-  todaySales: number;
-  todayOrders: number;
-  lastWeekSales: number;
-  lastWeekOrders: number;
+  currentSales: number;
+  currentOrders: number;
+  previousSales: number;
+  previousOrders: number;
 };
 
 type StoreCondition = {
@@ -27,38 +29,214 @@ type StoreCondition = {
   statusNote: string;
 };
 
-function buildHourlySeries(rows: Array<Record<string, unknown>>): HourlyPoint[] {
-  const byHour = new Map<number, { todaySales: number; todayOrders: number; lastWeekSales: number; lastWeekOrders: number }>();
+function parsePeriod(raw: string | null): PeriodKey {
+  if (raw === "yesterday" || raw === "this_week" || raw === "last_week" || raw === "last_month") {
+    return raw;
+  }
+  return "today";
+}
+
+function getTokyoTodayParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+  const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day)
+  };
+}
+
+function toIsoDate(date: Date) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatSlashDate(iso: string) {
+  return iso.replace(/-/g, "/");
+}
+
+function addUtcDays(date: Date, days: number) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days));
+}
+
+function computePeriodBounds(period: PeriodKey) {
+  const { year, month, day } = getTokyoTodayParts();
+  const todayUtc = new Date(Date.UTC(year, month - 1, day));
+  const weekdayMon0 = (todayUtc.getUTCDay() + 6) % 7; // Mon=0 ... Sun=6
+
+  if (period === "today") {
+    const start = toIsoDate(todayUtc);
+    const prev = toIsoDate(addUtcDays(todayUtc, -7));
+    return {
+      granularity: "hourly" as const,
+      currentStart: start,
+      currentEnd: start,
+      previousStart: prev,
+      previousEnd: prev,
+      rangeLabel: formatSlashDate(start),
+      compareRangeLabel: `${formatSlashDate(prev)}（先週同曜日）`
+    };
+  }
+
+  if (period === "yesterday") {
+    const yest = addUtcDays(todayUtc, -1);
+    const start = toIsoDate(yest);
+    const prev = toIsoDate(addUtcDays(yest, -7));
+    return {
+      granularity: "hourly" as const,
+      currentStart: start,
+      currentEnd: start,
+      previousStart: prev,
+      previousEnd: prev,
+      rangeLabel: formatSlashDate(start),
+      compareRangeLabel: `${formatSlashDate(prev)}（前週同曜日）`
+    };
+  }
+
+  if (period === "this_week") {
+    const weekStart = addUtcDays(todayUtc, -weekdayMon0);
+    const prevStart = addUtcDays(weekStart, -7);
+    const prevEnd = addUtcDays(todayUtc, -7);
+    const cs = toIsoDate(weekStart);
+    const ce = toIsoDate(todayUtc);
+    const ps = toIsoDate(prevStart);
+    const pe = toIsoDate(prevEnd);
+    return {
+      granularity: "daily" as const,
+      currentStart: cs,
+      currentEnd: ce,
+      previousStart: ps,
+      previousEnd: pe,
+      rangeLabel: `${formatSlashDate(cs)}〜${formatSlashDate(ce)}`,
+      compareRangeLabel: `${formatSlashDate(ps)}〜${formatSlashDate(pe)}`
+    };
+  }
+
+  if (period === "last_week") {
+    const thisWeekStart = addUtcDays(todayUtc, -weekdayMon0);
+    const lwStart = addUtcDays(thisWeekStart, -7);
+    const lwEnd = addUtcDays(thisWeekStart, -1);
+    const pwStart = addUtcDays(lwStart, -7);
+    const pwEnd = addUtcDays(lwEnd, -7);
+    const cs = toIsoDate(lwStart);
+    const ce = toIsoDate(lwEnd);
+    const ps = toIsoDate(pwStart);
+    const pe = toIsoDate(pwEnd);
+    return {
+      granularity: "daily" as const,
+      currentStart: cs,
+      currentEnd: ce,
+      previousStart: ps,
+      previousEnd: pe,
+      rangeLabel: `${formatSlashDate(cs)}〜${formatSlashDate(ce)}`,
+      compareRangeLabel: `${formatSlashDate(ps)}〜${formatSlashDate(pe)}`
+    };
+  }
+
+  // last_month
+  const lmStart = new Date(Date.UTC(year, month - 2, 1));
+  const lmEnd = new Date(Date.UTC(year, month - 1, 0));
+  const pmStart = new Date(Date.UTC(year, month - 3, 1));
+  const pmEnd = new Date(Date.UTC(year, month - 2, 0));
+  const cs = toIsoDate(lmStart);
+  const ce = toIsoDate(lmEnd);
+  const ps = toIsoDate(pmStart);
+  const pe = toIsoDate(pmEnd);
+  return {
+    granularity: "daily" as const,
+    currentStart: cs,
+    currentEnd: ce,
+    previousStart: ps,
+    previousEnd: pe,
+    rangeLabel: `${formatSlashDate(cs)}〜${formatSlashDate(ce)}`,
+    compareRangeLabel: `${formatSlashDate(ps)}〜${formatSlashDate(pe)}`
+  };
+}
+
+function buildHourlySeries(rows: Array<Record<string, unknown>>): SeriesPoint[] {
+  const byHour = new Map<number, { currentSales: number; currentOrders: number; previousSales: number; previousOrders: number }>();
   let minHour = 10;
   let maxHour = 21;
 
   for (const row of rows) {
-    const hour = Number(row.hour);
+    const hour = Number(row.bucket);
     if (!Number.isInteger(hour) || hour < 0 || hour > 23) continue;
-    const todaySales = Number(row.todaySales ?? 0);
-    const todayOrders = Number(row.todayOrders ?? 0);
-    const lastWeekSales = Number(row.lastWeekSales ?? 0);
-    const lastWeekOrders = Number(row.lastWeekOrders ?? 0);
-    byHour.set(hour, { todaySales, todayOrders, lastWeekSales, lastWeekOrders });
-    if (todaySales > 0 || lastWeekSales > 0 || todayOrders > 0 || lastWeekOrders > 0) {
+    const currentSales = Number(row.currentSales ?? 0);
+    const currentOrders = Number(row.currentOrders ?? 0);
+    const previousSales = Number(row.previousSales ?? 0);
+    const previousOrders = Number(row.previousOrders ?? 0);
+    byHour.set(hour, { currentSales, currentOrders, previousSales, previousOrders });
+    if (currentSales > 0 || previousSales > 0 || currentOrders > 0 || previousOrders > 0) {
       if (hour < minHour) minHour = hour;
       if (hour > maxHour) maxHour = hour;
     }
   }
 
-  const points: HourlyPoint[] = [];
+  const points: SeriesPoint[] = [];
   for (let hour = minHour; hour <= maxHour; hour += 1) {
     const entry = byHour.get(hour);
     points.push({
-      hour,
+      key: String(hour),
       label: `${hour}時`,
-      todaySales: entry?.todaySales ?? 0,
-      todayOrders: entry?.todayOrders ?? 0,
-      lastWeekSales: entry?.lastWeekSales ?? 0,
-      lastWeekOrders: entry?.lastWeekOrders ?? 0
+      currentSales: entry?.currentSales ?? 0,
+      currentOrders: entry?.currentOrders ?? 0,
+      previousSales: entry?.previousSales ?? 0,
+      previousOrders: entry?.previousOrders ?? 0
     });
   }
   return points;
+}
+
+function buildDailySeries(
+  currentStart: string,
+  currentEnd: string,
+  previousStart: string,
+  rows: Array<Record<string, unknown>>
+): SeriesPoint[] {
+  const byDayOffset = new Map<number, { currentSales: number; currentOrders: number; previousSales: number; previousOrders: number }>();
+  for (const row of rows) {
+    const offset = Number(row.bucket);
+    if (!Number.isInteger(offset) || offset < 0) continue;
+    byDayOffset.set(offset, {
+      currentSales: Number(row.currentSales ?? 0),
+      currentOrders: Number(row.currentOrders ?? 0),
+      previousSales: Number(row.previousSales ?? 0),
+      previousOrders: Number(row.previousOrders ?? 0)
+    });
+  }
+
+  const startDate = new Date(`${currentStart}T00:00:00Z`);
+  const endDate = new Date(`${currentEnd}T00:00:00Z`);
+  const totalDays = Math.max(1, Math.min(31, Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1));
+
+  const points: SeriesPoint[] = [];
+  for (let i = 0; i < totalDays; i += 1) {
+    const dayDate = addUtcDays(startDate, i);
+    const m = dayDate.getUTCMonth() + 1;
+    const d = dayDate.getUTCDate();
+    const entry = byDayOffset.get(i);
+    points.push({
+      key: `${previousStart}:${i}`,
+      label: `${m}/${d}`,
+      currentSales: entry?.currentSales ?? 0,
+      currentOrders: entry?.currentOrders ?? 0,
+      previousSales: entry?.previousSales ?? 0,
+      previousOrders: entry?.previousOrders ?? 0
+    });
+  }
+  return points;
+}
+
+function computeDeltaPct(current: number, previous: number): number | null {
+  if (previous <= 0) return null;
+  return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
 export async function GET(request: Request) {
@@ -68,7 +246,10 @@ export async function GET(request: Request) {
   }
 
   const access = await getStoreOrderAccess(session);
-  const requestedStoreId = new URL(request.url).searchParams.get("storeId")?.trim() ?? "";
+  const url = new URL(request.url);
+  const requestedStoreId = url.searchParams.get("storeId")?.trim() ?? "";
+  const period = parsePeriod(url.searchParams.get("period"));
+  const bounds = computePeriodBounds(period);
 
   let storeFilter: string | null = null;
   if (requestedStoreId && requestedStoreId !== "all") {
@@ -83,74 +264,114 @@ export async function GET(request: Request) {
   const accessibleStoreIds = access.stores.map((store) => store.id);
   const canViewSalesStats = access.canViewSalesStats;
 
-  const [hourlyRows, summaryRows, storeSalesRows, punchRows, operationRows] = await Promise.all([
+  const [seriesRows, summaryRows, storeSalesRows, punchRows, operationRows] = await Promise.all([
     canViewSalesStats
-      ? sql`
-          with scoped as (
+      ? bounds.granularity === "hourly"
+        ? sql`
+            with scoped as (
+              select
+                extract(hour from (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo'))::int as bucket,
+                (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date as biz_date,
+                amount
+              from store_customer_orders
+              where payment_status in ('paid', 'partial_refunded')
+                and (${access.allStores} or store_id::text = any(${access.storeIds}))
+                and (${storeFilter}::text is null or store_id::text = ${storeFilter})
+                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date in (
+                  ${bounds.currentStart}::date,
+                  ${bounds.previousStart}::date
+                )
+            )
             select
-              extract(hour from (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo'))::int as hour,
-              (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date as biz_date,
-              amount
-            from store_customer_orders
-            where payment_status in ('paid', 'partial_refunded')
-              and (${access.allStores} or store_id::text = any(${access.storeIds}))
-              and (${storeFilter}::text is null or store_id::text = ${storeFilter})
-              and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date in (
-                (now() at time zone 'Asia/Tokyo')::date,
-                ((now() at time zone 'Asia/Tokyo')::date - 7)
-              )
-          )
-          select
-            hour,
-            coalesce(sum(amount) filter (where biz_date = (now() at time zone 'Asia/Tokyo')::date), 0)::int as "todaySales",
-            count(*) filter (where biz_date = (now() at time zone 'Asia/Tokyo')::date)::int as "todayOrders",
-            coalesce(sum(amount) filter (where biz_date = ((now() at time zone 'Asia/Tokyo')::date - 7)), 0)::int as "lastWeekSales",
-            count(*) filter (where biz_date = ((now() at time zone 'Asia/Tokyo')::date - 7))::int as "lastWeekOrders"
-          from scoped
-          group by hour
-          order by hour
-        `
+              bucket,
+              coalesce(sum(amount) filter (where biz_date = ${bounds.currentStart}::date), 0)::int as "currentSales",
+              count(*) filter (where biz_date = ${bounds.currentStart}::date)::int as "currentOrders",
+              coalesce(sum(amount) filter (where biz_date = ${bounds.previousStart}::date), 0)::int as "previousSales",
+              count(*) filter (where biz_date = ${bounds.previousStart}::date)::int as "previousOrders"
+            from scoped
+            group by bucket
+            order by bucket
+          `
+        : sql`
+            with scoped as (
+              select
+                (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date as biz_date,
+                amount
+              from store_customer_orders
+              where payment_status in ('paid', 'partial_refunded')
+                and (${access.allStores} or store_id::text = any(${access.storeIds}))
+                and (${storeFilter}::text is null or store_id::text = ${storeFilter})
+                and (
+                  (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date
+                  or (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.previousStart}::date and ${bounds.previousEnd}::date
+                )
+            ),
+            bucketed as (
+              select
+                case
+                  when biz_date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date then (biz_date - ${bounds.currentStart}::date)
+                  else (biz_date - ${bounds.previousStart}::date)
+                end as bucket,
+                (biz_date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date) as is_current,
+                amount
+              from scoped
+            )
+            select
+              bucket::int as bucket,
+              coalesce(sum(amount) filter (where is_current), 0)::int as "currentSales",
+              count(*) filter (where is_current)::int as "currentOrders",
+              coalesce(sum(amount) filter (where not is_current), 0)::int as "previousSales",
+              count(*) filter (where not is_current)::int as "previousOrders"
+            from bucketed
+            group by bucket
+            order by bucket
+          `
       : Promise.resolve([]),
     canViewSalesStats
       ? sql`
           select
             coalesce(sum(amount) filter (
               where payment_status in ('paid', 'partial_refunded')
-                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date = (now() at time zone 'Asia/Tokyo')::date
-            ), 0)::int as "todaySales",
+                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date
+            ), 0)::int as "currentSales",
             count(*) filter (
               where payment_status in ('paid', 'partial_refunded')
-                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date = (now() at time zone 'Asia/Tokyo')::date
-            )::int as "todayOrders",
+                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date
+            )::int as "currentOrders",
             count(*) filter (
               where status in ('new', 'preparing', 'ready')
                 and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date = (now() at time zone 'Asia/Tokyo')::date
             )::int as "activeOrders",
             coalesce(sum(amount) filter (
               where payment_status in ('paid', 'partial_refunded')
-                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date = ((now() at time zone 'Asia/Tokyo')::date - 7)
-            ), 0)::int as "lastWeekSales",
+                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.previousStart}::date and ${bounds.previousEnd}::date
+            ), 0)::int as "previousSales",
             count(*) filter (
               where payment_status in ('paid', 'partial_refunded')
-                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date = (now() at time zone 'Asia/Tokyo')::date
+                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.previousStart}::date and ${bounds.previousEnd}::date
+            )::int as "previousOrders",
+            count(*) filter (
+              where payment_status in ('paid', 'partial_refunded')
+                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date
                 and order_source in ('store_pos', 'table_qr')
             )::int as "posOrders",
             count(*) filter (
               where payment_status in ('paid', 'partial_refunded')
-                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date = (now() at time zone 'Asia/Tokyo')::date
+                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date
                 and order_source in ('uber_eats', 'rocket_now', 'demae_can', 'wolt')
             )::int as "deliveryOrders",
             count(*) filter (
               where payment_status in ('paid', 'partial_refunded')
-                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date = (now() at time zone 'Asia/Tokyo')::date
+                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date
                 and order_source not in ('store_pos', 'table_qr', 'uber_eats', 'rocket_now', 'demae_can', 'wolt')
             )::int as "webOrders"
           from store_customer_orders
           where (${access.allStores} or store_id::text = any(${access.storeIds}))
             and (${storeFilter}::text is null or store_id::text = ${storeFilter})
-            and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date in (
-              (now() at time zone 'Asia/Tokyo')::date,
-              ((now() at time zone 'Asia/Tokyo')::date - 7)
+            and (
+              (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date
+              or (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.previousStart}::date and ${bounds.previousEnd}::date
+              or (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date = (now() at time zone 'Asia/Tokyo')::date
             )
         `
       : Promise.resolve([]),
@@ -158,12 +379,24 @@ export async function GET(request: Request) {
       ? sql`
           select
             store_id::text as "storeId",
-            coalesce(sum(amount) filter (where payment_status in ('paid', 'partial_refunded')), 0)::int as "todaySales",
-            count(*) filter (where payment_status in ('paid', 'partial_refunded'))::int as "todayOrders",
-            count(*) filter (where status in ('new', 'preparing', 'ready'))::int as "activeOrders"
+            coalesce(sum(amount) filter (
+              where payment_status in ('paid', 'partial_refunded')
+                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date
+            ), 0)::int as "periodSales",
+            count(*) filter (
+              where payment_status in ('paid', 'partial_refunded')
+                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date
+            )::int as "periodOrders",
+            count(*) filter (
+              where status in ('new', 'preparing', 'ready')
+                and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date = (now() at time zone 'Asia/Tokyo')::date
+            )::int as "activeOrders"
           from store_customer_orders
           where store_id::text = any(${accessibleStoreIds})
-            and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date = (now() at time zone 'Asia/Tokyo')::date
+            and (
+              (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date
+              or (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date = (now() at time zone 'Asia/Tokyo')::date
+            )
           group by store_id
         `
       : Promise.resolve([]),
@@ -206,18 +439,18 @@ export async function GET(request: Request) {
   ]);
 
   const rawSummary = (summaryRows[0] ?? {}) as Record<string, unknown>;
-  const todaySales = Number(rawSummary.todaySales ?? 0);
-  const todayOrders = Number(rawSummary.todayOrders ?? 0);
+  const currentSales = Number(rawSummary.currentSales ?? 0);
+  const currentOrders = Number(rawSummary.currentOrders ?? 0);
   const activeOrders = Number(rawSummary.activeOrders ?? 0);
-  const lastWeekSales = Number(rawSummary.lastWeekSales ?? 0);
-  const avgOrderValue = todayOrders > 0 ? Math.round(todaySales / todayOrders) : 0;
-  const deltaPct = lastWeekSales > 0 ? Math.round(((todaySales - lastWeekSales) / lastWeekSales) * 1000) / 10 : null;
+  const previousSales = Number(rawSummary.previousSales ?? 0);
+  const previousOrders = Number(rawSummary.previousOrders ?? 0);
+  const avgOrderValue = currentOrders > 0 ? Math.round(currentSales / currentOrders) : 0;
 
-  const salesByStore = new Map<string, { todaySales: number; todayOrders: number; activeOrders: number }>();
+  const salesByStore = new Map<string, { periodSales: number; periodOrders: number; activeOrders: number }>();
   for (const row of storeSalesRows as Array<Record<string, unknown>>) {
     salesByStore.set(String(row.storeId), {
-      todaySales: Number(row.todaySales ?? 0),
-      todayOrders: Number(row.todayOrders ?? 0),
+      periodSales: Number(row.periodSales ?? 0),
+      periodOrders: Number(row.periodOrders ?? 0),
       activeOrders: Number(row.activeOrders ?? 0)
     });
   }
@@ -253,8 +486,8 @@ export async function GET(request: Request) {
     return {
       id: store.id,
       name: store.name,
-      todaySales: sales?.todaySales ?? 0,
-      todayOrders: sales?.todayOrders ?? 0,
+      todaySales: sales?.periodSales ?? 0,
+      todayOrders: sales?.periodOrders ?? 0,
       activeOrders: sales?.activeOrders ?? 0,
       workingStaff: (staff?.working ?? 0) + (staff?.onBreak ?? 0),
       breakStaff: staff?.onBreak ?? 0,
@@ -266,25 +499,37 @@ export async function GET(request: Request) {
     };
   });
 
+  const series = canViewSalesStats
+    ? bounds.granularity === "hourly"
+      ? buildHourlySeries(seriesRows as Array<Record<string, unknown>>)
+      : buildDailySeries(bounds.currentStart, bounds.currentEnd, bounds.previousStart, seriesRows as Array<Record<string, unknown>>)
+    : [];
+
   return Response.json({
     canViewSalesStats,
     canSelectAllStores: access.allStores || access.stores.length > 1,
     selectedStoreId: storeFilter ?? "all",
+    period,
+    granularity: bounds.granularity,
+    rangeLabel: bounds.rangeLabel,
+    compareRangeLabel: bounds.compareRangeLabel,
     generatedAt: new Date().toISOString(),
     summary: {
-      todaySales,
-      todayOrders,
+      todaySales: currentSales,
+      todayOrders: currentOrders,
       activeOrders,
       avgOrderValue,
-      lastWeekSales,
-      deltaPct,
+      lastWeekSales: previousSales,
+      previousOrders,
+      deltaPct: computeDeltaPct(currentSales, previousSales),
+      deltaOrdersPct: computeDeltaPct(currentOrders, previousOrders),
       channelBreakdown: {
         pos: Number(rawSummary.posOrders ?? 0),
         web: Number(rawSummary.webOrders ?? 0),
         delivery: Number(rawSummary.deliveryOrders ?? 0)
       }
     },
-    hourlySeries: canViewSalesStats ? buildHourlySeries(hourlyRows as Array<Record<string, unknown>>) : [],
+    series,
     stores
   }, { headers: { "Cache-Control": "no-store, max-age=0" } });
 }

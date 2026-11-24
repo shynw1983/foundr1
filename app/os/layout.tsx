@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { getAppVersion, getShortAppVersion } from "../../lib/app-version";
 import { AppVersionNotice } from "./components/AppVersionNotice";
+import { OsMobileBottomNav } from "./components/OsMobileBottomNav";
 import "./os-interface.css";
 import "./os-editorial.css";
 
@@ -16,6 +17,7 @@ export default function OsLayout({ children }: { children: ReactNode }) {
         pathPrefixes={["/os"]}
       />
       {children}
+      <OsMobileBottomNav />
     </div>
   );
 }

@@ -2,13 +2,13 @@
 
 import { useMemo, useState } from "react";
 
-export type EditorialHourlyPoint = {
-  hour: number;
+export type EditorialSeriesPoint = {
+  key: string;
   label: string;
-  todaySales: number;
-  todayOrders: number;
-  lastWeekSales: number;
-  lastWeekOrders: number;
+  currentSales: number;
+  currentOrders: number;
+  previousSales: number;
+  previousOrders: number;
 };
 
 function formatYen(value: number) {
@@ -27,21 +27,23 @@ function buildSmoothPath(points: Array<[number, number]>) {
 
 export function OsEditorialChart({
   series,
+  granularity = "hourly",
+  currentLabel = "当期",
+  previousLabel = "前期比較",
   isLoading
 }: {
-  series: EditorialHourlyPoint[];
+  series: EditorialSeriesPoint[];
+  granularity?: "hourly" | "daily";
+  currentLabel?: string;
+  previousLabel?: string;
   isLoading?: boolean;
 }) {
   const defaultActiveIndex = useMemo(() => {
     if (!series.length) return 0;
     for (let i = series.length - 1; i >= 0; i -= 1) {
-      if (series[i].todaySales > 0 || series[i].todayOrders > 0) return i;
+      if (series[i].currentSales > 0 || series[i].currentOrders > 0) return i;
     }
-    const nowJstHour = Number(
-      new Intl.DateTimeFormat("ja-JP", { hour: "numeric", hour12: false, timeZone: "Asia/Tokyo" }).format(new Date())
-    );
-    const closest = series.findIndex((point) => point.hour >= nowJstHour);
-    return closest >= 0 ? closest : Math.max(0, series.length - 1);
+    return Math.max(0, series.length - 1);
   }, [series]);
 
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -59,39 +61,40 @@ export function OsEditorialChart({
     return null;
   }
 
-  const hasAnySales = series.some((point) => point.todaySales > 0 || point.lastWeekSales > 0);
+  const hasAnySales = series.some((point) => point.currentSales > 0 || point.previousSales > 0);
   const activePoint = series[activeIndex] ?? series[0];
 
   const width = 640;
-  const height = 172;
-  const padL = 8;
-  const padR = 8;
+  const height = 166;
+  const padL = 10;
+  const padR = 10;
   const padT = 16;
   const padB = 26;
   const maxValue = Math.max(
     1000,
-    ...series.map((point) => Math.max(point.todaySales, point.lastWeekSales))
+    ...series.map((point) => Math.max(point.currentSales, point.previousSales))
   ) * 1.14;
   const stepX = series.length > 1 ? (width - padL - padR) / (series.length - 1) : 0;
   const yOf = (value: number) => padT + (height - padT - padB) * (1 - value / maxValue);
 
-  const todayCoords: Array<[number, number]> = series.map((point, index) => [
-    padL + index * stepX,
-    yOf(point.todaySales)
+  const currentCoords: Array<[number, number]> = series.map((point, index) => [
+    series.length === 1 ? width / 2 : padL + index * stepX,
+    yOf(point.currentSales)
   ]);
-  const lastWeekCoords: Array<[number, number]> = series.map((point, index) => [
-    padL + index * stepX,
-    yOf(point.lastWeekSales)
+  const prevCoords: Array<[number, number]> = series.map((point, index) => [
+    series.length === 1 ? width / 2 : padL + index * stepX,
+    yOf(point.previousSales)
   ]);
 
-  const todayLine = buildSmoothPath(todayCoords);
-  const lastWeekLine = buildSmoothPath(lastWeekCoords);
+  const currentLine = buildSmoothPath(currentCoords);
+  const prevLine = buildSmoothPath(prevCoords);
   const baselineY = height - padB;
-  const todayArea = todayCoords.length
-    ? `${todayLine} L ${todayCoords[todayCoords.length - 1][0].toFixed(1)} ${baselineY.toFixed(1)} L ${todayCoords[0][0].toFixed(1)} ${baselineY.toFixed(1)} Z`
+  const currentArea = currentCoords.length > 1
+    ? `${currentLine} L ${currentCoords[currentCoords.length - 1][0].toFixed(1)} ${baselineY.toFixed(1)} L ${currentCoords[0][0].toFixed(1)} ${baselineY.toFixed(1)} Z`
     : "";
 
-  const activeCoord = todayCoords[activeIndex] ?? [padL, baselineY];
+  const activeCoord = currentCoords[activeIndex] ?? [padL, baselineY];
+  const labelStride = series.length <= 10 ? 1 : series.length <= 18 ? 2 : 5;
 
   return (
     <div className="os-ed-chart">
@@ -99,24 +102,26 @@ export function OsEditorialChart({
         <div className="os-ed-chart-readout">
           <span className="os-ed-legend-item is-today">
             <i aria-hidden="true" />
-            <span>本日</span>
+            <span>{currentLabel}</span>
             <strong className="os-ed-tabular" data-i18n-ignore>
-              {activePoint.label} · {formatYen(activePoint.todaySales)}
+              {activePoint.label} · {formatYen(activePoint.currentSales)}
             </strong>
-            <small className="os-ed-tabular">({activePoint.todayOrders}件)</small>
+            <small className="os-ed-tabular">({activePoint.currentOrders}件)</small>
           </span>
           <span className="os-ed-legend-item is-prev">
             <i aria-hidden="true" />
-            <span>先週同日</span>
+            <span>{previousLabel}</span>
             <span className="os-ed-tabular" data-i18n-ignore>
-              {formatYen(activePoint.lastWeekSales)}
+              {formatYen(activePoint.previousSales)}
             </span>
           </span>
         </div>
         {!hasAnySales ? (
-          <span className="os-ed-chart-hint">本日の会計が入ると時間帯別に反映されます</span>
+          <span className="os-ed-chart-hint">会計データが入ると推移グラフに反映されます</span>
         ) : (
-          <span className="os-ed-chart-hint">時間帯を選択して詳細を確認</span>
+          <span className="os-ed-chart-hint">
+            {granularity === "hourly" ? "時間帯をタップして詳細を確認" : "日付をタップして詳細を確認"}
+          </span>
         )}
       </div>
 
@@ -124,11 +129,11 @@ export function OsEditorialChart({
         viewBox={`0 0 ${width} ${height}`}
         className="os-ed-chart-svg"
         role="img"
-        aria-label="時間帯別売上推移"
+        aria-label={granularity === "hourly" ? "時間帯別売上推移" : "日別売上推移"}
         onMouseLeave={() => setHoveredIndex(null)}
       >
         <defs>
-          <linearGradient id="osEditorialSalesFill" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="osFoundr1SalesFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#135c47" stopOpacity="0.16" />
             <stop offset="100%" stopColor="#135c47" stopOpacity="0.0" />
           </linearGradient>
@@ -143,27 +148,27 @@ export function OsEditorialChart({
               y1={y}
               x2={width - padR}
               y2={y}
-              stroke="#eff2f6"
+              stroke="#edf1ef"
               strokeWidth="1"
             />
           );
         })}
 
-        {lastWeekLine ? (
+        {prevCoords.length > 1 ? (
           <path
-            d={lastWeekLine}
+            d={prevLine}
             fill="none"
-            stroke="#cbd5e1"
+            stroke="#c9d4ce"
             strokeWidth="1.5"
             strokeDasharray="4 4"
           />
         ) : null}
 
-        {todayArea ? <path d={todayArea} fill="url(#osEditorialSalesFill)" /> : null}
+        {currentArea ? <path d={currentArea} fill="url(#osFoundr1SalesFill)" /> : null}
 
-        {todayLine ? (
+        {currentCoords.length > 1 ? (
           <path
-            d={todayLine}
+            d={currentLine}
             fill="none"
             stroke="#135c47"
             strokeWidth="2.2"
@@ -185,20 +190,20 @@ export function OsEditorialChart({
         <circle cx={activeCoord[0]} cy={activeCoord[1]} r="3.5" fill="#135c47" stroke="#ffffff" strokeWidth="2" />
 
         {series.map((point, index) => {
-          const [x] = todayCoords[index];
+          const [x] = currentCoords[index];
           const isCurrent = index === activeIndex;
-          const showLabel = series.length <= 14 || index % 2 === 0 || isCurrent;
-          const hitWidth = Math.max(stepX, 24);
+          const showLabel = index === 0 || index === series.length - 1 || index % labelStride === 0 || isCurrent;
+          const hitWidth = Math.max(stepX, 22);
 
           return (
-            <g key={point.hour}>
+            <g key={point.key}>
               {showLabel ? (
                 <text
                   x={x}
                   y={height - 6}
                   textAnchor="middle"
                   fontSize="11"
-                  fill={isCurrent ? "#0f172a" : "#94a3b8"}
+                  fill={isCurrent ? "#0f172a" : "#8a9992"}
                   fontWeight={isCurrent ? "600" : "400"}
                 >
                   {point.label}
