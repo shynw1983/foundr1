@@ -158,10 +158,10 @@ export function OsMobileBottomNav() {
                   <Store size={20} />
                   <span>店舗画面 (/store)</span>
                 </Link>
-                <Link href="/os/logout" className="os-f1-more-quick-card is-subtle" onClick={() => setMoreOpen(false)}>
+                <a href="/os/logout" className="os-f1-more-quick-card is-subtle" onClick={() => setMoreOpen(false)}>
                   <LogOut size={20} />
                   <span>ログアウト</span>
-                </Link>
+                </a>
               </div>
             </div>
 
