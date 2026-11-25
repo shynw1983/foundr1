@@ -2554,8 +2554,8 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
   color: var(--ed-brand-ink);
 }
 
-/* Porcelain Filter Chips, Queue Filters & Slot Buttons */
-.os-editorial-root :is(.queue-filter, .filter-chip, .slot-button) {
+/* Porcelain Filter Chips & Queue Filters (Single-Line Pills) + 2-Line Slot Buttons (10px) */
+.os-editorial-root :is(.queue-filter, .filter-chip) {
   min-height: 34px;
   padding: 6px 13px;
   border: 0;
@@ -2566,6 +2566,19 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
   font-weight: 500;
   box-shadow: none;
   transition: background 120ms ease, color 120ms ease;
+}
+
+.os-editorial-root .slot-button {
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--ed-line);
+  border-radius: 10px;
+  background: var(--ed-subtle);
+  color: var(--ed-ink-soft);
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: none;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
 .os-editorial-root :is(.queue-filter, .filter-chip, .slot-button):hover:not(:disabled) {
@@ -3009,8 +3022,19 @@ body:has(.os-editorial-root) .floating-feedback-toast a {
     justify-content: flex-start;
   }
 
-  .os-editorial-root .shell .topbar-actions .search-box {
-    flex: 1 1 200px;
+  .os-editorial-root .shell .topbar-actions .search-box,
+  .os-editorial-root .workspace .search-box {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    min-height: 38px;
+    height: 38px;
+    max-height: 40px;
+  }
+
+  /* Prevent flex-basis height blowups when flex containers switch to column on mobile */
+  .os-editorial-root .shell.has-voucher-preview .voucher-product-binding-actions small {
+    flex: 0 0 auto;
   }
 
   /* Subpage mobile header: 3-column dead-center symmetry matching OS Home 1:1 */
@@ -3206,5 +3230,45 @@ body:has(.os-editorial-root) .floating-feedback-toast a {
     left: auto;
     width: min(320px, calc(100vw - 24px));
     max-width: calc(100vw - 24px);
+  }
+}
+
+/* Narrow Phone Refinements (<= 640px): Zero Topbar Collision & Full-Width Filters */
+@media (max-width: 640px) {
+  .os-f1-mobile-topbar,
+  .os-editorial-root .shell > .sidebar,
+  .os-editorial-root .shell > .sidebar:has(> .mobile-store-context > .os-global-store-picker) {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .os-editorial-root .shell > .sidebar > .mobile-store-context,
+  .os-editorial-root .shell > .sidebar > .mobile-store-context:has(> .os-global-store-picker),
+  .os-f1-mobile-store-wrap {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    justify-self: stretch;
+  }
+
+  .os-editorial-root .shell > .sidebar > .mobile-store-context .os-global-store-picker,
+  .os-f1-store-select-pill {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .os-editorial-root .shell > .sidebar > .mobile-store-context .os-global-store-picker select,
+  .os-f1-store-select-pill select {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .os-editorial-root .history-filter-row,
+  .os-editorial-root .staff-filter-bar,
+  .os-editorial-root .payroll-ledger-search,
+  .os-editorial-root .payroll-ledger-search:not(:has(.store-context-selector)),
+  .os-editorial-root .voucher-upload-form,
+  .os-editorial-root .voucher-upload-form:not(:has(.store-context-selector)) {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
