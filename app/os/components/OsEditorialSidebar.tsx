@@ -11,10 +11,18 @@ import {
   Store
 } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { OsLanguagePicker } from "./OsTranslationProvider";
 import { canonicalNavItems, type OsNavModuleWithChildren } from "./OsNavList";
+import { OsStoreContextPicker } from "./OsStoreContextPicker";
 import { UserBadge } from "./UserBadge";
+
+const SIDEBAR_COLLAPSE_KEY = "foundr1_os_ed_sidebar_collapsed";
+
+function isHrefActive(pathname: string, href: string) {
+  if (href === "/os") return pathname === "/os";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function OsEditorialSidebar({
   modules,
@@ -26,6 +34,39 @@ export function OsEditorialSidebar({
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [openModuleId, setOpenModuleId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === "1") {
+        setCollapsed(true);
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+  }, []);
+
+  const activeModuleId = modules.find(
+    (module) =>
+      (module.href && isHrefActive(pathname, module.href))
+      || module.children.some((child) => isHrefActive(pathname, child.href))
+  )?.id ?? null;
+
+  useEffect(() => {
+    if (activeModuleId) {
+      setOpenModuleId(activeModuleId);
+    }
+  }, [activeModuleId]);
+
+  function toggleCollapsed(next: boolean) {
+    setCollapsed(next);
+    if (next) setOpenModuleId(null);
+    else if (activeModuleId) setOpenModuleId(activeModuleId);
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSE_KEY, next ? "1" : "0");
+    } catch {
+      // Ignore storage access errors
+    }
+  }
 
   return (
     <aside
@@ -47,10 +88,7 @@ export function OsEditorialSidebar({
             <button
               type="button"
               className="os-ed-collapse-btn"
-              onClick={() => {
-                setCollapsed(true);
-                setOpenModuleId(null);
-              }}
+              onClick={() => toggleCollapsed(true)}
               aria-label="サイドバーを折りたたむ"
               title="サイドバーを折りたたむ"
             >
@@ -59,7 +97,13 @@ export function OsEditorialSidebar({
           ) : null}
         </div>
 
-        {/* Language switcher stays near the top in both expanded and collapsed states */}
+        {/* Global Store Switcher + Language Switcher near top of sidebar */}
+        {!collapsed ? (
+          <div className="os-ed-sidebar-store">
+            <OsStoreContextPicker />
+          </div>
+        ) : null}
+
         <div className="os-ed-sidebar-lang">
           <OsLanguagePicker />
         </div>
@@ -77,6 +121,7 @@ export function OsEditorialSidebar({
           {modules.map((module) => {
             const Icon = module.icon;
             const badgeCount = badges?.[module.id] ?? 0;
+            const isModuleActive = activeModuleId === module.id;
             const isOpen = !collapsed && openModuleId === module.id;
             const firstHref = module.href ?? module.children[0]?.href ?? "/os";
 
@@ -85,7 +130,7 @@ export function OsEditorialSidebar({
                 <Link
                   key={module.id}
                   href={firstHref}
-                  className="os-ed-nav-link"
+                  className={`os-ed-nav-link${isModuleActive ? " is-active" : ""}`}
                   title={module.label}
                   aria-label={module.label}
                 >
@@ -94,11 +139,25 @@ export function OsEditorialSidebar({
               );
             }
 
+            if (module.href && module.children.length <= 1) {
+              return (
+                <Link
+                  key={module.id}
+                  href={module.href}
+                  className={`os-ed-nav-link${isModuleActive ? " is-active" : ""}`}
+                >
+                  <Icon size={16} />
+                  <span>{module.label}</span>
+                  {badgeCount > 0 ? <em className="os-ed-nav-count">{badgeCount}</em> : null}
+                </Link>
+              );
+            }
+
             return (
               <div className={`os-ed-nav-group${isOpen ? " is-open" : ""}`} key={module.id}>
                 <button
                   type="button"
-                  className="os-ed-nav-link"
+                  className={`os-ed-nav-link${isModuleActive && !isOpen ? " is-active" : ""}`}
                   aria-expanded={isOpen}
                   onClick={() => setOpenModuleId((current) => (current === module.id ? null : module.id))}
                 >
@@ -113,7 +172,7 @@ export function OsEditorialSidebar({
                       <Link
                         key={child.href}
                         href={child.href}
-                        className={`os-ed-nav-sublink${pathname === child.href ? " is-active" : ""}`}
+                        className={`os-ed-nav-sublink${isHrefActive(pathname, child.href) ? " is-active" : ""}`}
                       >
                         <span>{child.label}</span>
                         {child.beta ? <em className="nav-beta-badge">Beta</em> : null}
@@ -133,7 +192,7 @@ export function OsEditorialSidebar({
           <button
             type="button"
             className="os-ed-nav-link os-ed-expand-btn"
-            onClick={() => setCollapsed(false)}
+            onClick={() => toggleCollapsed(false)}
             aria-label="サイドバーを展開"
             title="サイドバーを展開"
           >

@@ -7,6 +7,25 @@
 body:has(.os-editorial-root) {
   background: #ffffff;
   color: #111827;
+  --ed-brand: #175442;
+  --ed-brand-hover: #114032;
+  --ed-ink: #111827;
+  --ed-muted: #667085;
+  --ed-line: #eaecf0;
+  --ed-line-strong: #d4d8df;
+  --ed-subtle: #f4f5f6;
+  --ed-amber: #9a540a;
+  --ed-amber-soft: #fff8eb;
+  --ed-amber-border: #f3d9a4;
+  --ed-red: #b42318;
+  --ed-red-soft: #fef2f2;
+  --ed-red-border: #f5c6c6;
+  --ed-blue: #1d5d8f;
+  --ed-blue-soft: #eff6fc;
+  --ed-blue-border: #c7dff2;
+  --ed-green: #146c4e;
+  --ed-green-soft: #eef7f3;
+  --ed-green-border: #c5dad0;
 }
 
 .os-editorial-root {
@@ -25,40 +44,68 @@ body:has(.os-editorial-root) {
   --ed-brand-soft: #f0f6f3;
   --ed-brand-border: #c5dad0;
   --ed-brand-ink: #134738;
-  --ed-amber: #a85b0c;
+  --ed-amber: #9a540a;
   --ed-amber-soft: #fff8eb;
-  --ed-amber-border: #f9dfa8;
-  --ed-blue: #0b6694;
-  --ed-blue-soft: #eef7fc;
-  --ed-blue-border: #bae0f5;
-  --ed-red: #b42828;
-  --ed-red-soft: #fdf2f2;
-  --ed-red-border: #f8cece;
+  --ed-amber-border: #f3d9a4;
+  --ed-blue: #1d5d8f;
+  --ed-blue-soft: #eff6fc;
+  --ed-blue-border: #c7dff2;
+  --ed-red: #b42318;
+  --ed-red-soft: #fef2f2;
+  --ed-red-border: #f5c6c6;
   --ed-green: #146c4e;
   --ed-green-soft: #eef7f3;
-  --ed-green-border: #c2e0d2;
+  --ed-green-border: #c5dad0;
 
-  /* Harmonize legacy OS tokens cleanly inside .os-editorial-root */
+  /* Single Source of Truth: bridge ALL legacy & module CSS variables to one palette */
   --bg: #ffffff;
   --color-bg: #ffffff;
   --panel: #ffffff;
+  --surface: #ffffff;
+  --paper: #ffffff;
+  --surface-soft: #f4f5f6;
+  --surface-alt: #f4f5f6;
   --color-surface: #ffffff;
   --color-surface-muted: #f4f5f6;
   --color-surface-subtle: #fafafa;
   --ink: #111827;
+  --text: #111827;
   --color-text: #111827;
   --muted: #667085;
+  --text-muted: #667085;
   --color-text-muted: #667085;
   --line: #eaecf0;
+  --border: #eaecf0;
   --color-border: #eaecf0;
   --color-border-strong: #d4d8df;
+  --primary: #175442;
   --green: #175442;
+  --green-dark: #114032;
   --color-brand: #175442;
   --color-brand-hover: #114032;
   --green-soft: #f0f6f3;
   --color-brand-soft: #f0f6f3;
   --color-brand-border: #c5dad0;
   --color-brand-ink: #134738;
+  --store-primary-text: #134738;
+  --store-primary-soft: #f0f6f3;
+  --store-primary-border: #c5dad0;
+  --store-success: #146c4e;
+  --store-success-soft: #eef7f3;
+  --amber: #9a540a;
+  --amber-soft: #fff8eb;
+  --warning-text: #9a540a;
+  --color-warning: #9a540a;
+  --color-warning-soft: #fff8eb;
+  --red: #b42318;
+  --danger: #b42318;
+  --red-soft: #fef2f2;
+  --color-danger: #b42318;
+  --color-danger-soft: #fef2f2;
+  --blue: #1d5d8f;
+  --blue-soft: #eff6fc;
+  --color-info: #1d5d8f;
+  --color-info-soft: #eff6fc;
   --shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
   --shadow-soft: 0 1px 2px rgba(17, 24, 39, 0.03);
   --shadow-focus: 0 0 0 3px rgba(23, 84, 66, 0.14);
@@ -257,14 +304,25 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
   letter-spacing: 0.05em;
 }
 
+/* Neutral metadata indicator under page titles (de-greened; amber only on warning) */
 .os-editorial-root .source-indicator {
+  display: inline-flex;
+  align-items: center;
   min-height: 24px;
-  padding: 0 9px;
+  padding: 0 10px;
+  border: 1px solid var(--ed-line);
   border-radius: 999px;
-  color: var(--ed-brand-ink);
-  background: var(--ed-brand-soft);
-  font-size: 11px;
+  color: var(--ed-muted);
+  background: var(--ed-subtle);
+  font-size: 11.5px;
   font-weight: 500;
+  line-height: 1.2;
+}
+
+.os-editorial-root .source-indicator.is-warning {
+  border-color: var(--ed-amber-border);
+  color: var(--ed-amber);
+  background: var(--ed-amber-soft);
 }
 
 .os-editorial-root .panel,
@@ -330,8 +388,36 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
 }
 
 /* ============================================================================
-   3. Desktop Sidebar for OS Home
+   3. Unified Desktop Shell Frame & Sidebar Across ALL /os/* Pages
+   Replaces the legacy desktop sidebar everywhere on > 1120px.
    ============================================================================ */
+
+.os-ed-frame {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  background: var(--ed-canvas);
+}
+
+.os-ed-frame-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 1121px) {
+  .os-editorial-root .shell {
+    display: block;
+    grid-template-columns: none;
+    width: 100%;
+  }
+
+  .os-editorial-root .shell > .sidebar {
+    display: none;
+  }
+}
 
 .os-ed-shell {
   display: flex;
@@ -339,6 +425,45 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
   min-height: 100dvh;
   width: 100%;
   background: var(--ed-canvas);
+}
+
+.os-ed-sidebar-store {
+  padding: 0 2px 8px;
+}
+
+.os-ed-sidebar-store .os-global-store-picker {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+}
+
+.os-ed-sidebar-store .os-global-store-picker-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ed-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.os-ed-sidebar-store .os-global-store-picker select {
+  min-height: 34px;
+  height: 34px;
+  width: 100%;
+  padding: 0 10px;
+  border: 1px solid var(--ed-line);
+  border-radius: 9px;
+  background: #ffffff;
+  color: var(--ed-ink);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.os-ed-sidebar-store .os-global-store-picker select:focus {
+  border-color: var(--ed-brand);
+  box-shadow: var(--shadow-focus);
+  outline: none;
 }
 
 .os-ed-sidebar {
@@ -1557,6 +1682,10 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
 }
 
 @media (max-width: 1120px) {
+  .os-ed-frame {
+    display: block;
+  }
+
   .os-ed-sidebar,
   .os-f1-desktop-actions,
   .os-f1-desktop-only-modules {
@@ -1575,7 +1704,9 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
     height: 44px;
   }
 
-  body:has(.os-editorial-root) .action-notice {
+  body:has(.os-editorial-root) .action-notice,
+  body:has(.os-editorial-root) .app-version-notice {
+    top: auto;
     bottom: calc(74px + env(safe-area-inset-bottom, 0px));
   }
 
@@ -2282,6 +2413,27 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
   gap: 14px 18px;
 }
 
+/* Adapt toolbar grids gracefully when redundant per-page store selector is omitted */
+.os-editorial-root .payroll-ledger-search:not(:has(.store-context-selector)) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.os-editorial-root .voucher-upload-form:not(:has(.store-context-selector)) {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+}
+
+.os-editorial-root .history-filter-row {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 240px));
+}
+
+.os-editorial-root .staff-filter-bar {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) auto;
+}
+
+.os-editorial-root .product-structured-filters {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
 /* Clean Commercial View Tabs (Single-Line Horizontal Tabs Only) */
 .os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs) {
   display: flex;
@@ -2501,16 +2653,291 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
   background: #fafafa;
 }
 
-/* Restrained Text / Danger Buttons & Status Pills */
-.os-editorial-root .status-pill {
+/* ============================================================================
+   7. Unified Typography Weight Discipline, 5-Tone Status Capsules,
+      4-Tone Inline Alerts, and Sleek Dark Ink Capsule Toasts
+   ============================================================================ */
+
+/* Strict 400 / 500 / 600 Typography Ceiling (eliminates legacy 700-950 bolds) */
+.os-editorial-root .workspace :is(h1, h2, h3, h4, strong, b) {
+  font-weight: 600;
+}
+
+.os-editorial-root .workspace :is(
+  label > span,
+  .history-filter-row span,
+  .staff-filter-bar span,
+  .payroll-ledger-search span,
+  .voucher-controls span,
+  .product-structured-filters span
+) {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ed-muted);
+}
+
+.os-editorial-root .workspace .empty-state {
+  border: 1px dashed var(--ed-line-strong);
+  border-radius: 12px;
+  background: var(--ed-sidebar);
+  color: var(--ed-muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+/* Unified 5-Tone Capsule Grammar (Neutral / Success / Warning / Danger / Info) */
+.os-editorial-root :is(.status-pill, .inventory-status, .loyalty-email-pill, .source-pill) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  padding: 2px 9px;
+  border: 1px solid transparent;
   border-radius: 999px;
-  padding: 3px 9px;
   font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+/* Default / Pending Warning */
+.os-editorial-root .status-pill,
+.os-editorial-root :is(.status-pill, .inventory-status).is-warning,
+.os-editorial-root .status-pill.is-watch {
+  background: var(--ed-amber-soft);
+  color: var(--ed-amber);
+  border-color: transparent;
+}
+
+/* Success */
+.os-editorial-root :is(.status-pill, .loyalty-email-pill, .source-pill):is(.is-active, .is-safe, .is-payment-paid, .is-sent, .tone-done, .is-working, .is-ready) {
+  background: var(--ed-green-soft);
+  color: var(--ed-green);
+  border-color: transparent;
+}
+
+/* Danger */
+.os-editorial-root :is(.status-pill, .inventory-status, .loyalty-email-pill):is(.is-critical, .is-danger, .is-payment-unpaid, .is-failed, .is-error) {
+  background: var(--ed-red-soft);
+  color: var(--ed-red);
+  border-color: transparent;
+}
+
+/* Info */
+.os-editorial-root :is(.status-pill, .loyalty-email-pill, .source-pill):is(.is-pending, .is-info, .is-os) {
+  background: var(--ed-blue-soft);
+  color: var(--ed-blue);
+  border-color: transparent;
+}
+
+/* Neutral */
+.os-editorial-root :is(.status-pill, .loyalty-email-pill):is(.is-muted, .is-unknown),
+.os-editorial-root .source-pill {
+  background: var(--ed-subtle);
+  color: var(--ed-ink-soft);
+  border-color: transparent;
+}
+
+.os-editorial-root .nav-beta-badge {
+  min-height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--ed-line);
+  border-radius: 999px;
+  background: var(--ed-subtle);
+  color: var(--ed-muted);
+  font-size: 10px;
   font-weight: 500;
 }
 
-.os-editorial-root .text-button {
+.os-editorial-root .rank-badge {
+  background: var(--ed-subtle);
+  color: var(--ed-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Unified 4-Tone Inline Alerts & Status Notices */
+.os-editorial-root :is(
+  .inline-alert,
+  .login-error,
+  .procurement-sync-alert,
+  .os-quick-drawer-message,
+  .inventory-unit-notice,
+  .inventory-unit-warning
+) {
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  box-shadow: none;
+}
+
+.os-editorial-root :is(.inline-alert, .os-quick-drawer-message) {
+  border: 1px solid var(--ed-green-border);
+  background: var(--ed-green-soft);
+  color: var(--ed-brand-ink);
+}
+
+.os-editorial-root :is(.inline-alert.is-warning, .procurement-sync-alert, .inventory-unit-warning, .os-ed-statutory-strip) {
+  border: 1px solid var(--ed-amber-border);
+  background: var(--ed-amber-soft);
+  color: var(--ed-amber);
+}
+
+.os-editorial-root .procurement-sync-alert strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ed-ink);
+}
+
+.os-editorial-root .procurement-sync-alert span {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--ed-ink-soft);
+}
+
+.os-editorial-root :is(.login-error, .menu-publish-preview-error, .menu-sync-task-error, .os-global-store-picker-error) {
+  border: 1px solid var(--ed-red-border);
+  background: var(--ed-red-soft);
+  color: var(--ed-red);
+}
+
+.os-editorial-root .inventory-unit-notice {
+  border: 1px solid var(--ed-line);
+  background: var(--ed-subtle);
+  color: var(--ed-ink-soft);
+}
+
+.os-editorial-root .menu-publish-notice {
+  padding: 8px 10px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.os-editorial-root .menu-publish-notice.is-blocker {
+  border: 1px solid var(--ed-red-border);
+  background: var(--ed-red-soft);
+  color: var(--ed-red);
+}
+
+.os-editorial-root .menu-publish-notice.is-warning {
+  border: 1px solid var(--ed-amber-border);
+  background: var(--ed-amber-soft);
+  color: var(--ed-amber);
+}
+
+.os-editorial-root :is(.timecard-import-message, .sales-import-message, .feedback-board-message, .payroll-payment-message) {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.os-editorial-root :is(.timecard-import-message, .feedback-board-message) {
+  color: var(--ed-brand-ink);
+}
+
+.os-editorial-root .sales-import-message {
+  color: var(--ed-muted);
+}
+
+.os-editorial-root .payroll-payment-message {
+  color: var(--ed-red);
+}
+
+/* Unified Dark Ink Black Capsule Toasts (Apple / Linear Commercial Restraint) */
+body:has(.os-editorial-root) .action-notice {
+  min-height: 44px;
+  padding: 8px 14px 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 12px 32px rgba(17, 24, 39, 0.24);
+}
+
+body:has(.os-editorial-root) .action-notice.is-info {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #111827;
+  color: #ffffff;
+}
+
+body:has(.os-editorial-root) .action-notice-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.16);
+  color: #34d399;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+body:has(.os-editorial-root) .action-notice.is-info .action-notice-icon {
+  background: rgba(96, 165, 250, 0.18);
+  color: #60a5fa;
+}
+
+body:has(.os-editorial-root) .action-notice button {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 15px;
+}
+
+body:has(.os-editorial-root) .action-notice button:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+body:has(.os-editorial-root) .menu-action-toast,
+body:has(.os-editorial-root) .floating-feedback-toast,
+body:has(.os-editorial-root) .app-version-notice {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 12px 32px rgba(17, 24, 39, 0.24);
+}
+
+body:has(.os-editorial-root) .menu-action-toast.is-error {
+  border-color: rgba(248, 113, 113, 0.42);
+  color: #fecaca;
+}
+
+body:has(.os-editorial-root) .menu-action-toast.is-info {
+  border-color: rgba(96, 165, 250, 0.36);
+  color: #dbeafe;
+}
+
+body:has(.os-editorial-root) .menu-action-toast-action,
+body:has(.os-editorial-root) .app-version-notice button {
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-weight: 500;
+}
+
+body:has(.os-editorial-root) .menu-action-toast-action:hover,
+body:has(.os-editorial-root) .app-version-notice button:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+body:has(.os-editorial-root) .floating-feedback-toast a {
+  color: #34d399;
+  font-weight: 500;
+}
+
+/* Restrained Text / Danger Buttons */
+.os-editorial-root .text-button {
+  border-radius: 10px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--ed-ink-soft);
 }

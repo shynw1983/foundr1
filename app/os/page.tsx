@@ -5,7 +5,6 @@ import { AlertTriangle, ChevronDown, Plus, Store, TrendingDown, TrendingUp } fro
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { NotificationMenu } from "./components/NotificationMenu";
 import { OsEditorialChart, type EditorialSeriesPoint } from "./components/OsEditorialChart";
-import { OsEditorialSidebar } from "./components/OsEditorialSidebar";
 import { canonicalNavItems, usePermittedNavModules } from "./components/OsNavList";
 import { OsLanguagePicker } from "./components/OsTranslationProvider";
 import { QuickOperationsDashboard } from "./components/QuickOperationsDashboard";
@@ -344,10 +343,6 @@ export default function Foundr1OsHome() {
     ? stores.length > 1 ? `全店舗（${stores.length}）` : (stores[0]?.name ?? "全店舗")
     : stores.find((store) => store.id === selectedStoreId)?.name ?? "対象店舗";
 
-  const sidebarBadges = useMemo(() => ({
-    orders: activePurchaseOrders.length
-  }), [activePurchaseOrders.length]);
-
   const activePeriodMeta = PERIOD_OPTIONS.find((item) => item.key === period) ?? PERIOD_OPTIONS[0];
   const canQuickActions = ["owner", "manager", "store_owner", "store_manager"].includes(role);
   const payrollAlertActionHref = ["store_owner", "store_manager"].includes(role) ? "/os/timecard/payroll" : "/os/settings";
@@ -356,8 +351,6 @@ export default function Foundr1OsHome() {
 
   return (
     <div className="os-ed-shell">
-      <OsEditorialSidebar modules={permittedNavModules} badges={sidebarBadges} />
-
       <main className="os-ed-main">
         {/* Clean Native-Style Mobile Top Bar: Logo + Centered Store Switcher + Language/Bell */}
         <header className="os-f1-mobile-topbar">
