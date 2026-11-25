@@ -173,7 +173,7 @@ export default function Foundr1OsHome() {
   const cachedEmployee = getCachedCurrentEmployee();
   const [role, setRole] = useState(() => cachedEmployee?.role ?? "");
   const permittedNavModules = usePermittedNavModules(canonicalNavItems);
-  const [selectedStoreId, setSelectedStoreId] = useState<string>("all");
+  const [selectedStoreId, setSelectedStoreId] = useState<string>("");
   const [period, setPeriod] = useState<PeriodKey>("today");
   const [overview, setOverview] = useState<HomeOverviewData | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
@@ -196,11 +196,14 @@ export default function Foundr1OsHome() {
     setOverviewLoading(true);
     const params = new URLSearchParams();
     params.set("period", nextPeriod);
-    if (storeId && storeId !== "all") params.set("storeId", storeId);
+    if (storeId) params.set("storeId", storeId);
     const response = await fetch(`/api/os/home-overview?${params.toString()}`, { cache: "no-store" }).catch(() => null);
     if (response?.ok) {
       const body = (await response.json()) as HomeOverviewData;
       setOverview(body);
+      if (!storeId && body.selectedStoreId) {
+        setSelectedStoreId(body.selectedStoreId);
+      }
     }
     setOverviewLoading(false);
   }, []);
@@ -208,6 +211,17 @@ export default function Foundr1OsHome() {
   useEffect(() => {
     void loadOverview(selectedStoreId, period);
   }, [loadOverview, selectedStoreId, period]);
+
+  const handleStoreChange = useCallback((nextStoreId: string) => {
+    setSelectedStoreId(nextStoreId);
+    if (nextStoreId && nextStoreId !== "all" && (role === "owner" || role === "manager")) {
+      void fetch("/api/os/store-context", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeId: nextStoreId })
+      }).catch(() => null);
+    }
+  }, [role]);
 
   useEffect(() => {
     let isMounted = true;
@@ -326,7 +340,7 @@ export default function Foundr1OsHome() {
     () => Math.max(1, ...stores.map((store) => store.todaySales)),
     [stores]
   );
-  const activeStoreName = selectedStoreId === "all"
+  const activeStoreName = !selectedStoreId || selectedStoreId === "all"
     ? stores.length > 1 ? `全店舗（${stores.length}）` : (stores[0]?.name ?? "全店舗")
     : stores.find((store) => store.id === selectedStoreId)?.name ?? "対象店舗";
 
@@ -357,8 +371,8 @@ export default function Foundr1OsHome() {
                 <Store size={14} aria-hidden="true" />
                 <select
                   aria-label="対象店舗"
-                  value={selectedStoreId}
-                  onChange={(event) => setSelectedStoreId(event.target.value)}
+                  value={selectedStoreId || "all"}
+                  onChange={(event) => handleStoreChange(event.target.value)}
                 >
                   {overview?.canSelectAllStores !== false ? (
                     <option value="all">全店舗（{stores.length}）</option>
@@ -636,7 +650,7 @@ export default function Foundr1OsHome() {
                         type="button"
                         key={store.id}
                         className={`os-ed-store-item${isSelected ? " is-selected" : ""}`}
-                        onClick={() => setSelectedStoreId(isSelected && overview?.canSelectAllStores ? "all" : store.id)}
+                        onClick={() => handleStoreChange(isSelected && overview?.canSelectAllStores ? "all" : store.id)}
                       >
                         <div className="os-ed-store-top">
                           <strong data-i18n-ignore>{store.name}</strong>

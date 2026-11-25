@@ -1,4 +1,5 @@
-import { requireOsSession } from "../../../../lib/api-auth";
+import { cookies } from "next/headers";
+import { osStoreContextCookieName, requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { getStoreReceptionState } from "../../../../lib/store-business-hours";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
@@ -246,23 +247,50 @@ export async function GET(request: Request) {
   }
 
   const access = await getStoreOrderAccess(session);
+  const isHqRole = session.role === "owner" || session.role === "manager";
+  const allActiveStores = isHqRole
+    ? (await sql`
+        select id::text, name, business_hours as "businessHours"
+        from stores
+        where status = 'active'
+        order by name
+      `) as Array<{ id: string; name: string; businessHours: unknown }>
+    : access.stores;
+
+  const allowedStoreIdSet = new Set(allActiveStores.map((store) => store.id));
   const url = new URL(request.url);
   const requestedStoreId = url.searchParams.get("storeId")?.trim() ?? "";
   const period = parsePeriod(url.searchParams.get("period"));
   const bounds = computePeriodBounds(period);
 
+  const cookieStore = await cookies();
+  const contextStoreId = String(cookieStore.get(osStoreContextCookieName)?.value ?? "").trim();
+
   let storeFilter: string | null = null;
-  if (requestedStoreId && requestedStoreId !== "all") {
-    storeFilter = getScopedStoreFilter(access, requestedStoreId);
-    if (storeFilter === "__forbidden__") {
-      return Response.json({ error: "権限がありません。" }, { status: 403 });
+  if (requestedStoreId === "all") {
+    storeFilter = !isHqRole && allActiveStores.length === 1 ? (allActiveStores[0]?.id ?? null) : null;
+  } else if (requestedStoreId) {
+    if (isHqRole) {
+      if (!allowedStoreIdSet.has(requestedStoreId)) {
+        return Response.json({ error: "権限がありません。" }, { status: 403 });
+      }
+      storeFilter = requestedStoreId;
+    } else {
+      storeFilter = getScopedStoreFilter(access, requestedStoreId);
+      if (storeFilter === "__forbidden__") {
+        return Response.json({ error: "権限がありません。" }, { status: 403 });
+      }
     }
-  } else if (!access.allStores && access.stores.length === 1) {
-    storeFilter = access.stores[0]?.id ?? null;
+  } else if (isHqRole && contextStoreId && allowedStoreIdSet.has(contextStoreId)) {
+    storeFilter = contextStoreId;
+  } else if (!isHqRole && allActiveStores.length === 1) {
+    storeFilter = allActiveStores[0]?.id ?? null;
   }
 
-  const accessibleStoreIds = access.stores.map((store) => store.id);
+  const accessibleStoreIds = allActiveStores.map((store) => store.id);
   const canViewSalesStats = access.canViewSalesStats;
+  const effectiveAllStores = isHqRole || access.allStores;
+  const effectiveStoreIds = effectiveAllStores ? [] : accessibleStoreIds;
 
   const [seriesRows, summaryRows, storeSalesRows, punchRows, operationRows] = await Promise.all([
     canViewSalesStats
@@ -275,7 +303,7 @@ export async function GET(request: Request) {
                 amount
               from store_customer_orders
               where payment_status in ('paid', 'partial_refunded')
-                and (${access.allStores} or store_id::text = any(${access.storeIds}))
+                and (${effectiveAllStores} or store_id::text = any(${effectiveStoreIds}))
                 and (${storeFilter}::text is null or store_id::text = ${storeFilter})
                 and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date in (
                   ${bounds.currentStart}::date,
@@ -299,7 +327,7 @@ export async function GET(request: Request) {
                 amount
               from store_customer_orders
               where payment_status in ('paid', 'partial_refunded')
-                and (${access.allStores} or store_id::text = any(${access.storeIds}))
+                and (${effectiveAllStores} or store_id::text = any(${effectiveStoreIds}))
                 and (${storeFilter}::text is null or store_id::text = ${storeFilter})
                 and (
                   (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date
@@ -366,7 +394,7 @@ export async function GET(request: Request) {
                 and order_source not in ('store_pos', 'table_qr', 'uber_eats', 'rocket_now', 'demae_can', 'wolt')
             )::int as "webOrders"
           from store_customer_orders
-          where (${access.allStores} or store_id::text = any(${access.storeIds}))
+          where (${effectiveAllStores} or store_id::text = any(${effectiveStoreIds}))
             and (${storeFilter}::text is null or store_id::text = ${storeFilter})
             and (
               (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date between ${bounds.currentStart}::date and ${bounds.currentEnd}::date
@@ -471,7 +499,7 @@ export async function GET(request: Request) {
     operationByStore.set(String(row.storeId), row);
   }
 
-  const stores: StoreCondition[] = access.stores.map((store) => {
+  const stores: StoreCondition[] = allActiveStores.map((store) => {
     const sales = salesByStore.get(store.id);
     const staff = staffByStore.get(store.id);
     const op = operationByStore.get(store.id);
@@ -507,7 +535,7 @@ export async function GET(request: Request) {
 
   return Response.json({
     canViewSalesStats,
-    canSelectAllStores: access.allStores || access.stores.length > 1,
+    canSelectAllStores: effectiveAllStores || allActiveStores.length > 1,
     selectedStoreId: storeFilter ?? "all",
     period,
     granularity: bounds.granularity,
