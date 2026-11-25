@@ -423,8 +423,8 @@ export default function Foundr1OsHome() {
                   <Store size={14} aria-hidden="true" />
                   <select
                     aria-label="対象店舗"
-                    value={selectedStoreId}
-                    onChange={(event) => setSelectedStoreId(event.target.value)}
+                    value={selectedStoreId || "all"}
+                    onChange={(event) => handleStoreChange(event.target.value)}
                   >
                     {overview?.canSelectAllStores !== false ? (
                       <option value="all">全店舗（{stores.length}）</option>
