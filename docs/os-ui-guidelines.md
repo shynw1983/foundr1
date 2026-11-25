@@ -21,3 +21,14 @@ When editing UI:
 - The OS navigation/sidebar must always keep language switching available near the top of the navigation, including collapsed desktop sidebars and mobile navigation. In collapsed desktop sidebars, show only a globe icon for language switching; when the sidebar is expanded, show the full language selector/name.
 - Keep sidebar active states minimal. Do not add decorative accent lines or extra highlight colors; use only the restrained active background/text treatment.
 - Do not let native form controls fall back to browser/system blue. Checkboxes and compact selectors should use the active workbench theme and stable compact dimensions. Broad input styles must not accidentally stretch checkboxes into large blocks.
+
+## OS Commercial UI Architecture (2026-11-25)
+
+All `/os/*` routes inherit the scoped editorial commercial layer mounted in `app/os/layout.tsx` via `.os-editorial-root` (`app/os/os-editorial.css`). Keep every OS-only rule strictly under `.os-editorial-root` so `/store`, `/staff`, `/member`, `/t/[token]`, and TV display screens are never affected.
+
+- **Palette restraint**: Keep all canvas, sidebar, card, input, pill, and border surfaces in crisp achromatic neutrals (`#ffffff`, `#fafafa`, `#f4f5f6`, `#eff1f3`, `#eaecf0`, `#111827`, `#667085`). Reserve Foundr1 deep pine (`#175442`) strictly for high-signal focal points: active period/filter pills, primary CTA buttons, and chart curves. Do not tint neutral surfaces, bottom tab pills, quick-action cards, or floating feedback buttons green.
+- **Brand identity**: Preserve the original Foundr1 OS mark (`/icons/foundr1-os-512.png` at `166%` crop, locked `1:1` aspect ratio `34×34px`) identically across `/os` home and all `/os/*` subpage headers so proportions never jump between routes.
+- **Navigation architecture**:
+  - Desktop (`> 1120px`): Quiet `#fafafa` collapsible left sidebar (`OsEditorialSidebar` on `/os` home; harmonized `.sidebar` on subpages) with the language switcher near the top (globe icon only when collapsed) and restrained active pills without decorative left accent stripes.
+  - Mobile and compact tablet (`<= 1120px`): Clean single-row top bar (Foundr1 mark + centered pill store switcher + compact language/notification controls) paired with the persistent bottom 5-Tab navigation bar (`OsMobileBottomNav`: `ホーム` / `発注・購入` / `売上・POS` / `勤怠` / `その他`) and its native full-screen `その他` directory sheet. Keep bottom safe-area padding (`92px`) on workspaces and lift floating buttons above the tab bar.
+- **Subpage commercial grammar**: Use borderless soft neutral pills (`#f4f5f6`, active `#175442`) for filter chips and queue filters; crisp underline or segmented tabs for module view switchers; sleek `#f4f5f6` search/input controls that transition to `#ffffff` on focus; hairline data tables with `tabular-nums` and quiet `#fafafa` headers; and rounded `14px–16px` flat white containers (`1px solid #eaecf0`, zero heavy drop shadows).

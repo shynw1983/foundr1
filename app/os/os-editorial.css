@@ -2033,3 +2033,344 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
     flex: 0 0 auto;
   }
 }
+
+/* ============================================================================
+   6. Phase 2 — System-Wide /os/* Subpage Commercial Polish
+   Elevates Orders, Procurement, History, Vouchers, Analytics, Timecard,
+   Products, Menus, POS, Loyalty, Stores, and Settings in one clean layer.
+   ============================================================================ */
+
+/* Quiet Workspace Typography & Spacing */
+.os-editorial-root .shell .workspace {
+  padding: 24px 32px 56px;
+  gap: 18px;
+}
+
+.os-editorial-root .shell .topbar {
+  margin-bottom: 4px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ed-line);
+}
+
+.os-editorial-root .shell .topbar h2 {
+  font-size: clamp(20px, 2vw, 25px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ed-ink);
+}
+
+/* Sleek Search Boxes & Form Controls */
+.os-editorial-root .workspace .search-box {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--ed-subtle);
+  color: var(--ed-muted);
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.os-editorial-root .workspace .search-box:focus-within {
+  background: #ffffff;
+  border-color: var(--ed-brand-border);
+  box-shadow: var(--shadow-focus);
+  color: var(--ed-ink);
+}
+
+.os-editorial-root .workspace .search-box input {
+  background: transparent;
+  border: 0;
+  color: var(--ed-ink);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.os-editorial-root .workspace :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="file"]),
+  select,
+  textarea
+) {
+  border: 1px solid var(--ed-line);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--ed-ink);
+  font-weight: 400;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.os-editorial-root .workspace :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="file"]),
+  select,
+  textarea
+):focus {
+  border-color: var(--ed-brand);
+  box-shadow: var(--shadow-focus);
+  outline: none;
+}
+
+/* Clean Commercial View Tabs (History, Timecard, Settings, Shift Period) */
+.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs, .settings-section-tabs, .shift-period-switcher) {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 6px;
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--ed-line);
+  scrollbar-width: none;
+}
+
+.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs, .settings-section-tabs, .shift-period-switcher)::-webkit-scrollbar {
+  display: none;
+}
+
+.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs, .settings-section-tabs, .shift-period-switcher) :is(button, a) {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ed-muted);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs, .settings-section-tabs, .shift-period-switcher) :is(button, a):hover {
+  background: var(--ed-subtle);
+  color: var(--ed-ink);
+}
+
+.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs, .settings-section-tabs, .shift-period-switcher) :is(button.is-active, a.is-active) {
+  background: var(--ed-ink);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* Porcelain Filter Chips, Queue Filters & Slot Buttons */
+.os-editorial-root :is(.queue-filter, .filter-chip, .slot-button) {
+  min-height: 34px;
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ed-subtle);
+  color: var(--ed-ink-soft);
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: none;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.os-editorial-root :is(.queue-filter, .filter-chip, .slot-button):hover:not(:disabled) {
+  background: var(--ed-muted-surface);
+  color: var(--ed-ink);
+}
+
+.os-editorial-root :is(.queue-filter.is-active, .filter-chip.is-active, .slot-button.is-active) {
+  background: var(--ed-brand);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.os-editorial-root :is(.queue-filter.is-active, .slot-button.is-active) :is(strong, small, span) {
+  color: inherit;
+}
+
+/* Flat Crisp Panels, Metric Cards & Product Picker Cards */
+.os-editorial-root .panel-title h3 {
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--ed-ink);
+}
+
+.os-editorial-root .metric-card {
+  padding: 18px;
+  border: 1px solid var(--ed-line);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.os-editorial-root .metric-card strong {
+  font-size: clamp(22px, 2.2vw, 28px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ed-ink);
+}
+
+.os-editorial-root .order-product-card {
+  border: 1px solid var(--ed-line);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.os-editorial-root .order-product-card:hover {
+  border-color: var(--ed-line-strong);
+  background: var(--ed-sidebar);
+}
+
+.os-editorial-root .order-product-card.is-selected {
+  border-color: var(--ed-brand);
+  background: var(--ed-brand-soft);
+}
+
+/* Hairline Data Tables */
+.os-editorial-root .workspace table {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.os-editorial-root .workspace thead th {
+  padding: 10px 12px;
+  background: var(--ed-sidebar);
+  color: var(--ed-muted);
+  font-size: 12px;
+  font-weight: 500;
+  border-top: 1px solid var(--ed-line);
+  border-bottom: 1px solid var(--ed-line);
+  white-space: nowrap;
+}
+
+.os-editorial-root .workspace tbody td {
+  padding: 12px;
+  border-bottom: 1px solid var(--ed-line);
+  color: var(--ed-ink);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.os-editorial-root .workspace tbody tr:hover {
+  background: #fafafa;
+}
+
+/* Restrained Text / Danger Buttons & Status Pills */
+.os-editorial-root .status-pill {
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.os-editorial-root .text-button {
+  border-radius: 999px;
+  font-weight: 500;
+  color: var(--ed-ink-soft);
+}
+
+.os-editorial-root .text-button:hover:not(:disabled) {
+  background: var(--ed-subtle);
+  color: var(--ed-ink);
+}
+
+.os-editorial-root .danger-button,
+.os-editorial-root .danger-text-button {
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+/* Refined Commercial Modals */
+.os-editorial-root .modal-backdrop {
+  background: rgba(17, 24, 39, 0.36);
+  backdrop-filter: blur(4px);
+}
+
+.os-editorial-root .edit-modal {
+  border: 1px solid var(--ed-line);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(17, 24, 39, 0.16);
+}
+
+.os-editorial-root .modal-heading {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ed-line);
+}
+
+.os-editorial-root .modal-actions {
+  padding-top: 14px;
+  border-top: 1px solid var(--ed-line);
+}
+
+/* Compact Mobile Subpage Workspace Refinements */
+@media (max-width: 1120px) {
+  .os-editorial-root .shell .workspace {
+    padding: 16px 16px calc(92px + env(safe-area-inset-bottom, 0px));
+    gap: 14px;
+  }
+
+  .os-editorial-root .shell .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding-bottom: 12px;
+  }
+
+  .os-editorial-root .shell .topbar-actions {
+    justify-content: flex-start;
+  }
+
+  .os-editorial-root .shell .topbar-actions .search-box {
+    flex: 1 1 200px;
+  }
+
+  /* Subpage mobile header: hide duplicate hamburger since bottom 5-Tab + その他 is always present */
+  .os-editorial-root .shell .sidebar > .mobile-nav-actions {
+    display: none;
+  }
+
+  .os-editorial-root .shell .sidebar {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px 10px;
+    min-height: 54px;
+    padding: 8px 14px;
+  }
+
+  .os-editorial-root .shell .sidebar > .brand-block {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .os-editorial-root .shell .sidebar > .brand-block > div:last-child {
+    display: none;
+  }
+
+  .os-editorial-root .shell .sidebar .mobile-store-context:has(> .os-global-store-picker) {
+    grid-column: 2;
+    grid-row: 1;
+    width: auto;
+    justify-self: center;
+    max-width: 100%;
+  }
+
+  .os-editorial-root .shell .sidebar .mobile-store-context .os-global-store-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: auto;
+    max-width: 100%;
+    padding: 0;
+    border-top: 0;
+  }
+
+  .os-editorial-root .shell .sidebar .mobile-store-context .os-global-store-picker-label {
+    display: none;
+  }
+
+  .os-editorial-root .shell .sidebar .mobile-store-context .os-global-store-picker select {
+    min-height: 34px;
+    height: 34px;
+    padding: 0 28px 0 12px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--ed-subtle);
+    color: var(--ed-ink);
+    font-size: 13px;
+    font-weight: 500;
+  }
+}
