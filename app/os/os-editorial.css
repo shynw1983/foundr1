@@ -283,10 +283,17 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
 }
 
 .os-editorial-root .primary-button {
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 15px;
+  border-radius: 10px;
   background: var(--ed-brand);
   color: #ffffff;
+  font-size: 13px;
   font-weight: 500;
+  line-height: 1.2;
   box-shadow: none;
 }
 
@@ -295,16 +302,24 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
 }
 
 .os-editorial-root .secondary-button {
-  border: 0;
-  border-radius: 999px;
-  background: var(--ed-muted-surface);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 15px;
+  border: 1px solid var(--ed-line);
+  border-radius: 10px;
+  background: var(--ed-subtle);
   color: var(--ed-ink);
+  font-size: 13px;
   font-weight: 500;
+  line-height: 1.2;
   box-shadow: none;
 }
 
 .os-editorial-root .secondary-button:hover:not(:disabled) {
-  background: #e3eae7;
+  border-color: var(--ed-line-strong);
+  background: var(--ed-muted-surface);
   color: var(--ed-ink);
 }
 
@@ -1548,18 +1563,29 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
     display: none;
   }
 
-  /* Ensure floating feedback button sits cleanly above the bottom 5-Tab bar */
-  .floating-feedback-button {
-    bottom: calc(74px + env(safe-area-inset-bottom, 0px)) !important;
+  /* Ensure floating feedback button and toasts sit cleanly above the bottom 5-Tab bar */
+  body:has(.os-editorial-root) .floating-feedback {
+    right: 14px;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    z-index: 43;
   }
 
-  /* Clean 1-row Mobile Top Bar on OS Home */
+  body:has(.os-editorial-root) .floating-feedback-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  body:has(.os-editorial-root) .action-notice {
+    bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Clean 1-row Symmetric Mobile Top Bar on OS Home (Logo left · Store dead-center · Actions right) */
   .os-f1-mobile-topbar {
     position: sticky;
     top: 0;
     z-index: 35;
     display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(44px, 1fr) minmax(0, auto) minmax(44px, 1fr);
     align-items: center;
     gap: 8px;
     min-height: 54px;
@@ -1672,121 +1698,6 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
   .os-ed-split {
     grid-template-columns: minmax(0, 1fr);
     gap: 24px;
-  }
-
-  /* Unified Compact Subpage Header (.shell .sidebar) so subpages feel native too */
-  .os-editorial-root .shell .sidebar {
-    position: sticky;
-    top: 0;
-    z-index: 35;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto auto;
-    align-items: center;
-    align-content: start;
-    height: auto;
-    max-height: none;
-    gap: 8px 12px;
-    padding: 8px 14px;
-    background: rgba(255, 255, 255, 0.94);
-    backdrop-filter: blur(14px);
-    border-right: 0;
-    border-bottom: 1px solid var(--ed-line);
-    box-shadow: none;
-    overflow: visible;
-  }
-
-  .os-editorial-root .shell .sidebar > .brand-block {
-    grid-column: 1;
-    grid-row: 1;
-    min-width: 0;
-    margin: 0;
-  }
-
-  .os-editorial-root .shell .sidebar > .brand-block .eyebrow {
-    display: none;
-  }
-
-  .os-editorial-root .shell .sidebar > .mobile-nav-actions {
-    grid-column: 2;
-    grid-row: 1;
-    display: flex;
-    align-items: center;
-    margin: 0;
-  }
-
-  .os-editorial-root .shell .sidebar .mobile-nav-menu {
-    position: static;
-    display: block;
-    width: auto;
-  }
-
-  .os-editorial-root .shell .sidebar .mobile-nav-menu summary {
-    display: inline-grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-    min-height: 36px;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    background: var(--ed-subtle);
-    color: var(--ed-ink);
-    cursor: pointer;
-  }
-
-  .os-editorial-root .shell .sidebar .mobile-nav-menu summary .hamburger-button {
-    display: inline-grid;
-    place-items: center;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    box-shadow: none;
-  }
-
-  .os-editorial-root .shell .sidebar .mobile-nav-menu-label {
-    display: none;
-  }
-
-  .os-editorial-root .shell .sidebar .mobile-store-context:has(> .os-global-store-picker) {
-    display: block;
-    grid-column: 1 / -1;
-    grid-row: 2;
-    width: 100%;
-    min-width: 0;
-    margin: 0;
-  }
-
-  .os-editorial-root .shell .sidebar .mobile-store-context .os-global-store-picker {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding-top: 8px;
-    border-top: 1px solid var(--ed-line);
-  }
-
-  .os-editorial-root .shell .sidebar .mobile-store-context .os-global-store-picker-label {
-    color: var(--ed-muted);
-    font-size: 11.5px;
-    font-weight: 500;
-  }
-
-  .os-editorial-root .shell .sidebar .mobile-store-context .os-global-store-picker select {
-    min-height: 34px;
-    height: 34px;
-    padding: 0 28px 0 10px;
-    border: 0;
-    border-radius: 999px;
-    background: var(--ed-subtle);
-    color: var(--ed-ink);
-    font-size: 13px;
-    font-weight: 500;
-  }
-
-  .os-editorial-root .shell .workspace {
-    padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
   }
 
   /* Bottom 5-Tab Bar (Foundr1 Deep Green Active Pill) */
@@ -2035,19 +1946,27 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
 }
 
 /* ============================================================================
-   6. Phase 2 — System-Wide /os/* Subpage Commercial Polish
+   6. Phase 2 — System-Wide /os/* Subpage Commercial Polish & OCD Alignment
    Elevates Orders, Procurement, History, Vouchers, Analytics, Timecard,
-   Products, Menus, POS, Loyalty, Stores, and Settings in one clean layer.
+   Products, Menus, POS, Loyalty, Stores, and Settings with strict vertical
+   rhythm, level control baselines, neutral surfaces, and centered mobile bars.
    ============================================================================ */
 
-/* Quiet Workspace Typography & Spacing */
+/* Quiet Workspace Typography & Strict Uniform Vertical Rhythm */
 .os-editorial-root .shell .workspace {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   padding: 24px 32px 56px;
-  gap: 18px;
+  gap: 20px;
+}
+
+.os-editorial-root .shell .workspace > :not(.modal-backdrop):not(.action-notice) {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .os-editorial-root .shell .topbar {
-  margin-bottom: 4px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--ed-line);
 }
@@ -2059,9 +1978,243 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
   color: var(--ed-ink);
 }
 
-/* Sleek Search Boxes & Form Controls */
+.os-editorial-root .panel {
+  padding: 18px 20px;
+}
+
+.os-editorial-root .panel-title {
+  align-items: center;
+  gap: 12px 16px;
+  margin-bottom: 14px;
+}
+
+.os-editorial-root .panel-title > div > p {
+  margin: 4px 0 0;
+}
+
+/* Remove legacy negative margins that caused uneven gaps */
+.os-editorial-root .queue-filter-bar {
+  margin: 0 0 14px;
+  align-items: center;
+}
+
+.os-editorial-root .procurement-sync-alert,
+.os-editorial-root .store-geocode-message,
+.os-editorial-root .competitor-source-form > p {
+  margin-top: 0;
+}
+
+.os-editorial-root .store-management-actions {
+  margin: 0 0 12px;
+  align-items: center;
+}
+
+/* Neutralize Legacy Mint-Green .store-context-selector Boxes Across All OS Pages */
+.os-editorial-root .store-context-selector,
+.os-editorial-root .store-context-selector.is-os,
+.os-editorial-root .pos-admin-toolbar label.store-context-selector,
+.os-editorial-root .timecard-store-select label.store-context-selector,
+.os-editorial-root .store-menu-controls label.store-context-selector,
+.os-editorial-root .voucher-upload-form label.store-context-selector,
+.os-editorial-root .store-stats-heading label.store-context-selector {
+  display: grid;
+  gap: 6px;
+  min-width: min(260px, 100%);
+  padding: 12px 14px;
+  border: 1px solid var(--ed-line);
+  border-radius: 12px;
+  background: var(--ed-sidebar);
+  box-shadow: none;
+}
+
+.os-editorial-root .store-context-selector > span,
+.os-editorial-root .pos-admin-toolbar label.store-context-selector > span,
+.os-editorial-root .timecard-store-select label.store-context-selector > span,
+.os-editorial-root .store-menu-controls label.store-context-selector > span,
+.os-editorial-root .voucher-upload-form label.store-context-selector > span {
+  color: var(--ed-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.os-editorial-root .store-context-selector > strong {
+  color: var(--ed-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.os-editorial-root .store-context-selector > small {
+  color: var(--ed-faint);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+
+.os-editorial-root .store-context-selector select,
+.os-editorial-root .timecard-toolbar .store-context-selector select,
+.os-editorial-root .timecard-store-select .store-context-selector select,
+.os-editorial-root .store-menu-controls .store-context-selector select,
+.os-editorial-root .voucher-upload-form .store-context-selector select {
+  min-height: 38px;
+  height: 38px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 30px 0 12px;
+  border: 1px solid var(--ed-line-strong);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--ed-ink);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+/* Compact inline context selector: borderless aligned form field matching sibling controls */
+.os-editorial-root .store-context-selector.is-compact,
+.os-editorial-root .store-context-selector.is-os.is-compact,
+.os-editorial-root .voucher-upload-form label.store-context-selector.is-compact,
+.os-editorial-root .timecard-toolbar label.store-context-selector.is-compact,
+.os-editorial-root .payroll-ledger-search label.store-context-selector.is-compact {
+  min-width: min(196px, 100%);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  gap: 5px;
+}
+
+.os-editorial-root .voucher-upload-form label.store-context-selector.is-compact,
+.os-editorial-root .payroll-ledger-search label.store-context-selector.is-compact {
+  min-width: 0;
+}
+
+/* Store Business Hours & Disclosures Polish (Schedule Page) */
+.os-editorial-root #store-business-hours {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.os-editorial-root #store-business-hours > div:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.os-editorial-root #store-business-hours > div:first-child h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--ed-ink);
+  line-height: 38px;
+}
+
+.os-editorial-root #store-business-hours .panel > details {
+  padding: 10px 14px;
+  border: 1px solid var(--ed-line);
+  border-radius: 10px;
+  background: var(--ed-sidebar);
+}
+
+.os-editorial-root #store-business-hours .panel > details > summary {
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ed-ink);
+  line-height: 1.4;
+}
+
+.os-editorial-root #store-business-hours .panel > details[open] > summary {
+  margin-bottom: 12px;
+}
+
+.os-editorial-root #google-business-settings {
+  border: 1px solid var(--ed-line);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 0 20px;
+}
+
+.os-editorial-root #google-business-settings > summary {
+  padding: 14px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ed-ink);
+  cursor: pointer;
+}
+
+.os-editorial-root #google-business-settings > .panel {
+  border: 0;
+  border-radius: 0;
+  padding: 4px 0 18px;
+  border-top: 1px solid var(--ed-line);
+}
+
+/* Neutralize Legacy Pale-Blue (#f8fbff) Form/Filter Surfaces */
+.os-editorial-root :is(
+  .management-form,
+  .settings-field,
+  .staff-filter-bar,
+  .payroll-ledger-search,
+  .staff-payroll-guide,
+  .staff-deduction-section,
+  .staff-lifecycle-header,
+  .sales-source-brand-group,
+  .menu-item-button,
+  .menu-rule-card,
+  .menu-option-form,
+  .store-next-shift-block,
+  .settings-tax-table-list article,
+  .statutory-schedule-list article,
+  .procedure-reference-grid article,
+  .procedure-action-card
+) {
+  background: var(--ed-sidebar);
+  border-color: var(--ed-line);
+  border-radius: 12px;
+}
+
+.os-editorial-root .shift-grid .shift-cost-cell {
+  background: var(--ed-sidebar);
+}
+
+/* Sleek Search Boxes & Uniform 38px Form Controls */
+.os-editorial-root .workspace :where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="file"]),
+  select,
+  textarea
+) {
+  border: 1px solid var(--ed-line-strong);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--ed-ink);
+  font-weight: 400;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.os-editorial-root .workspace :where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="file"]),
+  select
+) {
+  min-height: 38px;
+}
+
+.os-editorial-root .workspace :where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="file"]),
+  select,
+  textarea
+):focus {
+  border-color: var(--ed-brand);
+  box-shadow: var(--shadow-focus);
+  outline: none;
+}
+
 .os-editorial-root .workspace .search-box {
   min-height: 38px;
+  height: 38px;
   padding: 0 12px;
   border: 1px solid transparent;
   border-radius: 999px;
@@ -2078,53 +2231,78 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
 }
 
 .os-editorial-root .workspace .search-box input {
-  background: transparent;
+  min-height: 0;
+  height: auto;
   border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   color: var(--ed-ink);
   font-size: 13px;
   font-weight: 400;
 }
 
-.os-editorial-root .workspace :is(
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="file"]),
-  select,
-  textarea
-) {
-  border: 1px solid var(--ed-line);
+.os-editorial-root .workspace .search-box input:focus {
+  border: 0;
+  box-shadow: none;
+}
+
+.os-editorial-root .timecard-month-picker,
+.os-editorial-root .timecard-month-today {
+  min-height: 38px;
+  height: 38px;
+  border-color: var(--ed-line-strong);
   border-radius: 10px;
-  background: #ffffff;
-  color: var(--ed-ink);
-  font-weight: 400;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
-.os-editorial-root .workspace :is(
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="file"]),
-  select,
-  textarea
-):focus {
-  border-color: var(--ed-brand);
-  box-shadow: var(--shadow-focus);
-  outline: none;
+.os-editorial-root .timecard-month-picker {
+  width: 38px;
 }
 
-/* Clean Commercial View Tabs (History, Timecard, Settings, Shift Period) */
-.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs, .settings-section-tabs, .shift-period-switcher) {
+.os-editorial-root .timecard-month-picker input {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+/* Uniform Alignment on Horizontal Toolbars & Filter Rows */
+.os-editorial-root :is(.payroll-ledger-search, .voucher-upload-form, .staff-filter-bar, .history-filter-row, .product-structured-filters) {
+  align-items: end;
+}
+
+.os-editorial-root :is(.payroll-ledger-search, .voucher-upload-form, .staff-filter-bar) :is(select, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), .primary-button, .secondary-button) {
+  min-height: 38px;
+  height: 38px;
+}
+
+.os-editorial-root .pos-admin-toolbar {
+  align-items: center;
+  padding: 16px 18px;
+  gap: 14px 18px;
+}
+
+/* Clean Commercial View Tabs (Single-Line Horizontal Tabs Only) */
+.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs) {
   display: flex;
   flex-wrap: nowrap;
+  align-items: center;
   overflow-x: auto;
   gap: 6px;
-  padding: 2px 0 10px;
+  padding: 2px 0 12px;
   border-bottom: 1px solid var(--ed-line);
   scrollbar-width: none;
 }
 
-.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs, .settings-section-tabs, .shift-period-switcher)::-webkit-scrollbar {
+.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs)::-webkit-scrollbar {
   display: none;
 }
 
-.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs, .settings-section-tabs, .shift-period-switcher) :is(button, a) {
+.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs) :is(button, a) {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 36px;
   padding: 0 14px;
   border: 0;
@@ -2138,16 +2316,90 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
   transition: background 120ms ease, color 120ms ease;
 }
 
-.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs, .settings-section-tabs, .shift-period-switcher) :is(button, a):hover {
+.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs) :is(button, a):hover {
   background: var(--ed-subtle);
   color: var(--ed-ink);
 }
 
-.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs, .settings-section-tabs, .shift-period-switcher) :is(button.is-active, a.is-active) {
+.os-editorial-root :is(.history-view-tabs, .timecard-view-tabs, .timecard-subtabs) :is(button.is-active, a.is-active) {
   background: var(--ed-ink);
   color: #ffffff;
   border-color: transparent;
   box-shadow: none;
+}
+
+/* Precision 3-Column Segmented Control (.shift-period-switcher) */
+.os-editorial-root .shift-period-switcher {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--ed-line);
+  border-radius: 12px;
+  background: var(--ed-subtle);
+}
+
+.os-editorial-root .shift-period-switcher button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ed-muted);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.os-editorial-root .shift-period-switcher button:hover {
+  color: var(--ed-ink);
+}
+
+.os-editorial-root .shift-period-switcher button.is-active {
+  background: #ffffff;
+  color: var(--ed-ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.08);
+}
+
+/* Clean 2-Line Segmented Card Tabs (.settings-section-tabs) */
+.os-editorial-root .settings-section-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.os-editorial-root .settings-section-tabs button {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-height: 58px;
+  padding: 10px 14px;
+  border: 1px solid var(--ed-line);
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--ed-ink-soft);
+  text-align: left;
+  box-shadow: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.os-editorial-root .settings-section-tabs button:hover {
+  border-color: var(--ed-line-strong);
+  background: var(--ed-sidebar);
+}
+
+.os-editorial-root .settings-section-tabs button.is-active {
+  border-color: var(--ed-brand);
+  background: var(--ed-brand-soft);
+  color: var(--ed-brand-ink);
+}
+
+.os-editorial-root .settings-section-tabs button.is-active span {
+  color: var(--ed-brand-ink);
 }
 
 /* Porcelain Filter Chips, Queue Filters & Slot Buttons */
@@ -2270,7 +2522,10 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
 
 .os-editorial-root .danger-button,
 .os-editorial-root .danger-text-button {
-  border-radius: 999px;
+  min-height: 38px;
+  padding: 0 15px;
+  border-radius: 10px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -2297,18 +2552,30 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
   border-top: 1px solid var(--ed-line);
 }
 
-/* Compact Mobile Subpage Workspace Refinements */
+/* Compact Mobile & Tablet Subpage Workspace Refinements */
 @media (max-width: 1120px) {
   .os-editorial-root .shell .workspace {
     padding: 16px 16px calc(92px + env(safe-area-inset-bottom, 0px));
-    gap: 14px;
+    gap: 16px;
+  }
+
+  .os-editorial-root .panel {
+    padding: 16px;
+  }
+
+  .os-editorial-root #google-business-settings {
+    padding: 0 16px;
+  }
+
+  .os-editorial-root .settings-section-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .os-editorial-root .shell .topbar {
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
-    padding-bottom: 12px;
+    padding-bottom: 14px;
   }
 
   .os-editorial-root .shell .topbar-actions {
@@ -2319,58 +2586,198 @@ body:has(.os-editorial-root) .floating-feedback-button:hover {
     flex: 1 1 200px;
   }
 
-  /* Subpage mobile header: hide duplicate hamburger since bottom 5-Tab + その他 is always present */
-  .os-editorial-root .shell .sidebar > .mobile-nav-actions {
+  /* Subpage mobile header: 3-column dead-center symmetry matching OS Home 1:1 */
+  .os-editorial-root .shell > .sidebar > .mobile-nav-actions {
     display: none;
   }
 
-  .os-editorial-root .shell .sidebar {
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 8px 10px;
+  .os-editorial-root .shell > .sidebar,
+  .os-editorial-root .shell > .sidebar:has(> .mobile-store-context > .os-global-store-picker) {
+    position: sticky;
+    top: 0;
+    z-index: 35;
+    display: grid;
+    grid-template-columns: minmax(44px, 1fr) minmax(0, auto) minmax(44px, 1fr);
+    grid-template-rows: auto;
+    align-items: center;
+    align-content: center;
+    height: auto;
+    max-height: none;
     min-height: 54px;
+    gap: 8px;
     padding: 8px 14px;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(14px);
+    border-right: 0;
+    border-bottom: 1px solid var(--ed-line);
+    box-shadow: none;
+    overflow: visible;
   }
 
-  .os-editorial-root .shell .sidebar > .brand-block {
+  .os-editorial-root .shell > .sidebar > .brand-block,
+  .os-editorial-root .shell > .sidebar:has(> .mobile-store-context > .os-global-store-picker) > .brand-block {
     grid-column: 1;
     grid-row: 1;
+    justify-self: start;
+    margin: 0;
+    padding: 0;
   }
 
-  .os-editorial-root .shell .sidebar > .brand-block > div:last-child {
+  .os-editorial-root .shell > .sidebar > .brand-block > div:last-child {
     display: none;
   }
 
-  .os-editorial-root .shell .sidebar .mobile-store-context:has(> .os-global-store-picker) {
+  .os-editorial-root .shell > .sidebar > .mobile-store-context,
+  .os-editorial-root .shell > .sidebar > .mobile-store-context:has(> .os-global-store-picker) {
+    display: flex;
+    justify-content: center;
     grid-column: 2;
     grid-row: 1;
+    order: 0;
     width: auto;
+    min-width: 0;
+    max-width: min(210px, 52vw);
     justify-self: center;
-    max-width: 100%;
+    margin: 0;
   }
 
-  .os-editorial-root .shell .sidebar .mobile-store-context .os-global-store-picker {
+  .os-editorial-root .shell > .sidebar > .mobile-store-context .os-global-store-picker {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 0;
     width: auto;
     max-width: 100%;
     padding: 0;
     border-top: 0;
   }
 
-  .os-editorial-root .shell .sidebar .mobile-store-context .os-global-store-picker-label {
+  .os-editorial-root .shell > .sidebar > .mobile-store-context .os-global-store-picker-label {
     display: none;
   }
 
-  .os-editorial-root .shell .sidebar .mobile-store-context .os-global-store-picker select {
+  .os-editorial-root .shell > .sidebar > .mobile-store-context .os-global-store-picker select {
     min-height: 34px;
     height: 34px;
-    padding: 0 28px 0 12px;
+    max-width: 100%;
+    padding: 0 28px 0 13px;
     border: 0;
     border-radius: 999px;
     background: var(--ed-subtle);
     color: var(--ed-ink);
     font-size: 13px;
     font-weight: 500;
+    text-overflow: ellipsis;
+  }
+
+  /* Right column: compact globe language switcher + notification bell, matching OS Home */
+  .os-editorial-root .shell > .sidebar > .sidebar-user,
+  .os-editorial-root .shell > .sidebar:has(> .mobile-store-context > .os-global-store-picker) > .sidebar-user {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    width: auto;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .os-editorial-root .shell > .sidebar > .sidebar-user > .user-panel {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    width: auto;
+  }
+
+  .os-editorial-root .shell > .sidebar > .sidebar-user :is(
+    .account-menu,
+    .user-badge-muted,
+    .os-global-store-picker,
+    .os-quick-drawer-trigger
+  ) {
+    display: none;
+  }
+
+  .os-editorial-root .shell > .sidebar > .sidebar-user .os-language-picker {
+    position: relative;
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+  }
+
+  .os-editorial-root .shell > .sidebar > .sidebar-user .os-language-label {
+    display: none;
+  }
+
+  .os-editorial-root .shell > .sidebar > .sidebar-user .os-language-picker select {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: var(--ed-subtle);
+    color: transparent;
+    cursor: pointer;
+  }
+
+  .os-editorial-root .shell > .sidebar > .sidebar-user .os-language-current-short {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--ed-ink-soft);
+    pointer-events: none;
+  }
+
+  .os-editorial-root .shell > .sidebar > .sidebar-user .os-language-current-short svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .os-editorial-root .shell > .sidebar > .sidebar-user .notification-menu,
+  .os-editorial-root .shell > .sidebar > .sidebar-user .notification-placeholder {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 34px;
+    height: 34px;
+  }
+
+  .os-editorial-root .shell > .sidebar > .sidebar-user .notification-menu summary,
+  .os-editorial-root .shell > .sidebar > .sidebar-user .notification-placeholder {
+    width: auto;
+    min-width: 34px;
+    min-height: 34px;
+    height: 34px;
+    padding: 0 9px;
+    gap: 5px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--ed-subtle);
+    color: var(--ed-ink-soft);
+  }
+
+  .os-editorial-root .shell > .sidebar > .sidebar-user .notification-menu summary span {
+    position: static;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 10.5px;
+    font-weight: 600;
+  }
+
+  .os-editorial-root .shell > .sidebar > .sidebar-user .notification-panel {
+    right: 0;
+    left: auto;
+    width: min(320px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
   }
 }
